@@ -1,10 +1,9 @@
 # Changelog
 
 ## v0.1.13
-- Fluid typing: text inputs keep local state and save silently (no page re-render)
-- While typing: only the input itself updates (zero lag)
-- After 1.5s pause: data saves to server in the background without interrupting
-- Click away from field: full state sync for consistency
+- Fluid typing: switched text inputs to uncontrolled (defaultValue) so React never overwrites typed text
+- After 1.5s pause or clicking away: data saves directly to server in the background
+- Separate quiet save path that never triggers page re-renders
 - Debounced Lucide icon refresh to avoid per-render overhead
 - Applied to both agency and character sheets
 

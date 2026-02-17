@@ -78,47 +78,31 @@
         return <i data-lucide={name} width={size} height={size} className={className}></i>;
     };
 
-    // --- DEBOUNCED INPUT ---
-    // Keeps local state so typing never triggers parent re-renders.
-    // onSave: called after inactivity — silently persists without re-render.
-    // onChange: called on blur — syncs parent state for consistency.
-    const DebouncedInput = ({ value, onChange, onSave, delay = 1500, component = 'input', ...props }) => {
-        const [local, setLocal] = useState(value);
-        const dirtyRef = useRef(false);
+    // --- AUTO-SAVE INPUT (uncontrolled) ---
+    // Uses defaultValue so React never touches the DOM input after mount.
+    // The DOM manages typing; we just read values via onChange to update
+    // the data ref and schedule a background save.
+    const AutoSaveInput = ({ defaultValue, onSave, delay = 1500, component = 'input', ...props }) => {
         const timerRef = useRef(null);
-
-        // Sync from parent only when not dirty (user isn't typing)
-        useEffect(() => {
-            if (!dirtyRef.current) {
-                setLocal(value);
-            }
-        }, [value]);
 
         const handleChange = (e) => {
             const val = e.target.value;
-            setLocal(val);
-            dirtyRef.current = true;
             if (timerRef.current) clearTimeout(timerRef.current);
             timerRef.current = setTimeout(() => {
-                timerRef.current = null;
-                // Silent save — no parent re-render
-                if (onSave) onSave(val);
+                onSave(val);
             }, delay);
         };
 
-        const handleBlur = () => {
+        const handleBlur = (e) => {
             if (timerRef.current) {
                 clearTimeout(timerRef.current);
                 timerRef.current = null;
             }
-            if (dirtyRef.current) {
-                dirtyRef.current = false;
-                onChange(local);
-            }
+            onSave(e.target.value);
         };
 
         const Tag = component;
-        return <Tag {...props} value={local} onChange={handleChange} onBlur={handleBlur} />;
+        return <Tag {...props} defaultValue={defaultValue} onChange={handleChange} onBlur={handleBlur} />;
     };
 
     // --- SAVE STATUS INDICATOR ---
@@ -169,7 +153,7 @@
     };
 
     // --- ALLIANCE MODULE (3-column: countries, companies, organizations) ---
-    const AllianceModule = ({ alliance, update, quietUpdate, visibility, onToggleVis }) => {
+    const AllianceModule = ({ alliance, update, onSave, visibility, onToggleVis }) => {
         const isClassified = alliance === 'CLASSIFIED';
 
         if (isClassified && !IS_ADMIN) return (
@@ -183,28 +167,12 @@
             ? { countries: [], companies: [], organizations: [], ...alliance }
             : { countries: [], companies: [], organizations: [] };
 
-        const updateList = (category, newList) => {
-            update({ ...data, [category]: newList });
-        };
-
-        const quietUpdateList = (category, newList) => {
-            quietUpdate({ ...data, [category]: newList });
-        };
-
         const addItem = (category) => {
-            updateList(category, [...data[category], '']);
+            update({ ...data, [category]: [...data[category], ''] });
         };
 
         const removeItem = (category, idx) => {
-            updateList(category, data[category].filter((_, i) => i !== idx));
-        };
-
-        const updateItem = (category, idx, value) => {
-            updateList(category, data[category].map((item, i) => i === idx ? value : item));
-        };
-
-        const quietUpdateItem = (category, idx, value) => {
-            quietUpdateList(category, data[category].map((item, i) => i === idx ? value : item));
+            update({ ...data, [category]: data[category].filter((_, i) => i !== idx) });
         };
 
         const Column = ({ category, title, icon }) => (
@@ -222,12 +190,14 @@
                     <div key={idx} style={{
                         display: 'flex', alignItems: 'center', gap: '0.25rem', marginBottom: '0.25rem'
                     }}>
-                        <DebouncedInput
+                        <AutoSaveInput
                             type="text"
-                            value={item}
+                            defaultValue={item}
                             placeholder={`Add ${title.toLowerCase().slice(0, -1)}...`}
-                            onChange={val => updateItem(category, idx, val)}
-                            onSave={val => quietUpdateItem(category, idx, val)}
+                            onSave={val => onSave({
+                                ...data,
+                                [category]: data[category].map((it, i) => i === idx ? val : it)
+                            })}
                             disabled={!IS_ADMIN}
                             style={{
                                 background: 'transparent', border: 'none',
@@ -282,7 +252,7 @@
     };
 
     // --- HEADER MODULE ---
-    const HeaderModule = ({ agency, update, quietUpdate, visibility, onToggleVis }) => (
+    const HeaderModule = ({ agency, onSave, visibility, onToggleVis }) => (
         <div className="glass-panel" style={{
             padding: '1.5rem', marginBottom: '1rem',
             display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '1rem'
@@ -291,9 +261,8 @@
                 <label className="text-secondary mono-text" style={{ fontSize: '0.8rem' }}>
                     AGENCY NAME
                 </label>
-                <DebouncedInput type="text" value={agency.name}
-                    onChange={val => update({ name: val })}
-                    onSave={val => quietUpdate({ name: val })}
+                <AutoSaveInput type="text" defaultValue={agency.name}
+                    onSave={val => onSave({ name: val })}
                     disabled={!IS_ADMIN}
                     style={{
                         background: 'transparent', border: 'none',
@@ -308,9 +277,8 @@
                     <VisibilityToggle field="motto" visibility={visibility} onToggle={onToggleVis} />
                 </label>
                 {agency.motto === 'CLASSIFIED' ? <Classified /> : (
-                    <DebouncedInput type="text" value={agency.motto}
-                        onChange={val => update({ motto: val })}
-                        onSave={val => quietUpdate({ motto: val })}
+                    <AutoSaveInput type="text" defaultValue={agency.motto}
+                        onSave={val => onSave({ motto: val })}
                         disabled={!IS_ADMIN}
                         style={{
                             background: 'transparent', border: 'none',
@@ -325,9 +293,8 @@
                     <VisibilityToggle field="headquarters" visibility={visibility} onToggle={onToggleVis} />
                 </label>
                 {agency.headquarters === 'CLASSIFIED' ? <Classified /> : (
-                    <DebouncedInput type="text" value={agency.headquarters}
-                        onChange={val => update({ headquarters: val })}
-                        onSave={val => quietUpdate({ headquarters: val })}
+                    <AutoSaveInput type="text" defaultValue={agency.headquarters}
+                        onSave={val => onSave({ headquarters: val })}
                         disabled={!IS_ADMIN}
                         style={{
                             background: 'transparent', border: 'none',
@@ -340,7 +307,7 @@
     );
 
     // --- NOTES MODULE ---
-    const NotesModule = ({ notes, update, quietUpdate, visibility, onToggleVis }) => (
+    const NotesModule = ({ notes, onSave, visibility, onToggleVis }) => (
         <div className="glass-panel" style={{ padding: '1.5rem', marginBottom: '1rem' }}>
             <h3 className="mono-text text-accent" style={{
                 borderBottom: '1px solid var(--border-color)',
@@ -350,11 +317,10 @@
                 <VisibilityToggle field="notes" visibility={visibility} onToggle={onToggleVis} />
             </h3>
             {notes === 'CLASSIFIED' ? <Classified /> : (
-                <DebouncedInput
+                <AutoSaveInput
                     component="textarea"
-                    value={notes}
-                    onChange={val => update({ notes: val })}
-                    onSave={val => quietUpdate({ notes: val })}
+                    defaultValue={notes}
+                    onSave={val => onSave({ notes: val })}
                     disabled={!IS_ADMIN}
                     placeholder="Agency notes..."
                     style={{
@@ -502,7 +468,7 @@
     };
 
     // --- GENERIC TABLE MODULE ---
-    const TableModule = ({ title, field, items, columns, update, quietUpdate, visibility, onToggleVis, emptyItem }) => {
+    const TableModule = ({ title, field, items, columns, update, onSave, visibility, onToggleVis, emptyItem }) => {
         const isClassified = items === 'CLASSIFIED';
 
         if (isClassified && !IS_ADMIN) return (
@@ -515,21 +481,6 @@
         );
 
         const actualItems = Array.isArray(items) ? items : [];
-
-        const updateItem = (idx, key, val) => {
-            const updated = actualItems.map((item, i) =>
-                i === idx ? { ...item, [key]: val } : item
-            );
-            update(updated);
-        };
-
-        const quietUpdateItem = (idx, key, val) => {
-            if (!quietUpdate) return;
-            const updated = actualItems.map((item, i) =>
-                i === idx ? { ...item, [key]: val } : item
-            );
-            quietUpdate(updated);
-        };
 
         const addItem = () => {
             update([...actualItems, { ...emptyItem }]);
@@ -585,17 +536,18 @@
                         background: 'rgba(0,0,0,0.2)', alignItems: 'center'
                     }}>
                         {columns.map(col => (
-                            <DebouncedInput
+                            <AutoSaveInput
                                 key={col.key}
                                 type={col.type || 'text'}
                                 placeholder={col.label}
-                                value={item[col.key] || (col.type === 'number' ? 0 : '')}
-                                onChange={val => updateItem(idx, col.key,
-                                    col.type === 'number' ? (parseInt(val) || 0) : val
-                                )}
-                                onSave={val => quietUpdateItem(idx, col.key,
-                                    col.type === 'number' ? (parseInt(val) || 0) : val
-                                )}
+                                defaultValue={item[col.key] || (col.type === 'number' ? 0 : '')}
+                                onSave={val => {
+                                    const parsed = col.type === 'number' ? (parseInt(val) || 0) : val;
+                                    const updated = actualItems.map((it, i) =>
+                                        i === idx ? { ...it, [col.key]: parsed } : it
+                                    );
+                                    onSave(updated);
+                                }}
                                 disabled={!IS_ADMIN}
                                 style={{
                                     background: 'transparent', border: 'none',
@@ -947,17 +899,30 @@
             }, 1000);
         };
 
-        // Silent update: ref + schedules save, NO state change, NO re-render.
-        // Use from DebouncedInput timer so typing is never interrupted.
+        // Silent save: updates ref and sends to server without any re-render.
+        // Used by AutoSaveInput so typing is never interrupted.
+        const quietSaveTimerRef = useRef(null);
         const saveAgencyQuiet = useCallback((updates) => {
             if (!IS_ADMIN) return;
             agencyRef.current = { ...agencyRef.current, ...updates };
 
-            if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
-            saveTimerRef.current = setTimeout(() => {
-                saveAgency(agencyRef.current);
+            if (quietSaveTimerRef.current) clearTimeout(quietSaveTimerRef.current);
+            quietSaveTimerRef.current = setTimeout(async () => {
+                try {
+                    const response = await fetch('/api/agencies/' + AGENCY_ID + '/', {
+                        method: 'PUT',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'X-CSRFToken': getCookie('csrftoken') || CSRF_TOKEN,
+                        },
+                        body: JSON.stringify(agencyRef.current),
+                    });
+                    if (!response.ok) console.error('Quiet save failed:', response.status);
+                } catch (err) {
+                    console.error('Quiet save error:', err);
+                }
             }, 500);
-        }, [saveAgency]);
+        }, []);
 
         const toggleVisibility = async (field, visible) => {
             try {
@@ -1036,18 +1001,18 @@
                     </div>
                 </div>
 
-                <HeaderModule agency={agency} update={updateAgency}
-                    quietUpdate={saveAgencyQuiet}
+                <HeaderModule agency={agency}
+                    onSave={saveAgencyQuiet}
                     visibility={vis} onToggleVis={toggleVisibility} />
 
                 <AllianceModule
                     alliance={agency.alliance}
                     update={val => updateAgency({ alliance: val })}
-                    quietUpdate={val => saveAgencyQuiet({ alliance: val })}
+                    onSave={val => saveAgencyQuiet({ alliance: val })}
                     visibility={vis} onToggleVis={toggleVisibility} />
 
-                <NotesModule notes={agency.notes} update={updateAgency}
-                    quietUpdate={saveAgencyQuiet}
+                <NotesModule notes={agency.notes}
+                    onSave={saveAgencyQuiet}
                     visibility={vis} onToggleVis={toggleVisibility} />
 
                 <IntegrityModule agency={agency} update={updateAgency}
@@ -1068,7 +1033,7 @@
                     ]}
                     emptyItem={{ name: '', relatedSkill: '', effect: '' }}
                     update={val => updateAgency({ specializations: val })}
-                    quietUpdate={val => saveAgencyQuiet({ specializations: val })}
+                    onSave={val => saveAgencyQuiet({ specializations: val })}
                     visibility={vis} onToggleVis={toggleVisibility}
                 />
 
@@ -1087,7 +1052,7 @@
                         ]}
                         emptyItem={{ name: '', value: 0, description: '' }}
                         update={val => updateAgency({ merits: val })}
-                        quietUpdate={val => saveAgencyQuiet({ merits: val })}
+                        onSave={val => saveAgencyQuiet({ merits: val })}
                         visibility={vis} onToggleVis={toggleVisibility}
                     />
                     <TableModule
@@ -1100,7 +1065,7 @@
                         ]}
                         emptyItem={{ name: '', value: 0, description: '' }}
                         update={val => updateAgency({ flaws: val })}
-                        quietUpdate={val => saveAgencyQuiet({ flaws: val })}
+                        onSave={val => saveAgencyQuiet({ flaws: val })}
                         visibility={vis} onToggleVis={toggleVisibility}
                     />
                 </div>
@@ -1116,7 +1081,7 @@
                     ]}
                     emptyItem={{ name: '', type: '', status: '', notes: '' }}
                     update={val => updateAgency({ assets: val })}
-                    quietUpdate={val => saveAgencyQuiet({ assets: val })}
+                    onSave={val => saveAgencyQuiet({ assets: val })}
                     visibility={vis} onToggleVis={toggleVisibility}
                 />
 
@@ -1131,7 +1096,7 @@
                     ]}
                     emptyItem={{ shipClass: '', role: '', quantity: 0, notes: '' }}
                     update={val => updateAgency({ fleet: val })}
-                    quietUpdate={val => saveAgencyQuiet({ fleet: val })}
+                    onSave={val => saveAgencyQuiet({ fleet: val })}
                     visibility={vis} onToggleVis={toggleVisibility}
                 />
 
@@ -1146,7 +1111,7 @@
                     ]}
                     emptyItem={{ condition: '', source: '', effect: '', duration: '' }}
                     update={val => updateAgency({ conditions: val })}
-                    quietUpdate={val => saveAgencyQuiet({ conditions: val })}
+                    onSave={val => saveAgencyQuiet({ conditions: val })}
                     visibility={vis} onToggleVis={toggleVisibility}
                 />
 
@@ -1162,7 +1127,7 @@
                     ]}
                     emptyItem={{ name: '', player: '', duration: '', completionScore: 0, notes: '' }}
                     update={val => updateAgency({ projects: val })}
-                    quietUpdate={val => saveAgencyQuiet({ projects: val })}
+                    onSave={val => saveAgencyQuiet({ projects: val })}
                     visibility={vis} onToggleVis={toggleVisibility}
                 />
 
@@ -1176,7 +1141,7 @@
                     ]}
                     emptyItem={{ year: '', decision: '', consequence: '' }}
                     update={val => updateAgency({ history: val })}
-                    quietUpdate={val => saveAgencyQuiet({ history: val })}
+                    onSave={val => saveAgencyQuiet({ history: val })}
                     visibility={vis} onToggleVis={toggleVisibility}
                 />
 
