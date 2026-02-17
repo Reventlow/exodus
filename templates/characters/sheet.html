@@ -861,12 +861,14 @@
             }, 1000);
         };
 
-        // Silent save: updates ref and sends to server without any re-render.
-        // Used by AutoSaveInput so typing is never interrupted.
+        // Silent save: updates ref + state and sends to server.
+        // Safe with uncontrolled inputs (defaultValue) — typing is never interrupted.
         const quietSaveTimerRef = useRef(null);
         const saveCharacterQuiet = useCallback((updates) => {
             if (!IS_OWNER) return;
-            charRef.current = { ...charRef.current, ...updates };
+            const updated = { ...charRef.current, ...updates };
+            charRef.current = updated;
+            setChar(updated);
 
             if (quietSaveTimerRef.current) clearTimeout(quietSaveTimerRef.current);
             quietSaveTimerRef.current = setTimeout(async () => {

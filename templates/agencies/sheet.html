@@ -899,12 +899,16 @@
             }, 1000);
         };
 
-        // Silent save: updates ref and sends to server without any re-render.
-        // Used by AutoSaveInput so typing is never interrupted.
+        // Silent save: updates ref + state and sends to server.
+        // Safe with uncontrolled inputs (defaultValue) — re-renders
+        // don't overwrite DOM input values, so typing is not interrupted.
+        // Keeping state in sync ensures add/remove operations have current data.
         const quietSaveTimerRef = useRef(null);
         const saveAgencyQuiet = useCallback((updates) => {
             if (!IS_ADMIN) return;
-            agencyRef.current = { ...agencyRef.current, ...updates };
+            const updated = { ...agencyRef.current, ...updates };
+            agencyRef.current = updated;
+            setAgency(updated);
 
             if (quietSaveTimerRef.current) clearTimeout(quietSaveTimerRef.current);
             quietSaveTimerRef.current = setTimeout(async () => {
