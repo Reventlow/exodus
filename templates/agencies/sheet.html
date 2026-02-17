@@ -1,0 +1,1004 @@
+{% extends "base.html" %}
+
+{% block title %}AGENCY RECORD // FOUNDATION{% endblock %}
+
+{% block content %}
+<div id="app-root">
+    <div class="loading-screen">
+        <h1 class="mono-text">DECRYPTING AGENCY RECORD...</h1>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    // Django context variables — outside verbatim block
+    const AGENCY_ID = {{ agency_id }};
+    const IS_ADMIN = {{ is_admin|yesno:"true,false" }};
+    const IS_PLAYER_AGENCY = {{ is_player_agency|yesno:"true,false" }};
+    const CSRF_TOKEN = '{{ csrf_token }}';
+</script>
+{% verbatim %}
+<script type="text/babel">
+    const { useState, useEffect, useRef, useCallback } = React;
+
+    // --- CSRF ---
+    function getCookie(name) {
+        let cookieValue = null;
+        if (document.cookie && document.cookie !== '') {
+            const cookies = document.cookie.split(';');
+            for (let i = 0; i < cookies.length; i++) {
+                const cookie = cookies[i].trim();
+                if (cookie.substring(0, name.length + 1) === (name + '=')) {
+                    cookieValue = decodeURIComponent(cookie.substring(name.length + 1));
+                    break;
+                }
+            }
+        }
+        return cookieValue;
+    }
+
+    // --- DEFAULT AGENCY STRUCTURE ---
+    const DEFAULT_AGENCY = {
+        id: null,
+        name: "NEW AGENCY",
+        alliance: "",
+        motto: "",
+        headquarters: "",
+        notes: "",
+        integrity: 0,
+        experience: 0,
+        isPlayerAgency: false,
+        attributes: {
+            power: { Industry: 0, Science: 0, Military: 0, Agriculture: 0 },
+            finesse: { Espionage: 0, Diplomacy: 0, Logistics: 0, Trade: 0 },
+            resistance: { Unity: 0, Surveillance: 0, Ethics: 0, "Counter Espionage": 0, Security: 0 }
+        },
+        specializations: [],
+        merits: [],
+        flaws: [],
+        assets: [],
+        fleet: [],
+        conditions: [],
+        projects: [],
+        history: [],
+        fieldVisibility: {}
+    };
+
+    // --- ICON COMPONENT ---
+    const Icon = ({ name, size = 16, className = "" }) => {
+        useEffect(() => {
+            if (window.lucide) window.lucide.createIcons();
+        }, [name]);
+        return <i data-lucide={name} width={size} height={size} className={className}></i>;
+    };
+
+    // --- SAVE STATUS INDICATOR ---
+    const SaveStatus = ({ status }) => {
+        const labels = {
+            saved: 'SAVED',
+            saving: 'SAVING...',
+            unsaved: 'UNSAVED CHANGES',
+            error: 'SAVE ERROR'
+        };
+        return (
+            <span className={'save-status ' + status}>
+                {labels[status] || status}
+            </span>
+        );
+    };
+
+    // --- CLASSIFIED INDICATOR ---
+    const Classified = () => (
+        <span className="classified" title="CLASSIFIED // CLEARANCE REQUIRED"
+            style={{ fontFamily: 'var(--font-mono)', fontSize: '0.9rem' }}>
+            CLASSIFIED
+        </span>
+    );
+
+    // --- VISIBILITY TOGGLE (admin on NPC) ---
+    const VisibilityToggle = ({ field, visibility, onToggle }) => {
+        if (!IS_ADMIN || IS_PLAYER_AGENCY) return null;
+        const isVisible = visibility[field] !== false; // default visible
+        return (
+            <button
+                onClick={() => onToggle(field, !isVisible)}
+                title={isVisible ? 'Click to classify' : 'Click to declassify'}
+                style={{
+                    background: 'transparent',
+                    border: 'none',
+                    cursor: 'pointer',
+                    color: isVisible ? 'var(--text-muted)' : 'var(--accent-danger)',
+                    padding: '2px',
+                    marginLeft: '4px',
+                    opacity: isVisible ? 0.4 : 1,
+                    transition: 'all 0.2s'
+                }}
+            >
+                <Icon name={isVisible ? "eye" : "eye-off"} size={14} />
+            </button>
+        );
+    };
+
+    // --- HEADER MODULE ---
+    const HeaderModule = ({ agency, update, visibility, onToggleVis }) => (
+        <div className="glass-panel" style={{
+            padding: '1.5rem', marginBottom: '1rem',
+            display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '1rem'
+        }}>
+            <div>
+                <label className="text-secondary mono-text" style={{ fontSize: '0.8rem' }}>
+                    AGENCY NAME
+                </label>
+                <input type="text" value={agency.name}
+                    onChange={e => update({ name: e.target.value })}
+                    disabled={!IS_ADMIN}
+                    style={{
+                        background: 'transparent', border: 'none',
+                        borderBottom: '1px solid var(--accent-primary)',
+                        color: 'var(--text-primary)', width: '100%',
+                        fontSize: '1.2rem', fontFamily: 'var(--font-mono)'
+                    }} />
+            </div>
+            <div>
+                <label className="text-secondary mono-text" style={{ fontSize: '0.8rem' }}>
+                    ALLIANCE / BLOC
+                    <VisibilityToggle field="alliance" visibility={visibility} onToggle={onToggleVis} />
+                </label>
+                {agency.alliance === 'CLASSIFIED' ? <Classified /> : (
+                    <input type="text" value={agency.alliance}
+                        onChange={e => update({ alliance: e.target.value })}
+                        disabled={!IS_ADMIN}
+                        style={{
+                            background: 'transparent', border: 'none',
+                            borderBottom: '1px solid var(--border-color)',
+                            color: 'var(--text-primary)', width: '100%'
+                        }} />
+                )}
+            </div>
+            <div>
+                <label className="text-secondary mono-text" style={{ fontSize: '0.8rem' }}>
+                    MOTTO
+                    <VisibilityToggle field="motto" visibility={visibility} onToggle={onToggleVis} />
+                </label>
+                {agency.motto === 'CLASSIFIED' ? <Classified /> : (
+                    <input type="text" value={agency.motto}
+                        onChange={e => update({ motto: e.target.value })}
+                        disabled={!IS_ADMIN}
+                        style={{
+                            background: 'transparent', border: 'none',
+                            borderBottom: '1px solid var(--border-color)',
+                            color: 'var(--text-primary)', width: '100%'
+                        }} />
+                )}
+            </div>
+            <div>
+                <label className="text-secondary mono-text" style={{ fontSize: '0.8rem' }}>
+                    HEADQUARTERS
+                    <VisibilityToggle field="headquarters" visibility={visibility} onToggle={onToggleVis} />
+                </label>
+                {agency.headquarters === 'CLASSIFIED' ? <Classified /> : (
+                    <input type="text" value={agency.headquarters}
+                        onChange={e => update({ headquarters: e.target.value })}
+                        disabled={!IS_ADMIN}
+                        style={{
+                            background: 'transparent', border: 'none',
+                            borderBottom: '1px solid var(--border-color)',
+                            color: 'var(--text-primary)', width: '100%'
+                        }} />
+                )}
+            </div>
+        </div>
+    );
+
+    // --- NOTES MODULE ---
+    const NotesModule = ({ notes, update, visibility, onToggleVis }) => (
+        <div className="glass-panel" style={{ padding: '1.5rem', marginBottom: '1rem' }}>
+            <h3 className="mono-text text-accent" style={{
+                borderBottom: '1px solid var(--border-color)',
+                paddingBottom: '0.5rem', marginBottom: '1rem'
+            }}>
+                NOTES
+                <VisibilityToggle field="notes" visibility={visibility} onToggle={onToggleVis} />
+            </h3>
+            {notes === 'CLASSIFIED' ? <Classified /> : (
+                <textarea
+                    value={notes}
+                    onChange={e => update({ notes: e.target.value })}
+                    disabled={!IS_ADMIN}
+                    placeholder="Agency notes..."
+                    style={{
+                        width: '100%', minHeight: '80px', background: 'transparent',
+                        border: '1px solid var(--border-color)', color: 'var(--text-primary)',
+                        padding: '0.5rem', fontFamily: 'inherit', resize: 'vertical'
+                    }}
+                />
+            )}
+        </div>
+    );
+
+    // --- INTEGRITY & EXPERIENCE MODULE ---
+    const IntegrityModule = ({ agency, update, visibility, onToggleVis }) => (
+        <div className="glass-panel" style={{ padding: '1.5rem', marginBottom: '1rem' }}>
+            <h3 className="mono-text text-accent" style={{
+                borderBottom: '1px solid var(--border-color)',
+                paddingBottom: '0.5rem', marginBottom: '1rem'
+            }}>CORE STATS</h3>
+            <div style={{ display: 'flex', gap: '2rem', justifyContent: 'center', flexWrap: 'wrap' }}>
+                <div className="tech-border text-center" style={{ padding: '1rem', minWidth: '120px' }}>
+                    <div className="text-secondary mono-text" style={{ fontSize: '0.8rem' }}>
+                        INTEGRITY
+                        <VisibilityToggle field="integrity" visibility={visibility} onToggle={onToggleVis} />
+                    </div>
+                    {agency.integrity === 'CLASSIFIED' ? <Classified /> : (
+                        <input type="number" value={agency.integrity}
+                            onChange={e => update({ integrity: parseInt(e.target.value) || 0 })}
+                            disabled={!IS_ADMIN}
+                            style={{
+                                background: 'transparent', border: 'none',
+                                color: 'var(--accent-primary)', width: '100%',
+                                textAlign: 'center', fontSize: '2rem',
+                                fontFamily: 'var(--font-mono)'
+                            }} />
+                    )}
+                </div>
+                <div className="tech-border text-center" style={{ padding: '1rem', minWidth: '120px' }}>
+                    <div className="text-secondary mono-text" style={{ fontSize: '0.8rem' }}>
+                        EXPERIENCE
+                        <VisibilityToggle field="experience" visibility={visibility} onToggle={onToggleVis} />
+                    </div>
+                    {agency.experience === 'CLASSIFIED' ? <Classified /> : (
+                        <input type="number" value={agency.experience}
+                            onChange={e => update({ experience: parseInt(e.target.value) || 0 })}
+                            disabled={!IS_ADMIN}
+                            style={{
+                                background: 'transparent', border: 'none',
+                                color: 'var(--accent-primary)', width: '100%',
+                                textAlign: 'center', fontSize: '2rem',
+                                fontFamily: 'var(--font-mono)'
+                            }} />
+                    )}
+                </div>
+            </div>
+        </div>
+    );
+
+    // --- ATTRIBUTES MODULE ---
+    const AttributesModule = ({ attributes, update, visibility, onToggleVis }) => {
+        const isClassified = attributes === 'CLASSIFIED';
+        if (isClassified && !IS_ADMIN) return (
+            <div className="glass-panel" style={{ padding: '1.5rem', marginBottom: '1rem' }}>
+                <h3 className="mono-text text-accent" style={{ marginBottom: '1rem' }}>ATTRIBUTES</h3>
+                <Classified />
+            </div>
+        );
+
+        const updateAttr = (cat, skill, val) => {
+            const updated = { ...attributes, [cat]: { ...attributes[cat], [skill]: val } };
+            update(updated);
+        };
+
+        const addCustomSkill = (category) => {
+            const name = prompt('Enter new skill name:');
+            if (name && name.trim()) {
+                const updated = { ...attributes, [category]: { ...attributes[category], [name.trim()]: 0 } };
+                update(updated);
+            }
+        };
+
+        const CategorySection = ({ category, title }) => {
+            const skills = attributes[category] || {};
+            return (
+                <div>
+                    <h4 className="text-center text-muted mono-text" style={{
+                        marginBottom: '1rem', textTransform: 'uppercase',
+                        borderBottom: '1px solid var(--border-color)', paddingBottom: '0.25rem'
+                    }}>{title}</h4>
+                    {Object.entries(skills).map(([skill, val]) => {
+                        const fieldPath = `attributes.${category}.${skill}`;
+                        const classified = val === 'CLASSIFIED';
+                        return (
+                            <div key={skill} style={{
+                                display: 'flex', justifyContent: 'space-between',
+                                alignItems: 'center', marginBottom: '0.5rem'
+                            }}>
+                                <span style={{ fontSize: '0.9rem', color: 'var(--text-primary)' }}>
+                                    {skill}
+                                    <VisibilityToggle field={fieldPath} visibility={visibility} onToggle={onToggleVis} />
+                                </span>
+                                {classified ? <Classified /> : (
+                                    <input type="number" value={val}
+                                        onChange={e => updateAttr(category, skill, parseInt(e.target.value) || 0)}
+                                        disabled={!IS_ADMIN}
+                                        style={{
+                                            width: '60px', textAlign: 'center',
+                                            background: 'transparent',
+                                            border: '1px solid var(--border-color)',
+                                            color: 'var(--accent-primary)',
+                                            fontFamily: 'var(--font-mono)'
+                                        }} />
+                                )}
+                            </div>
+                        );
+                    })}
+                    {IS_ADMIN && (
+                        <button onClick={() => addCustomSkill(category)} style={{
+                            background: 'transparent', border: '1px dashed var(--border-color)',
+                            color: 'var(--text-muted)', width: '100%', padding: '0.25rem',
+                            cursor: 'pointer', fontSize: '0.8rem', marginTop: '0.5rem'
+                        }}>+ Add Skill</button>
+                    )}
+                </div>
+            );
+        };
+
+        return (
+            <div className="glass-panel" style={{ padding: '1.5rem', marginBottom: '1rem' }}>
+                <h3 className="mono-text text-accent" style={{
+                    borderBottom: '1px solid var(--border-color)',
+                    paddingBottom: '0.5rem', marginBottom: '1rem'
+                }}>ATTRIBUTES</h3>
+                <div style={{
+                    display: 'grid',
+                    gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))',
+                    gap: '2rem'
+                }}>
+                    <CategorySection category="power" title="Power" />
+                    <CategorySection category="finesse" title="Finesse" />
+                    <CategorySection category="resistance" title="Resistance" />
+                </div>
+            </div>
+        );
+    };
+
+    // --- GENERIC TABLE MODULE ---
+    const TableModule = ({ title, field, items, columns, update, visibility, onToggleVis, emptyItem }) => {
+        const isClassified = items === 'CLASSIFIED';
+
+        if (isClassified && !IS_ADMIN) return (
+            <div className="glass-panel" style={{ padding: '1.5rem', marginBottom: '1rem' }}>
+                <h3 className="mono-text text-accent" style={{ marginBottom: '1rem' }}>
+                    {title}
+                </h3>
+                <Classified />
+            </div>
+        );
+
+        const actualItems = Array.isArray(items) ? items : [];
+
+        const updateItem = (idx, key, val) => {
+            const updated = actualItems.map((item, i) =>
+                i === idx ? { ...item, [key]: val } : item
+            );
+            update(updated);
+        };
+
+        const addItem = () => {
+            update([...actualItems, { ...emptyItem }]);
+        };
+
+        const removeItem = (idx) => {
+            update(actualItems.filter((_, i) => i !== idx));
+        };
+
+        return (
+            <div className="glass-panel" style={{ padding: '1.5rem', marginBottom: '1rem' }}>
+                <h3 className="mono-text text-accent" style={{
+                    borderBottom: '1px solid var(--border-color)',
+                    paddingBottom: '0.5rem', marginBottom: '1rem',
+                    display: 'flex', justifyContent: 'space-between', alignItems: 'center'
+                }}>
+                    <span>
+                        {title}
+                        <VisibilityToggle field={field} visibility={visibility} onToggle={onToggleVis} />
+                    </span>
+                    {IS_ADMIN && (
+                        <button onClick={addItem} title="Add Row" style={{
+                            background: 'transparent', border: '1px solid var(--accent-primary)',
+                            color: 'var(--accent-primary)', width: '24px', height: '24px',
+                            borderRadius: '4px', cursor: 'pointer',
+                            display: 'flex', alignItems: 'center', justifyContent: 'center'
+                        }}>
+                            <Icon name="plus" size={14} />
+                        </button>
+                    )}
+                </h3>
+
+                {/* Column headers */}
+                {actualItems.length > 0 && (
+                    <div style={{
+                        display: 'grid',
+                        gridTemplateColumns: columns.map(c => c.width || '1fr').join(' ') + (IS_ADMIN ? ' 30px' : ''),
+                        gap: '0.5rem', marginBottom: '0.5rem', padding: '0 0.5rem'
+                    }}>
+                        {columns.map(col => (
+                            <span key={col.key} className="text-muted mono-text" style={{ fontSize: '0.7rem' }}>
+                                {col.label}
+                            </span>
+                        ))}
+                    </div>
+                )}
+
+                {actualItems.map((item, idx) => (
+                    <div key={idx} className="tech-border" style={{
+                        display: 'grid',
+                        gridTemplateColumns: columns.map(c => c.width || '1fr').join(' ') + (IS_ADMIN ? ' 30px' : ''),
+                        gap: '0.5rem', padding: '0.5rem', marginBottom: '0.25rem',
+                        background: 'rgba(0,0,0,0.2)', alignItems: 'center'
+                    }}>
+                        {columns.map(col => (
+                            <input
+                                key={col.key}
+                                type={col.type || 'text'}
+                                placeholder={col.label}
+                                value={item[col.key] || (col.type === 'number' ? 0 : '')}
+                                onChange={e => updateItem(idx, col.key,
+                                    col.type === 'number' ? (parseInt(e.target.value) || 0) : e.target.value
+                                )}
+                                disabled={!IS_ADMIN}
+                                style={{
+                                    background: 'transparent', border: 'none',
+                                    borderBottom: '1px solid var(--border-color)',
+                                    color: 'var(--text-primary)', width: '100%',
+                                    fontSize: '0.85rem'
+                                }}
+                            />
+                        ))}
+                        {IS_ADMIN && (
+                            <button onClick={() => removeItem(idx)} style={{
+                                background: 'transparent', border: 'none',
+                                color: 'var(--accent-danger)', cursor: 'pointer'
+                            }}>
+                                <Icon name="x" size={14} />
+                            </button>
+                        )}
+                    </div>
+                ))}
+
+                {actualItems.length === 0 && (
+                    <p className="text-muted text-center" style={{ fontSize: '0.8rem', fontStyle: 'italic' }}>
+                        No data recorded.
+                    </p>
+                )}
+            </div>
+        );
+    };
+
+    // --- CHANGE REQUEST PANEL (player agency) ---
+    const ChangeRequestPanel = ({ agencyId }) => {
+        const [requests, setRequests] = useState([]);
+        const [showForm, setShowForm] = useState(false);
+        const [fieldName, setFieldName] = useState('');
+        const [description, setDescription] = useState('');
+        const [submitting, setSubmitting] = useState(false);
+
+        useEffect(() => {
+            fetchRequests();
+        }, []);
+
+        const fetchRequests = async () => {
+            try {
+                const res = await fetch(`/api/agencies/${agencyId}/changes/`);
+                if (res.ok) setRequests(await res.json());
+            } catch (err) {
+                console.error('Failed to fetch change requests:', err);
+            }
+        };
+
+        const submitRequest = async () => {
+            if (!fieldName.trim() || !description.trim()) return;
+            setSubmitting(true);
+            try {
+                const res = await fetch(`/api/agencies/${agencyId}/changes/`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-CSRFToken': getCookie('csrftoken') || CSRF_TOKEN,
+                    },
+                    body: JSON.stringify({
+                        fieldName: fieldName,
+                        description: description,
+                        proposedChanges: {}
+                    }),
+                });
+                if (res.ok) {
+                    setFieldName('');
+                    setDescription('');
+                    setShowForm(false);
+                    fetchRequests();
+                }
+            } catch (err) {
+                console.error('Failed to submit change request:', err);
+            } finally {
+                setSubmitting(false);
+            }
+        };
+
+        const reviewRequest = async (id, action, adminNote = '') => {
+            try {
+                const res = await fetch(`/api/changes/${id}/review/`, {
+                    method: 'PUT',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-CSRFToken': getCookie('csrftoken') || CSRF_TOKEN,
+                    },
+                    body: JSON.stringify({ action, adminNote }),
+                });
+                if (res.ok) fetchRequests();
+            } catch (err) {
+                console.error('Failed to review request:', err);
+            }
+        };
+
+        const pending = requests.filter(r => r.status === 'pending');
+        const reviewed = requests.filter(r => r.status !== 'pending');
+
+        return (
+            <div className="glass-panel" style={{
+                padding: '1.5rem', marginBottom: '1rem',
+                borderLeft: '3px solid var(--accent-warning)'
+            }}>
+                <h3 className="mono-text text-accent" style={{
+                    borderBottom: '1px solid var(--border-color)',
+                    paddingBottom: '0.5rem', marginBottom: '1rem',
+                    display: 'flex', justifyContent: 'space-between', alignItems: 'center'
+                }}>
+                    <span>
+                        CHANGE REQUESTS
+                        {pending.length > 0 && (
+                            <span style={{
+                                background: 'var(--accent-warning)',
+                                color: 'var(--bg-dark)',
+                                borderRadius: '50%', width: '20px', height: '20px',
+                                display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+                                fontSize: '0.7rem', fontWeight: 'bold', marginLeft: '0.5rem'
+                            }}>{pending.length}</span>
+                        )}
+                    </span>
+                    {!IS_ADMIN && (
+                        <button onClick={() => setShowForm(!showForm)} style={{
+                            background: 'transparent', border: '1px solid var(--accent-primary)',
+                            color: 'var(--accent-primary)', padding: '4px 12px',
+                            cursor: 'pointer', fontFamily: 'var(--font-mono)', fontSize: '0.8rem'
+                        }}>
+                            REQUEST CHANGE
+                        </button>
+                    )}
+                </h3>
+
+                {/* Submit form (non-admin) */}
+                {showForm && !IS_ADMIN && (
+                    <div className="tech-border" style={{ padding: '1rem', marginBottom: '1rem', background: 'rgba(0,0,0,0.2)' }}>
+                        <div style={{ marginBottom: '0.5rem' }}>
+                            <label className="text-muted mono-text" style={{ fontSize: '0.8rem' }}>SECTION</label>
+                            <select value={fieldName} onChange={e => setFieldName(e.target.value)}
+                                style={{
+                                    width: '100%', background: 'var(--bg-input, #1a1a2e)',
+                                    border: '1px solid var(--border-color)', color: 'var(--text-primary)',
+                                    padding: '0.25rem'
+                                }}>
+                                <option value="">Select section...</option>
+                                <option value="attributes">Attributes</option>
+                                <option value="specializations">Specializations</option>
+                                <option value="merits">Merits</option>
+                                <option value="flaws">Flaws</option>
+                                <option value="assets">Assets</option>
+                                <option value="fleet">Fleet</option>
+                                <option value="conditions">Conditions</option>
+                                <option value="projects">Projects</option>
+                                <option value="history">History</option>
+                                <option value="other">Other</option>
+                            </select>
+                        </div>
+                        <div style={{ marginBottom: '0.5rem' }}>
+                            <label className="text-muted mono-text" style={{ fontSize: '0.8rem' }}>DESCRIPTION</label>
+                            <textarea value={description} onChange={e => setDescription(e.target.value)}
+                                placeholder="Describe the change you'd like to make..."
+                                style={{
+                                    width: '100%', minHeight: '60px', background: 'transparent',
+                                    border: '1px solid var(--border-color)', color: 'var(--text-primary)',
+                                    padding: '0.5rem', fontFamily: 'inherit', resize: 'vertical'
+                                }} />
+                        </div>
+                        <div style={{ display: 'flex', gap: '0.5rem', justifyContent: 'flex-end' }}>
+                            <button onClick={() => setShowForm(false)} style={{
+                                background: 'transparent', border: '1px solid var(--border-color)',
+                                color: 'var(--text-muted)', padding: '4px 12px', cursor: 'pointer'
+                            }}>CANCEL</button>
+                            <button onClick={submitRequest} disabled={submitting} style={{
+                                background: 'var(--accent-primary)', border: 'none',
+                                color: 'var(--bg-dark)', padding: '4px 12px',
+                                cursor: 'pointer', fontWeight: 'bold'
+                            }}>{submitting ? 'SUBMITTING...' : 'SUBMIT'}</button>
+                        </div>
+                    </div>
+                )}
+
+                {/* Pending requests */}
+                {pending.map(cr => (
+                    <div key={cr.id} className="tech-border" style={{
+                        padding: '0.75rem', marginBottom: '0.5rem',
+                        background: 'rgba(0,0,0,0.2)',
+                        borderLeft: '2px solid var(--accent-warning)'
+                    }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                            <div>
+                                <span className="mono-text text-accent" style={{ fontSize: '0.85rem' }}>
+                                    {cr.fieldName}
+                                </span>
+                                <span className="text-muted" style={{ fontSize: '0.8rem', marginLeft: '0.5rem' }}>
+                                    by {cr.requester}
+                                </span>
+                            </div>
+                            <span className="mono-text" style={{
+                                fontSize: '0.7rem', padding: '2px 6px',
+                                border: '1px solid var(--accent-warning)',
+                                color: 'var(--accent-warning)'
+                            }}>PENDING</span>
+                        </div>
+                        <p className="text-secondary" style={{ fontSize: '0.85rem', marginTop: '0.25rem' }}>
+                            {cr.description}
+                        </p>
+                        {IS_ADMIN && (
+                            <div style={{ display: 'flex', gap: '0.5rem', marginTop: '0.5rem', justifyContent: 'flex-end' }}>
+                                <button
+                                    onClick={() => {
+                                        const note = prompt('Admin note (optional):') || '';
+                                        reviewRequest(cr.id, 'approve', note);
+                                    }}
+                                    style={{
+                                        background: 'var(--accent-success, #00cc66)', border: 'none',
+                                        color: 'var(--bg-dark)', padding: '4px 12px',
+                                        cursor: 'pointer', fontFamily: 'var(--font-mono)',
+                                        fontSize: '0.8rem', fontWeight: 'bold'
+                                    }}>APPROVE</button>
+                                <button
+                                    onClick={() => {
+                                        const note = prompt('Reason for rejection:') || '';
+                                        reviewRequest(cr.id, 'reject', note);
+                                    }}
+                                    style={{
+                                        background: 'var(--accent-danger)', border: 'none',
+                                        color: 'var(--bg-dark)', padding: '4px 12px',
+                                        cursor: 'pointer', fontFamily: 'var(--font-mono)',
+                                        fontSize: '0.8rem', fontWeight: 'bold'
+                                    }}>REJECT</button>
+                            </div>
+                        )}
+                    </div>
+                ))}
+
+                {/* Reviewed requests */}
+                {reviewed.length > 0 && (
+                    <details style={{ marginTop: '0.5rem' }}>
+                        <summary className="text-muted mono-text" style={{ cursor: 'pointer', fontSize: '0.8rem' }}>
+                            HISTORY ({reviewed.length})
+                        </summary>
+                        {reviewed.map(cr => (
+                            <div key={cr.id} style={{
+                                padding: '0.5rem', marginTop: '0.25rem',
+                                borderLeft: `2px solid ${cr.status === 'approved' ? 'var(--accent-success, #00cc66)' : 'var(--accent-danger)'}`,
+                                opacity: 0.7
+                            }}>
+                                <span className="mono-text" style={{ fontSize: '0.8rem' }}>
+                                    {cr.fieldName}
+                                </span>
+                                <span style={{
+                                    fontSize: '0.7rem', marginLeft: '0.5rem',
+                                    color: cr.status === 'approved' ? 'var(--accent-success, #00cc66)' : 'var(--accent-danger)'
+                                }}>
+                                    {cr.status.toUpperCase()}
+                                </span>
+                                {cr.adminNote && (
+                                    <p className="text-muted" style={{ fontSize: '0.8rem', marginTop: '0.25rem' }}>
+                                        Note: {cr.adminNote}
+                                    </p>
+                                )}
+                            </div>
+                        ))}
+                    </details>
+                )}
+
+                {requests.length === 0 && (
+                    <p className="text-muted text-center" style={{ fontSize: '0.8rem', fontStyle: 'italic' }}>
+                        No change requests.
+                    </p>
+                )}
+            </div>
+        );
+    };
+
+    // --- MAIN APP ---
+    const AgencySheet = () => {
+        const [agency, setAgency] = useState(null);
+        const [loading, setLoading] = useState(true);
+        const [saveStatus, setSaveStatus] = useState('saved');
+        const saveTimerRef = useRef(null);
+        const agencyRef = useRef(null);
+
+        useEffect(() => {
+            fetchAgency();
+        }, []);
+
+        const fetchAgency = async () => {
+            try {
+                const response = await fetch('/api/agencies/' + AGENCY_ID + '/');
+                if (response.ok) {
+                    const data = await response.json();
+                    const merged = { ...DEFAULT_AGENCY, ...data };
+                    // Merge attributes carefully
+                    if (data.attributes && typeof data.attributes === 'object') {
+                        merged.attributes = {
+                            power: { ...DEFAULT_AGENCY.attributes.power, ...(data.attributes.power || {}) },
+                            finesse: { ...DEFAULT_AGENCY.attributes.finesse, ...(data.attributes.finesse || {}) },
+                            resistance: { ...DEFAULT_AGENCY.attributes.resistance, ...(data.attributes.resistance || {}) },
+                            // Include any custom categories
+                            ...Object.fromEntries(
+                                Object.entries(data.attributes).filter(
+                                    ([k]) => !['power', 'finesse', 'resistance'].includes(k)
+                                )
+                            )
+                        };
+                    }
+                    setAgency(merged);
+                    agencyRef.current = merged;
+                }
+            } catch (err) {
+                console.error('Failed to load agency:', err);
+            } finally {
+                setLoading(false);
+            }
+        };
+
+        const saveAgency = useCallback(async (data) => {
+            setSaveStatus('saving');
+            try {
+                const response = await fetch('/api/agencies/' + AGENCY_ID + '/', {
+                    method: 'PUT',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-CSRFToken': getCookie('csrftoken') || CSRF_TOKEN,
+                    },
+                    body: JSON.stringify(data),
+                });
+                if (response.ok) {
+                    setSaveStatus('saved');
+                } else {
+                    setSaveStatus('error');
+                }
+            } catch (err) {
+                setSaveStatus('error');
+            }
+        }, []);
+
+        const updateAgency = (updates) => {
+            if (!IS_ADMIN) return;
+            const updated = { ...agencyRef.current, ...updates };
+            setAgency(updated);
+            agencyRef.current = updated;
+            setSaveStatus('unsaved');
+
+            if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
+            saveTimerRef.current = setTimeout(() => {
+                saveAgency(updated);
+            }, 1000);
+        };
+
+        const toggleVisibility = async (field, visible) => {
+            try {
+                const res = await fetch(`/api/agencies/${AGENCY_ID}/visibility/`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-CSRFToken': getCookie('csrftoken') || CSRF_TOKEN,
+                    },
+                    body: JSON.stringify({ field, visible }),
+                });
+                if (res.ok) {
+                    const result = await res.json();
+                    const updated = {
+                        ...agencyRef.current,
+                        fieldVisibility: {
+                            ...(agencyRef.current.fieldVisibility || {}),
+                            [field]: result.visible
+                        }
+                    };
+                    setAgency(updated);
+                    agencyRef.current = updated;
+                }
+            } catch (err) {
+                console.error('Failed to toggle visibility:', err);
+            }
+        };
+
+        if (loading) {
+            return (
+                <div style={{ textAlign: 'center', padding: '4rem' }}>
+                    <h2 className="mono-text text-accent" style={{ animation: 'pulse 1.5s infinite' }}>
+                        DECRYPTING AGENCY RECORD...
+                    </h2>
+                </div>
+            );
+        }
+
+        if (!agency) {
+            return (
+                <div style={{ textAlign: 'center', padding: '4rem' }}>
+                    <h2 className="mono-text text-danger">ERROR: RECORD NOT FOUND</h2>
+                </div>
+            );
+        }
+
+        const vis = agency.fieldVisibility || {};
+
+        return (
+            <div className="fade-in">
+                {/* Sub-header with save status */}
+                <div style={{
+                    display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+                    marginBottom: '1rem', paddingBottom: '0.5rem',
+                    borderBottom: '1px solid var(--border-color)'
+                }}>
+                    <h2 className="mono-text text-accent" style={{ fontSize: '1.2rem' }}>
+                        AGENCY RECORD
+                        {!IS_ADMIN && !IS_PLAYER_AGENCY && (
+                            <span className="text-muted" style={{ fontSize: '0.8rem', marginLeft: '1rem' }}>
+                                READ ONLY
+                            </span>
+                        )}
+                    </h2>
+                    <div style={{ display: 'flex', gap: '1rem', alignItems: 'center' }}>
+                        {IS_ADMIN && <SaveStatus status={saveStatus} />}
+                        <a href="/agencies/"
+                            className="mono-text"
+                            style={{
+                                background: 'transparent', border: '1px solid var(--accent-primary)',
+                                color: 'var(--accent-primary)', padding: '0.5rem 1rem',
+                                cursor: 'pointer', textDecoration: 'none', fontSize: '0.9rem'
+                            }}>
+                            &lt; CLOSE RECORD
+                        </a>
+                    </div>
+                </div>
+
+                <HeaderModule agency={agency} update={updateAgency}
+                    visibility={vis} onToggleVis={toggleVisibility} />
+
+                <NotesModule notes={agency.notes} update={updateAgency}
+                    visibility={vis} onToggleVis={toggleVisibility} />
+
+                <IntegrityModule agency={agency} update={updateAgency}
+                    visibility={vis} onToggleVis={toggleVisibility} />
+
+                <AttributesModule
+                    attributes={agency.attributes}
+                    update={attrs => updateAgency({ attributes: attrs })}
+                    visibility={vis} onToggleVis={toggleVisibility} />
+
+                <TableModule
+                    title="SPECIALIZATIONS" field="specializations"
+                    items={agency.specializations}
+                    columns={[
+                        { key: 'name', label: 'NAME', width: '1fr' },
+                        { key: 'relatedSkill', label: 'RELATED SKILL', width: '1fr' },
+                        { key: 'effect', label: 'EFFECT', width: '2fr' },
+                    ]}
+                    emptyItem={{ name: '', relatedSkill: '', effect: '' }}
+                    update={val => updateAgency({ specializations: val })}
+                    visibility={vis} onToggleVis={toggleVisibility}
+                />
+
+                <div style={{
+                    display: 'grid',
+                    gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))',
+                    gap: '1rem'
+                }}>
+                    <TableModule
+                        title="MERITS" field="merits"
+                        items={agency.merits}
+                        columns={[
+                            { key: 'name', label: 'NAME', width: '1fr' },
+                            { key: 'value', label: 'VALUE', width: '60px', type: 'number' },
+                            { key: 'description', label: 'DESCRIPTION', width: '2fr' },
+                        ]}
+                        emptyItem={{ name: '', value: 0, description: '' }}
+                        update={val => updateAgency({ merits: val })}
+                        visibility={vis} onToggleVis={toggleVisibility}
+                    />
+                    <TableModule
+                        title="FLAWS" field="flaws"
+                        items={agency.flaws}
+                        columns={[
+                            { key: 'name', label: 'NAME', width: '1fr' },
+                            { key: 'value', label: 'VALUE', width: '60px', type: 'number' },
+                            { key: 'description', label: 'DESCRIPTION', width: '2fr' },
+                        ]}
+                        emptyItem={{ name: '', value: 0, description: '' }}
+                        update={val => updateAgency({ flaws: val })}
+                        visibility={vis} onToggleVis={toggleVisibility}
+                    />
+                </div>
+
+                <TableModule
+                    title="ASSETS" field="assets"
+                    items={agency.assets}
+                    columns={[
+                        { key: 'name', label: 'NAME', width: '1fr' },
+                        { key: 'type', label: 'TYPE', width: '1fr' },
+                        { key: 'status', label: 'STATUS', width: '1fr' },
+                        { key: 'notes', label: 'NOTES', width: '2fr' },
+                    ]}
+                    emptyItem={{ name: '', type: '', status: '', notes: '' }}
+                    update={val => updateAgency({ assets: val })}
+                    visibility={vis} onToggleVis={toggleVisibility}
+                />
+
+                <TableModule
+                    title="FLEET" field="fleet"
+                    items={agency.fleet}
+                    columns={[
+                        { key: 'shipClass', label: 'SHIP CLASS', width: '1fr' },
+                        { key: 'role', label: 'ROLE', width: '1fr' },
+                        { key: 'quantity', label: 'QTY', width: '60px', type: 'number' },
+                        { key: 'notes', label: 'NOTES', width: '2fr' },
+                    ]}
+                    emptyItem={{ shipClass: '', role: '', quantity: 0, notes: '' }}
+                    update={val => updateAgency({ fleet: val })}
+                    visibility={vis} onToggleVis={toggleVisibility}
+                />
+
+                <TableModule
+                    title="CONDITIONS" field="conditions"
+                    items={agency.conditions}
+                    columns={[
+                        { key: 'condition', label: 'CONDITION', width: '1fr' },
+                        { key: 'source', label: 'SOURCE', width: '1fr' },
+                        { key: 'effect', label: 'EFFECT', width: '2fr' },
+                        { key: 'duration', label: 'DURATION', width: '1fr' },
+                    ]}
+                    emptyItem={{ condition: '', source: '', effect: '', duration: '' }}
+                    update={val => updateAgency({ conditions: val })}
+                    visibility={vis} onToggleVis={toggleVisibility}
+                />
+
+                <TableModule
+                    title="PROJECTS" field="projects"
+                    items={agency.projects}
+                    columns={[
+                        { key: 'name', label: 'NAME', width: '1fr' },
+                        { key: 'player', label: 'PLAYER', width: '1fr' },
+                        { key: 'duration', label: 'DURATION', width: '1fr' },
+                        { key: 'completionScore', label: 'COMPLETION', width: '80px', type: 'number' },
+                        { key: 'notes', label: 'NOTES', width: '2fr' },
+                    ]}
+                    emptyItem={{ name: '', player: '', duration: '', completionScore: 0, notes: '' }}
+                    update={val => updateAgency({ projects: val })}
+                    visibility={vis} onToggleVis={toggleVisibility}
+                />
+
+                <TableModule
+                    title="HISTORY" field="history"
+                    items={agency.history}
+                    columns={[
+                        { key: 'year', label: 'YEAR', width: '80px' },
+                        { key: 'decision', label: 'DECISION', width: '2fr' },
+                        { key: 'consequence', label: 'CONSEQUENCE', width: '2fr' },
+                    ]}
+                    emptyItem={{ year: '', decision: '', consequence: '' }}
+                    update={val => updateAgency({ history: val })}
+                    visibility={vis} onToggleVis={toggleVisibility}
+                />
+
+                {/* Change Request Panel — only for player agency */}
+                {IS_PLAYER_AGENCY && (
+                    <ChangeRequestPanel agencyId={AGENCY_ID} />
+                )}
+            </div>
+        );
+    };
+
+    const root = ReactDOM.createRoot(document.getElementById('app-root'));
+    root.render(<AgencySheet />);
+</script>
+{% endverbatim %}
+{% endblock %}

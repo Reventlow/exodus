@@ -1,0 +1,310 @@
+{% extends "base.html" %}
+
+{% block title %}AGENCIES // FOUNDATION{% endblock %}
+
+{% block content %}
+<div id="app-root">
+    <div class="loading-screen">
+        <h1 class="mono-text">LOADING AGENCY DATABASE...</h1>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    // Django context variables — outside verbatim block
+    const CURRENT_USER = '{{ user.username }}';
+    const IS_ADMIN = {{ user.is_superuser|yesno:"true,false" }};
+    const CSRF_TOKEN = '{{ csrf_token }}';
+</script>
+{% verbatim %}
+<script type="text/babel">
+    const { useState, useEffect } = React;
+
+    // CSRF cookie reader for fetch requests
+    function getCookie(name) {
+        let cookieValue = null;
+        if (document.cookie && document.cookie !== '') {
+            const cookies = document.cookie.split(';');
+            for (let i = 0; i < cookies.length; i++) {
+                const cookie = cookies[i].trim();
+                if (cookie.substring(0, name.length + 1) === (name + '=')) {
+                    cookieValue = decodeURIComponent(cookie.substring(name.length + 1));
+                    break;
+                }
+            }
+        }
+        return cookieValue;
+    }
+
+    // Icon component using Lucide
+    const Icon = ({ name, size = 16, className = "" }) => {
+        useEffect(() => {
+            if (window.lucide) window.lucide.createIcons();
+        }, [name]);
+        return <i data-lucide={name} width={size} height={size} className={className}></i>;
+    };
+
+    const AgencyCard = ({ agency, onClick }) => (
+        <div
+            className="tech-border glitch-hover"
+            style={{
+                padding: '1rem',
+                background: agency.isPlayerAgency
+                    ? 'linear-gradient(135deg, var(--bg-panel), rgba(var(--accent-primary-rgb, 0,255,136), 0.05))'
+                    : 'var(--bg-panel)',
+                cursor: 'pointer',
+                transition: 'all 0.2s',
+                borderLeft: agency.isPlayerAgency ? '3px solid var(--accent-primary)' : 'none'
+            }}
+            onClick={onClick}
+        >
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                <h3 className="text-accent mono-text" style={{ fontSize: '1.1rem' }}>
+                    {agency.name}
+                </h3>
+                {agency.isPlayerAgency && (
+                    <span className="mono-text" style={{
+                        fontSize: '0.7rem', padding: '2px 6px',
+                        border: '1px solid var(--accent-primary)',
+                        color: 'var(--accent-primary)'
+                    }}>PLAYER</span>
+                )}
+            </div>
+            <p className="text-secondary" style={{ fontSize: '0.9rem', marginTop: '0.25rem' }}>
+                {agency.alliance || <span className="text-muted" style={{ fontStyle: 'italic' }}>No Alliance</span>}
+            </p>
+            {agency.motto && agency.motto !== 'CLASSIFIED' && (
+                <p className="text-muted" style={{ fontSize: '0.8rem', fontStyle: 'italic', marginTop: '0.5rem' }}>
+                    "{agency.motto}"
+                </p>
+            )}
+            {agency.motto === 'CLASSIFIED' && (
+                <p className="classified" style={{ fontSize: '0.8rem', marginTop: '0.5rem' }}>
+                    CLASSIFIED
+                </p>
+            )}
+        </div>
+    );
+
+    const NotificationBadge = ({ count }) => {
+        if (!count) return null;
+        return (
+            <span style={{
+                background: 'var(--accent-danger)',
+                color: 'var(--bg-dark)',
+                borderRadius: '50%',
+                width: '20px', height: '20px',
+                display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+                fontSize: '0.7rem', fontWeight: 'bold', marginLeft: '0.5rem'
+            }}>{count}</span>
+        );
+    };
+
+    const Dashboard = () => {
+        const [agencies, setAgencies] = useState([]);
+        const [loading, setLoading] = useState(true);
+        const [creating, setCreating] = useState(false);
+        const [notifications, setNotifications] = useState({});
+
+        useEffect(() => {
+            fetchAgencies();
+            fetchNotifications();
+        }, []);
+
+        const fetchAgencies = async () => {
+            try {
+                const response = await fetch('/api/agencies/');
+                if (response.ok) {
+                    const data = await response.json();
+                    setAgencies(data);
+                }
+            } catch (err) {
+                console.error('Failed to fetch agencies:', err);
+            } finally {
+                setLoading(false);
+            }
+        };
+
+        const fetchNotifications = async () => {
+            try {
+                const response = await fetch('/api/agencies/notifications/');
+                if (response.ok) {
+                    setNotifications(await response.json());
+                }
+            } catch (err) {
+                console.error('Failed to fetch notifications:', err);
+            }
+        };
+
+        const createAgency = async (isPlayer) => {
+            setCreating(true);
+            try {
+                const response = await fetch('/api/agencies/', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-CSRFToken': getCookie('csrftoken') || CSRF_TOKEN,
+                    },
+                    body: JSON.stringify({
+                        name: isPlayer ? 'NEW PLAYER AGENCY' : 'NEW NPC AGENCY',
+                        isPlayerAgency: isPlayer,
+                    }),
+                });
+                if (response.ok) {
+                    const newAgency = await response.json();
+                    window.location.href = '/agencies/' + newAgency.id + '/';
+                } else {
+                    const err = await response.json();
+                    alert(err.error || 'Failed to create agency');
+                }
+            } catch (err) {
+                console.error('Failed to create agency:', err);
+            } finally {
+                setCreating(false);
+            }
+        };
+
+        if (loading) {
+            return (
+                <div style={{ textAlign: 'center', padding: '4rem' }}>
+                    <h2 className="mono-text text-accent" style={{ animation: 'pulse 1.5s infinite' }}>
+                        ACCESSING AGENCY DATABASE...
+                    </h2>
+                </div>
+            );
+        }
+
+        const playerAgencies = agencies.filter(a => a.isPlayerAgency);
+        const npcAgencies = agencies.filter(a => !a.isPlayerAgency);
+        const notifCount = (notifications.pendingRequests || 0) + (notifications.reviewedRequests || 0);
+
+        return (
+            <div>
+                <div className="glass-panel" style={{ padding: '2rem', maxWidth: '900px', margin: '2rem auto' }}>
+                    <h2 className="mono-text" style={{
+                        marginBottom: '1.5rem',
+                        borderBottom: '1px solid var(--border-color)',
+                        paddingBottom: '0.5rem',
+                        display: 'flex',
+                        justifyContent: 'space-between',
+                        alignItems: 'center'
+                    }}>
+                        <span className="text-accent">
+                            <Icon name="building-2" size={20} /> AGENCY DATABASE
+                            <NotificationBadge count={notifCount} />
+                        </span>
+                        <span className="text-muted" style={{ fontSize: '0.8rem' }}>
+                            {agencies.length} RECORD{agencies.length !== 1 ? 'S' : ''}
+                        </span>
+                    </h2>
+
+                    {/* Player Agency Section */}
+                    {playerAgencies.length > 0 && (
+                        <div style={{ marginBottom: '2rem' }}>
+                            <h3 className="mono-text text-muted" style={{
+                                fontSize: '0.9rem', marginBottom: '1rem',
+                                borderBottom: '1px solid var(--border-color)', paddingBottom: '0.25rem'
+                            }}>
+                                PLAYER AGENCY
+                            </h3>
+                            <div style={{
+                                display: 'grid',
+                                gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))',
+                                gap: '1rem'
+                            }}>
+                                {playerAgencies.map(agency => (
+                                    <AgencyCard
+                                        key={agency.id}
+                                        agency={agency}
+                                        onClick={() => { window.location.href = '/agencies/' + agency.id + '/'; }}
+                                    />
+                                ))}
+                            </div>
+                        </div>
+                    )}
+
+                    {/* NPC Agencies Section */}
+                    {npcAgencies.length > 0 && (
+                        <div style={{ marginBottom: '2rem' }}>
+                            <h3 className="mono-text text-muted" style={{
+                                fontSize: '0.9rem', marginBottom: '1rem',
+                                borderBottom: '1px solid var(--border-color)', paddingBottom: '0.25rem'
+                            }}>
+                                NPC AGENCIES
+                            </h3>
+                            <div style={{
+                                display: 'grid',
+                                gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))',
+                                gap: '1rem'
+                            }}>
+                                {npcAgencies.map(agency => (
+                                    <AgencyCard
+                                        key={agency.id}
+                                        agency={agency}
+                                        onClick={() => { window.location.href = '/agencies/' + agency.id + '/'; }}
+                                    />
+                                ))}
+                            </div>
+                        </div>
+                    )}
+
+                    {agencies.length === 0 && (
+                        <p className="text-muted text-center mono-text" style={{ fontStyle: 'italic', padding: '2rem 0' }}>
+                            No agency records in database.
+                        </p>
+                    )}
+
+                    {/* Admin: Create buttons */}
+                    {IS_ADMIN && (
+                        <div style={{ textAlign: 'center', padding: '1rem 0', display: 'flex', gap: '1rem', justifyContent: 'center' }}>
+                            <button
+                                onClick={() => createAgency(true)}
+                                disabled={creating}
+                                style={{
+                                    background: 'var(--accent-primary)',
+                                    border: 'none',
+                                    color: 'var(--bg-dark)',
+                                    padding: '0.75rem 2rem',
+                                    cursor: creating ? 'wait' : 'pointer',
+                                    fontWeight: 'bold',
+                                    fontFamily: 'var(--font-mono)',
+                                    fontSize: '0.9rem',
+                                    letterSpacing: '1px',
+                                    borderRadius: 'var(--radius-sm)',
+                                    opacity: creating ? 0.6 : 1
+                                }}
+                            >
+                                {creating ? 'CREATING...' : 'CREATE PLAYER AGENCY'}
+                            </button>
+                            <button
+                                onClick={() => createAgency(false)}
+                                disabled={creating}
+                                style={{
+                                    background: 'transparent',
+                                    border: '1px solid var(--accent-primary)',
+                                    color: 'var(--accent-primary)',
+                                    padding: '0.75rem 2rem',
+                                    cursor: creating ? 'wait' : 'pointer',
+                                    fontWeight: 'bold',
+                                    fontFamily: 'var(--font-mono)',
+                                    fontSize: '0.9rem',
+                                    letterSpacing: '1px',
+                                    borderRadius: 'var(--radius-sm)',
+                                    opacity: creating ? 0.6 : 1
+                                }}
+                            >
+                                {creating ? 'CREATING...' : 'CREATE NPC AGENCY'}
+                            </button>
+                        </div>
+                    )}
+                </div>
+            </div>
+        );
+    };
+
+    const root = ReactDOM.createRoot(document.getElementById('app-root'));
+    root.render(<Dashboard />);
+</script>
+{% endverbatim %}
+{% endblock %}
