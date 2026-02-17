@@ -1,5 +1,8 @@
 # Changelog
 
+## v0.1.6
+- Fixed changelog not showing in Docker deployment (was excluded by .dockerignore)
+
 ## v0.1.5
 - Hamburger menu for mobile navigation (collapses below 640px)
 
