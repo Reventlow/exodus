@@ -6,7 +6,7 @@ __pycache__
 .gitignore
 db.sqlite3
 staticfiles/
-*.md
+README.md
 .env
 .venv
 venv/
