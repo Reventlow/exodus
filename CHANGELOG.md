@@ -1,5 +1,8 @@
 # Changelog
 
+## v0.1.5
+- Hamburger menu for mobile navigation (collapses below 640px)
+
 ## v0.1.4
 - Added agencies feature for geopolitical organizations
 - Player agency with change request workflow
