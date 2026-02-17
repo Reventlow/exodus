@@ -74,12 +74,58 @@
         experience: 0
     };
 
-    // --- ICON COMPONENT ---
-    const Icon = ({ name, size = 16, className = "" }) => {
-        useEffect(() => {
+    // --- ICON COMPONENT (debounced createIcons to avoid per-render overhead) ---
+    let _iconTimer = null;
+    const _refreshIcons = () => {
+        if (_iconTimer) clearTimeout(_iconTimer);
+        _iconTimer = setTimeout(() => {
             if (window.lucide) window.lucide.createIcons();
-        }, [name]);
+        }, 50);
+    };
+    const Icon = ({ name, size = 16, className = "" }) => {
+        useEffect(() => { _refreshIcons(); }, [name]);
         return <i data-lucide={name} width={size} height={size} className={className}></i>;
+    };
+
+    // --- DEBOUNCED INPUT (local state, propagates on blur or after delay) ---
+    const DebouncedInput = ({ value, onChange, delay = 800, component = 'input', ...props }) => {
+        const [local, setLocal] = useState(value);
+        const timerRef = useRef(null);
+        const latestLocal = useRef(local);
+        const latestProp = useRef(value);
+
+        // Sync from parent only when the prop changes externally
+        useEffect(() => {
+            latestProp.current = value;
+            if (!timerRef.current) {
+                setLocal(value);
+                latestLocal.current = value;
+            }
+        }, [value]);
+
+        const handleChange = (e) => {
+            const val = e.target.value;
+            setLocal(val);
+            latestLocal.current = val;
+            if (timerRef.current) clearTimeout(timerRef.current);
+            timerRef.current = setTimeout(() => {
+                timerRef.current = null;
+                onChange(val);
+            }, delay);
+        };
+
+        const handleBlur = () => {
+            if (timerRef.current) {
+                clearTimeout(timerRef.current);
+                timerRef.current = null;
+            }
+            if (latestLocal.current !== latestProp.current) {
+                onChange(latestLocal.current);
+            }
+        };
+
+        const Tag = component;
+        return <Tag {...props} value={local} onChange={handleChange} onBlur={handleBlur} />;
     };
 
     // --- STAT DOTS ---
@@ -111,7 +157,7 @@
         }}>
             <div>
                 <label className="text-secondary mono-text" style={{ fontSize: '0.8rem' }}>CODENAME</label>
-                <input type="text" value={char.name} onChange={e => update({ name: e.target.value })}
+                <DebouncedInput type="text" value={char.name} onChange={val => update({ name: val })}
                     style={{
                         background: 'transparent', border: 'none',
                         borderBottom: '1px solid var(--accent-primary)',
@@ -121,7 +167,7 @@
             </div>
             <div>
                 <label className="text-secondary mono-text" style={{ fontSize: '0.8rem' }}>CONCEPT</label>
-                <input type="text" value={char.concept} onChange={e => update({ concept: e.target.value })}
+                <DebouncedInput type="text" value={char.concept} onChange={val => update({ concept: val })}
                     style={{
                         background: 'transparent', border: 'none',
                         borderBottom: '1px solid var(--border-color)',
@@ -130,7 +176,7 @@
             </div>
             <div>
                 <label className="text-secondary mono-text" style={{ fontSize: '0.8rem' }}>CHRONICLE</label>
-                <input type="text" value={char.chronicle} onChange={e => update({ chronicle: e.target.value })}
+                <DebouncedInput type="text" value={char.chronicle} onChange={val => update({ chronicle: val })}
                     style={{
                         background: 'transparent', border: 'none',
                         borderBottom: '1px solid var(--border-color)',
@@ -140,16 +186,16 @@
             <div>
                 <label className="text-secondary mono-text" style={{ fontSize: '0.8rem' }}>VIRTUE / VICE</label>
                 <div style={{ display: 'flex', gap: '0.5rem' }}>
-                    <input type="text" placeholder="Virtue" value={char.virtue}
-                        onChange={e => update({ virtue: e.target.value })}
+                    <DebouncedInput type="text" placeholder="Virtue" value={char.virtue}
+                        onChange={val => update({ virtue: val })}
                         style={{
                             background: 'transparent', border: 'none',
                             borderBottom: '1px solid var(--border-color)',
                             color: 'var(--text-primary)', width: '50%'
                         }} />
                     <span className="text-muted">/</span>
-                    <input type="text" placeholder="Vice" value={char.vice}
-                        onChange={e => update({ vice: e.target.value })}
+                    <DebouncedInput type="text" placeholder="Vice" value={char.vice}
+                        onChange={val => update({ vice: val })}
                         style={{
                             background: 'transparent', border: 'none',
                             borderBottom: '1px solid var(--border-color)',
@@ -472,11 +518,11 @@
                     padding: '0.5rem', marginBottom: '0.5rem', background: 'rgba(0,0,0,0.2)'
                 }}>
                     <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
-                        <input
+                        <DebouncedInput
                             type="text"
                             placeholder={itemLabel + ' Name'}
                             value={item.name}
-                            onChange={e => onUpdate(idx, { ...item, name: e.target.value })}
+                            onChange={val => onUpdate(idx, { ...item, name: val })}
                             disabled={!IS_OWNER}
                             style={{
                                 background: 'transparent', border: 'none',
@@ -496,10 +542,11 @@
                             </button>
                         )}
                     </div>
-                    <textarea
+                    <DebouncedInput
+                        component="textarea"
                         placeholder="Description / Effects..."
                         value={item.description || ""}
-                        onChange={e => onUpdate(idx, { ...item, description: e.target.value })}
+                        onChange={val => onUpdate(idx, { ...item, description: val })}
                         disabled={!IS_OWNER}
                         style={{
                             width: '100%', background: 'transparent', border: 'none',
@@ -552,12 +599,12 @@
                             display: 'flex', gap: '0.5rem',
                             alignItems: 'center', marginBottom: '0.5rem'
                         }}>
-                            <input
+                            <DebouncedInput
                                 type="text"
                                 placeholder="Item Name"
                                 value={item.name}
-                                onChange={e => update(inventory.map((it, i) =>
-                                    i === idx ? { ...it, name: e.target.value } : it))}
+                                onChange={val => update(inventory.map((it, i) =>
+                                    i === idx ? { ...it, name: val } : it))}
                                 disabled={!IS_OWNER}
                                 style={{
                                     background: 'transparent', border: 'none',
@@ -592,12 +639,12 @@
                                 </button>
                             )}
                         </div>
-                        <input
+                        <DebouncedInput
                             type="text"
                             placeholder="Notes..."
                             value={item.description}
-                            onChange={e => update(inventory.map((it, i) =>
-                                i === idx ? { ...it, description: e.target.value } : it))}
+                            onChange={val => update(inventory.map((it, i) =>
+                                i === idx ? { ...it, description: val } : it))}
                             disabled={!IS_OWNER}
                             style={{
                                 width: '100%', background: 'transparent', border: 'none',

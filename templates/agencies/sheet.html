@@ -65,12 +65,58 @@
         fieldVisibility: {}
     };
 
-    // --- ICON COMPONENT ---
-    const Icon = ({ name, size = 16, className = "" }) => {
-        useEffect(() => {
+    // --- ICON COMPONENT (debounced createIcons to avoid per-render overhead) ---
+    let _iconTimer = null;
+    const _refreshIcons = () => {
+        if (_iconTimer) clearTimeout(_iconTimer);
+        _iconTimer = setTimeout(() => {
             if (window.lucide) window.lucide.createIcons();
-        }, [name]);
+        }, 50);
+    };
+    const Icon = ({ name, size = 16, className = "" }) => {
+        useEffect(() => { _refreshIcons(); }, [name]);
         return <i data-lucide={name} width={size} height={size} className={className}></i>;
+    };
+
+    // --- DEBOUNCED INPUT (local state, propagates on blur or after delay) ---
+    const DebouncedInput = ({ value, onChange, delay = 800, component = 'input', ...props }) => {
+        const [local, setLocal] = useState(value);
+        const timerRef = useRef(null);
+        const latestLocal = useRef(local);
+        const latestProp = useRef(value);
+
+        // Sync from parent only when the prop changes externally
+        useEffect(() => {
+            latestProp.current = value;
+            if (!timerRef.current) {
+                setLocal(value);
+                latestLocal.current = value;
+            }
+        }, [value]);
+
+        const handleChange = (e) => {
+            const val = e.target.value;
+            setLocal(val);
+            latestLocal.current = val;
+            if (timerRef.current) clearTimeout(timerRef.current);
+            timerRef.current = setTimeout(() => {
+                timerRef.current = null;
+                onChange(val);
+            }, delay);
+        };
+
+        const handleBlur = () => {
+            if (timerRef.current) {
+                clearTimeout(timerRef.current);
+                timerRef.current = null;
+            }
+            if (latestLocal.current !== latestProp.current) {
+                onChange(latestLocal.current);
+            }
+        };
+
+        const Tag = component;
+        return <Tag {...props} value={local} onChange={handleChange} onBlur={handleBlur} />;
     };
 
     // --- SAVE STATUS INDICATOR ---
@@ -166,11 +212,11 @@
                     <div key={idx} style={{
                         display: 'flex', alignItems: 'center', gap: '0.25rem', marginBottom: '0.25rem'
                     }}>
-                        <input
+                        <DebouncedInput
                             type="text"
                             value={item}
                             placeholder={`Add ${title.toLowerCase().slice(0, -1)}...`}
-                            onChange={e => updateItem(category, idx, e.target.value)}
+                            onChange={val => updateItem(category, idx, val)}
                             disabled={!IS_ADMIN}
                             style={{
                                 background: 'transparent', border: 'none',
@@ -234,8 +280,8 @@
                 <label className="text-secondary mono-text" style={{ fontSize: '0.8rem' }}>
                     AGENCY NAME
                 </label>
-                <input type="text" value={agency.name}
-                    onChange={e => update({ name: e.target.value })}
+                <DebouncedInput type="text" value={agency.name}
+                    onChange={val => update({ name: val })}
                     disabled={!IS_ADMIN}
                     style={{
                         background: 'transparent', border: 'none',
@@ -250,8 +296,8 @@
                     <VisibilityToggle field="motto" visibility={visibility} onToggle={onToggleVis} />
                 </label>
                 {agency.motto === 'CLASSIFIED' ? <Classified /> : (
-                    <input type="text" value={agency.motto}
-                        onChange={e => update({ motto: e.target.value })}
+                    <DebouncedInput type="text" value={agency.motto}
+                        onChange={val => update({ motto: val })}
                         disabled={!IS_ADMIN}
                         style={{
                             background: 'transparent', border: 'none',
@@ -266,8 +312,8 @@
                     <VisibilityToggle field="headquarters" visibility={visibility} onToggle={onToggleVis} />
                 </label>
                 {agency.headquarters === 'CLASSIFIED' ? <Classified /> : (
-                    <input type="text" value={agency.headquarters}
-                        onChange={e => update({ headquarters: e.target.value })}
+                    <DebouncedInput type="text" value={agency.headquarters}
+                        onChange={val => update({ headquarters: val })}
                         disabled={!IS_ADMIN}
                         style={{
                             background: 'transparent', border: 'none',
@@ -290,9 +336,10 @@
                 <VisibilityToggle field="notes" visibility={visibility} onToggle={onToggleVis} />
             </h3>
             {notes === 'CLASSIFIED' ? <Classified /> : (
-                <textarea
+                <DebouncedInput
+                    component="textarea"
                     value={notes}
-                    onChange={e => update({ notes: e.target.value })}
+                    onChange={val => update({ notes: val })}
                     disabled={!IS_ADMIN}
                     placeholder="Agency notes..."
                     style={{
@@ -515,13 +562,13 @@
                         background: 'rgba(0,0,0,0.2)', alignItems: 'center'
                     }}>
                         {columns.map(col => (
-                            <input
+                            <DebouncedInput
                                 key={col.key}
                                 type={col.type || 'text'}
                                 placeholder={col.label}
                                 value={item[col.key] || (col.type === 'number' ? 0 : '')}
-                                onChange={e => updateItem(idx, col.key,
-                                    col.type === 'number' ? (parseInt(e.target.value) || 0) : e.target.value
+                                onChange={val => updateItem(idx, col.key,
+                                    col.type === 'number' ? (parseInt(val) || 0) : val
                                 )}
                                 disabled={!IS_ADMIN}
                                 style={{

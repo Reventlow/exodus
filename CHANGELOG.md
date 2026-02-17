@@ -1,8 +1,9 @@
 # Changelog
 
 ## v0.1.13
-- Improved auto-save: increased debounce from 1s to 2s for smoother typing
-- Auto-save now always captures latest state (fixes potential stale data on fast edits)
+- Fluid typing: inputs now use local state so keystrokes never trigger full-page re-renders
+- Changes propagate to auto-save after 800ms of inactivity or when you click away
+- Debounced Lucide icon refresh to avoid per-render overhead
 - Applied to both agency and character sheets
 
 ## v0.1.12
