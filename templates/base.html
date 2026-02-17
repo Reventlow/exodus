@@ -25,6 +25,9 @@
         <a href="/" class="mono-text text-accent" style="text-decoration: none; font-size: 1.1rem; letter-spacing: 2px;">
             FOUNDATION <span class="text-muted">//</span> EXODUS
         </a>
+        <button class="nav-burger" onclick="document.querySelector('.nav-links').classList.toggle('nav-open')" aria-label="Menu">
+            <span></span><span></span><span></span>
+        </button>
         <div class="nav-links">
             {% if user.is_authenticated %}
                 <a href="/">OPERATIVES</a>
