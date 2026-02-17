@@ -1,5 +1,8 @@
 # Changelog
 
+## v0.1.8
+- Corrected changelog version numbers to match CI releases
+
 ## v0.1.7
 - Fixed changelog not showing in Docker deployment (was excluded by .dockerignore)
 
