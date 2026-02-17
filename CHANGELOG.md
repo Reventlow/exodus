@@ -1,6 +1,9 @@
 # Changelog
 
-## v0.1.8
+## v0.1.10
+- Fixed changelog versioning to always match the upcoming CI release
+
+## v0.1.9
 - Corrected changelog version numbers to match CI releases
 
 ## v0.1.7
