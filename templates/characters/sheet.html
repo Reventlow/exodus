@@ -71,6 +71,7 @@
         health: { bashing: 0, lethal: 0, aggravated: 0 },
         willpower: { current: 0, max_mod: 0 },
         size: 5,
+        mentalLoad: 0,
         experience: 0
     };
 
@@ -379,8 +380,30 @@
         );
     };
 
+    // --- MENTAL LOAD PENALTIES ---
+    const getMentalLoadPenalties = (level) => {
+        let social = 0, cognitive = 0;
+        if (level >= 3) social -= 2;
+        if (level >= 4) cognitive -= 2;
+        if (level >= 5) { social -= 1; cognitive -= 1; }
+        if (level >= 6) { social -= 2; cognitive -= 2; }
+        return { social, cognitive };
+    };
+
     // --- HEALTH MODULE ---
-    const HealthModule = ({ health, max, update }) => {
+    const HealthModule = ({ health, max, mentalLoad, update, onMentalLoadChange }) => {
+        const deadlyFill = (health.lethal || 0) + (health.aggravated || 0);
+        const isFlatline = max > 0 && deadlyFill >= max;
+
+        // EKG speed: 2s base, faster with more mental load, flatline = no animation
+        const ekgSpeed = isFlatline ? 0 : Math.max(0.3, 2 - mentalLoad * 0.25);
+        const ekgPath = isFlatline
+            ? "M0,30 L300,30"
+            : "M0,30 L20,30 L25,10 L35,50 L40,30 L300,30";
+        const ekgColor = isFlatline ? 'var(--text-muted)' : 'var(--accent-danger)';
+
+        const penalties = getMentalLoadPenalties(mentalLoad);
+
         return (
             <div className="glass-panel" style={{
                 padding: '1.5rem', marginBottom: '1rem',
@@ -391,8 +414,10 @@
                     alignItems: 'center', marginBottom: '1rem'
                 }}>
                     <h3 className="mono-text text-danger">BIOSIGN MONITOR</h3>
-                    <div className="text-danger mono-text" style={{ animation: 'pulse 2s infinite' }}>
-                        Tracking vital signs...
+                    <div className="text-danger mono-text" style={{
+                        animation: isFlatline ? 'none' : 'pulse 2s infinite'
+                    }}>
+                        {isFlatline ? 'NO VITAL SIGNS DETECTED' : 'Tracking vital signs...'}
                     </div>
                 </div>
 
@@ -400,13 +425,13 @@
                 <div style={{
                     height: '60px', background: 'rgba(0,0,0,0.3)',
                     marginBottom: '1rem', position: 'relative', overflow: 'hidden',
-                    borderLeft: '2px solid var(--accent-danger)'
+                    borderLeft: '2px solid ' + ekgColor
                 }}>
                     <svg width="100%" height="100%" viewBox="0 0 300 60" preserveAspectRatio="none">
-                        <path d="M0,30 L20,30 L25,10 L35,50 L40,30 L300,30"
-                            fill="none" stroke="var(--accent-danger)" strokeWidth="2"
+                        <path d={ekgPath}
+                            fill="none" stroke={ekgColor} strokeWidth="2"
                             vectorEffect="non-scaling-stroke"
-                            style={{ animation: 'dash 2s linear infinite' }}
+                            style={isFlatline ? {} : { animation: 'dash ' + ekgSpeed + 's linear infinite' }}
                         />
                     </svg>
                 </div>
@@ -476,6 +501,73 @@
                                 color: 'var(--accent-danger)', width: '60px',
                                 textAlign: 'center', fontSize: '1.2rem'
                             }} />
+                    </div>
+                </div>
+
+                {/* Mental Load */}
+                <div style={{
+                    marginTop: '1.5rem', paddingTop: '1rem',
+                    borderTop: '1px solid var(--border-color)'
+                }}>
+                    <div style={{
+                        display: 'flex', justifyContent: 'space-between',
+                        alignItems: 'center', marginBottom: '0.75rem'
+                    }}>
+                        <span className="mono-text text-danger" style={{ fontSize: '0.9rem' }}>
+                            MENTAL LOAD
+                        </span>
+                        {(penalties.social !== 0 || penalties.cognitive !== 0) && (
+                            <div style={{ display: 'flex', gap: '0.75rem' }}>
+                                {penalties.social !== 0 && (
+                                    <span className="mono-text" style={{
+                                        fontSize: '0.75rem', color: 'var(--accent-warning)'
+                                    }}>
+                                        SOCIAL {penalties.social}
+                                    </span>
+                                )}
+                                {penalties.cognitive !== 0 && (
+                                    <span className="mono-text" style={{
+                                        fontSize: '0.75rem', color: 'var(--accent-warning)'
+                                    }}>
+                                        COGNITIVE {penalties.cognitive}
+                                    </span>
+                                )}
+                            </div>
+                        )}
+                    </div>
+                    <div style={{ display: 'flex', justifyContent: 'center', gap: '0.5rem' }}>
+                        {[...Array(6)].map((_, i) => {
+                            const filled = i < mentalLoad;
+                            const level = i + 1;
+                            let boxColor = 'var(--border-color)';
+                            if (filled && level <= 2) boxColor = 'var(--accent-primary)';
+                            else if (filled && level <= 4) boxColor = 'var(--accent-warning)';
+                            else if (filled) boxColor = 'var(--accent-danger)';
+                            return (
+                                <div key={i}
+                                    onClick={() => {
+                                        if (!IS_OWNER) return;
+                                        onMentalLoadChange(mentalLoad === level ? level - 1 : level);
+                                    }}
+                                    style={{
+                                        width: '28px', height: '28px',
+                                        border: '1px solid var(--accent-danger)',
+                                        background: filled ? boxColor : 'transparent',
+                                        cursor: IS_OWNER ? 'pointer' : 'default',
+                                        display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                        transition: 'all 0.2s',
+                                        boxShadow: filled ? '0 0 6px ' + boxColor : 'none'
+                                    }}
+                                    title={'Level ' + level + (level <= 2 ? ' (no effect)' : level === 3 ? ' (-2 social)' : level === 4 ? ' (-2 cognitive)' : level === 5 ? ' (-1 social, -1 cognitive)' : ' (-2 social, -2 cognitive)')}
+                                >
+                                    {filled && (
+                                        <span style={{
+                                            color: 'var(--bg-dark)', fontWeight: 'bold', fontSize: '0.7rem'
+                                        }}>{level}</span>
+                                    )}
+                                </div>
+                            );
+                        })}
                     </div>
                 </div>
             </div>
@@ -969,7 +1061,9 @@
                 <HealthModule
                     health={char.health}
                     max={char.attributes.resistance.physical + (char.size || 5)}
-                    update={h => updateCharacter({ health: h })} />
+                    mentalLoad={char.mentalLoad || 0}
+                    update={h => updateCharacter({ health: h })}
+                    onMentalLoadChange={v => updateCharacter({ mentalLoad: v })} />
 
                 <DiceRoller />
 

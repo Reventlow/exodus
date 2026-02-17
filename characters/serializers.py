@@ -20,6 +20,7 @@ def serialize_character(character):
             "aggravated": character.health_aggravated,
         },
         "size": character.size,
+        "mentalLoad": character.mental_load,
         "merits": character.merits,
         "flaws": character.flaws,
         "pullingStrings": character.pulling_strings,

@@ -82,6 +82,9 @@ class Character(models.Model):
     # Experience
     experience = models.IntegerField(default=0)
 
+    # Mental load (0-6, biosign stress indicator)
+    mental_load = models.IntegerField(default=0)
+
     # Willpower tracking
     willpower_current = models.IntegerField(default=0)
 
