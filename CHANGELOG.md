@@ -1,5 +1,10 @@
 # Changelog
 
+## v0.1.13
+- Improved auto-save: increased debounce from 1s to 2s for smoother typing
+- Auto-save now always captures latest state (fixes potential stale data on fast edits)
+- Applied to both agency and character sheets
+
 ## v0.1.12
 - Fixed alliance migration failure on production (existing string data now converted to JSON)
 

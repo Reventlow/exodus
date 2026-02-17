@@ -868,8 +868,8 @@
 
             if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
             saveTimerRef.current = setTimeout(() => {
-                saveAgency(updated);
-            }, 1000);
+                saveAgency(agencyRef.current);
+            }, 2000);
         };
 
         const toggleVisibility = async (field, visible) => {

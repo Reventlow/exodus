@@ -817,11 +817,11 @@
             charRef.current = updated;
             setSaveStatus('unsaved');
 
-            // Debounce: save 1 second after last change
+            // Debounce: save 2 seconds after last change
             if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
             saveTimerRef.current = setTimeout(() => {
-                saveCharacter(updated);
-            }, 1000);
+                saveCharacter(charRef.current);
+            }, 2000);
         };
 
         if (loading) {
