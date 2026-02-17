@@ -87,30 +87,31 @@
         return <i data-lucide={name} width={size} height={size} className={className}></i>;
     };
 
-    // --- DEBOUNCED INPUT (local state, propagates on blur or after delay) ---
-    const DebouncedInput = ({ value, onChange, delay = 800, component = 'input', ...props }) => {
+    // --- DEBOUNCED INPUT ---
+    // Keeps local state so typing never triggers parent re-renders.
+    // onSave: called after inactivity — silently persists without re-render.
+    // onChange: called on blur — syncs parent state for consistency.
+    const DebouncedInput = ({ value, onChange, onSave, delay = 1500, component = 'input', ...props }) => {
         const [local, setLocal] = useState(value);
+        const dirtyRef = useRef(false);
         const timerRef = useRef(null);
-        const latestLocal = useRef(local);
-        const latestProp = useRef(value);
 
-        // Sync from parent only when the prop changes externally
+        // Sync from parent only when not dirty (user isn't typing)
         useEffect(() => {
-            latestProp.current = value;
-            if (!timerRef.current) {
+            if (!dirtyRef.current) {
                 setLocal(value);
-                latestLocal.current = value;
             }
         }, [value]);
 
         const handleChange = (e) => {
             const val = e.target.value;
             setLocal(val);
-            latestLocal.current = val;
+            dirtyRef.current = true;
             if (timerRef.current) clearTimeout(timerRef.current);
             timerRef.current = setTimeout(() => {
                 timerRef.current = null;
-                onChange(val);
+                // Silent save — no parent re-render
+                if (onSave) onSave(val);
             }, delay);
         };
 
@@ -119,8 +120,9 @@
                 clearTimeout(timerRef.current);
                 timerRef.current = null;
             }
-            if (latestLocal.current !== latestProp.current) {
-                onChange(latestLocal.current);
+            if (dirtyRef.current) {
+                dirtyRef.current = false;
+                onChange(local);
             }
         };
 
@@ -150,14 +152,16 @@
     };
 
     // --- HEADER MODULE ---
-    const HeaderModule = ({ char, update }) => (
+    const HeaderModule = ({ char, update, quietUpdate }) => (
         <div className="glass-panel" style={{
             padding: '1.5rem', marginBottom: '1rem',
             display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '1rem'
         }}>
             <div>
                 <label className="text-secondary mono-text" style={{ fontSize: '0.8rem' }}>CODENAME</label>
-                <DebouncedInput type="text" value={char.name} onChange={val => update({ name: val })}
+                <DebouncedInput type="text" value={char.name}
+                    onChange={val => update({ name: val })}
+                    onSave={val => quietUpdate({ name: val })}
                     style={{
                         background: 'transparent', border: 'none',
                         borderBottom: '1px solid var(--accent-primary)',
@@ -167,7 +171,9 @@
             </div>
             <div>
                 <label className="text-secondary mono-text" style={{ fontSize: '0.8rem' }}>CONCEPT</label>
-                <DebouncedInput type="text" value={char.concept} onChange={val => update({ concept: val })}
+                <DebouncedInput type="text" value={char.concept}
+                    onChange={val => update({ concept: val })}
+                    onSave={val => quietUpdate({ concept: val })}
                     style={{
                         background: 'transparent', border: 'none',
                         borderBottom: '1px solid var(--border-color)',
@@ -176,7 +182,9 @@
             </div>
             <div>
                 <label className="text-secondary mono-text" style={{ fontSize: '0.8rem' }}>CHRONICLE</label>
-                <DebouncedInput type="text" value={char.chronicle} onChange={val => update({ chronicle: val })}
+                <DebouncedInput type="text" value={char.chronicle}
+                    onChange={val => update({ chronicle: val })}
+                    onSave={val => quietUpdate({ chronicle: val })}
                     style={{
                         background: 'transparent', border: 'none',
                         borderBottom: '1px solid var(--border-color)',
@@ -188,6 +196,7 @@
                 <div style={{ display: 'flex', gap: '0.5rem' }}>
                     <DebouncedInput type="text" placeholder="Virtue" value={char.virtue}
                         onChange={val => update({ virtue: val })}
+                        onSave={val => quietUpdate({ virtue: val })}
                         style={{
                             background: 'transparent', border: 'none',
                             borderBottom: '1px solid var(--border-color)',
@@ -196,6 +205,7 @@
                     <span className="text-muted">/</span>
                     <DebouncedInput type="text" placeholder="Vice" value={char.vice}
                         onChange={val => update({ vice: val })}
+                        onSave={val => quietUpdate({ vice: val })}
                         style={{
                             background: 'transparent', border: 'none',
                             borderBottom: '1px solid var(--border-color)',
@@ -494,7 +504,7 @@
     };
 
     // --- EXPANDABLE LIST MODULE (Merits, Pulling Strings) ---
-    const ExpandableListModule = ({ title, items, onAdd, onRemove, onUpdate, itemLabel = "Item" }) => (
+    const ExpandableListModule = ({ title, items, onAdd, onRemove, onUpdate, onQuietUpdate, itemLabel = "Item" }) => (
         <div className="glass-panel" style={{ padding: '1.5rem', marginBottom: '1rem' }}>
             <h3 className="mono-text text-accent" style={{
                 borderBottom: '1px solid var(--border-color)',
@@ -523,6 +533,7 @@
                             placeholder={itemLabel + ' Name'}
                             value={item.name}
                             onChange={val => onUpdate(idx, { ...item, name: val })}
+                            onSave={onQuietUpdate ? (val => onQuietUpdate(idx, { ...item, name: val })) : undefined}
                             disabled={!IS_OWNER}
                             style={{
                                 background: 'transparent', border: 'none',
@@ -547,6 +558,7 @@
                         placeholder="Description / Effects..."
                         value={item.description || ""}
                         onChange={val => onUpdate(idx, { ...item, description: val })}
+                        onSave={onQuietUpdate ? (val => onQuietUpdate(idx, { ...item, description: val })) : undefined}
                         disabled={!IS_OWNER}
                         style={{
                             width: '100%', background: 'transparent', border: 'none',
@@ -566,7 +578,7 @@
     );
 
     // --- INVENTORY MODULE ---
-    const InventoryModule = ({ inventory, update }) => (
+    const InventoryModule = ({ inventory, update, quietUpdate }) => (
         <div className="glass-panel" style={{ padding: '1.5rem', marginBottom: '1rem' }}>
             <h3 className="mono-text text-accent" style={{
                 borderBottom: '1px solid var(--border-color)',
@@ -605,6 +617,8 @@
                                 value={item.name}
                                 onChange={val => update(inventory.map((it, i) =>
                                     i === idx ? { ...it, name: val } : it))}
+                                onSave={quietUpdate ? (val => quietUpdate(inventory.map((it, i) =>
+                                    i === idx ? { ...it, name: val } : it))) : undefined}
                                 disabled={!IS_OWNER}
                                 style={{
                                     background: 'transparent', border: 'none',
@@ -645,6 +659,8 @@
                             value={item.description}
                             onChange={val => update(inventory.map((it, i) =>
                                 i === idx ? { ...it, description: val } : it))}
+                            onSave={quietUpdate ? (val => quietUpdate(inventory.map((it, i) =>
+                                i === idx ? { ...it, description: val } : it))) : undefined}
                             disabled={!IS_OWNER}
                             style={{
                                 width: '100%', background: 'transparent', border: 'none',
@@ -857,6 +873,8 @@
             }
         }, []);
 
+        // Full update: sets state (re-renders) + ref + schedules save.
+        // Use for structural changes (add/remove rows, dot clicks).
         const updateCharacter = (updates) => {
             if (!IS_OWNER) return;
             const updated = { ...charRef.current, ...updates };
@@ -864,12 +882,23 @@
             charRef.current = updated;
             setSaveStatus('unsaved');
 
-            // Debounce: save 2 seconds after last change
             if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
             saveTimerRef.current = setTimeout(() => {
                 saveCharacter(charRef.current);
-            }, 2000);
+            }, 1000);
         };
+
+        // Silent update: ref + schedules save, NO state change, NO re-render.
+        // Use from DebouncedInput timer so typing is never interrupted.
+        const saveCharacterQuiet = useCallback((updates) => {
+            if (!IS_OWNER) return;
+            charRef.current = { ...charRef.current, ...updates };
+
+            if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
+            saveTimerRef.current = setTimeout(() => {
+                saveCharacter(charRef.current);
+            }, 500);
+        }, [saveCharacter]);
 
         if (loading) {
             return (
@@ -917,7 +946,7 @@
                     </div>
                 </div>
 
-                <HeaderModule char={char} update={updateCharacter} />
+                <HeaderModule char={char} update={updateCharacter} quietUpdate={saveCharacterQuiet} />
 
                 <div style={{
                     display: 'grid',
@@ -936,7 +965,8 @@
 
                 <InventoryModule
                     inventory={char.inventory || []}
-                    update={inv => updateCharacter({ inventory: inv })} />
+                    update={inv => updateCharacter({ inventory: inv })}
+                    quietUpdate={inv => saveCharacterQuiet({ inventory: inv })} />
 
                 <HealthModule
                     health={char.health}
@@ -963,6 +993,9 @@
                         onUpdate={(idx, val) => updateCharacter({
                             pullingStrings: char.pullingStrings.map((item, i) => i === idx ? val : item)
                         })}
+                        onQuietUpdate={(idx, val) => saveCharacterQuiet({
+                            pullingStrings: charRef.current.pullingStrings.map((item, i) => i === idx ? val : item)
+                        })}
                     />
                     <ExpandableListModule
                         title="MERITS" itemLabel="Merit Name"
@@ -976,6 +1009,9 @@
                         })}
                         onUpdate={(idx, val) => updateCharacter({
                             merits: char.merits.map((item, i) => i === idx ? val : item)
+                        })}
+                        onQuietUpdate={(idx, val) => saveCharacterQuiet({
+                            merits: charRef.current.merits.map((item, i) => i === idx ? val : item)
                         })}
                     />
                 </div>

@@ -78,30 +78,31 @@
         return <i data-lucide={name} width={size} height={size} className={className}></i>;
     };
 
-    // --- DEBOUNCED INPUT (local state, propagates on blur or after delay) ---
-    const DebouncedInput = ({ value, onChange, delay = 800, component = 'input', ...props }) => {
+    // --- DEBOUNCED INPUT ---
+    // Keeps local state so typing never triggers parent re-renders.
+    // onSave: called after inactivity — silently persists without re-render.
+    // onChange: called on blur — syncs parent state for consistency.
+    const DebouncedInput = ({ value, onChange, onSave, delay = 1500, component = 'input', ...props }) => {
         const [local, setLocal] = useState(value);
+        const dirtyRef = useRef(false);
         const timerRef = useRef(null);
-        const latestLocal = useRef(local);
-        const latestProp = useRef(value);
 
-        // Sync from parent only when the prop changes externally
+        // Sync from parent only when not dirty (user isn't typing)
         useEffect(() => {
-            latestProp.current = value;
-            if (!timerRef.current) {
+            if (!dirtyRef.current) {
                 setLocal(value);
-                latestLocal.current = value;
             }
         }, [value]);
 
         const handleChange = (e) => {
             const val = e.target.value;
             setLocal(val);
-            latestLocal.current = val;
+            dirtyRef.current = true;
             if (timerRef.current) clearTimeout(timerRef.current);
             timerRef.current = setTimeout(() => {
                 timerRef.current = null;
-                onChange(val);
+                // Silent save — no parent re-render
+                if (onSave) onSave(val);
             }, delay);
         };
 
@@ -110,8 +111,9 @@
                 clearTimeout(timerRef.current);
                 timerRef.current = null;
             }
-            if (latestLocal.current !== latestProp.current) {
-                onChange(latestLocal.current);
+            if (dirtyRef.current) {
+                dirtyRef.current = false;
+                onChange(local);
             }
         };
 
@@ -167,7 +169,7 @@
     };
 
     // --- ALLIANCE MODULE (3-column: countries, companies, organizations) ---
-    const AllianceModule = ({ alliance, update, visibility, onToggleVis }) => {
+    const AllianceModule = ({ alliance, update, quietUpdate, visibility, onToggleVis }) => {
         const isClassified = alliance === 'CLASSIFIED';
 
         if (isClassified && !IS_ADMIN) return (
@@ -185,6 +187,10 @@
             update({ ...data, [category]: newList });
         };
 
+        const quietUpdateList = (category, newList) => {
+            quietUpdate({ ...data, [category]: newList });
+        };
+
         const addItem = (category) => {
             updateList(category, [...data[category], '']);
         };
@@ -195,6 +201,10 @@
 
         const updateItem = (category, idx, value) => {
             updateList(category, data[category].map((item, i) => i === idx ? value : item));
+        };
+
+        const quietUpdateItem = (category, idx, value) => {
+            quietUpdateList(category, data[category].map((item, i) => i === idx ? value : item));
         };
 
         const Column = ({ category, title, icon }) => (
@@ -217,6 +227,7 @@
                             value={item}
                             placeholder={`Add ${title.toLowerCase().slice(0, -1)}...`}
                             onChange={val => updateItem(category, idx, val)}
+                            onSave={val => quietUpdateItem(category, idx, val)}
                             disabled={!IS_ADMIN}
                             style={{
                                 background: 'transparent', border: 'none',
@@ -271,7 +282,7 @@
     };
 
     // --- HEADER MODULE ---
-    const HeaderModule = ({ agency, update, visibility, onToggleVis }) => (
+    const HeaderModule = ({ agency, update, quietUpdate, visibility, onToggleVis }) => (
         <div className="glass-panel" style={{
             padding: '1.5rem', marginBottom: '1rem',
             display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '1rem'
@@ -282,6 +293,7 @@
                 </label>
                 <DebouncedInput type="text" value={agency.name}
                     onChange={val => update({ name: val })}
+                    onSave={val => quietUpdate({ name: val })}
                     disabled={!IS_ADMIN}
                     style={{
                         background: 'transparent', border: 'none',
@@ -298,6 +310,7 @@
                 {agency.motto === 'CLASSIFIED' ? <Classified /> : (
                     <DebouncedInput type="text" value={agency.motto}
                         onChange={val => update({ motto: val })}
+                        onSave={val => quietUpdate({ motto: val })}
                         disabled={!IS_ADMIN}
                         style={{
                             background: 'transparent', border: 'none',
@@ -314,6 +327,7 @@
                 {agency.headquarters === 'CLASSIFIED' ? <Classified /> : (
                     <DebouncedInput type="text" value={agency.headquarters}
                         onChange={val => update({ headquarters: val })}
+                        onSave={val => quietUpdate({ headquarters: val })}
                         disabled={!IS_ADMIN}
                         style={{
                             background: 'transparent', border: 'none',
@@ -326,7 +340,7 @@
     );
 
     // --- NOTES MODULE ---
-    const NotesModule = ({ notes, update, visibility, onToggleVis }) => (
+    const NotesModule = ({ notes, update, quietUpdate, visibility, onToggleVis }) => (
         <div className="glass-panel" style={{ padding: '1.5rem', marginBottom: '1rem' }}>
             <h3 className="mono-text text-accent" style={{
                 borderBottom: '1px solid var(--border-color)',
@@ -340,6 +354,7 @@
                     component="textarea"
                     value={notes}
                     onChange={val => update({ notes: val })}
+                    onSave={val => quietUpdate({ notes: val })}
                     disabled={!IS_ADMIN}
                     placeholder="Agency notes..."
                     style={{
@@ -487,7 +502,7 @@
     };
 
     // --- GENERIC TABLE MODULE ---
-    const TableModule = ({ title, field, items, columns, update, visibility, onToggleVis, emptyItem }) => {
+    const TableModule = ({ title, field, items, columns, update, quietUpdate, visibility, onToggleVis, emptyItem }) => {
         const isClassified = items === 'CLASSIFIED';
 
         if (isClassified && !IS_ADMIN) return (
@@ -506,6 +521,14 @@
                 i === idx ? { ...item, [key]: val } : item
             );
             update(updated);
+        };
+
+        const quietUpdateItem = (idx, key, val) => {
+            if (!quietUpdate) return;
+            const updated = actualItems.map((item, i) =>
+                i === idx ? { ...item, [key]: val } : item
+            );
+            quietUpdate(updated);
         };
 
         const addItem = () => {
@@ -568,6 +591,9 @@
                                 placeholder={col.label}
                                 value={item[col.key] || (col.type === 'number' ? 0 : '')}
                                 onChange={val => updateItem(idx, col.key,
+                                    col.type === 'number' ? (parseInt(val) || 0) : val
+                                )}
+                                onSave={val => quietUpdateItem(idx, col.key,
                                     col.type === 'number' ? (parseInt(val) || 0) : val
                                 )}
                                 disabled={!IS_ADMIN}
@@ -906,6 +932,8 @@
             }
         }, []);
 
+        // Full update: sets state (re-renders) + ref + schedules save.
+        // Use for structural changes (add/remove rows, button clicks).
         const updateAgency = (updates) => {
             if (!IS_ADMIN) return;
             const updated = { ...agencyRef.current, ...updates };
@@ -916,8 +944,20 @@
             if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
             saveTimerRef.current = setTimeout(() => {
                 saveAgency(agencyRef.current);
-            }, 2000);
+            }, 1000);
         };
+
+        // Silent update: ref + schedules save, NO state change, NO re-render.
+        // Use from DebouncedInput timer so typing is never interrupted.
+        const saveAgencyQuiet = useCallback((updates) => {
+            if (!IS_ADMIN) return;
+            agencyRef.current = { ...agencyRef.current, ...updates };
+
+            if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
+            saveTimerRef.current = setTimeout(() => {
+                saveAgency(agencyRef.current);
+            }, 500);
+        }, [saveAgency]);
 
         const toggleVisibility = async (field, visible) => {
             try {
@@ -997,14 +1037,17 @@
                 </div>
 
                 <HeaderModule agency={agency} update={updateAgency}
+                    quietUpdate={saveAgencyQuiet}
                     visibility={vis} onToggleVis={toggleVisibility} />
 
                 <AllianceModule
                     alliance={agency.alliance}
                     update={val => updateAgency({ alliance: val })}
+                    quietUpdate={val => saveAgencyQuiet({ alliance: val })}
                     visibility={vis} onToggleVis={toggleVisibility} />
 
                 <NotesModule notes={agency.notes} update={updateAgency}
+                    quietUpdate={saveAgencyQuiet}
                     visibility={vis} onToggleVis={toggleVisibility} />
 
                 <IntegrityModule agency={agency} update={updateAgency}
@@ -1025,6 +1068,7 @@
                     ]}
                     emptyItem={{ name: '', relatedSkill: '', effect: '' }}
                     update={val => updateAgency({ specializations: val })}
+                    quietUpdate={val => saveAgencyQuiet({ specializations: val })}
                     visibility={vis} onToggleVis={toggleVisibility}
                 />
 
@@ -1043,6 +1087,7 @@
                         ]}
                         emptyItem={{ name: '', value: 0, description: '' }}
                         update={val => updateAgency({ merits: val })}
+                        quietUpdate={val => saveAgencyQuiet({ merits: val })}
                         visibility={vis} onToggleVis={toggleVisibility}
                     />
                     <TableModule
@@ -1055,6 +1100,7 @@
                         ]}
                         emptyItem={{ name: '', value: 0, description: '' }}
                         update={val => updateAgency({ flaws: val })}
+                        quietUpdate={val => saveAgencyQuiet({ flaws: val })}
                         visibility={vis} onToggleVis={toggleVisibility}
                     />
                 </div>
@@ -1070,6 +1116,7 @@
                     ]}
                     emptyItem={{ name: '', type: '', status: '', notes: '' }}
                     update={val => updateAgency({ assets: val })}
+                    quietUpdate={val => saveAgencyQuiet({ assets: val })}
                     visibility={vis} onToggleVis={toggleVisibility}
                 />
 
@@ -1084,6 +1131,7 @@
                     ]}
                     emptyItem={{ shipClass: '', role: '', quantity: 0, notes: '' }}
                     update={val => updateAgency({ fleet: val })}
+                    quietUpdate={val => saveAgencyQuiet({ fleet: val })}
                     visibility={vis} onToggleVis={toggleVisibility}
                 />
 
@@ -1098,6 +1146,7 @@
                     ]}
                     emptyItem={{ condition: '', source: '', effect: '', duration: '' }}
                     update={val => updateAgency({ conditions: val })}
+                    quietUpdate={val => saveAgencyQuiet({ conditions: val })}
                     visibility={vis} onToggleVis={toggleVisibility}
                 />
 
@@ -1113,6 +1162,7 @@
                     ]}
                     emptyItem={{ name: '', player: '', duration: '', completionScore: 0, notes: '' }}
                     update={val => updateAgency({ projects: val })}
+                    quietUpdate={val => saveAgencyQuiet({ projects: val })}
                     visibility={vis} onToggleVis={toggleVisibility}
                 />
 
@@ -1126,6 +1176,7 @@
                     ]}
                     emptyItem={{ year: '', decision: '', consequence: '' }}
                     update={val => updateAgency({ history: val })}
+                    quietUpdate={val => saveAgencyQuiet({ history: val })}
                     visibility={vis} onToggleVis={toggleVisibility}
                 />
 

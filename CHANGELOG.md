@@ -1,8 +1,10 @@
 # Changelog
 
 ## v0.1.13
-- Fluid typing: inputs now use local state so keystrokes never trigger full-page re-renders
-- Changes propagate to auto-save after 800ms of inactivity or when you click away
+- Fluid typing: text inputs keep local state and save silently (no page re-render)
+- While typing: only the input itself updates (zero lag)
+- After 1.5s pause: data saves to server in the background without interrupting
+- Click away from field: full state sync for consistency
 - Debounced Lucide icon refresh to avoid per-render overhead
 - Applied to both agency and character sheets
 
