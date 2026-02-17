@@ -1,5 +1,9 @@
 # Changelog
 
+## v0.1.11
+- Expanded alliance field into 3-column panel (countries, companies, organizations)
+- Alliance section placed above notes with add/remove entries per column
+
 ## v0.1.10
 - Fixed changelog versioning to always match the upcoming CI release
 
