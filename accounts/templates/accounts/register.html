@@ -1,0 +1,58 @@
+{% extends "base.html" %}
+
+{% block title %}REGISTER // FOUNDATION{% endblock %}
+
+{% block content %}
+<div style="max-width: 400px; margin: 4rem auto;">
+    <div class="glass-panel" style="padding: 2rem;">
+        <h2 class="mono-text text-accent" style="text-align: center; margin-bottom: 0.5rem; letter-spacing: 2px;">
+            NEW OPERATIVE
+        </h2>
+        <p class="text-muted mono-text" style="text-align: center; font-size: 0.8rem; margin-bottom: 2rem;">
+            INITIALIZE PERSONNEL RECORD
+        </p>
+
+        {% if messages %}
+        <div style="margin-bottom: 1rem;">
+            {% for message in messages %}
+            <div class="mono-text" style="color: var(--accent-danger); font-size: 0.85rem; padding: 0.5rem; border-left: 2px solid var(--accent-danger); margin-bottom: 0.5rem;">
+                {{ message }}
+            </div>
+            {% endfor %}
+        </div>
+        {% endif %}
+
+        <form method="post">
+            {% csrf_token %}
+            <div style="margin-bottom: 1.5rem;">
+                <label class="text-secondary mono-text" style="font-size: 0.8rem; display: block; margin-bottom: 0.25rem;">CODENAME</label>
+                <input type="text" name="username" required autofocus
+                    style="width: 100%; background: var(--bg-input); border: 1px solid var(--border-color); color: var(--text-primary); padding: 0.75rem; font-family: var(--font-mono); font-size: 1rem;"
+                    placeholder="Choose codename...">
+            </div>
+            <div style="margin-bottom: 1.5rem;">
+                <label class="text-secondary mono-text" style="font-size: 0.8rem; display: block; margin-bottom: 0.25rem;">PASSPHRASE</label>
+                <input type="password" name="password" required
+                    style="width: 100%; background: var(--bg-input); border: 1px solid var(--border-color); color: var(--text-primary); padding: 0.75rem; font-family: var(--font-mono); font-size: 1rem;"
+                    placeholder="Create passphrase...">
+            </div>
+            <div style="margin-bottom: 2rem;">
+                <label class="text-secondary mono-text" style="font-size: 0.8rem; display: block; margin-bottom: 0.25rem;">CONFIRM PASSPHRASE</label>
+                <input type="password" name="password_confirm" required
+                    style="width: 100%; background: var(--bg-input); border: 1px solid var(--border-color); color: var(--text-primary); padding: 0.75rem; font-family: var(--font-mono); font-size: 1rem;"
+                    placeholder="Re-enter passphrase...">
+            </div>
+            <button type="submit"
+                style="width: 100%; background: var(--accent-primary); color: var(--bg-dark); border: none; padding: 0.75rem; font-family: var(--font-mono); font-size: 1rem; font-weight: bold; cursor: pointer; letter-spacing: 1px;">
+                INITIALIZE OPERATIVE
+            </button>
+        </form>
+
+        <div style="text-align: center; margin-top: 1.5rem;">
+            <a href="{% url 'accounts:login' %}" class="text-accent mono-text" style="font-size: 0.85rem; text-decoration: none;">
+                EXISTING OPERATIVE? AUTHENTICATE
+            </a>
+        </div>
+    </div>
+</div>
+{% endblock %}

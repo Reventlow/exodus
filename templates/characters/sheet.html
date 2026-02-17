@@ -1,0 +1,943 @@
+{% extends "base.html" %}
+
+{% block title %}PERSONNEL RECORD // FOUNDATION{% endblock %}
+
+{% block content %}
+<div id="app-root">
+    <div class="loading-screen">
+        <h1 class="mono-text">DECRYPTING PERSONNEL RECORD...</h1>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    // Django context variables — outside verbatim block
+    const CHARACTER_ID = {{ character_id }};
+    const IS_OWNER = {{ is_owner|yesno:"true,false" }};
+    const CSRF_TOKEN = '{{ csrf_token }}';
+</script>
+{% verbatim %}
+<script type="text/babel">
+    const { useState, useEffect, useMemo, useRef, useCallback } = React;
+
+    // --- CSRF ---
+    function getCookie(name) {
+        let cookieValue = null;
+        if (document.cookie && document.cookie !== '') {
+            const cookies = document.cookie.split(';');
+            for (let i = 0; i < cookies.length; i++) {
+                const cookie = cookies[i].trim();
+                if (cookie.substring(0, name.length + 1) === (name + '=')) {
+                    cookieValue = decodeURIComponent(cookie.substring(name.length + 1));
+                    break;
+                }
+            }
+        }
+        return cookieValue;
+    }
+
+    // --- DEFAULT CHARACTER STRUCTURE ---
+    const DEFAULT_CHARACTER = {
+        id: null,
+        name: "UNKNOWN AGENT",
+        concept: "",
+        chronicle: "",
+        virtue: "",
+        vice: "",
+        attributes: {
+            power: { mental: 1, physical: 1, social: 1 },
+            finesse: { mental: 1, physical: 1, social: 1 },
+            resistance: { mental: 1, physical: 1, social: 1 }
+        },
+        skills: {
+            mental: {
+                Academics: 0, Computer: 0, Crafts: 0, Investigation: 0,
+                Medicine: 0, Occult: 0, Politics: 0, Science: 0
+            },
+            physical: {
+                Athletics: 0, Brawl: 0, Drive: 0, Firearms: 0,
+                Larceny: 0, Stealth: 0, Survival: 0, Weaponry: 0
+            },
+            social: {
+                AnimalKen: 0, Empathy: 0, Expression: 0, Intimidation: 0,
+                Persuasion: 0, Socialize: 0, Streetwise: 0, Subterfuge: 0
+            }
+        },
+        merits: [],
+        flaws: [],
+        pullingStrings: [],
+        inventory: [],
+        health: { bashing: 0, lethal: 0, aggravated: 0 },
+        willpower: { current: 0, max_mod: 0 },
+        size: 5,
+        experience: 0
+    };
+
+    // --- ICON COMPONENT ---
+    const Icon = ({ name, size = 16, className = "" }) => {
+        useEffect(() => {
+            if (window.lucide) window.lucide.createIcons();
+        }, [name]);
+        return <i data-lucide={name} width={size} height={size} className={className}></i>;
+    };
+
+    // --- STAT DOTS ---
+    const StatDots = ({ value, max = 5, onChange, editable }) => {
+        return (
+            <div style={{ display: 'flex', gap: '4px' }}>
+                {[...Array(max)].map((_, i) => (
+                    <div
+                        key={i}
+                        onClick={() => editable && onChange(i + 1 === value && value === 1 ? 0 : i + 1)}
+                        style={{
+                            width: '12px', height: '12px', borderRadius: '50%',
+                            border: '1px solid var(--text-muted)',
+                            background: i < value ? 'var(--accent-primary)' : 'transparent',
+                            cursor: editable ? 'pointer' : 'default',
+                            boxShadow: i < value ? '0 0 5px var(--accent-glow)' : 'none'
+                        }}
+                    />
+                ))}
+            </div>
+        );
+    };
+
+    // --- HEADER MODULE ---
+    const HeaderModule = ({ char, update }) => (
+        <div className="glass-panel" style={{
+            padding: '1.5rem', marginBottom: '1rem',
+            display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '1rem'
+        }}>
+            <div>
+                <label className="text-secondary mono-text" style={{ fontSize: '0.8rem' }}>CODENAME</label>
+                <input type="text" value={char.name} onChange={e => update({ name: e.target.value })}
+                    style={{
+                        background: 'transparent', border: 'none',
+                        borderBottom: '1px solid var(--accent-primary)',
+                        color: 'var(--text-primary)', width: '100%',
+                        fontSize: '1.2rem', fontFamily: 'var(--font-mono)'
+                    }} />
+            </div>
+            <div>
+                <label className="text-secondary mono-text" style={{ fontSize: '0.8rem' }}>CONCEPT</label>
+                <input type="text" value={char.concept} onChange={e => update({ concept: e.target.value })}
+                    style={{
+                        background: 'transparent', border: 'none',
+                        borderBottom: '1px solid var(--border-color)',
+                        color: 'var(--text-primary)', width: '100%'
+                    }} />
+            </div>
+            <div>
+                <label className="text-secondary mono-text" style={{ fontSize: '0.8rem' }}>CHRONICLE</label>
+                <input type="text" value={char.chronicle} onChange={e => update({ chronicle: e.target.value })}
+                    style={{
+                        background: 'transparent', border: 'none',
+                        borderBottom: '1px solid var(--border-color)',
+                        color: 'var(--text-primary)', width: '100%'
+                    }} />
+            </div>
+            <div>
+                <label className="text-secondary mono-text" style={{ fontSize: '0.8rem' }}>VIRTUE / VICE</label>
+                <div style={{ display: 'flex', gap: '0.5rem' }}>
+                    <input type="text" placeholder="Virtue" value={char.virtue}
+                        onChange={e => update({ virtue: e.target.value })}
+                        style={{
+                            background: 'transparent', border: 'none',
+                            borderBottom: '1px solid var(--border-color)',
+                            color: 'var(--text-primary)', width: '50%'
+                        }} />
+                    <span className="text-muted">/</span>
+                    <input type="text" placeholder="Vice" value={char.vice}
+                        onChange={e => update({ vice: e.target.value })}
+                        style={{
+                            background: 'transparent', border: 'none',
+                            borderBottom: '1px solid var(--border-color)',
+                            color: 'var(--text-primary)', width: '50%'
+                        }} />
+                </div>
+            </div>
+        </div>
+    );
+
+    // --- ATTRIBUTES MODULE ---
+    const AttributesModule = ({ attributes, update }) => {
+        const updateAttr = (cat, type, val) => {
+            update({ ...attributes, [cat]: { ...attributes[cat], [type]: val } });
+        };
+
+        return (
+            <div className="glass-panel" style={{ padding: '1.5rem', marginBottom: '1rem' }}>
+                <h3 className="mono-text text-accent" style={{
+                    borderBottom: '1px solid var(--border-color)',
+                    paddingBottom: '0.5rem', marginBottom: '1rem'
+                }}>ATTRIBUTES</h3>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '2rem' }}>
+                    {/* Headers */}
+                    <div className="text-center text-muted mono-text">MENTAL</div>
+                    <div className="text-center text-muted mono-text">PHYSICAL</div>
+                    <div className="text-center text-muted mono-text">SOCIAL</div>
+
+                    {/* Power */}
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <span>Intelligence</span>
+                        <StatDots value={attributes.power.mental}
+                            onChange={v => updateAttr('power', 'mental', v)} editable={IS_OWNER} />
+                    </div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <span>Strength</span>
+                        <StatDots value={attributes.power.physical}
+                            onChange={v => updateAttr('power', 'physical', v)} editable={IS_OWNER} />
+                    </div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <span>Presence</span>
+                        <StatDots value={attributes.power.social}
+                            onChange={v => updateAttr('power', 'social', v)} editable={IS_OWNER} />
+                    </div>
+
+                    {/* Finesse */}
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <span>Wits</span>
+                        <StatDots value={attributes.finesse.mental}
+                            onChange={v => updateAttr('finesse', 'mental', v)} editable={IS_OWNER} />
+                    </div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <span>Dexterity</span>
+                        <StatDots value={attributes.finesse.physical}
+                            onChange={v => updateAttr('finesse', 'physical', v)} editable={IS_OWNER} />
+                    </div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <span>Manipulation</span>
+                        <StatDots value={attributes.finesse.social}
+                            onChange={v => updateAttr('finesse', 'social', v)} editable={IS_OWNER} />
+                    </div>
+
+                    {/* Resistance */}
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <span>Resolve</span>
+                        <StatDots value={attributes.resistance.mental}
+                            onChange={v => updateAttr('resistance', 'mental', v)} editable={IS_OWNER} />
+                    </div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <span>Stamina</span>
+                        <StatDots value={attributes.resistance.physical}
+                            onChange={v => updateAttr('resistance', 'physical', v)} editable={IS_OWNER} />
+                    </div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <span>Composure</span>
+                        <StatDots value={attributes.resistance.social}
+                            onChange={v => updateAttr('resistance', 'social', v)} editable={IS_OWNER} />
+                    </div>
+                </div>
+            </div>
+        );
+    };
+
+    // --- SKILLS MODULE ---
+    const SkillsModule = ({ skills, update }) => {
+        const updateSkill = (cat, name, val) => {
+            update({ ...skills, [cat]: { ...skills[cat], [name]: val } });
+        };
+
+        const SkillCol = ({ category, title }) => (
+            <div>
+                <h4 className="text-center text-muted mono-text" style={{
+                    marginBottom: '1rem', textTransform: 'uppercase'
+                }}>{title}</h4>
+                {Object.entries(skills[category]).map(([name, val]) => (
+                    <div key={name} style={{
+                        display: 'flex', justifyContent: 'space-between',
+                        alignItems: 'center', marginBottom: '0.5rem'
+                    }}>
+                        <span style={{
+                            fontSize: '0.9rem',
+                            color: val === 0 ? 'var(--text-muted)' : 'var(--text-primary)'
+                        }}>
+                            {name.replace(/([A-Z])/g, ' $1').trim()}
+                            {val === 0 && <span style={{
+                                fontSize: '0.7em', marginLeft: '4px', opacity: 0.5
+                            }}>(-{category === 'mental' ? 3 : 1})</span>}
+                        </span>
+                        <StatDots value={val}
+                            onChange={v => updateSkill(category, name, v)} editable={IS_OWNER} />
+                    </div>
+                ))}
+            </div>
+        );
+
+        return (
+            <div className="glass-panel" style={{ padding: '1.5rem', marginBottom: '1rem' }}>
+                <h3 className="mono-text text-accent" style={{
+                    borderBottom: '1px solid var(--border-color)',
+                    paddingBottom: '0.5rem', marginBottom: '1rem'
+                }}>SKILLS</h3>
+                <div style={{
+                    display: 'grid',
+                    gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))',
+                    gap: '2rem'
+                }}>
+                    <SkillCol category="mental" title="Mental (-3 Unskilled)" />
+                    <SkillCol category="physical" title="Physical (-1 Unskilled)" />
+                    <SkillCol category="social" title="Social (-1 Unskilled)" />
+                </div>
+            </div>
+        );
+    };
+
+    // --- DERIVED TRAITS MODULE ---
+    const DerivedTraitsModule = ({ char, update }) => {
+        const speed = 5 + char.attributes.power.physical + char.attributes.finesse.physical + (char.size || 5);
+        const initMod = char.attributes.finesse.physical + char.attributes.resistance.social;
+        const defense = Math.min(char.attributes.finesse.physical, char.attributes.finesse.mental);
+        const willpowerMax = char.attributes.resistance.mental + char.attributes.resistance.social;
+        const healthMax = char.attributes.resistance.physical + (char.size || 5);
+
+        return (
+            <div className="glass-panel" style={{ padding: '1.5rem', marginBottom: '1rem' }}>
+                <h3 className="mono-text text-accent" style={{
+                    borderBottom: '1px solid var(--border-color)',
+                    paddingBottom: '0.5rem', marginBottom: '1rem'
+                }}>DERIVED TRAITS</h3>
+                <div style={{
+                    display: 'grid',
+                    gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))',
+                    gap: '1rem'
+                }}>
+                    <div className="tech-border text-center" style={{ padding: '0.5rem' }}>
+                        <div className="text-secondary mono-text" style={{ fontSize: '0.8rem' }}>HEALTH</div>
+                        <div className="text-accent" style={{ fontSize: '1.5rem' }}>{healthMax}</div>
+                        <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>Stamina + Size</div>
+                    </div>
+                    <div className="tech-border text-center" style={{ padding: '0.5rem' }}>
+                        <div className="text-secondary mono-text" style={{ fontSize: '0.8rem' }}>WILLPOWER</div>
+                        <div className="text-accent" style={{ fontSize: '1.5rem' }}>{willpowerMax}</div>
+                        <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>Resolve + Composure</div>
+                    </div>
+                    <div className="tech-border text-center" style={{ padding: '0.5rem' }}>
+                        <div className="text-secondary mono-text" style={{ fontSize: '0.8rem' }}>INITIATIVE</div>
+                        <div style={{ fontSize: '1.5rem', color: 'var(--text-primary)' }}>{initMod}</div>
+                        <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>Dex + Comp</div>
+                    </div>
+                    <div className="tech-border text-center" style={{ padding: '0.5rem' }}>
+                        <div className="text-secondary mono-text" style={{ fontSize: '0.8rem' }}>DEFENSE</div>
+                        <div style={{ fontSize: '1.5rem', color: 'var(--text-primary)' }}>{defense}</div>
+                        <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>Lowest(Wits, Dex)</div>
+                    </div>
+                    <div className="tech-border text-center" style={{ padding: '0.5rem' }}>
+                        <div className="text-secondary mono-text" style={{ fontSize: '0.8rem' }}>SPEED</div>
+                        <div style={{ fontSize: '1.5rem', color: 'var(--text-primary)' }}>{speed}</div>
+                        <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>Str + Dex + 5</div>
+                    </div>
+                    <div className="tech-border text-center" style={{ padding: '0.5rem' }}>
+                        <div className="text-secondary mono-text" style={{ fontSize: '0.8rem' }}>SIZE</div>
+                        <input type="number" value={char.size || 5}
+                            onChange={e => update({ size: parseInt(e.target.value) || 5 })}
+                            disabled={!IS_OWNER}
+                            style={{
+                                background: 'transparent', border: 'none',
+                                color: 'var(--text-primary)', width: '100%',
+                                textAlign: 'center', fontSize: '1.5rem'
+                            }} />
+                    </div>
+                </div>
+            </div>
+        );
+    };
+
+    // --- HEALTH MODULE ---
+    const HealthModule = ({ health, max, update }) => {
+        return (
+            <div className="glass-panel" style={{
+                padding: '1.5rem', marginBottom: '1rem',
+                border: '1px solid var(--accent-danger)'
+            }}>
+                <div style={{
+                    display: 'flex', justifyContent: 'space-between',
+                    alignItems: 'center', marginBottom: '1rem'
+                }}>
+                    <h3 className="mono-text text-danger">BIOSIGN MONITOR</h3>
+                    <div className="text-danger mono-text" style={{ animation: 'pulse 2s infinite' }}>
+                        Tracking vital signs...
+                    </div>
+                </div>
+
+                {/* EKG Visual */}
+                <div style={{
+                    height: '60px', background: 'rgba(0,0,0,0.3)',
+                    marginBottom: '1rem', position: 'relative', overflow: 'hidden',
+                    borderLeft: '2px solid var(--accent-danger)'
+                }}>
+                    <svg width="100%" height="100%" viewBox="0 0 300 60" preserveAspectRatio="none">
+                        <path d="M0,30 L20,30 L25,10 L35,50 L40,30 L300,30"
+                            fill="none" stroke="var(--accent-danger)" strokeWidth="2"
+                            vectorEffect="non-scaling-stroke"
+                            style={{ animation: 'dash 2s linear infinite' }}
+                        />
+                    </svg>
+                </div>
+
+                {/* Health boxes visual */}
+                <div style={{ display: 'flex', justifyContent: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
+                    {[...Array(max)].map((_, i) => {
+                        let symbol = '';
+                        let color = 'var(--border-color)';
+                        if (i < (health.aggravated || 0)) {
+                            symbol = '*';
+                            color = 'var(--accent-danger)';
+                        } else if (i < (health.aggravated || 0) + (health.lethal || 0)) {
+                            symbol = 'X';
+                            color = 'var(--accent-warning)';
+                        } else if (i < (health.aggravated || 0) + (health.lethal || 0) + (health.bashing || 0)) {
+                            symbol = '/';
+                            color = 'var(--text-secondary)';
+                        }
+                        return (
+                            <div key={i} style={{
+                                width: '24px', height: '24px',
+                                border: '1px solid var(--accent-danger)',
+                                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                color: color, fontWeight: 'bold', fontSize: '0.9rem'
+                            }}>
+                                {symbol}
+                            </div>
+                        );
+                    })}
+                </div>
+
+                {/* Numeric damage counters */}
+                <div style={{ display: 'flex', gap: '2rem', justifyContent: 'center', marginTop: '1rem' }}>
+                    <div className="text-center">
+                        <label className="text-muted mono-text" style={{ fontSize: '0.8rem' }}>BASHING</label>
+                        <input type="number" value={health.bashing || 0}
+                            onChange={e => update({ ...health, bashing: parseInt(e.target.value) || 0 })}
+                            disabled={!IS_OWNER}
+                            style={{
+                                display: 'block', background: 'transparent',
+                                border: '1px solid var(--accent-danger)',
+                                color: 'var(--accent-danger)', width: '60px',
+                                textAlign: 'center', fontSize: '1.2rem'
+                            }} />
+                    </div>
+                    <div className="text-center">
+                        <label className="text-muted mono-text" style={{ fontSize: '0.8rem' }}>LETHAL</label>
+                        <input type="number" value={health.lethal || 0}
+                            onChange={e => update({ ...health, lethal: parseInt(e.target.value) || 0 })}
+                            disabled={!IS_OWNER}
+                            style={{
+                                display: 'block', background: 'transparent',
+                                border: '1px solid var(--accent-danger)',
+                                color: 'var(--accent-danger)', width: '60px',
+                                textAlign: 'center', fontSize: '1.2rem'
+                            }} />
+                    </div>
+                    <div className="text-center">
+                        <label className="text-muted mono-text" style={{ fontSize: '0.8rem' }}>AGGRAVATED</label>
+                        <input type="number" value={health.aggravated || 0}
+                            onChange={e => update({ ...health, aggravated: parseInt(e.target.value) || 0 })}
+                            disabled={!IS_OWNER}
+                            style={{
+                                display: 'block', background: 'transparent',
+                                border: '1px solid var(--accent-danger)',
+                                color: 'var(--accent-danger)', width: '60px',
+                                textAlign: 'center', fontSize: '1.2rem'
+                            }} />
+                    </div>
+                </div>
+            </div>
+        );
+    };
+
+    // --- EXPANDABLE LIST MODULE (Merits, Pulling Strings) ---
+    const ExpandableListModule = ({ title, items, onAdd, onRemove, onUpdate, itemLabel = "Item" }) => (
+        <div className="glass-panel" style={{ padding: '1.5rem', marginBottom: '1rem' }}>
+            <h3 className="mono-text text-accent" style={{
+                borderBottom: '1px solid var(--border-color)',
+                paddingBottom: '0.5rem', marginBottom: '1rem',
+                display: 'flex', justifyContent: 'space-between', alignItems: 'center'
+            }}>
+                {title}
+                {IS_OWNER && (
+                    <button onClick={onAdd} title="Add New" style={{
+                        background: 'transparent', border: '1px solid var(--accent-primary)',
+                        color: 'var(--accent-primary)', width: '24px', height: '24px',
+                        borderRadius: '4px', cursor: 'pointer',
+                        display: 'flex', alignItems: 'center', justifyContent: 'center'
+                    }}>
+                        <Icon name="plus" size={14} />
+                    </button>
+                )}
+            </h3>
+            {items.map((item, idx) => (
+                <div key={idx} className="tech-border" style={{
+                    padding: '0.5rem', marginBottom: '0.5rem', background: 'rgba(0,0,0,0.2)'
+                }}>
+                    <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+                        <input
+                            type="text"
+                            placeholder={itemLabel + ' Name'}
+                            value={item.name}
+                            onChange={e => onUpdate(idx, { ...item, name: e.target.value })}
+                            disabled={!IS_OWNER}
+                            style={{
+                                background: 'transparent', border: 'none',
+                                borderBottom: '1px solid var(--text-muted)',
+                                color: 'var(--text-primary)', flex: 1,
+                                fontFamily: 'var(--font-mono)'
+                            }}
+                        />
+                        <StatDots value={item.rating} max={5}
+                            onChange={v => onUpdate(idx, { ...item, rating: v })} editable={IS_OWNER} />
+                        {IS_OWNER && (
+                            <button onClick={() => onRemove(idx)} style={{
+                                background: 'transparent', border: 'none',
+                                color: 'var(--accent-danger)', cursor: 'pointer'
+                            }}>
+                                <Icon name="x" size={14} />
+                            </button>
+                        )}
+                    </div>
+                    <textarea
+                        placeholder="Description / Effects..."
+                        value={item.description || ""}
+                        onChange={e => onUpdate(idx, { ...item, description: e.target.value })}
+                        disabled={!IS_OWNER}
+                        style={{
+                            width: '100%', background: 'transparent', border: 'none',
+                            color: 'var(--text-secondary)', fontSize: '0.8rem',
+                            marginTop: '0.5rem', minHeight: '40px',
+                            fontFamily: 'inherit', resize: 'vertical'
+                        }}
+                    />
+                </div>
+            ))}
+            {items.length === 0 && (
+                <p className="text-muted text-center" style={{ fontSize: '0.8rem', fontStyle: 'italic' }}>
+                    No data recorded.
+                </p>
+            )}
+        </div>
+    );
+
+    // --- INVENTORY MODULE ---
+    const InventoryModule = ({ inventory, update }) => (
+        <div className="glass-panel" style={{ padding: '1.5rem', marginBottom: '1rem' }}>
+            <h3 className="mono-text text-accent" style={{
+                borderBottom: '1px solid var(--border-color)',
+                paddingBottom: '0.5rem', marginBottom: '1rem',
+                display: 'flex', justifyContent: 'space-between', alignItems: 'center'
+            }}>
+                INVENTORY / ASSETS
+                {IS_OWNER && (
+                    <button onClick={() => update([...inventory, { name: "", bonus: 0, description: "" }])}
+                        title="Add Item" style={{
+                            background: 'transparent', border: '1px solid var(--accent-primary)',
+                            color: 'var(--accent-primary)', width: '24px', height: '24px',
+                            borderRadius: '4px', cursor: 'pointer',
+                            display: 'flex', alignItems: 'center', justifyContent: 'center'
+                        }}>
+                        <Icon name="plus" size={14} />
+                    </button>
+                )}
+            </h3>
+            <div style={{
+                display: 'grid',
+                gridTemplateColumns: 'repeat(auto-fill, minmax(250px, 1fr))',
+                gap: '1rem'
+            }}>
+                {inventory.map((item, idx) => (
+                    <div key={idx} className="tech-border" style={{
+                        padding: '0.5rem', background: 'rgba(0,0,0,0.2)'
+                    }}>
+                        <div style={{
+                            display: 'flex', gap: '0.5rem',
+                            alignItems: 'center', marginBottom: '0.5rem'
+                        }}>
+                            <input
+                                type="text"
+                                placeholder="Item Name"
+                                value={item.name}
+                                onChange={e => update(inventory.map((it, i) =>
+                                    i === idx ? { ...it, name: e.target.value } : it))}
+                                disabled={!IS_OWNER}
+                                style={{
+                                    background: 'transparent', border: 'none',
+                                    borderBottom: '1px solid var(--text-muted)',
+                                    color: 'var(--text-primary)', flex: 1,
+                                    fontFamily: 'var(--font-mono)'
+                                }}
+                            />
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                                <span className="text-muted" style={{ fontSize: '0.8rem' }}>+</span>
+                                <input
+                                    type="number"
+                                    placeholder="Dice"
+                                    title="Equipment Bonus Dice"
+                                    value={item.bonus}
+                                    onChange={e => update(inventory.map((it, i) =>
+                                        i === idx ? { ...it, bonus: parseInt(e.target.value) || 0 } : it))}
+                                    disabled={!IS_OWNER}
+                                    style={{
+                                        background: 'transparent', border: '1px solid var(--border-color)',
+                                        color: 'var(--accent-success)', width: '40px', textAlign: 'center'
+                                    }}
+                                />
+                            </div>
+                            {IS_OWNER && (
+                                <button onClick={() => update(inventory.filter((_, i) => i !== idx))}
+                                    style={{
+                                        background: 'transparent', border: 'none',
+                                        color: 'var(--accent-danger)', cursor: 'pointer'
+                                    }}>
+                                    <Icon name="x" size={14} />
+                                </button>
+                            )}
+                        </div>
+                        <input
+                            type="text"
+                            placeholder="Notes..."
+                            value={item.description}
+                            onChange={e => update(inventory.map((it, i) =>
+                                i === idx ? { ...it, description: e.target.value } : it))}
+                            disabled={!IS_OWNER}
+                            style={{
+                                width: '100%', background: 'transparent', border: 'none',
+                                color: 'var(--text-secondary)', fontSize: '0.8rem'
+                            }}
+                        />
+                    </div>
+                ))}
+            </div>
+        </div>
+    );
+
+    // --- DICE ROLLER ---
+    const DiceRoller = () => {
+        const [pool, setPool] = useState(1);
+        const [again, setAgain] = useState(10);
+        const [results, setResults] = useState(null);
+
+        const roll = () => {
+            const newResults = [];
+            let successes = 0;
+            let diceToRoll = pool;
+
+            if (diceToRoll > 50) diceToRoll = 50;
+            if (diceToRoll < 1) diceToRoll = 1;
+
+            while (diceToRoll > 0) {
+                const die = Math.floor(Math.random() * 10) + 1;
+                let isSuccess = die >= 8;
+                let explode = die >= again;
+
+                newResults.push({ value: die, success: isSuccess, exploded: explode });
+                if (isSuccess) successes++;
+
+                if (explode) {
+                    diceToRoll++;
+                    if (newResults.length > 100) break;
+                }
+                diceToRoll--;
+            }
+            setResults({ rolls: newResults, totalSuccesses: successes });
+        };
+
+        return (
+            <div className="glass-panel" style={{
+                padding: '1.5rem', marginBottom: '1rem',
+                borderTop: '2px solid var(--accent-primary)'
+            }}>
+                <h3 className="mono-text text-accent" style={{ marginBottom: '1rem' }}>
+                    TACTICAL DICE ROLLER
+                </h3>
+
+                <div style={{
+                    display: 'flex', gap: '1rem', alignItems: 'flex-end',
+                    justifyContent: 'center', marginBottom: '1rem'
+                }}>
+                    <div>
+                        <label className="text-muted mono-text" style={{ fontSize: '0.8rem' }}>POOL SIZE</label>
+                        <input type="number" value={pool}
+                            onChange={e => setPool(parseInt(e.target.value) || 1)}
+                            style={{
+                                display: 'block', width: '80px', height: '50px',
+                                fontSize: '2rem', textAlign: 'center',
+                                background: 'var(--bg-input)', color: 'var(--text-primary)',
+                                border: '1px solid var(--accent-primary)'
+                            }} />
+                    </div>
+                    <div>
+                        <label className="text-muted mono-text" style={{ fontSize: '0.8rem' }}>AGAIN</label>
+                        <select value={again} onChange={e => setAgain(parseInt(e.target.value))}
+                            style={{
+                                display: 'block', height: '50px',
+                                background: 'var(--bg-input)', color: 'var(--text-primary)',
+                                border: '1px solid var(--border-color)'
+                            }}>
+                            <option value={10}>10-Again</option>
+                            <option value={9}>9-Again</option>
+                            <option value={8}>8-Again</option>
+                        </select>
+                    </div>
+                    <button onClick={roll} style={{
+                        height: '50px', padding: '0 2rem',
+                        background: 'var(--accent-primary)', color: 'var(--bg-dark)',
+                        border: 'none', fontWeight: 'bold', cursor: 'pointer', fontSize: '1.2rem'
+                    }}>
+                        EXECUTE
+                    </button>
+                </div>
+
+                {results && (
+                    <div className="tech-border" style={{ padding: '1rem', background: 'rgba(0,0,0,0.3)' }}>
+                        <div style={{ textAlign: 'center', marginBottom: '0.5rem' }}>
+                            <span className="mono-text text-muted">OUTCOME: </span>
+                            <span style={{
+                                fontSize: '1.5rem', fontWeight: 'bold',
+                                color: results.totalSuccesses > 0 ? 'var(--accent-success)' : 'var(--text-secondary)'
+                            }}>
+                                {results.totalSuccesses} SUCCESSES
+                            </span>
+                        </div>
+                        <div style={{
+                            display: 'flex', flexWrap: 'wrap', gap: '4px', justifyContent: 'center'
+                        }}>
+                            {results.rolls.map((r, i) => (
+                                <div key={i} style={{
+                                    width: '24px', height: '24px',
+                                    borderRadius: '2px',
+                                    background: r.success ? 'var(--accent-primary)' : 'var(--bg-panel)',
+                                    color: r.success ? 'var(--bg-dark)' : 'var(--text-secondary)',
+                                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                    fontWeight: 'bold',
+                                    border: r.exploded ? '1px solid var(--accent-warning)' : 'none'
+                                }}>
+                                    {r.value}
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+                )}
+            </div>
+        );
+    };
+
+    // --- SAVE STATUS INDICATOR ---
+    const SaveStatus = ({ status }) => {
+        const labels = {
+            saved: 'SAVED',
+            saving: 'SAVING...',
+            unsaved: 'UNSAVED CHANGES',
+            error: 'SAVE ERROR'
+        };
+        return (
+            <span className={'save-status ' + status}>
+                {labels[status] || status}
+            </span>
+        );
+    };
+
+    // --- MAIN APP ---
+    const CharacterSheet = () => {
+        const [char, setChar] = useState(null);
+        const [loading, setLoading] = useState(true);
+        const [saveStatus, setSaveStatus] = useState('saved');
+        const saveTimerRef = useRef(null);
+        const charRef = useRef(null);
+
+        // Load character data on mount
+        useEffect(() => {
+            fetchCharacter();
+        }, []);
+
+        const fetchCharacter = async () => {
+            try {
+                const response = await fetch('/api/characters/' + CHARACTER_ID + '/');
+                if (response.ok) {
+                    const data = await response.json();
+                    // Merge with defaults to ensure all fields exist
+                    const merged = {
+                        ...DEFAULT_CHARACTER,
+                        ...data,
+                        attributes: {
+                            power: { ...DEFAULT_CHARACTER.attributes.power, ...(data.attributes?.power || {}) },
+                            finesse: { ...DEFAULT_CHARACTER.attributes.finesse, ...(data.attributes?.finesse || {}) },
+                            resistance: { ...DEFAULT_CHARACTER.attributes.resistance, ...(data.attributes?.resistance || {}) }
+                        },
+                        skills: {
+                            mental: { ...DEFAULT_CHARACTER.skills.mental, ...(data.skills?.mental || {}) },
+                            physical: { ...DEFAULT_CHARACTER.skills.physical, ...(data.skills?.physical || {}) },
+                            social: { ...DEFAULT_CHARACTER.skills.social, ...(data.skills?.social || {}) }
+                        },
+                        health: { ...DEFAULT_CHARACTER.health, ...(data.health || {}) },
+                        merits: data.merits || [],
+                        flaws: data.flaws || [],
+                        pullingStrings: data.pullingStrings || data.pulling_strings || [],
+                        inventory: data.inventory || [],
+                    };
+                    setChar(merged);
+                    charRef.current = merged;
+                } else {
+                    console.error('Failed to load character');
+                }
+            } catch (err) {
+                console.error('Failed to load character:', err);
+            } finally {
+                setLoading(false);
+            }
+        };
+
+        // Debounced auto-save
+        const saveCharacter = useCallback(async (data) => {
+            setSaveStatus('saving');
+            try {
+                const response = await fetch('/api/characters/' + CHARACTER_ID + '/', {
+                    method: 'PUT',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-CSRFToken': getCookie('csrftoken') || CSRF_TOKEN,
+                    },
+                    body: JSON.stringify(data),
+                });
+                if (response.ok) {
+                    setSaveStatus('saved');
+                } else {
+                    setSaveStatus('error');
+                    console.error('Save failed:', response.status);
+                }
+            } catch (err) {
+                setSaveStatus('error');
+                console.error('Save error:', err);
+            }
+        }, []);
+
+        const updateCharacter = (updates) => {
+            if (!IS_OWNER) return;
+            const updated = { ...charRef.current, ...updates };
+            setChar(updated);
+            charRef.current = updated;
+            setSaveStatus('unsaved');
+
+            // Debounce: save 1 second after last change
+            if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
+            saveTimerRef.current = setTimeout(() => {
+                saveCharacter(updated);
+            }, 1000);
+        };
+
+        if (loading) {
+            return (
+                <div style={{ textAlign: 'center', padding: '4rem' }}>
+                    <h2 className="mono-text text-accent" style={{ animation: 'pulse 1.5s infinite' }}>
+                        DECRYPTING PERSONNEL RECORD...
+                    </h2>
+                </div>
+            );
+        }
+
+        if (!char) {
+            return (
+                <div style={{ textAlign: 'center', padding: '4rem' }}>
+                    <h2 className="mono-text text-danger">ERROR: RECORD NOT FOUND</h2>
+                    <p className="text-muted" style={{ marginTop: '1rem' }}>
+                        The requested personnel record could not be retrieved.
+                    </p>
+                </div>
+            );
+        }
+
+        return (
+            <div className="fade-in">
+                {/* Sub-header with save status */}
+                <div style={{
+                    display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+                    marginBottom: '1rem', paddingBottom: '0.5rem',
+                    borderBottom: '1px solid var(--border-color)'
+                }}>
+                    <h2 className="mono-text text-accent" style={{ fontSize: '1.2rem' }}>
+                        PERSONNEL RECORD
+                    </h2>
+                    <div style={{ display: 'flex', gap: '1rem', alignItems: 'center' }}>
+                        {IS_OWNER && <SaveStatus status={saveStatus} />}
+                        <a href="/"
+                            className="mono-text"
+                            style={{
+                                background: 'transparent', border: '1px solid var(--accent-primary)',
+                                color: 'var(--accent-primary)', padding: '0.5rem 1rem',
+                                cursor: 'pointer', textDecoration: 'none', fontSize: '0.9rem'
+                            }}>
+                            &lt; CLOSE RECORD
+                        </a>
+                    </div>
+                </div>
+
+                <HeaderModule char={char} update={updateCharacter} />
+
+                <div style={{
+                    display: 'grid',
+                    gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))',
+                    gap: '1rem', marginBottom: '1rem'
+                }}>
+                    <AttributesModule
+                        attributes={char.attributes}
+                        update={attrs => updateCharacter({ attributes: attrs })} />
+                    <SkillsModule
+                        skills={char.skills}
+                        update={skills => updateCharacter({ skills })} />
+                </div>
+
+                <DerivedTraitsModule char={char} update={updateCharacter} />
+
+                <InventoryModule
+                    inventory={char.inventory || []}
+                    update={inv => updateCharacter({ inventory: inv })} />
+
+                <HealthModule
+                    health={char.health}
+                    max={char.attributes.resistance.physical + (char.size || 5)}
+                    update={h => updateCharacter({ health: h })} />
+
+                <DiceRoller />
+
+                <div style={{
+                    display: 'grid',
+                    gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))',
+                    gap: '1rem'
+                }}>
+                    <ExpandableListModule
+                        title="PULLING STRINGS" itemLabel="Asset Name"
+                        items={char.pullingStrings || []}
+                        onAdd={() => updateCharacter({
+                            pullingStrings: [...(char.pullingStrings || []),
+                                { name: "", rating: 1, description: "" }]
+                        })}
+                        onRemove={idx => updateCharacter({
+                            pullingStrings: char.pullingStrings.filter((_, i) => i !== idx)
+                        })}
+                        onUpdate={(idx, val) => updateCharacter({
+                            pullingStrings: char.pullingStrings.map((item, i) => i === idx ? val : item)
+                        })}
+                    />
+                    <ExpandableListModule
+                        title="MERITS" itemLabel="Merit Name"
+                        items={char.merits || []}
+                        onAdd={() => updateCharacter({
+                            merits: [...(char.merits || []),
+                                { name: "", rating: 1, description: "" }]
+                        })}
+                        onRemove={idx => updateCharacter({
+                            merits: char.merits.filter((_, i) => i !== idx)
+                        })}
+                        onUpdate={(idx, val) => updateCharacter({
+                            merits: char.merits.map((item, i) => i === idx ? val : item)
+                        })}
+                    />
+                </div>
+            </div>
+        );
+    };
+
+    const root = ReactDOM.createRoot(document.getElementById('app-root'));
+    root.render(<CharacterSheet />);
+</script>
+{% endverbatim %}
+{% endblock %}

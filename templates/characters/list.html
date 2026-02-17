@@ -1,0 +1,217 @@
+{% extends "base.html" %}
+
+{% block title %}OPERATIVES // FOUNDATION{% endblock %}
+
+{% block content %}
+<div id="app-root">
+    <div class="loading-screen">
+        <h1 class="mono-text">LOADING OPERATIVE DATABASE...</h1>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    // Django context variables — outside verbatim block
+    const CURRENT_USER = '{{ user.username }}';
+    const CURRENT_USER_ID = {{ user.id }};
+    const CSRF_TOKEN = '{{ csrf_token }}';
+</script>
+{% verbatim %}
+<script type="text/babel">
+    const { useState, useEffect } = React;
+
+    // CSRF cookie reader for fetch requests
+    function getCookie(name) {
+        let cookieValue = null;
+        if (document.cookie && document.cookie !== '') {
+            const cookies = document.cookie.split(';');
+            for (let i = 0; i < cookies.length; i++) {
+                const cookie = cookies[i].trim();
+                if (cookie.substring(0, name.length + 1) === (name + '=')) {
+                    cookieValue = decodeURIComponent(cookie.substring(name.length + 1));
+                    break;
+                }
+            }
+        }
+        return cookieValue;
+    }
+
+    // Icon component using Lucide
+    const Icon = ({ name, size = 16, className = "" }) => {
+        useEffect(() => {
+            if (window.lucide) window.lucide.createIcons();
+        }, [name]);
+        return <i data-lucide={name} width={size} height={size} className={className}></i>;
+    };
+
+    // Redacted text component
+    const Redacted = ({ children }) => (
+        <span className="classified" title="CLASSIFIED // CLEARANCE REQUIRED">{children}</span>
+    );
+
+    const CharacterCard = ({ char, onClick }) => (
+        <div
+            className="tech-border glitch-hover"
+            style={{
+                padding: '1rem',
+                background: 'var(--bg-panel)',
+                cursor: 'pointer',
+                transition: 'all 0.2s'
+            }}
+            onClick={onClick}
+        >
+            <h3 className="text-accent mono-text" style={{ fontSize: '1.1rem' }}>
+                {char.name}
+            </h3>
+            <p className="text-secondary" style={{ fontSize: '0.9rem' }}>
+                {char.concept || <Redacted>UNKNOWN</Redacted>}
+            </p>
+            <div style={{ marginTop: '1rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <span className="text-muted" style={{ fontSize: '0.8rem' }}>
+                    HANDLER: {char.owner || 'UNKNOWN'}
+                </span>
+                <span className="text-muted" style={{ fontSize: '0.8rem' }}>
+                    ID: {String(char.id).substring(0, 6)}
+                </span>
+            </div>
+        </div>
+    );
+
+    const Dashboard = () => {
+        const [characters, setCharacters] = useState([]);
+        const [loading, setLoading] = useState(true);
+        const [creating, setCreating] = useState(false);
+        const [hasOwnCharacter, setHasOwnCharacter] = useState(false);
+
+        useEffect(() => {
+            fetchCharacters();
+        }, []);
+
+        const fetchCharacters = async () => {
+            try {
+                const response = await fetch('/api/characters/');
+                if (response.ok) {
+                    const data = await response.json();
+                    setCharacters(data);
+                    // Check if current user already has a character
+                    const own = data.find(c => c.owner === CURRENT_USER);
+                    setHasOwnCharacter(!!own);
+                }
+            } catch (err) {
+                console.error('Failed to fetch operatives:', err);
+            } finally {
+                setLoading(false);
+            }
+        };
+
+        const createCharacter = async () => {
+            setCreating(true);
+            try {
+                const response = await fetch('/api/characters/', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-CSRFToken': getCookie('csrftoken') || CSRF_TOKEN,
+                    },
+                    body: JSON.stringify({ name: 'NEW OPERATIVE' }),
+                });
+                if (response.ok) {
+                    const newChar = await response.json();
+                    window.location.href = '/character/' + newChar.id + '/';
+                } else {
+                    console.error('Failed to create operative');
+                }
+            } catch (err) {
+                console.error('Failed to create operative:', err);
+            } finally {
+                setCreating(false);
+            }
+        };
+
+        if (loading) {
+            return (
+                <div style={{ textAlign: 'center', padding: '4rem' }}>
+                    <h2 className="mono-text text-accent" style={{ animation: 'pulse 1.5s infinite' }}>
+                        ACCESSING OPERATIVE DATABASE...
+                    </h2>
+                </div>
+            );
+        }
+
+        return (
+            <div>
+                <div className="glass-panel" style={{ padding: '2rem', maxWidth: '900px', margin: '2rem auto' }}>
+                    <h2 className="mono-text" style={{
+                        marginBottom: '1.5rem',
+                        borderBottom: '1px solid var(--border-color)',
+                        paddingBottom: '0.5rem',
+                        display: 'flex',
+                        justifyContent: 'space-between',
+                        alignItems: 'center'
+                    }}>
+                        <span className="text-accent">
+                            <Icon name="users" size={20} /> OPERATIVE DATABASE
+                        </span>
+                        <span className="text-muted" style={{ fontSize: '0.8rem' }}>
+                            {characters.length} RECORD{characters.length !== 1 ? 'S' : ''}
+                        </span>
+                    </h2>
+
+                    <div style={{
+                        display: 'grid',
+                        gridTemplateColumns: 'repeat(auto-fill, minmax(240px, 1fr))',
+                        gap: '1rem',
+                        marginBottom: '2rem'
+                    }}>
+                        {characters.map(char => (
+                            <CharacterCard
+                                key={char.id}
+                                char={char}
+                                onClick={() => { window.location.href = '/character/' + char.id + '/'; }}
+                            />
+                        ))}
+                    </div>
+
+                    {!hasOwnCharacter && (
+                        <div style={{ textAlign: 'center', padding: '2rem 0' }}>
+                            <p className="text-secondary mono-text" style={{ marginBottom: '1rem' }}>
+                                NO OPERATIVE RECORD FOUND FOR YOUR ACCOUNT
+                            </p>
+                            <button
+                                onClick={createCharacter}
+                                disabled={creating}
+                                style={{
+                                    background: 'var(--accent-primary)',
+                                    border: 'none',
+                                    color: 'var(--bg-dark)',
+                                    padding: '0.75rem 2rem',
+                                    cursor: creating ? 'wait' : 'pointer',
+                                    fontWeight: 'bold',
+                                    fontFamily: 'var(--font-mono)',
+                                    fontSize: '1rem',
+                                    letterSpacing: '1px',
+                                    borderRadius: 'var(--radius-sm)',
+                                    opacity: creating ? 0.6 : 1
+                                }}
+                            >
+                                {creating ? 'INITIALIZING...' : 'CREATE NEW OPERATIVE'}
+                            </button>
+                        </div>
+                    )}
+
+                    {characters.length === 0 && hasOwnCharacter === false && (
+                        <p className="text-muted text-center mono-text" style={{ fontStyle: 'italic' }}>
+                            No operative records in database.
+                        </p>
+                    )}
+                </div>
+            </div>
+        );
+    };
+
+    const root = ReactDOM.createRoot(document.getElementById('app-root'));
+    root.render(<Dashboard />);
+</script>
+{% endverbatim %}
+{% endblock %}

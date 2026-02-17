@@ -1,0 +1,72 @@
+{% extends "base.html" %}
+
+{% block title %}PROFILE // {{ user.username|upper }}{% endblock %}
+
+{% block content %}
+<div style="max-width: 500px; margin: 2rem auto;">
+    <div class="glass-panel" style="padding: 2rem; margin-bottom: 1.5rem;">
+        <h2 class="mono-text text-accent" style="margin-bottom: 0.5rem; letter-spacing: 2px;">
+            OPERATIVE PROFILE
+        </h2>
+        <div class="tech-border" style="padding: 1rem; margin-top: 1rem;">
+            <div style="display: flex; justify-content: space-between; margin-bottom: 0.5rem;">
+                <span class="text-secondary mono-text" style="font-size: 0.8rem;">CODENAME</span>
+                <span class="mono-text text-accent">{{ user.username }}</span>
+            </div>
+            <div style="display: flex; justify-content: space-between; margin-bottom: 0.5rem;">
+                <span class="text-secondary mono-text" style="font-size: 0.8rem;">STATUS</span>
+                <span class="mono-text" style="color: var(--accent-success);">ACTIVE</span>
+            </div>
+            <div style="display: flex; justify-content: space-between;">
+                <span class="text-secondary mono-text" style="font-size: 0.8rem;">CLEARANCE</span>
+                <span class="mono-text">{% if user.is_superuser %}ADMINISTRATOR{% else %}OPERATIVE{% endif %}</span>
+            </div>
+        </div>
+    </div>
+
+    <div class="glass-panel" style="padding: 2rem;">
+        <h3 class="mono-text text-accent" style="margin-bottom: 1.5rem; border-bottom: 1px solid var(--border-color); padding-bottom: 0.5rem;">
+            UPDATE PASSPHRASE
+        </h3>
+
+        {% if messages %}
+        <div style="margin-bottom: 1rem;">
+            {% for message in messages %}
+            <div class="mono-text" style="color: {% if message.tags == 'success' %}var(--accent-success){% else %}var(--accent-danger){% endif %}; font-size: 0.85rem; padding: 0.5rem; border-left: 2px solid {% if message.tags == 'success' %}var(--accent-success){% else %}var(--accent-danger){% endif %}; margin-bottom: 0.5rem;">
+                {{ message }}
+            </div>
+            {% endfor %}
+        </div>
+        {% endif %}
+
+        <form method="post">
+            {% csrf_token %}
+            <div style="margin-bottom: 1.5rem;">
+                <label class="text-secondary mono-text" style="font-size: 0.8rem; display: block; margin-bottom: 0.25rem;">CURRENT PASSPHRASE</label>
+                <input type="password" name="old_password" required
+                    style="width: 100%; background: var(--bg-input); border: 1px solid var(--border-color); color: var(--text-primary); padding: 0.75rem; font-family: var(--font-mono); font-size: 1rem;">
+            </div>
+            <div style="margin-bottom: 1.5rem;">
+                <label class="text-secondary mono-text" style="font-size: 0.8rem; display: block; margin-bottom: 0.25rem;">NEW PASSPHRASE</label>
+                <input type="password" name="new_password1" required
+                    style="width: 100%; background: var(--bg-input); border: 1px solid var(--border-color); color: var(--text-primary); padding: 0.75rem; font-family: var(--font-mono); font-size: 1rem;">
+            </div>
+            <div style="margin-bottom: 2rem;">
+                <label class="text-secondary mono-text" style="font-size: 0.8rem; display: block; margin-bottom: 0.25rem;">CONFIRM NEW PASSPHRASE</label>
+                <input type="password" name="new_password2" required
+                    style="width: 100%; background: var(--bg-input); border: 1px solid var(--border-color); color: var(--text-primary); padding: 0.75rem; font-family: var(--font-mono); font-size: 1rem;">
+            </div>
+            <button type="submit"
+                style="width: 100%; background: var(--accent-primary); color: var(--bg-dark); border: none; padding: 0.75rem; font-family: var(--font-mono); font-size: 1rem; font-weight: bold; cursor: pointer; letter-spacing: 1px;">
+                UPDATE PASSPHRASE
+            </button>
+        </form>
+    </div>
+
+    <div style="text-align: center; margin-top: 1.5rem;">
+        <a href="/" class="text-accent mono-text" style="font-size: 0.85rem; text-decoration: none;">
+            &lt; RETURN TO DATABASE
+        </a>
+    </div>
+</div>
+{% endblock %}

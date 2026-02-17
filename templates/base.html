@@ -1,0 +1,55 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}FOUNDATION // EXODUS{% endblock %}</title>
+
+    <!-- Foundation CSS -->
+    <link rel="stylesheet" href="{% static 'css/foundation.css' %}">
+
+    <!-- React 18 -->
+    <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+    <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+
+    <!-- Babel for in-browser JSX -->
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+
+    <!-- Lucide Icons -->
+    <script src="https://unpkg.com/lucide@latest"></script>
+</head>
+<body>
+    <!-- Navigation Bar -->
+    <nav class="nav-bar">
+        <a href="/" class="mono-text text-accent" style="text-decoration: none; font-size: 1.1rem; letter-spacing: 2px;">
+            FOUNDATION <span class="text-muted">//</span> EXODUS
+        </a>
+        <div class="nav-links">
+            {% if user.is_authenticated %}
+                <a href="/">OPERATIVES</a>
+                <a href="{% url 'accounts:profile' %}">PROFILE</a>
+                <form method="post" action="{% url 'accounts:logout' %}" style="display: inline;">
+                    {% csrf_token %}
+                    <button type="submit">LOGOUT</button>
+                </form>
+            {% else %}
+                <a href="{% url 'accounts:login' %}">LOGIN</a>
+            {% endif %}
+        </div>
+    </nav>
+
+    <!-- Django Messages -->
+    {% if messages %}
+    <ul class="messages">
+        {% for message in messages %}
+        <li class="{{ message.tags }}">{{ message }}</li>
+        {% endfor %}
+    </ul>
+    {% endif %}
+
+    {% block content %}{% endblock %}
+
+    {% block scripts %}{% endblock %}
+</body>
+</html>
