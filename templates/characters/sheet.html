@@ -555,7 +555,7 @@
     );
 
     // --- INVENTORY MODULE ---
-    const InventoryModule = ({ inventory, update, quietUpdate }) => (
+    const InventoryModule = ({ inventory, update, quietUpdate, getFreshItems }) => (
         <div className="glass-panel" style={{ padding: '1.5rem', marginBottom: '1rem' }}>
             <h3 className="mono-text text-accent" style={{
                 borderBottom: '1px solid var(--border-color)',
@@ -564,7 +564,11 @@
             }}>
                 INVENTORY / ASSETS
                 {IS_OWNER && (
-                    <button onClick={() => update([...inventory, { name: "", bonus: 0, description: "" }])}
+                    <button onClick={() => {
+                        document.activeElement?.blur();
+                        const fresh = getFreshItems ? getFreshItems() : inventory;
+                        update([...fresh, { name: "", bonus: 0, description: "" }]);
+                    }}
                         title="Add Item" style={{
                             background: 'transparent', border: '1px solid var(--accent-primary)',
                             color: 'var(--accent-primary)', width: '24px', height: '24px',
@@ -619,7 +623,11 @@
                                 />
                             </div>
                             {IS_OWNER && (
-                                <button onClick={() => update(inventory.filter((_, i) => i !== idx))}
+                                <button onClick={() => {
+                                    document.activeElement?.blur();
+                                    const fresh = getFreshItems ? getFreshItems() : inventory;
+                                    update(fresh.filter((_, i) => i !== idx));
+                                }}
                                     style={{
                                         background: 'transparent', border: 'none',
                                         color: 'var(--accent-danger)', cursor: 'pointer'
@@ -955,6 +963,7 @@
                     inventory={char.inventory || []}
                     update={inv => updateCharacter({ inventory: inv })}
                     quietUpdate={inv => saveCharacterQuiet({ inventory: inv })}
+                    getFreshItems={() => charRef.current.inventory || []}
                 />
 
                 <HealthModule
@@ -972,13 +981,20 @@
                     <ExpandableListModule
                         title="PULLING STRINGS" itemLabel="Asset Name"
                         items={char.pullingStrings || []}
-                        onAdd={() => updateCharacter({
-                            pullingStrings: [...(char.pullingStrings || []),
-                                { name: "", rating: 1, description: "" }]
-                        })}
-                        onRemove={idx => updateCharacter({
-                            pullingStrings: char.pullingStrings.filter((_, i) => i !== idx)
-                        })}
+                        onAdd={() => {
+                            document.activeElement?.blur();
+                            const fresh = charRef.current.pullingStrings || [];
+                            updateCharacter({
+                                pullingStrings: [...fresh, { name: "", rating: 1, description: "" }]
+                            });
+                        }}
+                        onRemove={idx => {
+                            document.activeElement?.blur();
+                            const fresh = charRef.current.pullingStrings || [];
+                            updateCharacter({
+                                pullingStrings: fresh.filter((_, i) => i !== idx)
+                            });
+                        }}
                         onUpdate={(idx, val) => updateCharacter({
                             pullingStrings: char.pullingStrings.map((item, i) => i === idx ? val : item)
                         })}
@@ -989,13 +1005,20 @@
                     <ExpandableListModule
                         title="MERITS" itemLabel="Merit Name"
                         items={char.merits || []}
-                        onAdd={() => updateCharacter({
-                            merits: [...(char.merits || []),
-                                { name: "", rating: 1, description: "" }]
-                        })}
-                        onRemove={idx => updateCharacter({
-                            merits: char.merits.filter((_, i) => i !== idx)
-                        })}
+                        onAdd={() => {
+                            document.activeElement?.blur();
+                            const fresh = charRef.current.merits || [];
+                            updateCharacter({
+                                merits: [...fresh, { name: "", rating: 1, description: "" }]
+                            });
+                        }}
+                        onRemove={idx => {
+                            document.activeElement?.blur();
+                            const fresh = charRef.current.merits || [];
+                            updateCharacter({
+                                merits: fresh.filter((_, i) => i !== idx)
+                            });
+                        }}
                         onUpdate={(idx, val) => updateCharacter({
                             merits: char.merits.map((item, i) => i === idx ? val : item)
                         })}

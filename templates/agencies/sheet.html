@@ -153,7 +153,7 @@
     };
 
     // --- ALLIANCE MODULE (3-column: countries, companies, organizations) ---
-    const AllianceModule = ({ alliance, update, onSave, visibility, onToggleVis }) => {
+    const AllianceModule = ({ alliance, agencyRef, update, onSave, visibility, onToggleVis }) => {
         const isClassified = alliance === 'CLASSIFIED';
 
         if (isClassified && !IS_ADMIN) return (
@@ -168,11 +168,15 @@
             : { countries: [], companies: [], organizations: [] };
 
         const addItem = (category) => {
-            update({ ...data, [category]: [...data[category], ''] });
+            document.activeElement?.blur();
+            const fresh = agencyRef.current.alliance || { countries: [], companies: [], organizations: [] };
+            update({ ...fresh, [category]: [...(fresh[category] || []), ''] });
         };
 
         const removeItem = (category, idx) => {
-            update({ ...data, [category]: data[category].filter((_, i) => i !== idx) });
+            document.activeElement?.blur();
+            const fresh = agencyRef.current.alliance || { countries: [], companies: [], organizations: [] };
+            update({ ...fresh, [category]: fresh[category].filter((_, i) => i !== idx) });
         };
 
         const Column = ({ category, title, icon }) => (
@@ -468,7 +472,7 @@
     };
 
     // --- GENERIC TABLE MODULE ---
-    const TableModule = ({ title, field, items, columns, update, onSave, visibility, onToggleVis, emptyItem }) => {
+    const TableModule = ({ title, field, items, columns, update, onSave, visibility, onToggleVis, emptyItem, getFreshItems }) => {
         const isClassified = items === 'CLASSIFIED';
 
         if (isClassified && !IS_ADMIN) return (
@@ -483,11 +487,15 @@
         const actualItems = Array.isArray(items) ? items : [];
 
         const addItem = () => {
-            update([...actualItems, { ...emptyItem }]);
+            document.activeElement?.blur();
+            const fresh = getFreshItems ? getFreshItems() : actualItems;
+            update([...fresh, { ...emptyItem }]);
         };
 
         const removeItem = (idx) => {
-            update(actualItems.filter((_, i) => i !== idx));
+            document.activeElement?.blur();
+            const fresh = getFreshItems ? getFreshItems() : actualItems;
+            update(fresh.filter((_, i) => i !== idx));
         };
 
         return (
@@ -1011,6 +1019,7 @@
 
                 <AllianceModule
                     alliance={agency.alliance}
+                    agencyRef={agencyRef}
                     update={val => updateAgency({ alliance: val })}
                     onSave={val => saveAgencyQuiet({ alliance: val })}
                     visibility={vis} onToggleVis={toggleVisibility} />
@@ -1038,6 +1047,7 @@
                     emptyItem={{ name: '', relatedSkill: '', effect: '' }}
                     update={val => updateAgency({ specializations: val })}
                     onSave={val => saveAgencyQuiet({ specializations: val })}
+                    getFreshItems={() => agencyRef.current.specializations || []}
                     visibility={vis} onToggleVis={toggleVisibility}
                 />
 
@@ -1057,6 +1067,7 @@
                         emptyItem={{ name: '', value: 0, description: '' }}
                         update={val => updateAgency({ merits: val })}
                         onSave={val => saveAgencyQuiet({ merits: val })}
+                        getFreshItems={() => agencyRef.current.merits || []}
                         visibility={vis} onToggleVis={toggleVisibility}
                     />
                     <TableModule
@@ -1070,6 +1081,7 @@
                         emptyItem={{ name: '', value: 0, description: '' }}
                         update={val => updateAgency({ flaws: val })}
                         onSave={val => saveAgencyQuiet({ flaws: val })}
+                        getFreshItems={() => agencyRef.current.flaws || []}
                         visibility={vis} onToggleVis={toggleVisibility}
                     />
                 </div>
@@ -1086,6 +1098,7 @@
                     emptyItem={{ name: '', type: '', status: '', notes: '' }}
                     update={val => updateAgency({ assets: val })}
                     onSave={val => saveAgencyQuiet({ assets: val })}
+                    getFreshItems={() => agencyRef.current.assets || []}
                     visibility={vis} onToggleVis={toggleVisibility}
                 />
 
@@ -1101,6 +1114,7 @@
                     emptyItem={{ shipClass: '', role: '', quantity: 0, notes: '' }}
                     update={val => updateAgency({ fleet: val })}
                     onSave={val => saveAgencyQuiet({ fleet: val })}
+                    getFreshItems={() => agencyRef.current.fleet || []}
                     visibility={vis} onToggleVis={toggleVisibility}
                 />
 
@@ -1116,6 +1130,7 @@
                     emptyItem={{ condition: '', source: '', effect: '', duration: '' }}
                     update={val => updateAgency({ conditions: val })}
                     onSave={val => saveAgencyQuiet({ conditions: val })}
+                    getFreshItems={() => agencyRef.current.conditions || []}
                     visibility={vis} onToggleVis={toggleVisibility}
                 />
 
@@ -1132,6 +1147,7 @@
                     emptyItem={{ name: '', player: '', duration: '', completionScore: 0, notes: '' }}
                     update={val => updateAgency({ projects: val })}
                     onSave={val => saveAgencyQuiet({ projects: val })}
+                    getFreshItems={() => agencyRef.current.projects || []}
                     visibility={vis} onToggleVis={toggleVisibility}
                 />
 
@@ -1146,6 +1162,7 @@
                     emptyItem={{ year: '', decision: '', consequence: '' }}
                     update={val => updateAgency({ history: val })}
                     onSave={val => saveAgencyQuiet({ history: val })}
+                    getFreshItems={() => agencyRef.current.history || []}
                     visibility={vis} onToggleVis={toggleVisibility}
                 />
 

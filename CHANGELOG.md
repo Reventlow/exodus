@@ -1,5 +1,10 @@
 # Changelog
 
+## v0.1.14
+- Fixed data loss when adding/removing list items while text input has pending changes
+- Blur active input before add/remove to flush pending saves, then read from ref for fresh data
+- Applied fix to AllianceModule, TableModule (agency sheet), ExpandableListModule, and InventoryModule (character sheet)
+
 ## v0.1.13
 - Fluid typing: switched text inputs to uncontrolled (defaultValue) so React never overwrites typed text
 - After 1.5s pause or clicking away: data saves directly to server in the background
