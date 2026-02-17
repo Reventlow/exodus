@@ -44,6 +44,9 @@
                     ">{{ COMMS_UNREAD }}</span>
                 </a>
                 <a href="{% url 'accounts:profile' %}">PROFILE</a>
+                {% if user.is_staff %}
+                    <a href="{% url 'admin:index' %}">ADMIN</a>
+                {% endif %}
                 <form method="post" action="{% url 'accounts:logout' %}" style="display: inline;">
                     {% csrf_token %}
                     <button type="submit">LOGOUT</button>

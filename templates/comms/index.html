@@ -5,12 +5,22 @@
 {% block content %}
 <div id="comms-root" style="height: calc(100vh - 80px); padding: var(--grid-spacing);"></div>
 
+<!-- Django variables injected before verbatim block -->
+<script>
+window.__COMMS_CONFIG__ = {
+  currentUserId: {{ user.pk }},
+  isStaff: {{ user.is_staff|yesno:"true,false" }},
+  csrfToken: "{{ csrf_token }}"
+};
+</script>
+
+{% verbatim %}
 <script type="text/babel">
 const { useState, useEffect, useRef, useCallback } = React;
 
-const CURRENT_USER_ID = {{ user.pk }};
-const IS_STAFF = {{ user.is_staff|yesno:"true,false" }};
-const CSRF_TOKEN = "{{ csrf_token }}";
+const CURRENT_USER_ID = window.__COMMS_CONFIG__.currentUserId;
+const IS_STAFF = window.__COMMS_CONFIG__.isStaff;
+const CSRF_TOKEN = window.__COMMS_CONFIG__.csrfToken;
 
 // ---------------------------------------------------------------------------
 // API helpers
@@ -99,6 +109,19 @@ const btnGhost = {
   color: "var(--text-secondary)", cursor: "pointer", fontSize: "0.8rem",
 };
 
+const sectionHeader = {
+  padding: "1rem", borderBottom: "1px solid var(--border-color)",
+};
+
+const sectionBody = {
+  padding: "1rem", display: "flex", flexDirection: "column", gap: "0.75rem", overflow: "auto",
+};
+
+const sectionFooter = {
+  padding: "1rem", borderTop: "1px solid var(--border-color)",
+  display: "flex", justifyContent: "flex-end", gap: "0.5rem",
+};
+
 // ---------------------------------------------------------------------------
 // NewThreadModal
 // ---------------------------------------------------------------------------
@@ -127,12 +150,12 @@ function NewThreadModal({ users, onClose, onCreate }) {
   return (
     <div style={modalOverlay} onClick={onClose}>
       <div style={modalPanel} onClick={e => e.stopPropagation()}>
-        <div style={{ padding: "1rem", borderBottom: "1px solid var(--border-color)" }}>
-          <h3 className="mono-text text-accent" style={{ fontSize: "0.9rem", letterSpacing: "1px" }}>
+        <div style={sectionHeader}>
+          <h3 className="mono-text text-accent" style={S.modalTitle}>
             NEW THREAD
           </h3>
         </div>
-        <div style={{ padding: "1rem", display: "flex", flexDirection: "column", gap: "0.75rem", overflow: "auto" }}>
+        <div style={sectionBody}>
           <input
             style={inputStyle}
             type="text"
@@ -147,34 +170,26 @@ function NewThreadModal({ users, onClose, onCreate }) {
             value={search}
             onChange={e => setSearch(e.target.value)}
           />
-          <div style={{ maxHeight: 200, overflowY: "auto" }}>
+          <div style={S.scrollList}>
             {filtered.map(u => (
-              <label key={u.id} style={{
-                display: "flex", alignItems: "center", gap: "0.5rem",
-                padding: "0.4rem 0.5rem", cursor: "pointer", borderRadius: "var(--radius-sm)",
-              }}
-              onMouseOver={e => e.currentTarget.style.background = "rgba(255,255,255,0.05)"}
-              onMouseOut={e => e.currentTarget.style.background = "transparent"}>
+              <label key={u.id} style={S.checkLabel}
+                onMouseOver={e => e.currentTarget.style.background = "rgba(255,255,255,0.05)"}
+                onMouseOut={e => e.currentTarget.style.background = "transparent"}>
                 <input
                   type="checkbox"
                   checked={selectedIds.includes(u.id)}
                   onChange={() => toggle(u.id)}
-                  style={{ accentColor: "var(--accent-primary)" }}
+                  style={S.checkbox}
                 />
-                <span style={{ fontSize: "0.85rem", color: "var(--text-primary)" }}>
-                  {u.displayName}
-                </span>
+                <span style={S.userName}>{u.displayName}</span>
               </label>
             ))}
           </div>
         </div>
-        <div style={{
-          padding: "1rem", borderTop: "1px solid var(--border-color)",
-          display: "flex", justifyContent: "flex-end", gap: "0.5rem",
-        }}>
+        <div style={sectionFooter}>
           <button style={btnGhost} onClick={onClose}>CANCEL</button>
           <button
-            style={{ ...btnPrimary, opacity: selectedIds.length === 0 ? 0.4 : 1 }}
+            style={Object.assign({}, btnPrimary, {opacity: selectedIds.length === 0 ? 0.4 : 1})}
             onClick={handleCreate}
             disabled={selectedIds.length === 0}
           >TRANSMIT</button>
@@ -202,35 +217,25 @@ function MemberManager({ thread, users, onClose, onAddMember, onRemoveMember }) 
   return (
     <div style={modalOverlay} onClick={onClose}>
       <div style={modalPanel} onClick={e => e.stopPropagation()}>
-        <div style={{ padding: "1rem", borderBottom: "1px solid var(--border-color)" }}>
-          <h3 className="mono-text text-accent" style={{ fontSize: "0.9rem", letterSpacing: "1px" }}>
-            MEMBERS
-          </h3>
+        <div style={sectionHeader}>
+          <h3 className="mono-text text-accent" style={S.modalTitle}>MEMBERS</h3>
         </div>
-        <div style={{ padding: "1rem", display: "flex", flexDirection: "column", gap: "0.5rem", overflow: "auto" }}>
+        <div style={Object.assign({}, sectionBody, {gap: "0.5rem"})}>
           {thread.members.map(m => (
-            <div key={m.id} style={{
-              display: "flex", alignItems: "center", justifyContent: "space-between",
-              padding: "0.5rem 0.75rem", background: "var(--bg-input)",
-              borderRadius: "var(--radius-sm)", border: "1px solid var(--border-color)",
-            }}>
-              <span style={{ fontSize: "0.85rem", color: "var(--text-primary)" }}>
+            <div key={m.id} style={S.memberRow}>
+              <span style={S.userName}>
                 {m.displayName}
                 {m.id === thread.creator && (
-                  <span className="text-accent" style={{ fontSize: "0.7rem", marginLeft: "0.5rem" }}>OWNER</span>
+                  <span className="text-accent" style={S.ownerBadge}>OWNER</span>
                 )}
               </span>
               {canManage && m.id !== thread.creator && (
-                <button onClick={() => onRemoveMember(thread.id, m.id)}
-                  style={{ background: "none", border: "none", color: "var(--accent-danger)",
-                           cursor: "pointer", fontSize: "0.75rem", fontFamily: "var(--font-mono)" }}>
+                <button onClick={() => onRemoveMember(thread.id, m.id)} style={S.dangerBtn}>
                   REMOVE
                 </button>
               )}
               {!canManage && m.id === CURRENT_USER_ID && m.id !== thread.creator && (
-                <button onClick={() => onRemoveMember(thread.id, m.id)}
-                  style={{ background: "none", border: "none", color: "var(--accent-danger)",
-                           cursor: "pointer", fontSize: "0.75rem", fontFamily: "var(--font-mono)" }}>
+                <button onClick={() => onRemoveMember(thread.id, m.id)} style={S.dangerBtn}>
                   LEAVE
                 </button>
               )}
@@ -238,25 +243,20 @@ function MemberManager({ thread, users, onClose, onAddMember, onRemoveMember }) 
           ))}
 
           {canManage && (
-            <>
+            <React.Fragment>
               <input
-                style={{ ...inputStyle, marginTop: "0.5rem" }}
+                style={Object.assign({}, inputStyle, {marginTop: "0.5rem"})}
                 type="text"
                 placeholder="Add operative..."
                 value={search}
                 onChange={e => setSearch(e.target.value)}
               />
               {search && (
-                <div style={{ maxHeight: 120, overflowY: "auto" }}>
+                <div style={S.shortScrollList}>
                   {nonMembers.map(u => (
                     <button key={u.id}
                       onClick={() => { onAddMember(thread.id, u.id); setSearch(""); }}
-                      style={{
-                        display: "block", width: "100%", textAlign: "left",
-                        padding: "0.4rem 0.75rem", background: "none",
-                        border: "none", color: "var(--accent-primary)",
-                        cursor: "pointer", fontSize: "0.85rem", borderRadius: "var(--radius-sm)",
-                      }}
+                      style={S.addUserBtn}
                       onMouseOver={e => e.currentTarget.style.background = "rgba(255,255,255,0.05)"}
                       onMouseOut={e => e.currentTarget.style.background = "transparent"}>
                       + {u.displayName}
@@ -264,10 +264,10 @@ function MemberManager({ thread, users, onClose, onAddMember, onRemoveMember }) 
                   ))}
                 </div>
               )}
-            </>
+            </React.Fragment>
           )}
         </div>
-        <div style={{ padding: "1rem", borderTop: "1px solid var(--border-color)", display: "flex", justifyContent: "flex-end" }}>
+        <div style={sectionFooter}>
           <button style={btnGhost} onClick={onClose}>CLOSE</button>
         </div>
       </div>
@@ -297,20 +297,14 @@ function MessageInput({ onSend }) {
   }
 
   return (
-    <div style={{
-      display: "flex", gap: "0.5rem", padding: "0.75rem",
-      borderTop: "1px solid var(--border-color)", background: "var(--bg-panel)",
-    }}>
+    <div style={S.inputBar}>
       <textarea
         value={text}
         onChange={e => setText(e.target.value)}
         onKeyDown={handleKeyDown}
         placeholder="Type message..."
         rows={1}
-        style={{
-          ...inputStyle, flex: 1, resize: "none",
-          fontFamily: "var(--font-main)",
-        }}
+        style={Object.assign({}, inputStyle, {flex: 1, resize: "none"})}
       />
       <button onClick={submit} style={btnPrimary}>TRANSMIT</button>
     </div>
@@ -330,12 +324,7 @@ function ThreadView({ thread, onSend, onBack, onOpenMembers }) {
 
   if (!thread) {
     return (
-      <div style={{
-        flex: 1, display: "flex", alignItems: "center", justifyContent: "center",
-        color: "var(--text-muted)", fontFamily: "var(--font-mono)", letterSpacing: "1px",
-      }}>
-        SELECT CHANNEL
-      </div>
+      <div style={S.emptyState}>SELECT CHANNEL</div>
     );
   }
 
@@ -344,59 +333,33 @@ function ThreadView({ thread, onSend, onBack, onOpenMembers }) {
     "CHANNEL";
 
   return (
-    <div style={{ flex: 1, display: "flex", flexDirection: "column", minHeight: 0 }}>
+    <div style={S.threadViewContainer}>
       {/* Header */}
-      <div style={{
-        display: "flex", alignItems: "center", gap: "0.75rem",
-        padding: "0.75rem 1rem", borderBottom: "1px solid var(--border-color)",
-        background: "var(--bg-panel)",
-      }}>
-        <button onClick={onBack} className="mobile-only" style={{
-          background: "none", border: "none", color: "var(--text-muted)",
-          cursor: "pointer", fontSize: "1.2rem", display: "none",
-        }}>&#8592;</button>
-        <div style={{ flex: 1, minWidth: 0 }}>
-          <h2 className="mono-text text-accent" style={{
-            fontSize: "0.85rem", letterSpacing: "1px", overflow: "hidden",
-            textOverflow: "ellipsis", whiteSpace: "nowrap",
-          }}>{threadTitle}</h2>
-          <span className="text-muted" style={{ fontSize: "0.7rem" }}>
+      <div style={S.threadHeader}>
+        <button onClick={onBack} className="mobile-only" style={S.backBtn}>&#8592;</button>
+        <div style={S.threadTitleWrap}>
+          <h2 className="mono-text text-accent" style={S.threadTitle}>{threadTitle}</h2>
+          <span className="text-muted" style={S.threadSub}>
             {thread.members.length} operative{thread.members.length !== 1 && "s"}
           </span>
         </div>
-        <button onClick={onOpenMembers} style={{
-          background: "none", border: "1px solid var(--border-color)",
-          borderRadius: "var(--radius-sm)", color: "var(--text-secondary)",
-          cursor: "pointer", padding: "0.3rem 0.5rem", fontSize: "0.75rem",
-          fontFamily: "var(--font-mono)",
-        }}>ROSTER</button>
+        <button onClick={onOpenMembers} style={S.rosterBtn}>ROSTER</button>
       </div>
 
       {/* Messages */}
-      <div style={{ flex: 1, overflowY: "auto", padding: "1rem", display: "flex", flexDirection: "column", gap: "0.5rem" }}>
+      <div style={S.messageList}>
         {(thread.messages || []).map(msg => {
           const isOwn = msg.sender.id === CURRENT_USER_ID;
           return (
-            <div key={msg.id} style={{
-              display: "flex", justifyContent: isOwn ? "flex-end" : "flex-start",
-            }}>
-              <div style={{
-                maxWidth: "75%", padding: "0.5rem 0.75rem",
-                borderRadius: "var(--radius-md)",
-                background: isOwn ? "rgba(56, 189, 248, 0.1)" : "var(--bg-input)",
-                border: isOwn
-                  ? "1px solid rgba(56, 189, 248, 0.3)"
-                  : "1px solid var(--border-color)",
-              }}>
+            <div key={msg.id} style={isOwn ? S.msgRowOwn : S.msgRowOther}>
+              <div style={isOwn ? S.msgBubbleOwn : S.msgBubbleOther}>
                 {!isOwn && (
-                  <div className="mono-text text-accent" style={{ fontSize: "0.7rem", marginBottom: "0.25rem" }}>
+                  <div className="mono-text text-accent" style={S.msgSender}>
                     {msg.sender.displayName}
                   </div>
                 )}
-                <div style={{ fontSize: "0.85rem", color: "var(--text-primary)", whiteSpace: "pre-wrap", wordBreak: "break-word" }}>
-                  {msg.content}
-                </div>
-                <div className="text-muted" style={{ fontSize: "0.65rem", marginTop: "0.25rem", textAlign: isOwn ? "right" : "left" }}>
+                <div style={S.msgContent}>{msg.content}</div>
+                <div className="text-muted" style={isOwn ? S.msgTimeRight : S.msgTimeLeft}>
                   {new Date(msg.createdAt).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" })}
                 </div>
               </div>
@@ -418,59 +381,42 @@ function ThreadView({ thread, onSend, onBack, onOpenMembers }) {
 
 function ThreadList({ threads, activeId, onSelect, onNewThread }) {
   return (
-    <div style={{ display: "flex", flexDirection: "column", height: "100%" }}>
-      <div style={{
-        padding: "0.75rem 1rem", borderBottom: "1px solid var(--border-color)",
-        display: "flex", alignItems: "center", justifyContent: "space-between",
-      }}>
-        <span className="mono-text text-accent" style={{ fontSize: "0.85rem", letterSpacing: "1px" }}>
-          CHANNELS
-        </span>
-        <button onClick={onNewThread} style={{
-          ...btnPrimary, padding: "0.3rem 0.75rem", fontSize: "0.7rem",
-        }}>+ NEW</button>
+    <div style={S.threadListContainer}>
+      <div style={S.threadListHeader}>
+        <span className="mono-text text-accent" style={S.threadListTitle}>CHANNELS</span>
+        <button onClick={onNewThread} style={Object.assign({}, btnPrimary, {padding: "0.3rem 0.75rem", fontSize: "0.7rem"})}>
+          + NEW
+        </button>
       </div>
-      <div style={{ flex: 1, overflowY: "auto" }}>
+      <div style={S.threadListBody}>
         {threads.length === 0 && (
-          <div className="text-muted" style={{ padding: "2rem", textAlign: "center", fontSize: "0.85rem" }}>
-            No active channels
-          </div>
+          <div className="text-muted" style={S.noThreads}>No active channels</div>
         )}
         {threads.map(t => {
           const title = t.title ||
             t.members.filter(m => m.id !== CURRENT_USER_ID).map(m => m.displayName).join(", ") ||
             "Channel";
           const isActive = t.id === activeId;
+          const itemStyle = Object.assign({}, S.threadItem, {
+            borderLeft: isActive ? "2px solid var(--accent-primary)" : "2px solid transparent",
+            background: isActive ? "rgba(56, 189, 248, 0.05)" : "transparent",
+          });
           return (
             <div key={t.id}
               onClick={() => onSelect(t.id)}
-              style={{
-                padding: "0.75rem 1rem", cursor: "pointer",
-                borderBottom: "1px solid rgba(51, 65, 85, 0.5)",
-                borderLeft: isActive ? "2px solid var(--accent-primary)" : "2px solid transparent",
-                background: isActive ? "rgba(56, 189, 248, 0.05)" : "transparent",
-                transition: "all 0.15s",
-              }}
+              style={itemStyle}
               onMouseOver={e => { if (!isActive) e.currentTarget.style.background = "rgba(255,255,255,0.02)"; }}
-              onMouseOut={e => { if (!isActive) e.currentTarget.style.background = "transparent"; }}>
-              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "0.5rem" }}>
-                <span style={{
-                  fontSize: "0.85rem", overflow: "hidden", textOverflow: "ellipsis",
-                  whiteSpace: "nowrap", color: "var(--text-primary)",
-                  fontWeight: t.unreadCount > 0 ? "bold" : "normal",
-                }}>{title}</span>
+              onMouseOut={e => { if (!isActive) e.currentTarget.style.background = isActive ? "rgba(56, 189, 248, 0.05)" : "transparent"; }}>
+              <div style={S.threadItemRow}>
+                <span style={Object.assign({}, S.threadItemTitle, {fontWeight: t.unreadCount > 0 ? "bold" : "normal"})}>
+                  {title}
+                </span>
                 {t.unreadCount > 0 && (
-                  <span style={{
-                    flexShrink: 0, minWidth: 18, height: 18,
-                    background: "var(--accent-primary)", color: "var(--bg-dark)",
-                    borderRadius: 9, display: "inline-flex", alignItems: "center",
-                    justifyContent: "center", fontSize: "0.65rem", fontWeight: "bold",
-                    fontFamily: "var(--font-mono)", padding: "0 4px",
-                  }}>{t.unreadCount}</span>
+                  <span style={S.unreadBadge}>{t.unreadCount}</span>
                 )}
               </div>
               {t.lastMessage && (
-                <div className="text-muted" style={{ fontSize: "0.75rem", marginTop: "0.25rem", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                <div className="text-muted" style={S.threadPreview}>
                   {t.lastMessage.sender}: {t.lastMessage.content}
                 </div>
               )}
@@ -495,52 +441,42 @@ function CommsApp() {
   const [showMembers, setShowMembers] = useState(false);
   const [mobileShowThread, setMobileShowThread] = useState(false);
 
-  // Load threads and users on mount
   useEffect(() => {
     api("/api/comms/threads/").then(setThreads);
     api("/api/comms/users/").then(setUsers);
   }, []);
 
-  // Load thread detail when active thread changes
   useEffect(() => {
     if (!activeThreadId) {
       setActiveThread(null);
       return;
     }
-    api(`/api/comms/threads/${activeThreadId}/`).then(data => {
+    api("/api/comms/threads/" + activeThreadId + "/").then(data => {
       setActiveThread(data);
-      // Mark as read
-      api(`/api/comms/threads/${activeThreadId}/read/`, { method: "POST" });
-      // Clear unread in thread list
+      api("/api/comms/threads/" + activeThreadId + "/read/", { method: "POST" });
       setThreads(prev => prev.map(t =>
-        t.id === activeThreadId ? { ...t, unreadCount: 0 } : t
+        t.id === activeThreadId ? Object.assign({}, t, {unreadCount: 0}) : t
       ));
     });
   }, [activeThreadId]);
 
-  // WebSocket handler
   const handleWsMessage = useCallback((data) => {
     if (data.type === "new_message") {
       const msg = data.message;
       setActiveThread(prev => {
         if (prev && prev.id === msg.threadId) {
-          api(`/api/comms/threads/${msg.threadId}/read/`, { method: "POST" });
-          return { ...prev, messages: [...(prev.messages || []), msg] };
+          api("/api/comms/threads/" + msg.threadId + "/read/", { method: "POST" });
+          return Object.assign({}, prev, {messages: (prev.messages || []).concat(msg)});
         }
         return prev;
       });
       setThreads(prev => {
         const updated = prev.map(t => {
           if (t.id === msg.threadId) {
-            return {
-              ...t,
-              lastMessage: {
-                sender: msg.sender.displayName,
-                content: msg.content,
-                createdAt: msg.createdAt,
-              },
+            return Object.assign({}, t, {
+              lastMessage: { sender: msg.sender.displayName, content: msg.content, createdAt: msg.createdAt },
               updatedAt: msg.createdAt,
-            };
+            });
           }
           return t;
         });
@@ -548,9 +484,9 @@ function CommsApp() {
       });
     } else if (data.type === "unread_update") {
       setThreads(prev => prev.map(t =>
-        t.id === data.threadId ? { ...t, unreadCount: data.unreadCount } : t
+        t.id === data.threadId ? Object.assign({}, t, {unreadCount: data.unreadCount}) : t
       ));
-      const badge = document.getElementById("comms-badge");
+      var badge = document.getElementById("comms-badge");
       if (badge) {
         api("/api/comms/unread/").then(d => {
           badge.textContent = d.unreadCount || "";
@@ -576,9 +512,9 @@ function CommsApp() {
   function handleCreateThread(title, memberIds) {
     api("/api/comms/threads/", {
       method: "POST",
-      body: JSON.stringify({ title, members: memberIds }),
+      body: JSON.stringify({ title: title, members: memberIds }),
     }).then(data => {
-      setThreads(prev => [data, ...prev]);
+      setThreads(prev => [data].concat(prev));
       setActiveThreadId(data.id);
       setActiveThread(data);
       setShowNewThread(false);
@@ -588,24 +524,24 @@ function CommsApp() {
 
   function handleSendMessage(content) {
     if (!activeThreadId) return;
-    api(`/api/comms/threads/${activeThreadId}/messages/`, {
+    api("/api/comms/threads/" + activeThreadId + "/messages/", {
       method: "POST",
-      body: JSON.stringify({ content }),
+      body: JSON.stringify({ content: content }),
     });
   }
 
   function handleAddMember(threadId, userId) {
-    api(`/api/comms/threads/${threadId}/members/`, {
+    api("/api/comms/threads/" + threadId + "/members/", {
       method: "POST",
-      body: JSON.stringify({ userId }),
+      body: JSON.stringify({ userId: userId }),
     }).then(() => {
-      api(`/api/comms/threads/${threadId}/`).then(setActiveThread);
+      api("/api/comms/threads/" + threadId + "/").then(setActiveThread);
       api("/api/comms/threads/").then(setThreads);
     });
   }
 
   function handleRemoveMember(threadId, userId) {
-    api(`/api/comms/threads/${threadId}/members/${userId}/`, {
+    api("/api/comms/threads/" + threadId + "/members/" + userId + "/", {
       method: "DELETE",
     }).then(() => {
       if (userId === CURRENT_USER_ID) {
@@ -614,19 +550,15 @@ function CommsApp() {
         setShowMembers(false);
         api("/api/comms/threads/").then(setThreads);
       } else {
-        api(`/api/comms/threads/${threadId}/`).then(setActiveThread);
+        api("/api/comms/threads/" + threadId + "/").then(setActiveThread);
         api("/api/comms/threads/").then(setThreads);
       }
     });
   }
 
   return (
-    <div className="glass-panel" style={{ display: "flex", height: "100%", overflow: "hidden" }}>
-      {/* Thread list */}
-      <div style={{
-        width: 300, flexShrink: 0, borderRight: "1px solid var(--border-color)",
-        display: "flex", flexDirection: "column",
-      }}>
+    <div className="glass-panel" style={S.appContainer}>
+      <div style={S.sidePanel}>
         <ThreadList
           threads={threads}
           activeId={activeThreadId}
@@ -634,9 +566,7 @@ function CommsApp() {
           onNewThread={() => setShowNewThread(true)}
         />
       </div>
-
-      {/* Thread view */}
-      <div style={{ flex: 1, display: "flex", flexDirection: "column", minWidth: 0 }}>
+      <div style={S.mainPanel}>
         <ThreadView
           thread={activeThread}
           onSend={handleSendMessage}
@@ -644,8 +574,6 @@ function CommsApp() {
           onOpenMembers={() => setShowMembers(true)}
         />
       </div>
-
-      {/* Modals */}
       {showNewThread && (
         <NewThreadModal
           users={users}
@@ -667,15 +595,139 @@ function CommsApp() {
 }
 
 // ---------------------------------------------------------------------------
+// Style constants (avoids {{ }} in JSX which Django parses)
+// ---------------------------------------------------------------------------
+
+const S = {
+  modalTitle: { fontSize: "0.9rem", letterSpacing: "1px" },
+  scrollList: { maxHeight: 200, overflowY: "auto" },
+  shortScrollList: { maxHeight: 120, overflowY: "auto" },
+  checkLabel: {
+    display: "flex", alignItems: "center", gap: "0.5rem",
+    padding: "0.4rem 0.5rem", cursor: "pointer", borderRadius: "var(--radius-sm)",
+  },
+  checkbox: { accentColor: "var(--accent-primary)" },
+  userName: { fontSize: "0.85rem", color: "var(--text-primary)" },
+  ownerBadge: { fontSize: "0.7rem", marginLeft: "0.5rem" },
+  memberRow: {
+    display: "flex", alignItems: "center", justifyContent: "space-between",
+    padding: "0.5rem 0.75rem", background: "var(--bg-input)",
+    borderRadius: "var(--radius-sm)", border: "1px solid var(--border-color)",
+  },
+  dangerBtn: {
+    background: "none", border: "none", color: "var(--accent-danger)",
+    cursor: "pointer", fontSize: "0.75rem", fontFamily: "var(--font-mono)",
+  },
+  addUserBtn: {
+    display: "block", width: "100%", textAlign: "left",
+    padding: "0.4rem 0.75rem", background: "none",
+    border: "none", color: "var(--accent-primary)",
+    cursor: "pointer", fontSize: "0.85rem", borderRadius: "var(--radius-sm)",
+  },
+  inputBar: {
+    display: "flex", gap: "0.5rem", padding: "0.75rem",
+    borderTop: "1px solid var(--border-color)", background: "var(--bg-panel)",
+  },
+  emptyState: {
+    flex: 1, display: "flex", alignItems: "center", justifyContent: "center",
+    color: "var(--text-muted)", fontFamily: "var(--font-mono)", letterSpacing: "1px",
+  },
+  threadViewContainer: { flex: 1, display: "flex", flexDirection: "column", minHeight: 0 },
+  threadHeader: {
+    display: "flex", alignItems: "center", gap: "0.75rem",
+    padding: "0.75rem 1rem", borderBottom: "1px solid var(--border-color)",
+    background: "var(--bg-panel)",
+  },
+  backBtn: {
+    background: "none", border: "none", color: "var(--text-muted)",
+    cursor: "pointer", fontSize: "1.2rem", display: "none",
+  },
+  threadTitleWrap: { flex: 1, minWidth: 0 },
+  threadTitle: {
+    fontSize: "0.85rem", letterSpacing: "1px", overflow: "hidden",
+    textOverflow: "ellipsis", whiteSpace: "nowrap",
+  },
+  threadSub: { fontSize: "0.7rem" },
+  rosterBtn: {
+    background: "none", border: "1px solid var(--border-color)",
+    borderRadius: "var(--radius-sm)", color: "var(--text-secondary)",
+    cursor: "pointer", padding: "0.3rem 0.5rem", fontSize: "0.75rem",
+    fontFamily: "var(--font-mono)",
+  },
+  messageList: {
+    flex: 1, overflowY: "auto", padding: "1rem",
+    display: "flex", flexDirection: "column", gap: "0.5rem",
+  },
+  msgRowOwn: { display: "flex", justifyContent: "flex-end" },
+  msgRowOther: { display: "flex", justifyContent: "flex-start" },
+  msgBubbleOwn: {
+    maxWidth: "75%", padding: "0.5rem 0.75rem",
+    borderRadius: "var(--radius-md)",
+    background: "rgba(56, 189, 248, 0.1)",
+    border: "1px solid rgba(56, 189, 248, 0.3)",
+  },
+  msgBubbleOther: {
+    maxWidth: "75%", padding: "0.5rem 0.75rem",
+    borderRadius: "var(--radius-md)",
+    background: "var(--bg-input)",
+    border: "1px solid var(--border-color)",
+  },
+  msgSender: { fontSize: "0.7rem", marginBottom: "0.25rem" },
+  msgContent: {
+    fontSize: "0.85rem", color: "var(--text-primary)",
+    whiteSpace: "pre-wrap", wordBreak: "break-word",
+  },
+  msgTimeRight: { fontSize: "0.65rem", marginTop: "0.25rem", textAlign: "right" },
+  msgTimeLeft: { fontSize: "0.65rem", marginTop: "0.25rem", textAlign: "left" },
+  threadListContainer: { display: "flex", flexDirection: "column", height: "100%" },
+  threadListHeader: {
+    padding: "0.75rem 1rem", borderBottom: "1px solid var(--border-color)",
+    display: "flex", alignItems: "center", justifyContent: "space-between",
+  },
+  threadListTitle: { fontSize: "0.85rem", letterSpacing: "1px" },
+  threadListBody: { flex: 1, overflowY: "auto" },
+  noThreads: { padding: "2rem", textAlign: "center", fontSize: "0.85rem" },
+  threadItem: {
+    padding: "0.75rem 1rem", cursor: "pointer",
+    borderBottom: "1px solid rgba(51, 65, 85, 0.5)",
+    transition: "all 0.15s",
+  },
+  threadItemRow: {
+    display: "flex", alignItems: "center", justifyContent: "space-between", gap: "0.5rem",
+  },
+  threadItemTitle: {
+    fontSize: "0.85rem", overflow: "hidden", textOverflow: "ellipsis",
+    whiteSpace: "nowrap", color: "var(--text-primary)",
+  },
+  unreadBadge: {
+    flexShrink: 0, minWidth: 18, height: 18,
+    background: "var(--accent-primary)", color: "var(--bg-dark)",
+    borderRadius: 9, display: "inline-flex", alignItems: "center",
+    justifyContent: "center", fontSize: "0.65rem", fontWeight: "bold",
+    fontFamily: "var(--font-mono)", padding: "0 4px",
+  },
+  threadPreview: {
+    fontSize: "0.75rem", marginTop: "0.25rem", overflow: "hidden",
+    textOverflow: "ellipsis", whiteSpace: "nowrap",
+  },
+  appContainer: { display: "flex", height: "100%", overflow: "hidden" },
+  sidePanel: {
+    width: 300, flexShrink: 0, borderRight: "1px solid var(--border-color)",
+    display: "flex", flexDirection: "column",
+  },
+  mainPanel: { flex: 1, display: "flex", flexDirection: "column", minWidth: 0 },
+};
+
+// ---------------------------------------------------------------------------
 // Mount
 // ---------------------------------------------------------------------------
 
 const root = ReactDOM.createRoot(document.getElementById("comms-root"));
 root.render(<CommsApp />);
 </script>
+{% endverbatim %}
 
 <style>
-/* Mobile responsive overrides */
 @media (max-width: 768px) {
   #comms-root > div > div:first-child {
     width: 100% !important;
