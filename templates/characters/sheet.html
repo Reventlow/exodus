@@ -337,61 +337,60 @@
                     borderBottom: '1px solid var(--border-color)',
                     paddingBottom: '0.5rem', marginBottom: '1rem'
                 }}>ATTRIBUTES</h3>
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '2rem' }}>
-                    {/* Headers */}
-                    <div className="text-center text-muted mono-text">MENTAL</div>
-                    <div className="text-center text-muted mono-text">PHYSICAL</div>
-                    <div className="text-center text-muted mono-text">SOCIAL</div>
-
-                    {/* Power */}
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                        <span>Intelligence</span>
-                        <StatDots value={attributes.power.mental}
-                            onChange={v => updateAttr('power', 'mental', v)} editable={IS_OWNER} />
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '2rem' }}>
+                    <div>
+                        <div className="text-center text-muted mono-text" style={{ marginBottom: '0.5rem' }}>MENTAL</div>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
+                            <span>Intelligence</span>
+                            <StatDots value={attributes.power.mental}
+                                onChange={v => updateAttr('power', 'mental', v)} editable={IS_OWNER} />
+                        </div>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
+                            <span>Wits</span>
+                            <StatDots value={attributes.finesse.mental}
+                                onChange={v => updateAttr('finesse', 'mental', v)} editable={IS_OWNER} />
+                        </div>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                            <span>Resolve</span>
+                            <StatDots value={attributes.resistance.mental}
+                                onChange={v => updateAttr('resistance', 'mental', v)} editable={IS_OWNER} />
+                        </div>
                     </div>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                        <span>Strength</span>
-                        <StatDots value={attributes.power.physical}
-                            onChange={v => updateAttr('power', 'physical', v)} editable={IS_OWNER} />
+                    <div>
+                        <div className="text-center text-muted mono-text" style={{ marginBottom: '0.5rem' }}>PHYSICAL</div>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
+                            <span>Strength</span>
+                            <StatDots value={attributes.power.physical}
+                                onChange={v => updateAttr('power', 'physical', v)} editable={IS_OWNER} />
+                        </div>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
+                            <span>Dexterity</span>
+                            <StatDots value={attributes.finesse.physical}
+                                onChange={v => updateAttr('finesse', 'physical', v)} editable={IS_OWNER} />
+                        </div>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                            <span>Stamina</span>
+                            <StatDots value={attributes.resistance.physical}
+                                onChange={v => updateAttr('resistance', 'physical', v)} editable={IS_OWNER} />
+                        </div>
                     </div>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                        <span>Presence</span>
-                        <StatDots value={attributes.power.social}
-                            onChange={v => updateAttr('power', 'social', v)} editable={IS_OWNER} />
-                    </div>
-
-                    {/* Finesse */}
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                        <span>Wits</span>
-                        <StatDots value={attributes.finesse.mental}
-                            onChange={v => updateAttr('finesse', 'mental', v)} editable={IS_OWNER} />
-                    </div>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                        <span>Dexterity</span>
-                        <StatDots value={attributes.finesse.physical}
-                            onChange={v => updateAttr('finesse', 'physical', v)} editable={IS_OWNER} />
-                    </div>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                        <span>Manipulation</span>
-                        <StatDots value={attributes.finesse.social}
-                            onChange={v => updateAttr('finesse', 'social', v)} editable={IS_OWNER} />
-                    </div>
-
-                    {/* Resistance */}
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                        <span>Resolve</span>
-                        <StatDots value={attributes.resistance.mental}
-                            onChange={v => updateAttr('resistance', 'mental', v)} editable={IS_OWNER} />
-                    </div>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                        <span>Stamina</span>
-                        <StatDots value={attributes.resistance.physical}
-                            onChange={v => updateAttr('resistance', 'physical', v)} editable={IS_OWNER} />
-                    </div>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                        <span>Composure</span>
-                        <StatDots value={attributes.resistance.social}
-                            onChange={v => updateAttr('resistance', 'social', v)} editable={IS_OWNER} />
+                    <div>
+                        <div className="text-center text-muted mono-text" style={{ marginBottom: '0.5rem' }}>SOCIAL</div>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
+                            <span>Presence</span>
+                            <StatDots value={attributes.power.social}
+                                onChange={v => updateAttr('power', 'social', v)} editable={IS_OWNER} />
+                        </div>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
+                            <span>Manipulation</span>
+                            <StatDots value={attributes.finesse.social}
+                                onChange={v => updateAttr('finesse', 'social', v)} editable={IS_OWNER} />
+                        </div>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                            <span>Composure</span>
+                            <StatDots value={attributes.resistance.social}
+                                onChange={v => updateAttr('resistance', 'social', v)} editable={IS_OWNER} />
+                        </div>
                     </div>
                 </div>
             </div>
@@ -540,7 +539,8 @@
             }}>
                 <div style={{
                     display: 'flex', justifyContent: 'space-between',
-                    alignItems: 'center', marginBottom: '1rem'
+                    alignItems: 'center', marginBottom: '1rem',
+                    flexWrap: 'wrap', gap: '0.5rem'
                 }}>
                     <h3 className="mono-text text-danger">BIOSIGN MONITOR</h3>
                     <div className="text-danger mono-text" style={{
@@ -594,7 +594,7 @@
                 </div>
 
                 {/* Numeric damage counters */}
-                <div style={{ display: 'flex', gap: '2rem', justifyContent: 'center', marginTop: '1rem' }}>
+                <div style={{ display: 'flex', gap: '2rem', justifyContent: 'center', marginTop: '1rem', flexWrap: 'wrap' }}>
                     <div className="text-center">
                         <label className="text-muted mono-text" style={{ fontSize: '0.8rem' }}>BASHING</label>
                         <input type="number" value={health.bashing || 0}
@@ -640,7 +640,8 @@
                 }}>
                     <div style={{
                         display: 'flex', justifyContent: 'space-between',
-                        alignItems: 'center', marginBottom: '0.75rem'
+                        alignItems: 'center', marginBottom: '0.75rem',
+                        flexWrap: 'wrap', gap: '0.5rem'
                     }}>
                         <span className="mono-text text-danger" style={{ fontSize: '0.9rem' }}>
                             MENTAL LOAD
@@ -917,7 +918,8 @@
 
                 <div style={{
                     display: 'flex', gap: '1rem', alignItems: 'flex-end',
-                    justifyContent: 'center', marginBottom: '1rem'
+                    justifyContent: 'center', marginBottom: '1rem',
+                    flexWrap: 'wrap'
                 }}>
                     <div>
                         <label className="text-muted mono-text" style={{ fontSize: '0.8rem' }}>POOL SIZE</label>
@@ -1144,7 +1146,8 @@
                 <div style={{
                     display: 'flex', justifyContent: 'space-between', alignItems: 'center',
                     marginBottom: '1rem', paddingBottom: '0.5rem',
-                    borderBottom: '1px solid var(--border-color)'
+                    borderBottom: '1px solid var(--border-color)',
+                    flexWrap: 'wrap', gap: '0.5rem'
                 }}>
                     <h2 className="mono-text text-accent" style={{ fontSize: '1.2rem' }}>
                         PERSONNEL RECORD

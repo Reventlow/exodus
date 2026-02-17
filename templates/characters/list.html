@@ -167,8 +167,10 @@
                         borderBottom: '1px solid var(--border-color)',
                         paddingBottom: '0.5rem',
                         display: 'flex',
+                        flexWrap: 'wrap',
                         justifyContent: 'space-between',
-                        alignItems: 'center'
+                        alignItems: 'center',
+                        gap: '0.5rem'
                     }}>
                         <span className="text-accent">
                             <Icon name="users" size={20} /> OPERATIVE DATABASE
@@ -180,7 +182,7 @@
 
                     <div style={{
                         display: 'grid',
-                        gridTemplateColumns: 'repeat(auto-fill, minmax(240px, 1fr))',
+                        gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))',
                         gap: '1rem',
                         marginBottom: '2rem'
                     }}>

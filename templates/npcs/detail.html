@@ -220,7 +220,7 @@
                 <div className="glass-panel" style={{
                     padding: '1.5rem', marginBottom: '1rem',
                     display: 'grid',
-                    gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))',
+                    gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))',
                     gap: '1rem'
                 }}>
                     <div>
@@ -259,7 +259,7 @@
             <div className="glass-panel" style={{
                 padding: '1.5rem', marginBottom: '1rem',
                 display: 'grid',
-                gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))',
+                gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))',
                 gap: '1rem'
             }}>
                 <div>
@@ -692,14 +692,15 @@
             <div className="fade-in">
                 {/* Sub-header with save status */}
                 <div style={{
-                    display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+                    display: 'flex', flexWrap: 'wrap', justifyContent: 'space-between', alignItems: 'center',
                     marginBottom: '1rem', paddingBottom: '0.5rem',
+                    gap: '0.5rem',
                     borderBottom: '1px solid var(--border-color)'
                 }}>
                     <h2 className="mono-text text-accent" style={{ fontSize: '1.2rem' }}>
                         CONTACT DOSSIER
                     </h2>
-                    <div style={{ display: 'flex', gap: '1rem', alignItems: 'center' }}>
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem', alignItems: 'center' }}>
                         {!IS_EDITOR && (
                             <span className="mono-text" style={{
                                 fontSize: '0.8rem', padding: '0.25rem 0.75rem',
