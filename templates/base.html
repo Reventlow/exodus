@@ -51,6 +51,69 @@
 
     {% block content %}{% endblock %}
 
+    <!-- Version Badge -->
+    <div id="version-badge" onclick="document.getElementById('changelog-modal').style.display='flex'"
+        style="
+            position: fixed; bottom: 1rem; right: 1rem;
+            font-family: var(--font-mono); font-size: 0.75rem;
+            color: var(--text-muted); cursor: pointer;
+            padding: 4px 10px; border: 1px solid var(--border-color);
+            border-radius: var(--radius-sm); background: var(--bg-panel);
+            transition: all 0.2s; z-index: 50;
+        "
+        onmouseover="this.style.color='var(--accent-primary)';this.style.borderColor='var(--accent-primary)'"
+        onmouseout="this.style.color='var(--text-muted)';this.style.borderColor='var(--border-color)'"
+    >v{{ APP_VERSION }}</div>
+
+    <!-- Changelog Modal -->
+    <div id="changelog-modal" onclick="if(event.target===this)this.style.display='none'"
+        style="
+            display: none; position: fixed; top: 0; left: 0;
+            width: 100%; height: 100%; z-index: 200;
+            background: rgba(0,0,0,0.7); backdrop-filter: blur(4px);
+            align-items: center; justify-content: center;
+        ">
+        <div class="glass-panel" style="
+            max-width: 600px; width: 90%; max-height: 80vh;
+            padding: 2rem; overflow-y: auto; position: relative;
+        ">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem; border-bottom: 1px solid var(--border-color); padding-bottom: 0.75rem;">
+                <h2 class="mono-text text-accent" style="font-size: 1.1rem; letter-spacing: 1px;">
+                    CHANGELOG <span class="text-muted">// v{{ APP_VERSION }}</span>
+                </h2>
+                <button onclick="document.getElementById('changelog-modal').style.display='none'"
+                    style="background: transparent; border: none; color: var(--text-muted); cursor: pointer; font-size: 1.2rem; font-family: var(--font-mono);">
+                    &times;
+                </button>
+            </div>
+            <div id="changelog-content" style="color: var(--text-secondary); line-height: 1.8; font-size: 0.9rem;">
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Simple markdown-to-HTML for changelog
+        (function() {
+            const raw = "{{ CHANGELOG|escapejs }}";
+            const lines = raw.split('\n');
+            let html = '';
+            for (const line of lines) {
+                if (line.startsWith('# ')) {
+                    // Skip the main title
+                } else if (line.startsWith('## ')) {
+                    html += '<h3 class="mono-text text-accent" style="margin-top: 1.5rem; margin-bottom: 0.5rem; font-size: 1rem;">' + line.slice(3) + '</h3>';
+                } else if (line.startsWith('- ')) {
+                    html += '<div style="padding-left: 1rem; margin-bottom: 0.25rem;">&bull; ' + line.slice(2) + '</div>';
+                } else if (line.trim() === '') {
+                    // skip blank lines
+                } else {
+                    html += '<p>' + line + '</p>';
+                }
+            }
+            document.getElementById('changelog-content').innerHTML = html;
+        })();
+    </script>
+
     {% block scripts %}{% endblock %}
 </body>
 </html>
