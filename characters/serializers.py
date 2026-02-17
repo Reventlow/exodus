@@ -12,6 +12,8 @@ def serialize_character(character):
         "chronicle": character.chronicle,
         "virtue": character.virtue,
         "vice": character.vice,
+        "dossier": character.dossier,
+        "profilePicture": character.profile_picture.url if character.profile_picture else None,
         "attributes": character.attributes,
         "skills": character.skills,
         "health": {
@@ -37,4 +39,5 @@ def serialize_character_summary(character):
         "owner": character.owner.username,
         "name": character.name,
         "concept": character.concept,
+        "profilePicture": character.profile_picture.url if character.profile_picture else None,
     }

@@ -1,4 +1,5 @@
 import json
+import os
 
 from django.http import JsonResponse
 from django.shortcuts import render, get_object_or_404
@@ -85,7 +86,7 @@ def api_character_detail(request, pk):
             return JsonResponse({"error": "Invalid data stream."}, status=400)
 
         # Update simple text fields
-        for field in ("name", "concept", "chronicle", "virtue", "vice"):
+        for field in ("name", "concept", "chronicle", "virtue", "vice", "dossier"):
             if field in data:
                 setattr(character, field, data[field])
 
@@ -131,3 +132,40 @@ def api_character_detail(request, pk):
             return JsonResponse({"error": "ACCESS DENIED. Administrator clearance required."}, status=403)
         character.delete()
         return JsonResponse({"status": "Record terminated."})
+
+
+@login_required
+@require_http_methods(["POST"])
+def api_character_image(request, pk):
+    """Upload character profile picture."""
+    character = get_object_or_404(Character, pk=pk)
+
+    # Only owner or admin can upload
+    if request.user != character.owner and not request.user.is_superuser:
+        return JsonResponse({"error": "ACCESS DENIED."}, status=403)
+
+    image = request.FILES.get("image")
+    if not image:
+        return JsonResponse({"error": "No image provided."}, status=400)
+
+    # Validate file size (5MB max)
+    if image.size > 5 * 1024 * 1024:
+        return JsonResponse({"error": "Image too large. Maximum 5MB."}, status=400)
+
+    # Validate content type
+    allowed_types = ("image/jpeg", "image/png", "image/webp", "image/gif")
+    if image.content_type not in allowed_types:
+        return JsonResponse(
+            {"error": "Invalid image type. Use JPEG, PNG, WebP, or GIF."},
+            status=400,
+        )
+
+    # Delete old image if exists
+    if character.profile_picture:
+        old_path = character.profile_picture.path
+        if os.path.exists(old_path):
+            os.remove(old_path)
+
+    character.profile_picture = image
+    character.save()
+    return JsonResponse({"profilePicture": character.profile_picture.url})

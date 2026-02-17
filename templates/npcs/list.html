@@ -1,0 +1,366 @@
+{% extends "base.html" %}
+
+{% block title %}CONTACT DOSSIERS // FOUNDATION{% endblock %}
+
+{% block content %}
+<div id="app-root">
+    <div class="loading-screen">
+        <h1 class="mono-text">LOADING CONTACT DATABASE...</h1>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    // Django context variables — outside verbatim block
+    const CURRENT_USER = '{{ user.username }}';
+    const CURRENT_USER_ID = {{ user.id }};
+    const CSRF_TOKEN = '{{ csrf_token }}';
+</script>
+{% verbatim %}
+<script type="text/babel">
+    const { useState, useEffect } = React;
+
+    // CSRF cookie reader for fetch requests
+    function getCookie(name) {
+        let cookieValue = null;
+        if (document.cookie && document.cookie !== '') {
+            const cookies = document.cookie.split(';');
+            for (let i = 0; i < cookies.length; i++) {
+                const cookie = cookies[i].trim();
+                if (cookie.substring(0, name.length + 1) === (name + '=')) {
+                    cookieValue = decodeURIComponent(cookie.substring(name.length + 1));
+                    break;
+                }
+            }
+        }
+        return cookieValue;
+    }
+
+    // Icon component using Lucide
+    const Icon = ({ name, size = 16, className = "" }) => {
+        useEffect(() => {
+            if (window.lucide) window.lucide.createIcons();
+        }, [name]);
+        return <i data-lucide={name} width={size} height={size} className={className}></i>;
+    };
+
+    // State color mapping for NPC status
+    const STATE_COLORS = {
+        active: 'var(--accent-primary)',
+        leave: 'var(--accent-warning)',
+        medical_leave: 'var(--accent-warning)',
+        missing: 'var(--accent-danger)',
+        deceased: 'var(--text-muted)',
+    };
+
+    const getStateColor = (state) => STATE_COLORS[state] || 'var(--text-muted)';
+
+    const getStateLabel = (state) => {
+        const labels = {
+            active: 'ACTIVE',
+            leave: 'ON LEAVE',
+            medical_leave: 'MEDICAL LEAVE',
+            missing: 'MISSING',
+            deceased: 'DECEASED',
+        };
+        return labels[state] || (state ? state.toUpperCase() : 'UNKNOWN');
+    };
+
+    // NPC portrait with state-colored border
+    const Portrait = ({ npc }) => {
+        const color = getStateColor(npc.state);
+        const firstLetter = npc.name ? npc.name.charAt(0).toUpperCase() : '?';
+        const hasImage = !!npc.image;
+
+        return (
+            <div style={{
+                width: '60px',
+                height: '60px',
+                borderRadius: '50%',
+                border: `2px solid ${color}`,
+                flexShrink: 0,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                overflow: 'hidden',
+                background: hasImage ? 'transparent' : 'var(--bg-dark)',
+                backgroundImage: hasImage ? `url(${npc.image})` : 'none',
+                backgroundSize: 'cover',
+                backgroundPosition: 'center',
+            }}>
+                {!hasImage && (
+                    <span className="mono-text" style={{
+                        fontSize: '1.4rem',
+                        color: color,
+                        fontWeight: 'bold',
+                    }}>
+                        {firstLetter}
+                    </span>
+                )}
+            </div>
+        );
+    };
+
+    // NPC card component
+    const NPCCard = ({ npc, onClick }) => {
+        const stateColor = getStateColor(npc.state);
+
+        return (
+            <div
+                className="tech-border glitch-hover glass-panel"
+                style={{
+                    padding: '1rem',
+                    cursor: 'pointer',
+                    transition: 'all 0.2s',
+                }}
+                onClick={onClick}
+            >
+                <div style={{ display: 'flex', gap: '1rem', alignItems: 'flex-start' }}>
+                    <Portrait npc={npc} />
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                        <h3 className="text-accent mono-text" style={{
+                            fontSize: '1.1rem',
+                            margin: 0,
+                            whiteSpace: 'nowrap',
+                            overflow: 'hidden',
+                            textOverflow: 'ellipsis',
+                        }}>
+                            {npc.name}
+                        </h3>
+
+                        <span className="mono-text" style={{
+                            fontSize: '0.65rem',
+                            color: stateColor,
+                            textTransform: 'uppercase',
+                            letterSpacing: '1px',
+                            display: 'inline-block',
+                            marginTop: '0.25rem',
+                        }}>
+                            {getStateLabel(npc.state)}
+                        </span>
+
+                        {npc.occupation && (
+                            <p className="text-secondary" style={{
+                                fontSize: '0.85rem',
+                                margin: '0.4rem 0 0 0',
+                                whiteSpace: 'nowrap',
+                                overflow: 'hidden',
+                                textOverflow: 'ellipsis',
+                            }}>
+                                {npc.occupation}
+                            </p>
+                        )}
+                    </div>
+                </div>
+
+                <div style={{
+                    marginTop: '0.75rem',
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    alignItems: 'center',
+                }}>
+                    <span className="text-muted" style={{ fontSize: '0.75rem' }}>
+                        HANDLER: {npc.handler || 'UNASSIGNED'}
+                    </span>
+                    <span className="text-muted" style={{ fontSize: '0.75rem' }}>
+                        ID: {String(npc.id).substring(0, 6)}
+                    </span>
+                </div>
+            </div>
+        );
+    };
+
+    // Filter bar with filter buttons
+    const FilterBar = ({ activeFilter, onFilterChange }) => {
+        const filters = [
+            { key: 'all', label: 'ALL' },
+            { key: 'my_contacts', label: 'MY CONTACTS' },
+            { key: 'active', label: 'ACTIVE' },
+            { key: 'deceased', label: 'DECEASED' },
+        ];
+
+        return (
+            <div style={{
+                display: 'flex',
+                gap: '0.5rem',
+                flexWrap: 'wrap',
+                marginBottom: '1.5rem',
+            }}>
+                {filters.map(f => (
+                    <button
+                        key={f.key}
+                        className="tech-border mono-text"
+                        onClick={() => onFilterChange(f.key)}
+                        style={{
+                            background: activeFilter === f.key ? 'var(--accent-primary)' : 'transparent',
+                            color: activeFilter === f.key ? 'var(--bg-dark)' : 'var(--text-secondary)',
+                            border: activeFilter === f.key ? '1px solid var(--accent-primary)' : '1px solid var(--border-color)',
+                            padding: '0.4rem 1rem',
+                            cursor: 'pointer',
+                            fontSize: '0.75rem',
+                            letterSpacing: '1px',
+                            fontWeight: activeFilter === f.key ? 'bold' : 'normal',
+                            transition: 'all 0.2s',
+                            fontFamily: 'var(--font-mono)',
+                        }}
+                    >
+                        {f.label}
+                    </button>
+                ))}
+            </div>
+        );
+    };
+
+    // Main application component
+    const DossierList = () => {
+        const [npcs, setNpcs] = useState([]);
+        const [loading, setLoading] = useState(true);
+        const [creating, setCreating] = useState(false);
+        const [activeFilter, setActiveFilter] = useState('all');
+
+        useEffect(() => {
+            fetchNpcs();
+        }, []);
+
+        const fetchNpcs = async () => {
+            try {
+                const response = await fetch('/api/npcs/');
+                if (response.ok) {
+                    const data = await response.json();
+                    setNpcs(data);
+                }
+            } catch (err) {
+                console.error('Failed to fetch contacts:', err);
+            } finally {
+                setLoading(false);
+            }
+        };
+
+        const createNpc = async () => {
+            setCreating(true);
+            try {
+                const response = await fetch('/api/npcs/', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-CSRFToken': getCookie('csrftoken') || CSRF_TOKEN,
+                    },
+                    body: JSON.stringify({ name: 'NEW CONTACT' }),
+                });
+                if (response.ok) {
+                    const newNpc = await response.json();
+                    window.location.href = '/npcs/' + newNpc.id + '/';
+                } else {
+                    console.error('Failed to create contact');
+                }
+            } catch (err) {
+                console.error('Failed to create contact:', err);
+            } finally {
+                setCreating(false);
+            }
+        };
+
+        const getFilteredNpcs = () => {
+            switch (activeFilter) {
+                case 'my_contacts':
+                    return npcs.filter(n => n.handler === CURRENT_USER);
+                case 'active':
+                    return npcs.filter(n => n.state === 'active');
+                case 'deceased':
+                    return npcs.filter(n => n.state === 'deceased');
+                default:
+                    return npcs;
+            }
+        };
+
+        if (loading) {
+            return (
+                <div style={{ textAlign: 'center', padding: '4rem' }}>
+                    <h2 className="mono-text text-accent" style={{ animation: 'pulse 1.5s infinite' }}>
+                        ACCESSING CONTACT DATABASE...
+                    </h2>
+                </div>
+            );
+        }
+
+        const filtered = getFilteredNpcs();
+
+        return (
+            <div>
+                <div className="glass-panel" style={{ padding: '2rem', maxWidth: '1100px', margin: '2rem auto' }}>
+                    <h2 className="mono-text" style={{
+                        marginBottom: '1.5rem',
+                        borderBottom: '1px solid var(--border-color)',
+                        paddingBottom: '0.5rem',
+                        display: 'flex',
+                        justifyContent: 'space-between',
+                        alignItems: 'center',
+                    }}>
+                        <span className="text-accent">
+                            <Icon name="book-user" size={20} /> CONTACT DOSSIERS
+                        </span>
+                        <span className="text-muted" style={{ fontSize: '0.8rem' }}>
+                            {filtered.length} RECORD{filtered.length !== 1 ? 'S' : ''}
+                        </span>
+                    </h2>
+
+                    <FilterBar activeFilter={activeFilter} onFilterChange={setActiveFilter} />
+
+                    <div style={{ textAlign: 'right', marginBottom: '1.5rem' }}>
+                        <button
+                            onClick={createNpc}
+                            disabled={creating}
+                            style={{
+                                background: 'var(--accent-primary)',
+                                border: 'none',
+                                color: 'var(--bg-dark)',
+                                padding: '0.6rem 1.5rem',
+                                cursor: creating ? 'wait' : 'pointer',
+                                fontWeight: 'bold',
+                                fontFamily: 'var(--font-mono)',
+                                fontSize: '0.85rem',
+                                letterSpacing: '1px',
+                                borderRadius: 'var(--radius-sm)',
+                                opacity: creating ? 0.6 : 1,
+                                transition: 'opacity 0.2s',
+                            }}
+                        >
+                            {creating ? 'INITIALIZING...' : 'CREATE NEW CONTACT'}
+                        </button>
+                    </div>
+
+                    <div style={{
+                        display: 'grid',
+                        gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))',
+                        gap: '1rem',
+                        marginBottom: '2rem',
+                    }}>
+                        {filtered.map(npc => (
+                            <NPCCard
+                                key={npc.id}
+                                npc={npc}
+                                onClick={() => { window.location.href = '/npcs/' + npc.id + '/'; }}
+                            />
+                        ))}
+                    </div>
+
+                    {filtered.length === 0 && (
+                        <p className="text-muted mono-text fade-in" style={{
+                            textAlign: 'center',
+                            fontStyle: 'italic',
+                            padding: '2rem 0',
+                        }}>
+                            No contact records match current filter.
+                        </p>
+                    )}
+                </div>
+            </div>
+        );
+    };
+
+    const root = ReactDOM.createRoot(document.getElementById('app-root'));
+    root.render(<DossierList />);
+</script>
+{% endverbatim %}
+{% endblock %}

@@ -58,6 +58,10 @@ class Character(models.Model):
     chronicle = models.CharField(max_length=200, blank=True, default="")
     virtue = models.CharField(max_length=100, blank=True, default="")
     vice = models.CharField(max_length=100, blank=True, default="")
+    dossier = models.TextField(blank=True, default="")
+    profile_picture = models.ImageField(
+        upload_to="character_portraits/", blank=True, null=True
+    )
 
     # Attributes stored as JSON: {power: {mental, physical, social}, finesse: {...}, resistance: {...}}
     attributes = models.JSONField(default=default_attributes)

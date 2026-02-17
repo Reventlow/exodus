@@ -12,6 +12,7 @@ COPY . .
 
 RUN python manage.py collectstatic --noinput
 RUN mkdir -p /app/data
+RUN mkdir -p /app/media
 
 EXPOSE 8000
 

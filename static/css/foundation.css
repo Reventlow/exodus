@@ -443,3 +443,78 @@ body {
     color: var(--accent-danger);
     border: 1px solid var(--accent-danger);
 }
+
+/* ============================================================
+   Dossier / Bio Markdown Content
+   ============================================================ */
+.dossier-content {
+    color: var(--text-secondary);
+    line-height: 1.8;
+    font-size: 0.9rem;
+}
+
+.dossier-content h1,
+.dossier-content h2,
+.dossier-content h3 {
+    color: var(--accent-primary);
+    font-family: var(--font-mono);
+    margin: 1rem 0 0.5rem;
+}
+
+.dossier-content h1 { font-size: 1.2rem; }
+.dossier-content h2 { font-size: 1.1rem; }
+.dossier-content h3 { font-size: 1rem; }
+
+.dossier-content p { margin-bottom: 0.75rem; }
+
+.dossier-content ul,
+.dossier-content ol {
+    margin-left: 1.5rem;
+    margin-bottom: 0.75rem;
+}
+
+.dossier-content li { margin-bottom: 0.25rem; }
+
+.dossier-content blockquote {
+    border-left: 2px solid var(--accent-primary);
+    padding-left: 1rem;
+    margin: 0.75rem 0;
+    color: var(--text-muted);
+    font-style: italic;
+}
+
+.dossier-content code {
+    background: rgba(0,0,0,0.3);
+    padding: 0.15rem 0.4rem;
+    border-radius: 3px;
+    font-family: var(--font-mono);
+    font-size: 0.85em;
+}
+
+.dossier-content pre {
+    background: rgba(0,0,0,0.3);
+    padding: 1rem;
+    border-radius: var(--radius-sm);
+    overflow-x: auto;
+    margin-bottom: 0.75rem;
+}
+
+.dossier-content pre code {
+    padding: 0;
+    background: none;
+}
+
+.dossier-content a {
+    color: var(--accent-primary);
+    text-decoration: none;
+}
+
+.dossier-content a:hover { text-decoration: underline; }
+
+.dossier-content hr {
+    border: none;
+    border-top: 1px solid var(--border-color);
+    margin: 1rem 0;
+}
+
+.dossier-content strong { color: var(--text-primary); }

@@ -72,7 +72,9 @@
         willpower: { current: 0, max_mod: 0 },
         size: 5,
         mentalLoad: 0,
-        experience: 0
+        experience: 0,
+        dossier: "",
+        profilePicture: null
     };
 
     // --- ICON COMPONENT (debounced createIcons to avoid per-render overhead) ---
@@ -132,6 +134,133 @@
                         }}
                     />
                 ))}
+            </div>
+        );
+    };
+
+    // --- PROFILE PICTURE MODULE ---
+    const ProfilePictureModule = ({ profilePicture, onUpload }) => {
+        const [uploading, setUploading] = useState(false);
+        const fileRef = useRef(null);
+
+        const handleUpload = async (e) => {
+            const file = e.target.files[0];
+            if (!file) return;
+            setUploading(true);
+            const formData = new FormData();
+            formData.append('image', file);
+            try {
+                const response = await fetch('/api/characters/' + CHARACTER_ID + '/image/', {
+                    method: 'POST',
+                    headers: { 'X-CSRFToken': getCookie('csrftoken') || CSRF_TOKEN },
+                    body: formData,
+                });
+                if (response.ok) {
+                    const data = await response.json();
+                    onUpload(data.profilePicture);
+                }
+            } catch (err) {
+                console.error('Upload error:', err);
+            } finally {
+                setUploading(false);
+                if (fileRef.current) fileRef.current.value = '';
+            }
+        };
+
+        return (
+            <div style={{ display: 'flex', justifyContent: 'center', marginBottom: '1rem' }}>
+                <div
+                    onClick={() => IS_OWNER && fileRef.current?.click()}
+                    style={{
+                        width: '150px', height: '150px', borderRadius: '50%',
+                        border: '2px solid var(--accent-primary)',
+                        overflow: 'hidden', cursor: IS_OWNER ? 'pointer' : 'default',
+                        position: 'relative',
+                        background: profilePicture ? `url(${profilePicture}) center/cover` : 'var(--bg-panel)',
+                        display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    }}
+                    title={IS_OWNER ? 'Click to upload portrait' : ''}
+                >
+                    {!profilePicture && !uploading && (
+                        <Icon name="user" size={48} className="text-muted" />
+                    )}
+                    {uploading && (
+                        <div style={{
+                            position: 'absolute', inset: 0,
+                            background: 'rgba(0,0,0,0.7)',
+                            display: 'flex', alignItems: 'center', justifyContent: 'center',
+                        }}>
+                            <span className="mono-text text-accent" style={{ fontSize: '0.8rem' }}>UPLOADING...</span>
+                        </div>
+                    )}
+                    {IS_OWNER && !uploading && (
+                        <div style={{
+                            position: 'absolute', bottom: 0, left: 0, right: 0,
+                            background: 'rgba(0,0,0,0.6)', textAlign: 'center',
+                            padding: '4px 0', fontSize: '0.7rem',
+                            fontFamily: 'var(--font-mono)', color: 'var(--accent-primary)',
+                        }}>
+                            {profilePicture ? 'CHANGE' : 'UPLOAD'}
+                        </div>
+                    )}
+                </div>
+                <input ref={fileRef} type="file" accept="image/*"
+                    onChange={handleUpload} style={{ display: 'none' }} />
+            </div>
+        );
+    };
+
+    // --- DOSSIER MODULE ---
+    const DossierModule = ({ dossier, onSave }) => {
+        const [editing, setEditing] = useState(false);
+        const textareaRef = useRef(null);
+
+        const handleSave = () => {
+            if (textareaRef.current) {
+                onSave({ dossier: textareaRef.current.value });
+            }
+            setEditing(false);
+        };
+
+        const renderMarkdown = (text) => {
+            if (!text) return '<p style="color: var(--text-muted); font-style: italic;">No dossier recorded.</p>';
+            try { return window.marked.parse(text); } catch { return text; }
+        };
+
+        return (
+            <div className="glass-panel" style={{ padding: '1.5rem', marginBottom: '1rem' }}>
+                <div style={{
+                    display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+                    borderBottom: '1px solid var(--border-color)',
+                    paddingBottom: '0.5rem', marginBottom: '1rem'
+                }}>
+                    <h3 className="mono-text text-accent">OPERATIVE DOSSIER</h3>
+                    {IS_OWNER && (
+                        <button onClick={() => editing ? handleSave() : setEditing(true)}
+                            style={{
+                                background: 'transparent',
+                                border: '1px solid var(--accent-primary)',
+                                color: 'var(--accent-primary)',
+                                padding: '0.25rem 0.75rem', cursor: 'pointer',
+                                fontFamily: 'var(--font-mono)', fontSize: '0.8rem',
+                            }}>
+                            {editing ? 'SAVE' : 'EDIT'}
+                        </button>
+                    )}
+                </div>
+                {editing ? (
+                    <textarea ref={textareaRef} defaultValue={dossier}
+                        placeholder="Write operative dossier in markdown..."
+                        style={{
+                            width: '100%', minHeight: '200px', background: 'var(--bg-input)',
+                            border: '1px solid var(--border-color)', color: 'var(--text-primary)',
+                            padding: '1rem', fontFamily: 'var(--font-mono)', fontSize: '0.9rem',
+                            resize: 'vertical', borderRadius: 'var(--radius-sm)',
+                        }} />
+                ) : (
+                    <div className="dossier-content"
+                        dangerouslySetInnerHTML={{ __html: renderMarkdown(dossier) }} />
+                )}
             </div>
         );
     };
@@ -1034,6 +1163,14 @@
                     </div>
                 </div>
 
+                <ProfilePictureModule
+                    profilePicture={char.profilePicture}
+                    onUpload={url => {
+                        charRef.current = { ...charRef.current, profilePicture: url };
+                        setChar({ ...charRef.current });
+                    }}
+                />
+
                 <HeaderModule char={char} onSave={saveCharacterQuiet} />
 
                 <div style={{
@@ -1064,6 +1201,8 @@
                     mentalLoad={char.mentalLoad || 0}
                     update={h => updateCharacter({ health: h })}
                     onMentalLoadChange={v => updateCharacter({ mentalLoad: v })} />
+
+                <DossierModule dossier={char.dossier || ""} onSave={saveCharacterQuiet} />
 
                 <DiceRoller />
 

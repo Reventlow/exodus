@@ -5,11 +5,13 @@ services:
       - "8000:8000"
     volumes:
       - db_data:/app/data
+      - media_data:/app/media
     environment:
       - DJANGO_SECRET_KEY=${DJANGO_SECRET_KEY:-django-insecure-dev-key-exodus}
       - DJANGO_DEBUG=${DJANGO_DEBUG:-True}
       - DJANGO_ALLOWED_HOSTS=${DJANGO_ALLOWED_HOSTS:-*}
       - DATABASE_DIR=/app/data
+      - MEDIA_DIR=/app/media
       - REDIS_URL=redis://redis:6379/0
     depends_on:
       - redis
@@ -24,4 +26,5 @@ services:
 
 volumes:
   db_data:
+  media_data:
   redis_data:

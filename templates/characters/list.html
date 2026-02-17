@@ -61,12 +61,32 @@
             }}
             onClick={onClick}
         >
-            <h3 className="text-accent mono-text" style={{ fontSize: '1.1rem' }}>
-                {char.name}
-            </h3>
-            <p className="text-secondary" style={{ fontSize: '0.9rem' }}>
-                {char.concept || <Redacted>UNKNOWN</Redacted>}
-            </p>
+            <div style={{ display: 'flex', gap: '0.75rem', alignItems: 'center' }}>
+                {char.profilePicture ? (
+                    <div style={{
+                        width: '40px', height: '40px', borderRadius: '50%', flexShrink: 0,
+                        border: '1px solid var(--accent-primary)',
+                        background: `url(${char.profilePicture}) center/cover`,
+                    }} />
+                ) : (
+                    <div style={{
+                        width: '40px', height: '40px', borderRadius: '50%', flexShrink: 0,
+                        border: '1px solid var(--border-color)',
+                        display: 'flex', alignItems: 'center', justifyContent: 'center',
+                        background: 'var(--bg-dark)',
+                    }}>
+                        <Icon name="user" size={18} className="text-muted" />
+                    </div>
+                )}
+                <div style={{ flex: 1, minWidth: 0 }}>
+                    <h3 className="text-accent mono-text" style={{ fontSize: '1.1rem' }}>
+                        {char.name}
+                    </h3>
+                    <p className="text-secondary" style={{ fontSize: '0.9rem' }}>
+                        {char.concept || <Redacted>UNKNOWN</Redacted>}
+                    </p>
+                </div>
+            </div>
             <div style={{ marginTop: '1rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                 <span className="text-muted" style={{ fontSize: '0.8rem' }}>
                     HANDLER: {char.owner || 'UNKNOWN'}

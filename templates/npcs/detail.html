@@ -1,0 +1,747 @@
+{% extends "base.html" %}
+
+{% block title %}CONTACT DOSSIER // FOUNDATION{% endblock %}
+
+{% block content %}
+<div id="app-root">
+    <div class="loading-screen">
+        <h1 class="mono-text">DECRYPTING CONTACT DOSSIER...</h1>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    // Django context variables — outside verbatim block
+    const NPC_ID = {{ npc_id }};
+    const IS_EDITOR = {{ is_editor|yesno:"true,false" }};
+    const IS_ADMIN = {{ is_admin|yesno:"true,false" }};
+    const CSRF_TOKEN = '{{ csrf_token }}';
+</script>
+{% verbatim %}
+<script type="text/babel">
+    const { useState, useEffect, useMemo, useRef, useCallback } = React;
+
+    // --- CSRF ---
+    function getCookie(name) {
+        let cookieValue = null;
+        if (document.cookie && document.cookie !== '') {
+            const cookies = document.cookie.split(';');
+            for (let i = 0; i < cookies.length; i++) {
+                const cookie = cookies[i].trim();
+                if (cookie.substring(0, name.length + 1) === (name + '=')) {
+                    cookieValue = decodeURIComponent(cookie.substring(name.length + 1));
+                    break;
+                }
+            }
+        }
+        return cookieValue;
+    }
+
+    // --- ICON COMPONENT (debounced createIcons to avoid per-render overhead) ---
+    let _iconTimer = null;
+    const _refreshIcons = () => {
+        if (_iconTimer) clearTimeout(_iconTimer);
+        _iconTimer = setTimeout(() => {
+            if (window.lucide) window.lucide.createIcons();
+        }, 50);
+    };
+    const Icon = ({ name, size = 16, className = "" }) => {
+        useEffect(() => { _refreshIcons(); }, [name]);
+        return <i data-lucide={name} width={size} height={size} className={className}></i>;
+    };
+
+    // --- AUTO-SAVE INPUT (uncontrolled) ---
+    // Uses defaultValue so React never touches the DOM input after mount.
+    // The DOM manages typing; we just read values via onChange to update
+    // the data ref and schedule a background save.
+    const AutoSaveInput = ({ defaultValue, onSave, delay = 1500, component = 'input', ...props }) => {
+        const timerRef = useRef(null);
+
+        const handleChange = (e) => {
+            const val = e.target.value;
+            if (timerRef.current) clearTimeout(timerRef.current);
+            timerRef.current = setTimeout(() => {
+                onSave(val);
+            }, delay);
+        };
+
+        const handleBlur = (e) => {
+            if (timerRef.current) {
+                clearTimeout(timerRef.current);
+                timerRef.current = null;
+            }
+            onSave(e.target.value);
+        };
+
+        const Tag = component;
+        return <Tag {...props} defaultValue={defaultValue} onChange={handleChange} onBlur={handleBlur} />;
+    };
+
+    // --- SAVE STATUS INDICATOR ---
+    const SaveStatus = ({ status }) => {
+        const labels = {
+            saved: 'SAVED',
+            saving: 'SAVING...',
+            unsaved: 'UNSAVED CHANGES',
+            error: 'SAVE ERROR'
+        };
+        return (
+            <span className={'save-status ' + status}>
+                {labels[status] || status}
+            </span>
+        );
+    };
+
+    // --- STATE COLOR HELPER ---
+    const getStateColor = (state) => {
+        switch (state) {
+            case 'active': return 'var(--accent-primary)';
+            case 'leave':
+            case 'medical_leave': return 'var(--accent-warning)';
+            case 'missing': return 'var(--accent-danger)';
+            case 'deceased': return 'var(--text-muted)';
+            default: return 'var(--accent-primary)';
+        }
+    };
+
+    // --- STATE DISPLAY LABELS ---
+    const STATE_CHOICES = [
+        { value: 'active', label: 'Active' },
+        { value: 'leave', label: 'Leave' },
+        { value: 'medical_leave', label: 'Medical Leave' },
+        { value: 'missing', label: 'Missing' },
+        { value: 'deceased', label: 'Deceased' }
+    ];
+
+    // --- PROFILE PICTURE MODULE ---
+    const ProfilePictureModule = ({ npc, onImageUploaded }) => {
+        const [uploading, setUploading] = useState(false);
+        const fileInputRef = useRef(null);
+
+        const handleClick = () => {
+            if (IS_EDITOR && fileInputRef.current) {
+                fileInputRef.current.click();
+            }
+        };
+
+        const handleFileChange = async (e) => {
+            const file = e.target.files[0];
+            if (!file) return;
+
+            setUploading(true);
+            try {
+                const formData = new FormData();
+                formData.append('image', file);
+
+                const response = await fetch('/api/npcs/' + NPC_ID + '/image/', {
+                    method: 'POST',
+                    headers: {
+                        'X-CSRFToken': getCookie('csrftoken') || CSRF_TOKEN,
+                    },
+                    body: formData,
+                });
+
+                if (response.ok) {
+                    const data = await response.json();
+                    onImageUploaded(data.image || data.url || data);
+                } else {
+                    console.error('Image upload failed:', response.status);
+                }
+            } catch (err) {
+                console.error('Image upload error:', err);
+            } finally {
+                setUploading(false);
+                // Reset the input so the same file can be re-selected
+                if (fileInputRef.current) fileInputRef.current.value = '';
+            }
+        };
+
+        const stateColor = getStateColor(npc.state);
+
+        return (
+            <div className="glass-panel" style={{
+                padding: '1.5rem', marginBottom: '1rem',
+                display: 'flex', justifyContent: 'center'
+            }}>
+                <div
+                    onClick={handleClick}
+                    style={{
+                        width: '150px', height: '150px', borderRadius: '50%',
+                        border: '3px solid ' + stateColor,
+                        overflow: 'hidden', position: 'relative',
+                        cursor: IS_EDITOR ? 'pointer' : 'default',
+                        background: 'rgba(0,0,0,0.3)',
+                        display: 'flex', alignItems: 'center', justifyContent: 'center'
+                    }}
+                >
+                    {npc.image ? (
+                        <img src={npc.image} alt={npc.name || 'NPC'}
+                            style={{
+                                width: '100%', height: '100%', objectFit: 'cover'
+                            }} />
+                    ) : (
+                        <Icon name="user" size={48} className="text-muted" />
+                    )}
+
+                    {/* Uploading overlay */}
+                    {uploading && (
+                        <div style={{
+                            position: 'absolute', top: 0, left: 0,
+                            width: '100%', height: '100%',
+                            background: 'rgba(0,0,0,0.7)',
+                            display: 'flex', alignItems: 'center', justifyContent: 'center',
+                            borderRadius: '50%'
+                        }}>
+                            <span className="mono-text text-accent" style={{
+                                fontSize: '0.7rem', animation: 'pulse 1s infinite'
+                            }}>UPLOADING</span>
+                        </div>
+                    )}
+                </div>
+
+                {/* Hidden file input */}
+                <input
+                    ref={fileInputRef}
+                    type="file"
+                    accept="image/*"
+                    onChange={handleFileChange}
+                    style={{ display: 'none' }}
+                />
+            </div>
+        );
+    };
+
+    // --- DEMOGRAPHICS MODULE ---
+    const DemographicsModule = ({ npc, onSave }) => {
+        if (!IS_EDITOR) {
+            // Read-only view
+            return (
+                <div className="glass-panel" style={{
+                    padding: '1.5rem', marginBottom: '1rem',
+                    display: 'grid',
+                    gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))',
+                    gap: '1rem'
+                }}>
+                    <div>
+                        <label className="text-secondary mono-text" style={{ fontSize: '0.8rem' }}>NAME</label>
+                        <div className="mono-text" style={{
+                            fontSize: '1.2rem', color: 'var(--text-primary)',
+                            borderBottom: '1px solid var(--accent-primary)',
+                            paddingBottom: '0.25rem'
+                        }}>{npc.name || 'UNKNOWN'}</div>
+                    </div>
+                    <div>
+                        <label className="text-secondary mono-text" style={{ fontSize: '0.8rem' }}>AGE</label>
+                        <div style={{ color: 'var(--text-primary)' }}>{npc.age || '-'}</div>
+                    </div>
+                    <div>
+                        <label className="text-secondary mono-text" style={{ fontSize: '0.8rem' }}>SEX</label>
+                        <div style={{ color: 'var(--text-primary)' }}>{npc.sex || '-'}</div>
+                    </div>
+                    <div>
+                        <label className="text-secondary mono-text" style={{ fontSize: '0.8rem' }}>PRONOUNS</label>
+                        <div style={{ color: 'var(--text-primary)' }}>{npc.pronouns || '-'}</div>
+                    </div>
+                    <div>
+                        <label className="text-secondary mono-text" style={{ fontSize: '0.8rem' }}>NATIONALITY</label>
+                        <div style={{ color: 'var(--text-primary)' }}>{npc.nationality || '-'}</div>
+                    </div>
+                    <div>
+                        <label className="text-secondary mono-text" style={{ fontSize: '0.8rem' }}>OCCUPATION</label>
+                        <div style={{ color: 'var(--text-primary)' }}>{npc.occupation || '-'}</div>
+                    </div>
+                </div>
+            );
+        }
+
+        return (
+            <div className="glass-panel" style={{
+                padding: '1.5rem', marginBottom: '1rem',
+                display: 'grid',
+                gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))',
+                gap: '1rem'
+            }}>
+                <div>
+                    <label className="text-secondary mono-text" style={{ fontSize: '0.8rem' }}>NAME</label>
+                    <AutoSaveInput type="text" defaultValue={npc.name}
+                        onSave={val => onSave({ name: val })}
+                        style={{
+                            background: 'transparent', border: 'none',
+                            borderBottom: '1px solid var(--accent-primary)',
+                            color: 'var(--text-primary)', width: '100%',
+                            fontSize: '1.2rem', fontFamily: 'var(--font-mono)'
+                        }} />
+                </div>
+                <div>
+                    <label className="text-secondary mono-text" style={{ fontSize: '0.8rem' }}>AGE</label>
+                    <AutoSaveInput type="number" defaultValue={npc.age}
+                        onSave={val => onSave({ age: val })}
+                        style={{
+                            background: 'transparent', border: 'none',
+                            borderBottom: '1px solid var(--border-color)',
+                            color: 'var(--text-primary)', width: '100%'
+                        }} />
+                </div>
+                <div>
+                    <label className="text-secondary mono-text" style={{ fontSize: '0.8rem' }}>SEX</label>
+                    <AutoSaveInput type="text" defaultValue={npc.sex}
+                        onSave={val => onSave({ sex: val })}
+                        style={{
+                            background: 'transparent', border: 'none',
+                            borderBottom: '1px solid var(--border-color)',
+                            color: 'var(--text-primary)', width: '100%'
+                        }} />
+                </div>
+                <div>
+                    <label className="text-secondary mono-text" style={{ fontSize: '0.8rem' }}>PRONOUNS</label>
+                    <AutoSaveInput type="text" defaultValue={npc.pronouns}
+                        onSave={val => onSave({ pronouns: val })}
+                        style={{
+                            background: 'transparent', border: 'none',
+                            borderBottom: '1px solid var(--border-color)',
+                            color: 'var(--text-primary)', width: '100%'
+                        }} />
+                </div>
+                <div>
+                    <label className="text-secondary mono-text" style={{ fontSize: '0.8rem' }}>NATIONALITY</label>
+                    <AutoSaveInput type="text" defaultValue={npc.nationality}
+                        onSave={val => onSave({ nationality: val })}
+                        style={{
+                            background: 'transparent', border: 'none',
+                            borderBottom: '1px solid var(--border-color)',
+                            color: 'var(--text-primary)', width: '100%'
+                        }} />
+                </div>
+                <div>
+                    <label className="text-secondary mono-text" style={{ fontSize: '0.8rem' }}>OCCUPATION</label>
+                    <AutoSaveInput type="text" defaultValue={npc.occupation}
+                        onSave={val => onSave({ occupation: val })}
+                        style={{
+                            background: 'transparent', border: 'none',
+                            borderBottom: '1px solid var(--border-color)',
+                            color: 'var(--text-primary)', width: '100%'
+                        }} />
+                </div>
+            </div>
+        );
+    };
+
+    // --- STATE MODULE ---
+    const StateModule = ({ npc, onSave }) => {
+        const stateColor = getStateColor(npc.state);
+        const stateLabel = STATE_CHOICES.find(s => s.value === npc.state)?.label || npc.state;
+
+        if (!IS_EDITOR) {
+            return (
+                <div className="glass-panel" style={{ padding: '1.5rem', marginBottom: '1rem' }}>
+                    <label className="text-secondary mono-text" style={{ fontSize: '0.8rem' }}>STATUS</label>
+                    <span className="mono-text" style={{
+                        display: 'block', marginTop: '0.25rem',
+                        color: stateColor, fontSize: '1rem',
+                        textTransform: 'uppercase'
+                    }}>
+                        {stateLabel}
+                    </span>
+                </div>
+            );
+        }
+
+        return (
+            <div className="glass-panel" style={{ padding: '1.5rem', marginBottom: '1rem' }}>
+                <label className="text-secondary mono-text" style={{ fontSize: '0.8rem' }}>STATUS</label>
+                <select
+                    value={npc.state || 'active'}
+                    onChange={e => onSave({ state: e.target.value })}
+                    style={{
+                        display: 'block', marginTop: '0.25rem',
+                        background: 'transparent',
+                        border: '1px solid ' + stateColor,
+                        color: stateColor,
+                        padding: '0.5rem', width: '100%',
+                        fontFamily: 'var(--font-mono)',
+                        fontSize: '0.9rem', cursor: 'pointer',
+                        textTransform: 'uppercase'
+                    }}
+                >
+                    {STATE_CHOICES.map(s => (
+                        <option key={s.value} value={s.value}
+                            style={{ background: 'var(--bg-dark)', color: 'var(--text-primary)' }}>
+                            {s.label}
+                        </option>
+                    ))}
+                </select>
+            </div>
+        );
+    };
+
+    // --- BIO MODULE (Markdown editor with preview toggle) ---
+    const BioModule = ({ npc, onSave }) => {
+        const [editMode, setEditMode] = useState(false);
+
+        const renderMarkdown = (text) => {
+            if (!text) return '<p class="text-muted" style="font-style:italic;">No bio recorded.</p>';
+            try {
+                return window.marked.parse(text);
+            } catch (err) {
+                return '<p>' + text + '</p>';
+            }
+        };
+
+        return (
+            <div className="glass-panel" style={{ padding: '1.5rem', marginBottom: '1rem' }}>
+                <div style={{
+                    display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+                    borderBottom: '1px solid var(--border-color)',
+                    paddingBottom: '0.5rem', marginBottom: '1rem'
+                }}>
+                    <h3 className="mono-text text-accent">DOSSIER</h3>
+                    {IS_EDITOR && (
+                        <button
+                            onClick={() => setEditMode(!editMode)}
+                            className="mono-text"
+                            style={{
+                                background: 'transparent',
+                                border: '1px solid var(--accent-primary)',
+                                color: 'var(--accent-primary)',
+                                padding: '0.25rem 0.75rem',
+                                cursor: 'pointer', fontSize: '0.8rem'
+                            }}
+                        >
+                            {editMode ? 'PREVIEW' : 'EDIT'}
+                        </button>
+                    )}
+                </div>
+
+                {editMode && IS_EDITOR ? (
+                    <AutoSaveInput
+                        component="textarea"
+                        defaultValue={npc.bio || ''}
+                        onSave={val => onSave({ bio: val })}
+                        placeholder="Write the contact's dossier in Markdown..."
+                        style={{
+                            width: '100%', minHeight: '300px',
+                            background: 'rgba(0,0,0,0.2)',
+                            border: '1px solid var(--border-color)',
+                            color: 'var(--text-primary)',
+                            padding: '1rem', fontFamily: 'var(--font-mono)',
+                            fontSize: '0.9rem', resize: 'vertical',
+                            lineHeight: '1.6'
+                        }}
+                    />
+                ) : (
+                    <div
+                        className="dossier-content"
+                        dangerouslySetInnerHTML={{ __html: renderMarkdown(npc.bio) }}
+                    />
+                )}
+            </div>
+        );
+    };
+
+    // --- ADMIN PANEL ---
+    const AdminPanel = ({ npc, onSave }) => {
+        const [users, setUsers] = useState([]);
+        const [confirmDelete, setConfirmDelete] = useState(false);
+
+        useEffect(() => {
+            fetchUsers();
+        }, []);
+
+        const fetchUsers = async () => {
+            try {
+                const response = await fetch('/api/comms/users/');
+                if (response.ok) {
+                    const data = await response.json();
+                    setUsers(data);
+                }
+            } catch (err) {
+                console.error('Failed to fetch users:', err);
+            }
+        };
+
+        const handleDelete = async () => {
+            try {
+                const response = await fetch('/api/npcs/' + NPC_ID + '/', {
+                    method: 'DELETE',
+                    headers: {
+                        'X-CSRFToken': getCookie('csrftoken') || CSRF_TOKEN,
+                    },
+                });
+                if (response.ok) {
+                    window.location.href = '/npcs/';
+                } else {
+                    console.error('Delete failed:', response.status);
+                }
+            } catch (err) {
+                console.error('Delete error:', err);
+            }
+        };
+
+        if (!IS_ADMIN) return null;
+
+        return (
+            <div className="glass-panel" style={{
+                padding: '1.5rem', marginBottom: '1rem',
+                border: '1px solid var(--accent-danger)'
+            }}>
+                <h3 className="mono-text text-danger" style={{
+                    borderBottom: '1px solid var(--border-color)',
+                    paddingBottom: '0.5rem', marginBottom: '1rem'
+                }}>ADMIN PANEL</h3>
+
+                {/* Reassign dropdown */}
+                <div style={{ marginBottom: '1.5rem' }}>
+                    <label className="text-secondary mono-text" style={{ fontSize: '0.8rem' }}>
+                        REASSIGN CONTACT
+                    </label>
+                    <select
+                        value={npc.assignedToId || ''}
+                        onChange={e => onSave({ assignedToId: parseInt(e.target.value) || null })}
+                        style={{
+                            display: 'block', marginTop: '0.25rem',
+                            background: 'transparent',
+                            border: '1px solid var(--accent-primary)',
+                            color: 'var(--text-primary)',
+                            padding: '0.5rem', width: '100%',
+                            fontFamily: 'var(--font-mono)',
+                            fontSize: '0.9rem', cursor: 'pointer'
+                        }}
+                    >
+                        <option value="" style={{ background: 'var(--bg-dark)' }}>-- Unassigned --</option>
+                        {users.map(user => (
+                            <option key={user.id} value={user.id}
+                                style={{ background: 'var(--bg-dark)', color: 'var(--text-primary)' }}>
+                                {user.username}
+                            </option>
+                        ))}
+                    </select>
+                </div>
+
+                {/* Delete button */}
+                <div>
+                    {!confirmDelete ? (
+                        <button
+                            onClick={() => setConfirmDelete(true)}
+                            className="mono-text"
+                            style={{
+                                background: 'transparent',
+                                border: '1px solid var(--accent-danger)',
+                                color: 'var(--accent-danger)',
+                                padding: '0.5rem 1rem',
+                                cursor: 'pointer', fontSize: '0.9rem',
+                                width: '100%'
+                            }}
+                        >
+                            DELETE RECORD
+                        </button>
+                    ) : (
+                        <div style={{ display: 'flex', gap: '0.5rem' }}>
+                            <button
+                                onClick={handleDelete}
+                                className="mono-text"
+                                style={{
+                                    background: 'var(--accent-danger)',
+                                    border: 'none',
+                                    color: 'var(--bg-dark)',
+                                    padding: '0.5rem 1rem',
+                                    cursor: 'pointer', fontSize: '0.9rem',
+                                    flex: 1, fontWeight: 'bold'
+                                }}
+                            >
+                                CONFIRM DELETE
+                            </button>
+                            <button
+                                onClick={() => setConfirmDelete(false)}
+                                className="mono-text"
+                                style={{
+                                    background: 'transparent',
+                                    border: '1px solid var(--border-color)',
+                                    color: 'var(--text-muted)',
+                                    padding: '0.5rem 1rem',
+                                    cursor: 'pointer', fontSize: '0.9rem'
+                                }}
+                            >
+                                CANCEL
+                            </button>
+                        </div>
+                    )}
+                </div>
+            </div>
+        );
+    };
+
+    // --- MAIN APP ---
+    const NPCDetail = () => {
+        const [npc, setNpc] = useState(null);
+        const [loading, setLoading] = useState(true);
+        const [saveStatus, setSaveStatus] = useState('saved');
+        const saveTimerRef = useRef(null);
+        const charRef = useRef(null);
+
+        // Load NPC data on mount
+        useEffect(() => {
+            fetchNPC();
+        }, []);
+
+        const fetchNPC = async () => {
+            try {
+                const response = await fetch('/api/npcs/' + NPC_ID + '/');
+                if (response.ok) {
+                    const data = await response.json();
+                    setNpc(data);
+                    charRef.current = data;
+                } else {
+                    console.error('Failed to load NPC');
+                }
+            } catch (err) {
+                console.error('Failed to load NPC:', err);
+            } finally {
+                setLoading(false);
+            }
+        };
+
+        // Debounced auto-save
+        const saveNPC = useCallback(async (data) => {
+            setSaveStatus('saving');
+            try {
+                const response = await fetch('/api/npcs/' + NPC_ID + '/', {
+                    method: 'PUT',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-CSRFToken': getCookie('csrftoken') || CSRF_TOKEN,
+                    },
+                    body: JSON.stringify(data),
+                });
+                if (response.ok) {
+                    setSaveStatus('saved');
+                } else {
+                    setSaveStatus('error');
+                    console.error('Save failed:', response.status);
+                }
+            } catch (err) {
+                setSaveStatus('error');
+                console.error('Save error:', err);
+            }
+        }, []);
+
+        // Full update: sets state (re-renders) + ref + schedules save.
+        // Use for structural changes (dropdown selections, state changes).
+        const updateNPC = (updates) => {
+            if (!IS_EDITOR) return;
+            const updated = { ...charRef.current, ...updates };
+            setNpc(updated);
+            charRef.current = updated;
+            setSaveStatus('unsaved');
+
+            if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
+            saveTimerRef.current = setTimeout(() => {
+                saveNPC(charRef.current);
+            }, 1000);
+        };
+
+        // Silent save: updates ref + state and sends to server.
+        // Safe with uncontrolled inputs (defaultValue) — typing is never interrupted.
+        const quietSaveTimerRef = useRef(null);
+        const saveNPCQuiet = useCallback((updates) => {
+            if (!IS_EDITOR) return;
+            const updated = { ...charRef.current, ...updates };
+            charRef.current = updated;
+            setNpc(updated);
+
+            if (quietSaveTimerRef.current) clearTimeout(quietSaveTimerRef.current);
+            quietSaveTimerRef.current = setTimeout(async () => {
+                try {
+                    const response = await fetch('/api/npcs/' + NPC_ID + '/', {
+                        method: 'PUT',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'X-CSRFToken': getCookie('csrftoken') || CSRF_TOKEN,
+                        },
+                        body: JSON.stringify(charRef.current),
+                    });
+                    if (!response.ok) console.error('Quiet save failed:', response.status);
+                } catch (err) {
+                    console.error('Quiet save error:', err);
+                }
+            }, 500);
+        }, []);
+
+        if (loading) {
+            return (
+                <div style={{ textAlign: 'center', padding: '4rem' }}>
+                    <h2 className="mono-text text-accent" style={{ animation: 'pulse 1.5s infinite' }}>
+                        DECRYPTING CONTACT DOSSIER...
+                    </h2>
+                </div>
+            );
+        }
+
+        if (!npc) {
+            return (
+                <div style={{ textAlign: 'center', padding: '4rem' }}>
+                    <h2 className="mono-text text-danger">ERROR: RECORD NOT FOUND</h2>
+                    <p className="text-muted" style={{ marginTop: '1rem' }}>
+                        The requested contact dossier could not be retrieved.
+                    </p>
+                </div>
+            );
+        }
+
+        return (
+            <div className="fade-in">
+                {/* Sub-header with save status */}
+                <div style={{
+                    display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+                    marginBottom: '1rem', paddingBottom: '0.5rem',
+                    borderBottom: '1px solid var(--border-color)'
+                }}>
+                    <h2 className="mono-text text-accent" style={{ fontSize: '1.2rem' }}>
+                        CONTACT DOSSIER
+                    </h2>
+                    <div style={{ display: 'flex', gap: '1rem', alignItems: 'center' }}>
+                        {!IS_EDITOR && (
+                            <span className="mono-text" style={{
+                                fontSize: '0.8rem', padding: '0.25rem 0.75rem',
+                                border: '1px solid var(--text-muted)',
+                                color: 'var(--text-muted)'
+                            }}>READ ONLY</span>
+                        )}
+                        {IS_EDITOR && <SaveStatus status={saveStatus} />}
+                        <a href="/npcs/"
+                            className="mono-text"
+                            style={{
+                                background: 'transparent', border: '1px solid var(--accent-primary)',
+                                color: 'var(--accent-primary)', padding: '0.5rem 1rem',
+                                cursor: 'pointer', textDecoration: 'none', fontSize: '0.9rem'
+                            }}>
+                            &lt; CLOSE RECORD
+                        </a>
+                    </div>
+                </div>
+
+                <ProfilePictureModule
+                    npc={npc}
+                    onImageUploaded={(imageUrl) => {
+                        const updated = { ...charRef.current, image: imageUrl };
+                        setNpc(updated);
+                        charRef.current = updated;
+                    }}
+                />
+
+                <DemographicsModule npc={npc} onSave={saveNPCQuiet} />
+
+                <StateModule npc={npc} onSave={updateNPC} />
+
+                <BioModule npc={npc} onSave={saveNPCQuiet} />
+
+                <AdminPanel npc={npc} onSave={updateNPC} />
+            </div>
+        );
+    };
+
+    const root = ReactDOM.createRoot(document.getElementById('app-root'));
+    root.render(<NPCDetail />);
+</script>
+{% endverbatim %}
+{% endblock %}

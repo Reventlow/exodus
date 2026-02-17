@@ -55,7 +55,9 @@
         health: { bashing: 0, lethal: 0, aggravated: 0 },
         willpower: { current: 0, max_mod: 0 },
         size: 5,
-        experience: 0
+        experience: 0,
+        dossier: "",
+        profilePicture: null
     };
 
     // --- ICON COMPONENT ---
@@ -82,6 +84,42 @@
                         }}
                     />
                 ))}
+            </div>
+        );
+    };
+
+    // --- PROFILE PICTURE (read-only) ---
+    const ProfilePictureReadOnly = ({ profilePicture }) => (
+        <div style={{ display: 'flex', justifyContent: 'center', marginBottom: '1rem' }}>
+            <div style={{
+                width: '150px', height: '150px', borderRadius: '50%',
+                border: '2px solid var(--accent-primary)',
+                overflow: 'hidden',
+                background: profilePicture ? `url(${profilePicture}) center/cover` : 'var(--bg-panel)',
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+            }}>
+                {!profilePicture && (
+                    <Icon name="user" size={48} className="text-muted" />
+                )}
+            </div>
+        </div>
+    );
+
+    // --- DOSSIER MODULE (read-only) ---
+    const DossierReadOnly = ({ dossier }) => {
+        const renderMarkdown = (text) => {
+            if (!text) return '<p style="color: var(--text-muted); font-style: italic;">No dossier recorded.</p>';
+            try { return window.marked.parse(text); } catch { return text; }
+        };
+
+        return (
+            <div className="glass-panel" style={{ padding: '1.5rem', marginBottom: '1rem' }}>
+                <h3 className="mono-text text-accent" style={{
+                    borderBottom: '1px solid var(--border-color)',
+                    paddingBottom: '0.5rem', marginBottom: '1rem'
+                }}>OPERATIVE DOSSIER</h3>
+                <div className="dossier-content"
+                    dangerouslySetInnerHTML={{ __html: renderMarkdown(dossier) }} />
             </div>
         );
     };
@@ -687,6 +725,8 @@
                     </div>
                 </div>
 
+                <ProfilePictureReadOnly profilePicture={char.profilePicture} />
+
                 <HeaderModule char={char} />
 
                 <div style={{
@@ -706,6 +746,8 @@
                     health={char.health}
                     max={char.attributes.resistance.physical + (char.size || 5)}
                 />
+
+                <DossierReadOnly dossier={char.dossier || ""} />
 
                 <DiceRoller />
 

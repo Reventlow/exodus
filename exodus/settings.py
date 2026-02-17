@@ -26,6 +26,7 @@ INSTALLED_APPS = [
     "characters",
     "agencies",
     "comms",
+    "npcs",
 ]
 
 MIDDLEWARE = [
@@ -96,6 +97,9 @@ USE_TZ = True
 STATIC_URL = "static/"
 STATICFILES_DIRS = [BASE_DIR / "static"]
 STATIC_ROOT = BASE_DIR / "staticfiles"
+
+MEDIA_URL = "/media/"
+MEDIA_ROOT = Path(os.environ.get("MEDIA_DIR", BASE_DIR / "media"))
 
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
