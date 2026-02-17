@@ -1,5 +1,8 @@
 # Changelog
 
+## v0.1.12
+- Fixed alliance migration failure on production (existing string data now converted to JSON)
+
 ## v0.1.11
 - Expanded alliance field into 3-column panel (countries, companies, organizations)
 - Alliance section placed above notes with add/remove entries per column
