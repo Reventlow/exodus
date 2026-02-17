@@ -3,4 +3,4 @@ set -e
 
 python manage.py migrate --noinput
 
-exec gunicorn exodus.wsgi:application --bind 0.0.0.0:8000 --workers 3
+exec daphne -b 0.0.0.0 -p 8000 exodus.asgi:application

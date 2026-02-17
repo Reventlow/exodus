@@ -32,6 +32,17 @@
             {% if user.is_authenticated %}
                 <a href="/">OPERATIVES</a>
                 <a href="/agencies/">AGENCIES</a>
+                <a href="/comms/" style="position: relative;">
+                    COMMS
+                    <span id="comms-badge" style="
+                        position: absolute; top: -6px; right: -10px;
+                        background: var(--accent-primary); color: var(--bg-dark);
+                        font-size: 0.65rem; font-weight: bold; min-width: 16px; height: 16px;
+                        border-radius: 8px; display: {% if COMMS_UNREAD > 0 %}inline-flex{% else %}none{% endif %};
+                        align-items: center; justify-content: center; padding: 0 4px;
+                        font-family: var(--font-mono);
+                    ">{{ COMMS_UNREAD }}</span>
+                </a>
                 <a href="{% url 'accounts:profile' %}">PROFILE</a>
                 <form method="post" action="{% url 'accounts:logout' %}" style="display: inline;">
                     {% csrf_token %}
@@ -116,6 +127,34 @@
             document.getElementById('changelog-content').innerHTML = html;
         })();
     </script>
+
+    {% if user.is_authenticated %}
+    <script>
+    (function() {
+        var proto = location.protocol === "https:" ? "wss:" : "ws:";
+        var ws = new WebSocket(proto + "//" + location.host + "/ws/comms/");
+        ws.onmessage = function(e) {
+            var data = JSON.parse(e.data);
+            if (data.type === "unread_update" || data.type === "new_message") {
+                fetch("/api/comms/unread/").then(function(r) { return r.json(); }).then(function(d) {
+                    var badge = document.getElementById("comms-badge");
+                    if (badge) {
+                        badge.textContent = d.unreadCount || "";
+                        badge.style.display = d.unreadCount > 0 ? "inline-flex" : "none";
+                    }
+                });
+            }
+        };
+        ws.onclose = function() {
+            setTimeout(function() {
+                // Reconnect silently
+                var ws2 = new WebSocket(proto + "//" + location.host + "/ws/comms/");
+                ws2.onmessage = ws.onmessage;
+            }, 5000);
+        };
+    })();
+    </script>
+    {% endif %}
 
     {% block scripts %}{% endblock %}
 </body>

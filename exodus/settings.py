@@ -14,15 +14,18 @@ DEBUG = os.environ.get("DJANGO_DEBUG", "True").lower() in ("true", "1", "yes")
 ALLOWED_HOSTS = os.environ.get("DJANGO_ALLOWED_HOSTS", "*").split(",")
 
 INSTALLED_APPS = [
+    "daphne",
     "django.contrib.admin",
     "django.contrib.auth",
     "django.contrib.contenttypes",
     "django.contrib.sessions",
     "django.contrib.messages",
     "django.contrib.staticfiles",
+    "channels",
     "accounts",
     "characters",
     "agencies",
+    "comms",
 ]
 
 MIDDLEWARE = [
@@ -51,12 +54,25 @@ TEMPLATES = [
                 "django.contrib.messages.context_processors.messages",
                 "exodus.context_processors.version",
                 "exodus.context_processors.changelog",
+                "comms.context_processors.unread_count",
             ],
         },
     },
 ]
 
 WSGI_APPLICATION = "exodus.wsgi.application"
+ASGI_APPLICATION = "exodus.asgi.application"
+
+# Channel Layers (WebSocket backend)
+REDIS_URL = os.environ.get("REDIS_URL", "redis://localhost:6379/0")
+CHANNEL_LAYERS = {
+    "default": {
+        "BACKEND": "channels_redis.core.RedisChannelLayer",
+        "CONFIG": {
+            "hosts": [REDIS_URL],
+        },
+    },
+}
 
 DATABASES = {
     "default": {

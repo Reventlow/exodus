@@ -1,0 +1,690 @@
+{% extends 'base.html' %}
+
+{% block title %}COMMS // EXODUS{% endblock %}
+
+{% block content %}
+<div id="comms-root" style="height: calc(100vh - 80px); padding: var(--grid-spacing);"></div>
+
+<script type="text/babel">
+const { useState, useEffect, useRef, useCallback } = React;
+
+const CURRENT_USER_ID = {{ user.pk }};
+const IS_STAFF = {{ user.is_staff|yesno:"true,false" }};
+const CSRF_TOKEN = "{{ csrf_token }}";
+
+// ---------------------------------------------------------------------------
+// API helpers
+// ---------------------------------------------------------------------------
+
+function api(url, opts = {}) {
+  return fetch(url, {
+    headers: {
+      "Content-Type": "application/json",
+      "X-CSRFToken": CSRF_TOKEN,
+      ...opts.headers,
+    },
+    ...opts,
+  }).then(r => {
+    if (!r.ok) return r.json().then(e => Promise.reject(e));
+    return r.json();
+  });
+}
+
+// ---------------------------------------------------------------------------
+// WebSocket hook
+// ---------------------------------------------------------------------------
+
+function useCommsSocket(onMessage) {
+  const wsRef = useRef(null);
+  const onMessageRef = useRef(onMessage);
+  onMessageRef.current = onMessage;
+
+  useEffect(() => {
+    const proto = location.protocol === "https:" ? "wss:" : "ws:";
+    const ws = new WebSocket(`${proto}//${location.host}/ws/comms/`);
+    wsRef.current = ws;
+
+    ws.onmessage = (e) => {
+      const data = JSON.parse(e.data);
+      onMessageRef.current(data);
+    };
+
+    ws.onclose = () => {
+      setTimeout(() => {
+        if (wsRef.current === ws) {
+          wsRef.current = null;
+        }
+      }, 3000);
+    };
+
+    return () => ws.close();
+  }, []);
+
+  return wsRef;
+}
+
+// ---------------------------------------------------------------------------
+// Shared styles
+// ---------------------------------------------------------------------------
+
+const modalOverlay = {
+  position: "fixed", inset: 0, background: "rgba(0,0,0,0.7)",
+  backdropFilter: "blur(4px)", display: "flex", alignItems: "center",
+  justifyContent: "center", zIndex: 100,
+};
+
+const modalPanel = {
+  background: "var(--bg-panel)", border: "1px solid var(--border-color)",
+  borderRadius: "var(--radius-md)", width: "90%", maxWidth: 420,
+  maxHeight: "80vh", overflow: "hidden", display: "flex", flexDirection: "column",
+};
+
+const inputStyle = {
+  width: "100%", padding: "0.5rem 0.75rem", background: "var(--bg-input)",
+  border: "1px solid var(--border-color)", borderRadius: "var(--radius-sm)",
+  color: "var(--text-primary)", fontFamily: "var(--font-main)", fontSize: "0.85rem",
+  outline: "none",
+};
+
+const btnPrimary = {
+  padding: "0.5rem 1rem", background: "var(--accent-primary)", color: "var(--bg-dark)",
+  border: "none", borderRadius: "var(--radius-sm)", cursor: "pointer",
+  fontFamily: "var(--font-mono)", fontWeight: "bold", fontSize: "0.8rem",
+  letterSpacing: "0.05em",
+};
+
+const btnGhost = {
+  padding: "0.5rem 1rem", background: "transparent",
+  border: "1px solid var(--border-color)", borderRadius: "var(--radius-sm)",
+  color: "var(--text-secondary)", cursor: "pointer", fontSize: "0.8rem",
+};
+
+// ---------------------------------------------------------------------------
+// NewThreadModal
+// ---------------------------------------------------------------------------
+
+function NewThreadModal({ users, onClose, onCreate }) {
+  const [title, setTitle] = useState("");
+  const [selectedIds, setSelectedIds] = useState([]);
+  const [search, setSearch] = useState("");
+
+  const filtered = users.filter(u =>
+    u.id !== CURRENT_USER_ID &&
+    u.displayName.toLowerCase().includes(search.toLowerCase())
+  );
+
+  function toggle(id) {
+    setSelectedIds(prev =>
+      prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]
+    );
+  }
+
+  function handleCreate() {
+    if (selectedIds.length === 0) return;
+    onCreate(title, selectedIds);
+  }
+
+  return (
+    <div style={modalOverlay} onClick={onClose}>
+      <div style={modalPanel} onClick={e => e.stopPropagation()}>
+        <div style={{ padding: "1rem", borderBottom: "1px solid var(--border-color)" }}>
+          <h3 className="mono-text text-accent" style={{ fontSize: "0.9rem", letterSpacing: "1px" }}>
+            NEW THREAD
+          </h3>
+        </div>
+        <div style={{ padding: "1rem", display: "flex", flexDirection: "column", gap: "0.75rem", overflow: "auto" }}>
+          <input
+            style={inputStyle}
+            type="text"
+            placeholder="Thread title (optional)"
+            value={title}
+            onChange={e => setTitle(e.target.value)}
+          />
+          <input
+            style={inputStyle}
+            type="text"
+            placeholder="Search operatives..."
+            value={search}
+            onChange={e => setSearch(e.target.value)}
+          />
+          <div style={{ maxHeight: 200, overflowY: "auto" }}>
+            {filtered.map(u => (
+              <label key={u.id} style={{
+                display: "flex", alignItems: "center", gap: "0.5rem",
+                padding: "0.4rem 0.5rem", cursor: "pointer", borderRadius: "var(--radius-sm)",
+              }}
+              onMouseOver={e => e.currentTarget.style.background = "rgba(255,255,255,0.05)"}
+              onMouseOut={e => e.currentTarget.style.background = "transparent"}>
+                <input
+                  type="checkbox"
+                  checked={selectedIds.includes(u.id)}
+                  onChange={() => toggle(u.id)}
+                  style={{ accentColor: "var(--accent-primary)" }}
+                />
+                <span style={{ fontSize: "0.85rem", color: "var(--text-primary)" }}>
+                  {u.displayName}
+                </span>
+              </label>
+            ))}
+          </div>
+        </div>
+        <div style={{
+          padding: "1rem", borderTop: "1px solid var(--border-color)",
+          display: "flex", justifyContent: "flex-end", gap: "0.5rem",
+        }}>
+          <button style={btnGhost} onClick={onClose}>CANCEL</button>
+          <button
+            style={{ ...btnPrimary, opacity: selectedIds.length === 0 ? 0.4 : 1 }}
+            onClick={handleCreate}
+            disabled={selectedIds.length === 0}
+          >TRANSMIT</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// MemberManager
+// ---------------------------------------------------------------------------
+
+function MemberManager({ thread, users, onClose, onAddMember, onRemoveMember }) {
+  const [search, setSearch] = useState("");
+  const isOwner = thread.creator === CURRENT_USER_ID;
+  const canManage = isOwner || IS_STAFF;
+  const memberIds = thread.members.map(m => m.id);
+
+  const nonMembers = users.filter(u =>
+    !memberIds.includes(u.id) &&
+    u.displayName.toLowerCase().includes(search.toLowerCase())
+  );
+
+  return (
+    <div style={modalOverlay} onClick={onClose}>
+      <div style={modalPanel} onClick={e => e.stopPropagation()}>
+        <div style={{ padding: "1rem", borderBottom: "1px solid var(--border-color)" }}>
+          <h3 className="mono-text text-accent" style={{ fontSize: "0.9rem", letterSpacing: "1px" }}>
+            MEMBERS
+          </h3>
+        </div>
+        <div style={{ padding: "1rem", display: "flex", flexDirection: "column", gap: "0.5rem", overflow: "auto" }}>
+          {thread.members.map(m => (
+            <div key={m.id} style={{
+              display: "flex", alignItems: "center", justifyContent: "space-between",
+              padding: "0.5rem 0.75rem", background: "var(--bg-input)",
+              borderRadius: "var(--radius-sm)", border: "1px solid var(--border-color)",
+            }}>
+              <span style={{ fontSize: "0.85rem", color: "var(--text-primary)" }}>
+                {m.displayName}
+                {m.id === thread.creator && (
+                  <span className="text-accent" style={{ fontSize: "0.7rem", marginLeft: "0.5rem" }}>OWNER</span>
+                )}
+              </span>
+              {canManage && m.id !== thread.creator && (
+                <button onClick={() => onRemoveMember(thread.id, m.id)}
+                  style={{ background: "none", border: "none", color: "var(--accent-danger)",
+                           cursor: "pointer", fontSize: "0.75rem", fontFamily: "var(--font-mono)" }}>
+                  REMOVE
+                </button>
+              )}
+              {!canManage && m.id === CURRENT_USER_ID && m.id !== thread.creator && (
+                <button onClick={() => onRemoveMember(thread.id, m.id)}
+                  style={{ background: "none", border: "none", color: "var(--accent-danger)",
+                           cursor: "pointer", fontSize: "0.75rem", fontFamily: "var(--font-mono)" }}>
+                  LEAVE
+                </button>
+              )}
+            </div>
+          ))}
+
+          {canManage && (
+            <>
+              <input
+                style={{ ...inputStyle, marginTop: "0.5rem" }}
+                type="text"
+                placeholder="Add operative..."
+                value={search}
+                onChange={e => setSearch(e.target.value)}
+              />
+              {search && (
+                <div style={{ maxHeight: 120, overflowY: "auto" }}>
+                  {nonMembers.map(u => (
+                    <button key={u.id}
+                      onClick={() => { onAddMember(thread.id, u.id); setSearch(""); }}
+                      style={{
+                        display: "block", width: "100%", textAlign: "left",
+                        padding: "0.4rem 0.75rem", background: "none",
+                        border: "none", color: "var(--accent-primary)",
+                        cursor: "pointer", fontSize: "0.85rem", borderRadius: "var(--radius-sm)",
+                      }}
+                      onMouseOver={e => e.currentTarget.style.background = "rgba(255,255,255,0.05)"}
+                      onMouseOut={e => e.currentTarget.style.background = "transparent"}>
+                      + {u.displayName}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </>
+          )}
+        </div>
+        <div style={{ padding: "1rem", borderTop: "1px solid var(--border-color)", display: "flex", justifyContent: "flex-end" }}>
+          <button style={btnGhost} onClick={onClose}>CLOSE</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// MessageInput
+// ---------------------------------------------------------------------------
+
+function MessageInput({ onSend }) {
+  const [text, setText] = useState("");
+
+  function handleKeyDown(e) {
+    if (e.key === "Enter" && !e.shiftKey) {
+      e.preventDefault();
+      submit();
+    }
+  }
+
+  function submit() {
+    const trimmed = text.trim();
+    if (!trimmed) return;
+    onSend(trimmed);
+    setText("");
+  }
+
+  return (
+    <div style={{
+      display: "flex", gap: "0.5rem", padding: "0.75rem",
+      borderTop: "1px solid var(--border-color)", background: "var(--bg-panel)",
+    }}>
+      <textarea
+        value={text}
+        onChange={e => setText(e.target.value)}
+        onKeyDown={handleKeyDown}
+        placeholder="Type message..."
+        rows={1}
+        style={{
+          ...inputStyle, flex: 1, resize: "none",
+          fontFamily: "var(--font-main)",
+        }}
+      />
+      <button onClick={submit} style={btnPrimary}>TRANSMIT</button>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// ThreadView
+// ---------------------------------------------------------------------------
+
+function ThreadView({ thread, onSend, onBack, onOpenMembers }) {
+  const messagesEndRef = useRef(null);
+
+  useEffect(() => {
+    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [thread?.messages?.length]);
+
+  if (!thread) {
+    return (
+      <div style={{
+        flex: 1, display: "flex", alignItems: "center", justifyContent: "center",
+        color: "var(--text-muted)", fontFamily: "var(--font-mono)", letterSpacing: "1px",
+      }}>
+        SELECT CHANNEL
+      </div>
+    );
+  }
+
+  const threadTitle = thread.title ||
+    thread.members.filter(m => m.id !== CURRENT_USER_ID).map(m => m.displayName).join(", ") ||
+    "CHANNEL";
+
+  return (
+    <div style={{ flex: 1, display: "flex", flexDirection: "column", minHeight: 0 }}>
+      {/* Header */}
+      <div style={{
+        display: "flex", alignItems: "center", gap: "0.75rem",
+        padding: "0.75rem 1rem", borderBottom: "1px solid var(--border-color)",
+        background: "var(--bg-panel)",
+      }}>
+        <button onClick={onBack} className="mobile-only" style={{
+          background: "none", border: "none", color: "var(--text-muted)",
+          cursor: "pointer", fontSize: "1.2rem", display: "none",
+        }}>&#8592;</button>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <h2 className="mono-text text-accent" style={{
+            fontSize: "0.85rem", letterSpacing: "1px", overflow: "hidden",
+            textOverflow: "ellipsis", whiteSpace: "nowrap",
+          }}>{threadTitle}</h2>
+          <span className="text-muted" style={{ fontSize: "0.7rem" }}>
+            {thread.members.length} operative{thread.members.length !== 1 && "s"}
+          </span>
+        </div>
+        <button onClick={onOpenMembers} style={{
+          background: "none", border: "1px solid var(--border-color)",
+          borderRadius: "var(--radius-sm)", color: "var(--text-secondary)",
+          cursor: "pointer", padding: "0.3rem 0.5rem", fontSize: "0.75rem",
+          fontFamily: "var(--font-mono)",
+        }}>ROSTER</button>
+      </div>
+
+      {/* Messages */}
+      <div style={{ flex: 1, overflowY: "auto", padding: "1rem", display: "flex", flexDirection: "column", gap: "0.5rem" }}>
+        {(thread.messages || []).map(msg => {
+          const isOwn = msg.sender.id === CURRENT_USER_ID;
+          return (
+            <div key={msg.id} style={{
+              display: "flex", justifyContent: isOwn ? "flex-end" : "flex-start",
+            }}>
+              <div style={{
+                maxWidth: "75%", padding: "0.5rem 0.75rem",
+                borderRadius: "var(--radius-md)",
+                background: isOwn ? "rgba(56, 189, 248, 0.1)" : "var(--bg-input)",
+                border: isOwn
+                  ? "1px solid rgba(56, 189, 248, 0.3)"
+                  : "1px solid var(--border-color)",
+              }}>
+                {!isOwn && (
+                  <div className="mono-text text-accent" style={{ fontSize: "0.7rem", marginBottom: "0.25rem" }}>
+                    {msg.sender.displayName}
+                  </div>
+                )}
+                <div style={{ fontSize: "0.85rem", color: "var(--text-primary)", whiteSpace: "pre-wrap", wordBreak: "break-word" }}>
+                  {msg.content}
+                </div>
+                <div className="text-muted" style={{ fontSize: "0.65rem", marginTop: "0.25rem", textAlign: isOwn ? "right" : "left" }}>
+                  {new Date(msg.createdAt).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" })}
+                </div>
+              </div>
+            </div>
+          );
+        })}
+        <div ref={messagesEndRef} />
+      </div>
+
+      {/* Input */}
+      <MessageInput onSend={onSend} />
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// ThreadList
+// ---------------------------------------------------------------------------
+
+function ThreadList({ threads, activeId, onSelect, onNewThread }) {
+  return (
+    <div style={{ display: "flex", flexDirection: "column", height: "100%" }}>
+      <div style={{
+        padding: "0.75rem 1rem", borderBottom: "1px solid var(--border-color)",
+        display: "flex", alignItems: "center", justifyContent: "space-between",
+      }}>
+        <span className="mono-text text-accent" style={{ fontSize: "0.85rem", letterSpacing: "1px" }}>
+          CHANNELS
+        </span>
+        <button onClick={onNewThread} style={{
+          ...btnPrimary, padding: "0.3rem 0.75rem", fontSize: "0.7rem",
+        }}>+ NEW</button>
+      </div>
+      <div style={{ flex: 1, overflowY: "auto" }}>
+        {threads.length === 0 && (
+          <div className="text-muted" style={{ padding: "2rem", textAlign: "center", fontSize: "0.85rem" }}>
+            No active channels
+          </div>
+        )}
+        {threads.map(t => {
+          const title = t.title ||
+            t.members.filter(m => m.id !== CURRENT_USER_ID).map(m => m.displayName).join(", ") ||
+            "Channel";
+          const isActive = t.id === activeId;
+          return (
+            <div key={t.id}
+              onClick={() => onSelect(t.id)}
+              style={{
+                padding: "0.75rem 1rem", cursor: "pointer",
+                borderBottom: "1px solid rgba(51, 65, 85, 0.5)",
+                borderLeft: isActive ? "2px solid var(--accent-primary)" : "2px solid transparent",
+                background: isActive ? "rgba(56, 189, 248, 0.05)" : "transparent",
+                transition: "all 0.15s",
+              }}
+              onMouseOver={e => { if (!isActive) e.currentTarget.style.background = "rgba(255,255,255,0.02)"; }}
+              onMouseOut={e => { if (!isActive) e.currentTarget.style.background = "transparent"; }}>
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "0.5rem" }}>
+                <span style={{
+                  fontSize: "0.85rem", overflow: "hidden", textOverflow: "ellipsis",
+                  whiteSpace: "nowrap", color: "var(--text-primary)",
+                  fontWeight: t.unreadCount > 0 ? "bold" : "normal",
+                }}>{title}</span>
+                {t.unreadCount > 0 && (
+                  <span style={{
+                    flexShrink: 0, minWidth: 18, height: 18,
+                    background: "var(--accent-primary)", color: "var(--bg-dark)",
+                    borderRadius: 9, display: "inline-flex", alignItems: "center",
+                    justifyContent: "center", fontSize: "0.65rem", fontWeight: "bold",
+                    fontFamily: "var(--font-mono)", padding: "0 4px",
+                  }}>{t.unreadCount}</span>
+                )}
+              </div>
+              {t.lastMessage && (
+                <div className="text-muted" style={{ fontSize: "0.75rem", marginTop: "0.25rem", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                  {t.lastMessage.sender}: {t.lastMessage.content}
+                </div>
+              )}
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// CommsApp
+// ---------------------------------------------------------------------------
+
+function CommsApp() {
+  const [threads, setThreads] = useState([]);
+  const [activeThreadId, setActiveThreadId] = useState(null);
+  const [activeThread, setActiveThread] = useState(null);
+  const [users, setUsers] = useState([]);
+  const [showNewThread, setShowNewThread] = useState(false);
+  const [showMembers, setShowMembers] = useState(false);
+  const [mobileShowThread, setMobileShowThread] = useState(false);
+
+  // Load threads and users on mount
+  useEffect(() => {
+    api("/api/comms/threads/").then(setThreads);
+    api("/api/comms/users/").then(setUsers);
+  }, []);
+
+  // Load thread detail when active thread changes
+  useEffect(() => {
+    if (!activeThreadId) {
+      setActiveThread(null);
+      return;
+    }
+    api(`/api/comms/threads/${activeThreadId}/`).then(data => {
+      setActiveThread(data);
+      // Mark as read
+      api(`/api/comms/threads/${activeThreadId}/read/`, { method: "POST" });
+      // Clear unread in thread list
+      setThreads(prev => prev.map(t =>
+        t.id === activeThreadId ? { ...t, unreadCount: 0 } : t
+      ));
+    });
+  }, [activeThreadId]);
+
+  // WebSocket handler
+  const handleWsMessage = useCallback((data) => {
+    if (data.type === "new_message") {
+      const msg = data.message;
+      setActiveThread(prev => {
+        if (prev && prev.id === msg.threadId) {
+          api(`/api/comms/threads/${msg.threadId}/read/`, { method: "POST" });
+          return { ...prev, messages: [...(prev.messages || []), msg] };
+        }
+        return prev;
+      });
+      setThreads(prev => {
+        const updated = prev.map(t => {
+          if (t.id === msg.threadId) {
+            return {
+              ...t,
+              lastMessage: {
+                sender: msg.sender.displayName,
+                content: msg.content,
+                createdAt: msg.createdAt,
+              },
+              updatedAt: msg.createdAt,
+            };
+          }
+          return t;
+        });
+        return updated.sort((a, b) => new Date(b.updatedAt) - new Date(a.updatedAt));
+      });
+    } else if (data.type === "unread_update") {
+      setThreads(prev => prev.map(t =>
+        t.id === data.threadId ? { ...t, unreadCount: data.unreadCount } : t
+      ));
+      const badge = document.getElementById("comms-badge");
+      if (badge) {
+        api("/api/comms/unread/").then(d => {
+          badge.textContent = d.unreadCount || "";
+          badge.style.display = d.unreadCount > 0 ? "inline-flex" : "none";
+        });
+      }
+    } else if (data.type === "membership_change") {
+      api("/api/comms/threads/").then(setThreads);
+      if (data.action === "removed" && data.threadId === activeThreadId) {
+        setActiveThreadId(null);
+        setActiveThread(null);
+      }
+    }
+  }, [activeThreadId]);
+
+  useCommsSocket(handleWsMessage);
+
+  function handleSelectThread(id) {
+    setActiveThreadId(id);
+    setMobileShowThread(true);
+  }
+
+  function handleCreateThread(title, memberIds) {
+    api("/api/comms/threads/", {
+      method: "POST",
+      body: JSON.stringify({ title, members: memberIds }),
+    }).then(data => {
+      setThreads(prev => [data, ...prev]);
+      setActiveThreadId(data.id);
+      setActiveThread(data);
+      setShowNewThread(false);
+      setMobileShowThread(true);
+    });
+  }
+
+  function handleSendMessage(content) {
+    if (!activeThreadId) return;
+    api(`/api/comms/threads/${activeThreadId}/messages/`, {
+      method: "POST",
+      body: JSON.stringify({ content }),
+    });
+  }
+
+  function handleAddMember(threadId, userId) {
+    api(`/api/comms/threads/${threadId}/members/`, {
+      method: "POST",
+      body: JSON.stringify({ userId }),
+    }).then(() => {
+      api(`/api/comms/threads/${threadId}/`).then(setActiveThread);
+      api("/api/comms/threads/").then(setThreads);
+    });
+  }
+
+  function handleRemoveMember(threadId, userId) {
+    api(`/api/comms/threads/${threadId}/members/${userId}/`, {
+      method: "DELETE",
+    }).then(() => {
+      if (userId === CURRENT_USER_ID) {
+        setActiveThreadId(null);
+        setActiveThread(null);
+        setShowMembers(false);
+        api("/api/comms/threads/").then(setThreads);
+      } else {
+        api(`/api/comms/threads/${threadId}/`).then(setActiveThread);
+        api("/api/comms/threads/").then(setThreads);
+      }
+    });
+  }
+
+  return (
+    <div className="glass-panel" style={{ display: "flex", height: "100%", overflow: "hidden" }}>
+      {/* Thread list */}
+      <div style={{
+        width: 300, flexShrink: 0, borderRight: "1px solid var(--border-color)",
+        display: "flex", flexDirection: "column",
+      }}>
+        <ThreadList
+          threads={threads}
+          activeId={activeThreadId}
+          onSelect={handleSelectThread}
+          onNewThread={() => setShowNewThread(true)}
+        />
+      </div>
+
+      {/* Thread view */}
+      <div style={{ flex: 1, display: "flex", flexDirection: "column", minWidth: 0 }}>
+        <ThreadView
+          thread={activeThread}
+          onSend={handleSendMessage}
+          onBack={() => setMobileShowThread(false)}
+          onOpenMembers={() => setShowMembers(true)}
+        />
+      </div>
+
+      {/* Modals */}
+      {showNewThread && (
+        <NewThreadModal
+          users={users}
+          onClose={() => setShowNewThread(false)}
+          onCreate={handleCreateThread}
+        />
+      )}
+      {showMembers && activeThread && (
+        <MemberManager
+          thread={activeThread}
+          users={users}
+          onClose={() => setShowMembers(false)}
+          onAddMember={handleAddMember}
+          onRemoveMember={handleRemoveMember}
+        />
+      )}
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Mount
+// ---------------------------------------------------------------------------
+
+const root = ReactDOM.createRoot(document.getElementById("comms-root"));
+root.render(<CommsApp />);
+</script>
+
+<style>
+/* Mobile responsive overrides */
+@media (max-width: 768px) {
+  #comms-root > div > div:first-child {
+    width: 100% !important;
+    border-right: none !important;
+  }
+  #comms-root > div > div:last-of-type {
+    display: none;
+  }
+  .mobile-only { display: inline-block !important; }
+}
+</style>
+{% endblock %}
