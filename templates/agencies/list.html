@@ -71,8 +71,16 @@
                     }}>PLAYER</span>
                 )}
             </div>
-            <p className="text-secondary" style={{ fontSize: '0.9rem', marginTop: '0.25rem' }}>
-                {agency.alliance || <span className="text-muted" style={{ fontStyle: 'italic' }}>No Alliance</span>}
+            <p className="text-secondary" style={{ fontSize: '0.85rem', marginTop: '0.25rem' }}>
+                {agency.alliance === 'CLASSIFIED' ? <span className="classified">CLASSIFIED</span> :
+                    (() => {
+                        const a = agency.alliance || {};
+                        const all = [...(a.countries || []), ...(a.companies || []), ...(a.organizations || [])];
+                        return all.length > 0
+                            ? all.filter(Boolean).join(', ')
+                            : <span className="text-muted" style={{ fontStyle: 'italic' }}>No Alliance</span>;
+                    })()
+                }
             </p>
             {agency.motto && agency.motto !== 'CLASSIFIED' && (
                 <p className="text-muted" style={{ fontSize: '0.8rem', fontStyle: 'italic', marginTop: '0.5rem' }}>

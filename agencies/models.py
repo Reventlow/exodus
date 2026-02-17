@@ -2,6 +2,11 @@ from django.db import models
 from django.contrib.auth.models import User
 
 
+def default_alliance():
+    """Default alliance structure with three member categories."""
+    return {"countries": [], "companies": [], "organizations": []}
+
+
 def default_agency_attributes():
     """Default agency attribute structure. All start at 0."""
     return {
@@ -20,7 +25,7 @@ def default_agency_attributes():
 class Agency(models.Model):
     # Identity
     name = models.CharField(max_length=200)
-    alliance = models.CharField(max_length=200, blank=True, default="")
+    alliance = models.JSONField(default=default_alliance)  # {countries:[], companies:[], organizations:[]}
     motto = models.CharField(max_length=200, blank=True, default="")
     headquarters = models.CharField(max_length=200, blank=True, default="")
     notes = models.TextField(blank=True, default="")

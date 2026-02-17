@@ -42,7 +42,7 @@
     const DEFAULT_AGENCY = {
         id: null,
         name: "NEW AGENCY",
-        alliance: "",
+        alliance: { countries: [], companies: [], organizations: [] },
         motto: "",
         headquarters: "",
         notes: "",
@@ -120,6 +120,110 @@
         );
     };
 
+    // --- ALLIANCE MODULE (3-column: countries, companies, organizations) ---
+    const AllianceModule = ({ alliance, update, visibility, onToggleVis }) => {
+        const isClassified = alliance === 'CLASSIFIED';
+
+        if (isClassified && !IS_ADMIN) return (
+            <div className="glass-panel" style={{ padding: '1.5rem', marginBottom: '1rem' }}>
+                <h3 className="mono-text text-accent" style={{ marginBottom: '1rem' }}>ALLIANCE / BLOC</h3>
+                <Classified />
+            </div>
+        );
+
+        const data = (typeof alliance === 'object' && alliance !== null)
+            ? { countries: [], companies: [], organizations: [], ...alliance }
+            : { countries: [], companies: [], organizations: [] };
+
+        const updateList = (category, newList) => {
+            update({ ...data, [category]: newList });
+        };
+
+        const addItem = (category) => {
+            updateList(category, [...data[category], '']);
+        };
+
+        const removeItem = (category, idx) => {
+            updateList(category, data[category].filter((_, i) => i !== idx));
+        };
+
+        const updateItem = (category, idx, value) => {
+            updateList(category, data[category].map((item, i) => i === idx ? value : item));
+        };
+
+        const Column = ({ category, title, icon }) => (
+            <div>
+                <h4 className="text-muted mono-text" style={{
+                    fontSize: '0.8rem', marginBottom: '0.75rem',
+                    borderBottom: '1px solid var(--border-color)', paddingBottom: '0.25rem'
+                }}>
+                    {title}
+                    <span className="text-muted" style={{ marginLeft: '0.5rem', fontSize: '0.7rem' }}>
+                        ({data[category].length})
+                    </span>
+                </h4>
+                {data[category].map((item, idx) => (
+                    <div key={idx} style={{
+                        display: 'flex', alignItems: 'center', gap: '0.25rem', marginBottom: '0.25rem'
+                    }}>
+                        <input
+                            type="text"
+                            value={item}
+                            placeholder={`Add ${title.toLowerCase().slice(0, -1)}...`}
+                            onChange={e => updateItem(category, idx, e.target.value)}
+                            disabled={!IS_ADMIN}
+                            style={{
+                                background: 'transparent', border: 'none',
+                                borderBottom: '1px solid var(--border-color)',
+                                color: 'var(--text-primary)', flex: 1,
+                                fontSize: '0.85rem', padding: '0.25rem 0'
+                            }}
+                        />
+                        {IS_ADMIN && (
+                            <button onClick={() => removeItem(category, idx)} style={{
+                                background: 'transparent', border: 'none',
+                                color: 'var(--accent-danger)', cursor: 'pointer', padding: '2px'
+                            }}>
+                                <Icon name="x" size={12} />
+                            </button>
+                        )}
+                    </div>
+                ))}
+                {IS_ADMIN && (
+                    <button onClick={() => addItem(category)} style={{
+                        background: 'transparent', border: '1px dashed var(--border-color)',
+                        color: 'var(--text-muted)', width: '100%', padding: '0.25rem',
+                        cursor: 'pointer', fontSize: '0.8rem', marginTop: '0.25rem'
+                    }}>+ Add</button>
+                )}
+                {data[category].length === 0 && !IS_ADMIN && (
+                    <p className="text-muted" style={{ fontSize: '0.8rem', fontStyle: 'italic' }}>None</p>
+                )}
+            </div>
+        );
+
+        return (
+            <div className="glass-panel" style={{ padding: '1.5rem', marginBottom: '1rem' }}>
+                <h3 className="mono-text text-accent" style={{
+                    borderBottom: '1px solid var(--border-color)',
+                    paddingBottom: '0.5rem', marginBottom: '1rem'
+                }}>
+                    ALLIANCE / BLOC
+                    <VisibilityToggle field="alliance" visibility={visibility} onToggle={onToggleVis} />
+                </h3>
+                <div style={{
+                    display: 'grid',
+                    gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))',
+                    gap: '1.5rem'
+                }}>
+                    <Column category="countries" title="COUNTRIES" />
+                    <Column category="companies" title="COMPANIES" />
+                    <Column category="organizations" title="ORGANIZATIONS" />
+                </div>
+            </div>
+        );
+    };
+
     // --- HEADER MODULE ---
     const HeaderModule = ({ agency, update, visibility, onToggleVis }) => (
         <div className="glass-panel" style={{
@@ -139,22 +243,6 @@
                         color: 'var(--text-primary)', width: '100%',
                         fontSize: '1.2rem', fontFamily: 'var(--font-mono)'
                     }} />
-            </div>
-            <div>
-                <label className="text-secondary mono-text" style={{ fontSize: '0.8rem' }}>
-                    ALLIANCE / BLOC
-                    <VisibilityToggle field="alliance" visibility={visibility} onToggle={onToggleVis} />
-                </label>
-                {agency.alliance === 'CLASSIFIED' ? <Classified /> : (
-                    <input type="text" value={agency.alliance}
-                        onChange={e => update({ alliance: e.target.value })}
-                        disabled={!IS_ADMIN}
-                        style={{
-                            background: 'transparent', border: 'none',
-                            borderBottom: '1px solid var(--border-color)',
-                            color: 'var(--text-primary)', width: '100%'
-                        }} />
-                )}
             </div>
             <div>
                 <label className="text-secondary mono-text" style={{ fontSize: '0.8rem' }}>
@@ -862,6 +950,11 @@
                 </div>
 
                 <HeaderModule agency={agency} update={updateAgency}
+                    visibility={vis} onToggleVis={toggleVisibility} />
+
+                <AllianceModule
+                    alliance={agency.alliance}
+                    update={val => updateAgency({ alliance: val })}
                     visibility={vis} onToggleVis={toggleVisibility} />
 
                 <NotesModule notes={agency.notes} update={updateAgency}
