@@ -1,5 +1,8 @@
 # Changelog
 
+## v0.1.25
+- Rebranded from FOUNDATION to BLACKLOG.NET across all page titles, navigation, login screen, and boot sequence
+
 ## v0.1.14
 - Fixed data loss when adding/removing list items while text input has pending changes
 - Blur active input before add/remove to flush pending saves, then read from ref for fresh data
