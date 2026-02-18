@@ -1,0 +1,44 @@
+{% extends "base.html" %}
+
+{% block title %}SITE SETTINGS // BLACKLOG.NET{% endblock %}
+
+{% block content %}
+<div style="max-width: 500px; margin: 2rem auto;">
+    <div class="glass-panel" style="padding: 2rem;">
+        <h2 class="mono-text text-accent" style="margin-bottom: 0.5rem; letter-spacing: 2px;">
+            SITE SETTINGS
+        </h2>
+
+        {% if messages %}
+        <div style="margin-bottom: 1rem;">
+            {% for message in messages %}
+            <div class="mono-text" style="color: {% if message.tags == 'success' %}var(--accent-success){% else %}var(--accent-danger){% endif %}; font-size: 0.85rem; padding: 0.5rem; border-left: 2px solid {% if message.tags == 'success' %}var(--accent-success){% else %}var(--accent-danger){% endif %}; margin-bottom: 0.5rem;">
+                {{ message }}
+            </div>
+            {% endfor %}
+        </div>
+        {% endif %}
+
+        <form method="post">
+            {% csrf_token %}
+            <div style="margin-bottom: 2rem;">
+                <label class="text-secondary mono-text" style="font-size: 0.8rem; display: block; margin-bottom: 0.25rem;">NEXT GAME DATE</label>
+                <input type="date" name="next_game_date"
+                    value="{{ settings_obj.next_game_date|date:'Y-m-d' }}"
+                    style="width: 100%; background: var(--bg-input); border: 1px solid var(--border-color); color: var(--text-primary); padding: 0.75rem; font-family: var(--font-mono); font-size: 1rem;">
+                <span class="text-muted mono-text" style="font-size: 0.7rem;">Leave blank to hide from navbar.</span>
+            </div>
+            <button type="submit"
+                style="width: 100%; background: var(--accent-primary); color: var(--bg-dark); border: none; padding: 0.75rem; font-family: var(--font-mono); font-size: 1rem; font-weight: bold; cursor: pointer; letter-spacing: 1px;">
+                SAVE SETTINGS
+            </button>
+        </form>
+    </div>
+
+    <div style="text-align: center; margin-top: 1.5rem;">
+        <a href="/" class="text-accent mono-text" style="font-size: 0.85rem; text-decoration: none;">
+            &lt; RETURN TO DATABASE
+        </a>
+    </div>
+</div>
+{% endblock %}

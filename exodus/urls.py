@@ -4,9 +4,12 @@ from django.conf.urls.static import static
 from django.contrib import admin
 from django.urls import path, include
 
+from . import views
+
 
 urlpatterns = [
     path("admin/", admin.site.urls),
+    path("settings/", views.site_settings, name="site-settings"),
     path("accounts/", include("accounts.urls")),
     path("", include("comms.urls")),
     path("", include("characters.urls")),

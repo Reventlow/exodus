@@ -27,6 +27,7 @@ INSTALLED_APPS = [
     "agencies",
     "comms",
     "npcs",
+    "exodus",
 ]
 
 MIDDLEWARE = [
@@ -55,6 +56,7 @@ TEMPLATES = [
                 "django.contrib.messages.context_processors.messages",
                 "exodus.context_processors.version",
                 "exodus.context_processors.changelog",
+                "exodus.context_processors.game_date",
                 "comms.context_processors.unread_count",
             ],
         },

@@ -28,6 +28,11 @@
         <a href="/" class="mono-text text-accent" style="text-decoration: none; font-size: 1.1rem; letter-spacing: 2px;">
             BLACKLOG.NET <span class="text-muted">//</span> EXODUS
         </a>
+        {% if user.is_authenticated and NEXT_GAME_DATE %}
+        <span class="mono-text text-muted" style="font-size: 0.8rem; letter-spacing: 1px;">
+            NEXT SESSION <span class="text-accent">// {{ NEXT_GAME_DATE|date:"D d M" }}</span>
+        </span>
+        {% endif %}
         <button class="nav-burger" onclick="document.querySelector('.nav-links').classList.toggle('nav-open')" aria-label="Menu">
             <span></span><span></span><span></span>
         </button>
@@ -49,6 +54,7 @@
                 </a>
                 <a href="{% url 'accounts:profile' %}">PROFILE</a>
                 {% if user.is_staff %}
+                    <a href="{% url 'site-settings' %}">SETTINGS</a>
                     <a href="{% url 'admin:index' %}">ADMIN</a>
                 {% endif %}
                 <form method="post" action="{% url 'accounts:logout' %}" style="display: inline;">
