@@ -9,6 +9,12 @@
 - Global flaws management page with inline editing (superadmin only)
 - Agency sheets now display global flaws, FTL project assignments, and council items as read-only
 - Admin navigation buttons for Global Flaws, FTL Projects, and Interstellar Council on agency list
+- UIC council membership — agencies can be added to the council via checkbox on agency sheet
+- UIC chairman designation — superusers can set the council chairman from the UIC page
+- UIC council members panel on the council page showing all members and chairman
+- UIC Charter document with formal articles covering membership, voting, quorum, chairman, enforcement, and amendments
+- Charter page accessible from the UIC page, rendered with themed markdown
+- UIC page now viewable by all logged-in players (editing remains superadmin only)
 - Switched to manual version control (removed auto-increment on push)
 
 ## v0.1.25

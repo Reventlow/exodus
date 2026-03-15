@@ -133,6 +133,7 @@
 
     const STATUS_OPTIONS = [
         { value: 'proposed', label: 'Proposed' },
+        { value: 'voting', label: 'Voting' },
         { value: 'active', label: 'Active' },
         { value: 'suspended', label: 'Suspended' },
         { value: 'repealed', label: 'Repealed' },
@@ -140,6 +141,7 @@
 
     const STATUS_COLORS = {
         proposed: '#facc15',
+        voting: '#f97316',
         active: 'var(--accent-primary)',
         suspended: 'var(--accent-warning)',
         repealed: 'var(--accent-danger)',
@@ -151,7 +153,20 @@
         law: 'scale',
     };
 
+    const ReadOnlyField = ({ value, style = {} }) => (
+        <span className="mono-text" style={{
+            color: 'var(--text-primary)', fontSize: '0.85rem',
+            display: 'block', padding: '0.4rem 0',
+            ...style,
+        }}>
+            {value || '—'}
+        </span>
+    );
+
     const CouncilItemCard = ({ item, onSave, onDelete, saving }) => {
+        const statusLabel = STATUS_OPTIONS.find(o => o.value === item.status)?.label || item.status;
+        const typeLabel = TYPE_OPTIONS.find(o => o.value === item.itemType)?.label || item.itemType;
+
         return (
             <div className="tech-border" style={{
                 padding: '1.25rem',
@@ -169,33 +184,39 @@
                         <label className="text-muted mono-text" style={{ fontSize: '0.7rem', display: 'block', marginBottom: '0.25rem' }}>
                             ITEM NAME
                         </label>
-                        <EditableCell
-                            value={item.name}
-                            field="name"
-                            itemId={item.id}
-                            onSave={onSave}
-                            style={{ fontSize: '1rem', fontWeight: 'bold' }}
-                        />
+                        {IS_ADMIN ? (
+                            <EditableCell
+                                value={item.name}
+                                field="name"
+                                itemId={item.id}
+                                onSave={onSave}
+                                style={{ fontSize: '1rem', fontWeight: 'bold' }}
+                            />
+                        ) : (
+                            <ReadOnlyField value={item.name} style={{ fontSize: '1rem', fontWeight: 'bold' }} />
+                        )}
                     </div>
-                    <button
-                        onClick={() => onDelete(item.id)}
-                        title="Delete council item"
-                        style={{
-                            background: 'transparent', border: '1px solid var(--accent-danger)',
-                            color: 'var(--accent-danger)', cursor: 'pointer',
-                            padding: '0.3rem 0.6rem', fontSize: '0.75rem',
-                            fontFamily: 'var(--font-mono)', borderRadius: 'var(--radius-sm)',
-                            marginTop: '1rem',
-                        }}
-                    >
-                        DELETE
-                    </button>
+                    {IS_ADMIN && (
+                        <button
+                            onClick={() => onDelete(item.id)}
+                            title="Delete council item"
+                            style={{
+                                background: 'transparent', border: '1px solid var(--accent-danger)',
+                                color: 'var(--accent-danger)', cursor: 'pointer',
+                                padding: '0.3rem 0.6rem', fontSize: '0.75rem',
+                                fontFamily: 'var(--font-mono)', borderRadius: 'var(--radius-sm)',
+                                marginTop: '1rem',
+                            }}
+                        >
+                            DELETE
+                        </button>
+                    )}
                 </div>
 
                 {/* Type + Status + Order + Proposed By */}
                 <div style={{
                     display: 'grid',
-                    gridTemplateColumns: '1fr 1fr 80px 1fr',
+                    gridTemplateColumns: IS_ADMIN ? '1fr 1fr 80px 1fr' : '1fr 1fr 1fr',
                     gap: '0.75rem',
                     marginBottom: '0.75rem',
                 }}>
@@ -203,48 +224,68 @@
                         <label className="text-muted mono-text" style={{ fontSize: '0.7rem', display: 'block', marginBottom: '0.25rem' }}>
                             TYPE
                         </label>
-                        <SelectField
-                            value={item.itemType}
-                            field="itemType"
-                            itemId={item.id}
-                            onSave={onSave}
-                            options={TYPE_OPTIONS}
-                        />
+                        {IS_ADMIN ? (
+                            <SelectField
+                                value={item.itemType}
+                                field="itemType"
+                                itemId={item.id}
+                                onSave={onSave}
+                                options={TYPE_OPTIONS}
+                            />
+                        ) : (
+                            <ReadOnlyField value={typeLabel} />
+                        )}
                     </div>
                     <div>
                         <label className="text-muted mono-text" style={{ fontSize: '0.7rem', display: 'block', marginBottom: '0.25rem' }}>
                             STATUS
                         </label>
-                        <SelectField
-                            value={item.status}
-                            field="status"
-                            itemId={item.id}
-                            onSave={onSave}
-                            options={STATUS_OPTIONS}
-                        />
+                        {IS_ADMIN ? (
+                            <SelectField
+                                value={item.status}
+                                field="status"
+                                itemId={item.id}
+                                onSave={onSave}
+                                options={STATUS_OPTIONS}
+                            />
+                        ) : (
+                            <span className="mono-text" style={{
+                                fontSize: '0.8rem', padding: '2px 6px',
+                                border: `1px solid ${STATUS_COLORS[item.status] || 'var(--text-muted)'}`,
+                                color: STATUS_COLORS[item.status] || 'var(--text-muted)',
+                            }}>
+                                {statusLabel.toUpperCase()}
+                            </span>
+                        )}
                     </div>
-                    <div>
-                        <label className="text-muted mono-text" style={{ fontSize: '0.7rem', display: 'block', marginBottom: '0.25rem' }}>
-                            ORDER
-                        </label>
-                        <EditableCell
-                            value={item.order}
-                            field="order"
-                            itemId={item.id}
-                            onSave={onSave}
-                            type="number"
-                        />
-                    </div>
+                    {IS_ADMIN && (
+                        <div>
+                            <label className="text-muted mono-text" style={{ fontSize: '0.7rem', display: 'block', marginBottom: '0.25rem' }}>
+                                ORDER
+                            </label>
+                            <EditableCell
+                                value={item.order}
+                                field="order"
+                                itemId={item.id}
+                                onSave={onSave}
+                                type="number"
+                            />
+                        </div>
+                    )}
                     <div>
                         <label className="text-muted mono-text" style={{ fontSize: '0.7rem', display: 'block', marginBottom: '0.25rem' }}>
                             PROPOSED BY
                         </label>
-                        <EditableCell
-                            value={item.proposedBy}
-                            field="proposedBy"
-                            itemId={item.id}
-                            onSave={onSave}
-                        />
+                        {IS_ADMIN ? (
+                            <EditableCell
+                                value={item.proposedBy}
+                                field="proposedBy"
+                                itemId={item.id}
+                                onSave={onSave}
+                            />
+                        ) : (
+                            <ReadOnlyField value={item.proposedBy} />
+                        )}
                     </div>
                 </div>
 
@@ -253,12 +294,18 @@
                     <label className="text-muted mono-text" style={{ fontSize: '0.7rem', display: 'block', marginBottom: '0.25rem' }}>
                         DESCRIPTION
                     </label>
-                    <EditableTextArea
-                        value={item.description}
-                        field="description"
-                        itemId={item.id}
-                        onSave={onSave}
-                    />
+                    {IS_ADMIN ? (
+                        <EditableTextArea
+                            value={item.description}
+                            field="description"
+                            itemId={item.id}
+                            onSave={onSave}
+                        />
+                    ) : (
+                        <p className="text-secondary" style={{ fontSize: '0.85rem', margin: 0, whiteSpace: 'pre-wrap' }}>
+                            {item.description || '—'}
+                        </p>
+                    )}
                 </div>
 
                 {/* Notes */}
@@ -266,13 +313,144 @@
                     <label className="text-muted mono-text" style={{ fontSize: '0.7rem', display: 'block', marginBottom: '0.25rem' }}>
                         NOTES
                     </label>
-                    <EditableTextArea
-                        value={item.notes}
-                        field="notes"
-                        itemId={item.id}
-                        onSave={onSave}
-                    />
+                    {IS_ADMIN ? (
+                        <EditableTextArea
+                            value={item.notes}
+                            field="notes"
+                            itemId={item.id}
+                            onSave={onSave}
+                        />
+                    ) : (
+                        <p className="text-secondary" style={{ fontSize: '0.85rem', margin: 0, whiteSpace: 'pre-wrap' }}>
+                            {item.notes || '—'}
+                        </p>
+                    )}
                 </div>
+            </div>
+        );
+    };
+
+    const CouncilMembersPanel = () => {
+        const [members, setMembers] = useState([]);
+        const [loading, setLoading] = useState(true);
+        const [settingChairman, setSettingChairman] = useState(null);
+
+        const fetchMembers = async () => {
+            const res = await fetch('/api/council/members/', {
+                headers: { 'X-CSRFToken': getCookie('csrftoken') || CSRF_TOKEN }
+            });
+            if (res.ok) {
+                setMembers(await res.json());
+            }
+            setLoading(false);
+        };
+
+        useEffect(() => { fetchMembers(); }, []);
+
+        const setChairman = async (agencyId) => {
+            setSettingChairman(agencyId);
+            await fetch(`/api/council/chairman/${agencyId}/`, {
+                method: 'POST',
+                headers: { 'X-CSRFToken': getCookie('csrftoken') || CSRF_TOKEN },
+            });
+            await fetchMembers();
+            setSettingChairman(null);
+        };
+
+        const chairman = members.find(m => m.isCouncilChairman);
+
+        return (
+            <div className="glass-panel" style={{ padding: '1.5rem', marginBottom: '1.5rem' }}>
+                <h2 className="mono-text" style={{
+                    color: COUNCIL_ACCENT, fontSize: '1rem', letterSpacing: '1px',
+                    borderBottom: `1px solid ${COUNCIL_ACCENT}`, paddingBottom: '0.5rem',
+                    marginBottom: '1rem',
+                }}>
+                    COUNCIL MEMBERS
+                    <span className="text-muted" style={{ fontSize: '0.7rem', marginLeft: '0.5rem' }}>
+                        ({members.length} member{members.length !== 1 ? 's' : ''})
+                    </span>
+                </h2>
+
+                {chairman && (
+                    <div style={{
+                        background: 'rgba(168, 85, 247, 0.12)',
+                        border: `1px solid ${COUNCIL_ACCENT}`,
+                        borderRadius: 'var(--radius-sm)',
+                        padding: '0.75rem',
+                        marginBottom: '1rem',
+                        display: 'flex', alignItems: 'center', gap: '0.5rem',
+                    }}>
+                        <Icon name="crown" size={16} />
+                        <span className="mono-text" style={{ color: COUNCIL_ACCENT, fontWeight: 'bold', fontSize: '0.85rem' }}>
+                            CHAIRMAN: {chairman.name}
+                        </span>
+                    </div>
+                )}
+
+                {loading ? (
+                    <p className="text-muted mono-text" style={{ fontSize: '0.8rem' }}>Loading members...</p>
+                ) : members.length === 0 ? (
+                    <p className="text-muted mono-text" style={{
+                        textAlign: 'center', padding: '1rem 0', fontStyle: 'italic', fontSize: '0.85rem'
+                    }}>
+                        No agencies have joined the council yet. Agencies can join via their agency sheet.
+                    </p>
+                ) : (
+                    <div>
+                        {members.map(member => (
+                            <div key={member.id} className="tech-border" style={{
+                                padding: '0.6rem 0.75rem', marginBottom: '0.25rem',
+                                display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+                                background: member.isCouncilChairman ? 'rgba(168, 85, 247, 0.08)' : 'rgba(0,0,0,0.2)',
+                            }}>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                                    <a href={`/agencies/${member.id}/`} className="mono-text" style={{
+                                        color: 'var(--text-primary)', textDecoration: 'none',
+                                        fontSize: '0.85rem', fontWeight: member.isCouncilChairman ? 'bold' : 'normal',
+                                    }}>
+                                        {member.name}
+                                    </a>
+                                    {member.isPlayerAgency && (
+                                        <span className="mono-text" style={{
+                                            fontSize: '0.6rem', padding: '1px 4px',
+                                            border: '1px solid var(--accent-primary)',
+                                            color: 'var(--accent-primary)',
+                                        }}>PLAYER</span>
+                                    )}
+                                    {member.isCouncilChairman && (
+                                        <span className="mono-text" style={{
+                                            fontSize: '0.6rem', padding: '1px 4px',
+                                            background: COUNCIL_ACCENT, color: 'var(--bg-dark)',
+                                            borderRadius: 'var(--radius-sm)', fontWeight: 'bold',
+                                        }}>CHAIRMAN</span>
+                                    )}
+                                </div>
+                                {IS_ADMIN && !member.isCouncilChairman && (
+                                    <button
+                                        onClick={() => setChairman(member.id)}
+                                        disabled={settingChairman !== null}
+                                        className="mono-text"
+                                        title="Designate as Chairman"
+                                        style={{
+                                            background: 'transparent',
+                                            border: `1px solid ${COUNCIL_ACCENT}`,
+                                            color: COUNCIL_ACCENT,
+                                            padding: '0.2rem 0.6rem',
+                                            cursor: settingChairman ? 'wait' : 'pointer',
+                                            fontSize: '0.7rem',
+                                            fontFamily: 'var(--font-mono)',
+                                            borderRadius: 'var(--radius-sm)',
+                                            opacity: settingChairman ? 0.6 : 1,
+                                        }}
+                                    >
+                                        {settingChairman === member.id ? 'SETTING...' : 'SET CHAIRMAN'}
+                                    </button>
+                                )}
+                            </div>
+                        ))}
+                    </div>
+                )}
             </div>
         );
     };
@@ -373,10 +551,28 @@
                     }}>
                         <Icon name="landmark" size={22} /> UNITED INTERSTELLAR COUNCIL
                     </h1>
-                    <p className="text-muted mono-text" style={{ fontSize: '0.75rem', marginTop: '0.5rem' }}>
-                        Agreements, common goal initiatives, and laws established by the council. Visible on all agency sheets.
-                    </p>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', marginTop: '0.5rem' }}>
+                        <p className="text-muted mono-text" style={{ fontSize: '0.75rem', margin: 0 }}>
+                            Agreements, common goal initiatives, and laws established by the council. Visible on all agency sheets.
+                        </p>
+                        <a href="/agencies/council/charter/" className="mono-text" style={{
+                            textDecoration: 'none',
+                            border: `1px solid ${COUNCIL_ACCENT}`,
+                            color: COUNCIL_ACCENT,
+                            padding: '0.4rem 1rem',
+                            fontSize: '0.8rem',
+                            fontWeight: 'bold',
+                            letterSpacing: '1px',
+                            borderRadius: 'var(--radius-sm)',
+                            whiteSpace: 'nowrap',
+                        }}>
+                            <Icon name="scroll-text" size={14} /> CHARTER
+                        </a>
+                    </div>
                 </div>
+
+                {/* Council Members */}
+                <CouncilMembersPanel />
 
                 {/* Filter tabs */}
                 <div style={{
@@ -429,39 +625,41 @@
                         />
                     ))}
 
-                    {/* Create buttons */}
-                    <div style={{
-                        textAlign: 'center', marginTop: '1rem',
-                        display: 'flex', gap: '0.75rem', justifyContent: 'center', flexWrap: 'wrap'
-                    }}>
-                        {[
-                            { type: 'agreement', label: '+ AGREEMENT', icon: 'handshake' },
-                            { type: 'initiative', label: '+ INITIATIVE', icon: 'target' },
-                            { type: 'law', label: '+ LAW', icon: 'scale' },
-                        ].map(btn => (
-                            <button
-                                key={btn.type}
-                                onClick={() => createItem(btn.type)}
-                                disabled={creating}
-                                className="mono-text"
-                                style={{
-                                    background: 'transparent',
-                                    border: `1px solid ${COUNCIL_ACCENT}`,
-                                    color: COUNCIL_ACCENT,
-                                    padding: '0.6rem 1.5rem',
-                                    cursor: creating ? 'wait' : 'pointer',
-                                    fontWeight: 'bold',
-                                    fontFamily: 'var(--font-mono)',
-                                    fontSize: '0.85rem',
-                                    letterSpacing: '1px',
-                                    borderRadius: 'var(--radius-sm)',
-                                    opacity: creating ? 0.6 : 1,
-                                }}
-                            >
-                                {creating ? 'CREATING...' : btn.label}
-                            </button>
-                        ))}
-                    </div>
+                    {/* Create buttons — admin only */}
+                    {IS_ADMIN && (
+                        <div style={{
+                            textAlign: 'center', marginTop: '1rem',
+                            display: 'flex', gap: '0.75rem', justifyContent: 'center', flexWrap: 'wrap'
+                        }}>
+                            {[
+                                { type: 'agreement', label: '+ AGREEMENT', icon: 'handshake' },
+                                { type: 'initiative', label: '+ INITIATIVE', icon: 'target' },
+                                { type: 'law', label: '+ LAW', icon: 'scale' },
+                            ].map(btn => (
+                                <button
+                                    key={btn.type}
+                                    onClick={() => createItem(btn.type)}
+                                    disabled={creating}
+                                    className="mono-text"
+                                    style={{
+                                        background: 'transparent',
+                                        border: `1px solid ${COUNCIL_ACCENT}`,
+                                        color: COUNCIL_ACCENT,
+                                        padding: '0.6rem 1.5rem',
+                                        cursor: creating ? 'wait' : 'pointer',
+                                        fontWeight: 'bold',
+                                        fontFamily: 'var(--font-mono)',
+                                        fontSize: '0.85rem',
+                                        letterSpacing: '1px',
+                                        borderRadius: 'var(--radius-sm)',
+                                        opacity: creating ? 0.6 : 1,
+                                    }}
+                                >
+                                    {creating ? 'CREATING...' : btn.label}
+                                </button>
+                            ))}
+                        </div>
+                    )}
                 </div>
             </div>
         );

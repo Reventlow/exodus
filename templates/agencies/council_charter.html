@@ -1,0 +1,64 @@
+{% extends "base.html" %}
+
+{% block title %}UIC CHARTER // BLACKLOG.NET{% endblock %}
+
+{% block content %}
+<div style="max-width: 800px; margin: 0 auto; padding: 2rem 1rem;">
+    <div style="margin-bottom: 1.5rem;">
+        <a href="/agencies/council/" class="mono-text text-muted"
+            style="text-decoration: none; font-size: 0.8rem; display: block; margin-bottom: 0.5rem;">
+            &lt; BACK TO COUNCIL
+        </a>
+    </div>
+    <div id="charter-content" class="glass-panel" style="padding: 2rem; line-height: 1.7;"></div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    const charterMd = "{{ charter_md|escapejs }}";
+    const html = marked.parse(charterMd);
+    const el = document.getElementById('charter-content');
+    el.innerHTML = html;
+
+    // Style headings and rules to match the theme
+    el.querySelectorAll('h1').forEach(h => {
+        h.classList.add('mono-text');
+        h.style.color = '#a855f7';
+        h.style.fontSize = '1.5rem';
+        h.style.letterSpacing = '2px';
+        h.style.borderBottom = '2px solid #a855f7';
+        h.style.paddingBottom = '0.5rem';
+        h.style.marginTop = '2rem';
+    });
+    el.querySelectorAll('h2').forEach(h => {
+        h.classList.add('mono-text');
+        h.style.color = '#a855f7';
+        h.style.fontSize = '1.1rem';
+        h.style.letterSpacing = '1px';
+        h.style.marginTop = '1.5rem';
+        h.style.borderBottom = '1px solid rgba(168, 85, 247, 0.3)';
+        h.style.paddingBottom = '0.3rem';
+    });
+    el.querySelectorAll('h3').forEach(h => {
+        h.classList.add('mono-text');
+        h.style.color = 'var(--text-primary)';
+        h.style.fontSize = '0.95rem';
+        h.style.marginTop = '1rem';
+    });
+    el.querySelectorAll('p, li').forEach(p => {
+        p.style.color = 'var(--text-secondary)';
+        p.style.fontSize = '0.9rem';
+    });
+    el.querySelectorAll('em').forEach(em => {
+        em.style.color = 'var(--text-muted)';
+    });
+    el.querySelectorAll('hr').forEach(hr => {
+        hr.style.borderColor = 'rgba(168, 85, 247, 0.2)';
+        hr.style.margin = '1.5rem 0';
+    });
+    el.querySelectorAll('ol').forEach(ol => {
+        ol.style.paddingLeft = '1.5rem';
+    });
+</script>
+{% endblock %}

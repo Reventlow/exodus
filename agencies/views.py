@@ -1,5 +1,7 @@
 import json
+from pathlib import Path
 
+from django.conf import settings
 from django.http import JsonResponse
 from django.shortcuts import render, get_object_or_404
 from django.contrib.auth.decorators import login_required
@@ -67,12 +69,16 @@ def ftl_projects_page(request):
 
 @login_required
 def council_page(request):
-    """United Interstellar Council management page. Superuser only."""
-    if not request.user.is_superuser:
-        return JsonResponse(
-            {"error": "ACCESS DENIED. Administrator clearance required."}, status=403
-        )
+    """United Interstellar Council page. Viewable by all, editable by superusers."""
     return render(request, "agencies/council.html")
+
+
+@login_required
+def council_charter_page(request):
+    """UIC Charter page. Readable by all logged-in users."""
+    charter_path = Path(settings.BASE_DIR) / "UIC_CHARTER.md"
+    charter_content = charter_path.read_text() if charter_path.exists() else ""
+    return render(request, "agencies/council_charter.html", {"charter_md": charter_content})
 
 
 # ---------------------------------------------------------------------------
@@ -139,9 +145,14 @@ def api_agency_detail(request, pk):
         if "experience" in data:
             agency.experience = data["experience"]
 
-        # Update boolean
+        # Update booleans
         if "isPlayerAgency" in data:
             agency.is_player_agency = data["isPlayerAgency"]
+        if "isCouncilMember" in data:
+            agency.is_council_member = data["isCouncilMember"]
+            # If leaving the council, also remove chairman status
+            if not data["isCouncilMember"]:
+                agency.is_council_chairman = False
 
         # Update JSON fields
         if "attributes" in data:
@@ -520,7 +531,7 @@ def api_agency_ftl_detail(request, pk, assignment_id):
 
 
 # ---------------------------------------------------------------------------
-# API views — Council Items (superuser only)
+# API views — Council Items
 # ---------------------------------------------------------------------------
 
 
@@ -528,17 +539,16 @@ def api_agency_ftl_detail(request, pk, assignment_id):
 @require_http_methods(["GET", "POST"])
 def api_council_list(request):
     """GET: list all council items. POST: create a new one (admin only)."""
-    if not request.user.is_superuser:
-        return JsonResponse(
-            {"error": "ACCESS DENIED. Administrator clearance required."}, status=403
-        )
-
     if request.method == "GET":
         items = CouncilItem.objects.all()
         data = [serialize_council_item(ci) for ci in items]
         return JsonResponse(data, safe=False)
 
-    # POST
+    # POST — admin only
+    if not request.user.is_superuser:
+        return JsonResponse(
+            {"error": "ACCESS DENIED. Administrator clearance required."}, status=403
+        )
     try:
         body = json.loads(request.body) if request.body else {}
     except json.JSONDecodeError:
@@ -597,6 +607,50 @@ def api_council_detail(request, pk):
     if request.method == "DELETE":
         ci.delete()
         return JsonResponse({"status": "Council item record terminated."})
+
+
+# ---------------------------------------------------------------------------
+# API views — Council Membership (superuser only)
+# ---------------------------------------------------------------------------
+
+
+@login_required
+@require_http_methods(["GET"])
+def api_council_members(request):
+    """GET: list all agencies that are council members, with chairman info."""
+    members = Agency.objects.filter(is_council_member=True).order_by(
+        "-is_council_chairman", "name"
+    )
+    data = [
+        {
+            "id": a.id,
+            "name": a.name,
+            "isCouncilChairman": a.is_council_chairman,
+            "isPlayerAgency": a.is_player_agency,
+        }
+        for a in members
+    ]
+    return JsonResponse(data, safe=False)
+
+
+@login_required
+@require_http_methods(["POST"])
+def api_council_set_chairman(request, pk):
+    """Set an agency as the council chairman. Clears any previous chairman."""
+    if not request.user.is_superuser:
+        return JsonResponse(
+            {"error": "ACCESS DENIED. Administrator clearance required."}, status=403
+        )
+    agency = get_object_or_404(Agency, pk=pk)
+    if not agency.is_council_member:
+        return JsonResponse(
+            {"error": "Agency must be a council member first."}, status=400
+        )
+    # Clear existing chairman
+    Agency.objects.filter(is_council_chairman=True).update(is_council_chairman=False)
+    agency.is_council_chairman = True
+    agency.save()
+    return JsonResponse({"status": "Chairman designation updated.", "agencyId": agency.id})
 
 
 def _apply_changes(agency, changes):

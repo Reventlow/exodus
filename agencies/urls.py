@@ -7,6 +7,7 @@ urlpatterns = [
     path("agencies/global-flaws/", views.global_flaws_page, name="global_flaws"),
     path("agencies/ftl-projects/", views.ftl_projects_page, name="ftl_projects"),
     path("agencies/council/", views.council_page, name="council"),
+    path("agencies/council/charter/", views.council_charter_page, name="council_charter"),
     path("agencies/<int:pk>/", views.agency_sheet_page, name="agency_sheet"),
     # API — global flaws
     path("api/global-flaws/", views.api_global_flaw_list, name="api_global_flaw_list"),
@@ -60,8 +61,14 @@ urlpatterns = [
         views.api_notification_count,
         name="api_notification_count",
     ),
-    # API — council items
+    # API — council items & membership
     path("api/council/", views.api_council_list, name="api_council_list"),
+    path("api/council/members/", views.api_council_members, name="api_council_members"),
+    path(
+        "api/council/chairman/<int:pk>/",
+        views.api_council_set_chairman,
+        name="api_council_set_chairman",
+    ),
     path(
         "api/council/<int:pk>/",
         views.api_council_detail,

@@ -37,6 +37,10 @@ class Agency(models.Model):
     # Agency type
     is_player_agency = models.BooleanField(default=False)
 
+    # United Interstellar Council membership
+    is_council_member = models.BooleanField(default=False)
+    is_council_chairman = models.BooleanField(default=False)
+
     # Attributes: {power: {Industry: 3, ...}, finesse: {...}, resistance: {...}}
     attributes = models.JSONField(default=default_agency_attributes)
 
@@ -183,6 +187,7 @@ class CouncilItem(models.Model):
 
     STATUS_CHOICES = [
         ("proposed", "Proposed"),
+        ("voting", "Voting"),
         ("active", "Active"),
         ("suspended", "Suspended"),
         ("repealed", "Repealed"),

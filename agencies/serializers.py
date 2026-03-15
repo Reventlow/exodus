@@ -66,6 +66,8 @@ def serialize_agency(agency, user):
         "integrity": vis("integrity", agency.integrity),
         "experience": vis("experience", agency.experience),
         "isPlayerAgency": agency.is_player_agency,
+        "isCouncilMember": agency.is_council_member,
+        "isCouncilChairman": agency.is_council_chairman,
         "attributes": vis_attributes(agency.attributes),
         "specializations": vis("specializations", agency.specializations),
         "merits": vis("merits", agency.merits),

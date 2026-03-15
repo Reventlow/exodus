@@ -49,6 +49,8 @@
         integrity: 0,
         experience: 0,
         isPlayerAgency: false,
+        isCouncilMember: false,
+        isCouncilChairman: false,
         attributes: {
             power: { Industry: 0, Science: 0, Military: 0, Agriculture: 0 },
             finesse: { Espionage: 0, Diplomacy: 0, Logistics: 0, Trade: 0 },
@@ -525,13 +527,12 @@
     };
 
     // --- COUNCIL ITEMS DISPLAY (read-only, shown on every agency) ---
-    const CouncilDisplay = ({ councilItems }) => {
-        if (!councilItems || councilItems.length === 0) return null;
-
+    const CouncilDisplay = ({ councilItems, isCouncilMember, isCouncilChairman, onToggleMembership }) => {
         const COUNCIL_ACCENT = '#a855f7';
 
         const statusColors = {
             proposed: '#facc15',
+            voting: '#f97316',
             active: 'var(--accent-primary)',
             suspended: 'var(--accent-warning)',
             repealed: 'var(--accent-danger)',
@@ -543,9 +544,10 @@
             law: 'LAW',
         };
 
-        // Only show active/proposed items on agency sheets
-        const visibleItems = councilItems.filter(i => i.status === 'active' || i.status === 'proposed');
-        if (visibleItems.length === 0) return null;
+        // Show active, proposed, and voting items on agency sheets
+        const visibleItems = (councilItems || []).filter(i => ['active', 'proposed', 'voting'].includes(i.status));
+        const votingItems = visibleItems.filter(i => i.status === 'voting');
+        const otherItems = visibleItems.filter(i => i.status !== 'voting');
 
         return (
             <div className="glass-panel" style={{
@@ -555,14 +557,107 @@
                 <h3 className="mono-text" style={{
                     borderBottom: '1px solid var(--border-color)',
                     paddingBottom: '0.5rem', marginBottom: '1rem',
-                    color: COUNCIL_ACCENT, fontSize: '0.95rem'
+                    color: COUNCIL_ACCENT, fontSize: '0.95rem',
+                    display: 'flex', justifyContent: 'space-between', alignItems: 'center',
                 }}>
-                    UNITED INTERSTELLAR COUNCIL
-                    <span className="text-muted" style={{ fontSize: '0.7rem', marginLeft: '0.5rem' }}>
-                        (COUNCIL RECORD // READ ONLY)
+                    <span>
+                        UNITED INTERSTELLAR COUNCIL
+                        <span className="text-muted" style={{ fontSize: '0.7rem', marginLeft: '0.5rem' }}>
+                            (COUNCIL RECORD // READ ONLY)
+                        </span>
                     </span>
+                    {isCouncilChairman && (
+                        <span className="mono-text" style={{
+                            fontSize: '0.7rem', padding: '2px 8px',
+                            background: COUNCIL_ACCENT, color: 'var(--bg-dark)',
+                            borderRadius: 'var(--radius-sm)', fontWeight: 'bold',
+                        }}>
+                            CHAIRMAN
+                        </span>
+                    )}
                 </h3>
-                {visibleItems.map(item => (
+
+                {/* Council Membership Toggle */}
+                {IS_ADMIN && (
+                    <div style={{
+                        display: 'flex', alignItems: 'center', gap: '0.5rem',
+                        marginBottom: '1rem', padding: '0.5rem 0.75rem',
+                        background: 'rgba(168, 85, 247, 0.08)',
+                        borderRadius: 'var(--radius-sm)',
+                        border: '1px solid rgba(168, 85, 247, 0.2)',
+                    }}>
+                        <input
+                            type="checkbox"
+                            id="council-member-toggle"
+                            checked={isCouncilMember}
+                            onChange={(e) => onToggleMembership(e.target.checked)}
+                            style={{ cursor: 'pointer', accentColor: COUNCIL_ACCENT }}
+                        />
+                        <label htmlFor="council-member-toggle" className="mono-text" style={{
+                            fontSize: '0.8rem', color: 'var(--text-primary)', cursor: 'pointer',
+                        }}>
+                            COUNCIL MEMBER
+                        </label>
+                        {isCouncilMember && isCouncilChairman && (
+                            <span className="mono-text text-muted" style={{ fontSize: '0.7rem', marginLeft: '0.5rem' }}>
+                                (Designated Chairman)
+                            </span>
+                        )}
+                    </div>
+                )}
+                {/* Voting items — highlighted section */}
+                {votingItems.length > 0 && (
+                    <div style={{
+                        border: '1px solid #f97316',
+                        borderRadius: 'var(--radius-sm)',
+                        padding: '0.75rem',
+                        marginBottom: '0.75rem',
+                        background: 'rgba(249, 115, 22, 0.08)',
+                    }}>
+                        <h4 className="mono-text" style={{
+                            color: '#f97316', fontSize: '0.8rem',
+                            marginBottom: '0.5rem', letterSpacing: '1px',
+                        }}>
+                            CURRENTLY IN VOTE
+                        </h4>
+                        {votingItems.map(item => (
+                            <div key={item.id} className="tech-border" style={{
+                                padding: '0.75rem', marginBottom: '0.5rem',
+                                background: 'rgba(249, 115, 22, 0.05)',
+                                borderLeft: '3px solid #f97316',
+                            }}>
+                                <div style={{
+                                    display: 'flex', justifyContent: 'space-between',
+                                    alignItems: 'center', marginBottom: '0.25rem'
+                                }}>
+                                    <span className="mono-text" style={{ color: 'var(--text-primary)', fontSize: '0.9rem', fontWeight: 'bold' }}>
+                                        {item.name}
+                                    </span>
+                                    <span className="mono-text" style={{
+                                        fontSize: '0.65rem', padding: '2px 6px',
+                                        border: `1px solid ${COUNCIL_ACCENT}`,
+                                        color: COUNCIL_ACCENT,
+                                    }}>
+                                        {typeLabels[item.itemType] || item.itemType.toUpperCase()}
+                                    </span>
+                                </div>
+                                {item.proposedBy && (
+                                    <p className="text-muted mono-text" style={{ fontSize: '0.75rem', marginBottom: '0.25rem' }}>
+                                        Proposed by: {item.proposedBy}
+                                    </p>
+                                )}
+                                {item.description && (
+                                    <p className="text-secondary" style={{ fontSize: '0.85rem', marginTop: '0.25rem' }}>
+                                        {item.description}
+                                    </p>
+                                )}
+                            </div>
+                        ))}
+                    </div>
+                )}
+
+                {/* Active and proposed items */}
+                {otherItems.map(item => (
                     <div key={item.id} className="tech-border" style={{
                         padding: '0.75rem', marginBottom: '0.5rem',
                         background: 'rgba(168, 85, 247, 0.05)',
@@ -1671,7 +1766,15 @@
                     visibility={vis} onToggleVis={toggleVisibility}
                 />
 
-                <CouncilDisplay councilItems={agency.councilItems} />
+                <CouncilDisplay
+                    councilItems={agency.councilItems}
+                    isCouncilMember={agency.isCouncilMember}
+                    isCouncilChairman={agency.isCouncilChairman}
+                    onToggleMembership={(checked) => {
+                        updateAgency({ isCouncilMember: checked });
+                        if (!checked) updateAgency({ isCouncilChairman: false });
+                    }}
+                />
 
                 {/* Change Request Panel — only for player agency */}
                 {IS_PLAYER_AGENCY && (
