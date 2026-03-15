@@ -1,0 +1,252 @@
+{% extends "base.html" %}
+
+{% block title %}GLOBAL FLAWS // BLACKLOG.NET{% endblock %}
+
+{% block content %}
+<div id="app-root">
+    <div class="loading-screen">
+        <h1 class="mono-text">LOADING GLOBAL FLAW REGISTRY...</h1>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    const IS_ADMIN = {{ user.is_superuser|yesno:"true,false" }};
+    const CSRF_TOKEN = '{{ csrf_token }}';
+</script>
+{% verbatim %}
+<script type="text/babel">
+    const { useState, useEffect, useRef, useCallback } = React;
+
+    function getCookie(name) {
+        let cookieValue = null;
+        if (document.cookie && document.cookie !== '') {
+            const cookies = document.cookie.split(';');
+            for (let i = 0; i < cookies.length; i++) {
+                const cookie = cookies[i].trim();
+                if (cookie.substring(0, name.length + 1) === (name + '=')) {
+                    cookieValue = decodeURIComponent(cookie.substring(name.length + 1));
+                    break;
+                }
+            }
+        }
+        return cookieValue;
+    }
+
+    const Icon = ({ name, size = 16, className = "" }) => {
+        useEffect(() => {
+            if (window.lucide) window.lucide.createIcons();
+        }, [name]);
+        return <i data-lucide={name} width={size} height={size} className={className}></i>;
+    };
+
+    // --- Inline editable cell with save-on-blur ---
+    const EditableCell = ({ value, field, flawId, onSave, type = "text" }) => {
+        const ref = useRef(null);
+        return (
+            <input
+                ref={ref}
+                type={type}
+                defaultValue={value}
+                className="mono-text"
+                style={{
+                    background: 'rgba(255,255,255,0.03)',
+                    border: '1px solid var(--border-color)',
+                    color: 'var(--text-primary)',
+                    padding: '0.4rem 0.6rem',
+                    fontSize: '0.85rem',
+                    width: '100%',
+                    boxSizing: 'border-box',
+                    borderRadius: 'var(--radius-sm)',
+                }}
+                onBlur={() => {
+                    const v = type === 'number' ? parseInt(ref.current.value, 10) || 0 : ref.current.value;
+                    onSave(flawId, field, v);
+                }}
+            />
+        );
+    };
+
+    const GlobalFlawsManager = () => {
+        const [flaws, setFlaws] = useState([]);
+        const [loading, setLoading] = useState(true);
+        const [saving, setSaving] = useState(null); // id of flaw being saved
+        const [creating, setCreating] = useState(false);
+
+        const fetchFlaws = async () => {
+            const res = await fetch('/api/global-flaws/', {
+                headers: { 'X-CSRFToken': getCookie('csrftoken') || CSRF_TOKEN }
+            });
+            if (res.ok) {
+                const data = await res.json();
+                setFlaws(data);
+            }
+            setLoading(false);
+        };
+
+        useEffect(() => { fetchFlaws(); }, []);
+
+        const saveFlaw = async (id, field, value) => {
+            setSaving(id);
+            await fetch(`/api/global-flaws/${id}/`, {
+                method: 'PUT',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRFToken': getCookie('csrftoken') || CSRF_TOKEN,
+                },
+                body: JSON.stringify({ [field]: value }),
+            });
+            setSaving(null);
+        };
+
+        const createFlaw = async () => {
+            setCreating(true);
+            const res = await fetch('/api/global-flaws/', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRFToken': getCookie('csrftoken') || CSRF_TOKEN,
+                },
+                body: JSON.stringify({
+                    name: 'NEW GLOBAL FLAW',
+                    value: 0,
+                    description: '',
+                    order: flaws.length,
+                }),
+            });
+            if (res.ok) {
+                await fetchFlaws();
+            }
+            setCreating(false);
+        };
+
+        const deleteFlaw = async (id) => {
+            await fetch(`/api/global-flaws/${id}/`, {
+                method: 'DELETE',
+                headers: { 'X-CSRFToken': getCookie('csrftoken') || CSRF_TOKEN },
+            });
+            setFlaws(prev => prev.filter(f => f.id !== id));
+        };
+
+        if (loading) {
+            return (
+                <div className="loading-screen">
+                    <h1 className="mono-text">LOADING GLOBAL FLAW REGISTRY...</h1>
+                </div>
+            );
+        }
+
+        return (
+            <div style={{ maxWidth: '1000px', margin: '0 auto', padding: '2rem 1rem' }}>
+                {/* Header */}
+                <div style={{ marginBottom: '2rem' }}>
+                    <a href="/agencies/" className="mono-text text-muted"
+                        style={{ textDecoration: 'none', fontSize: '0.8rem', display: 'block', marginBottom: '0.5rem' }}>
+                        &lt; BACK TO AGENCIES
+                    </a>
+                    <h1 className="mono-text" style={{
+                        color: 'var(--accent-warning)',
+                        fontSize: '1.5rem',
+                        letterSpacing: '2px',
+                        borderBottom: '2px solid var(--accent-warning)',
+                        paddingBottom: '0.5rem'
+                    }}>
+                        GLOBAL FLAWS // MANAGEMENT
+                    </h1>
+                    <p className="text-muted mono-text" style={{ fontSize: '0.75rem', marginTop: '0.5rem' }}>
+                        Global flaws apply to ALL agencies. Only administrators can manage this registry.
+                    </p>
+                </div>
+
+                {/* Table */}
+                <div className="glass-panel" style={{ padding: '1.5rem' }}>
+                    {/* Column headers */}
+                    <div style={{
+                        display: 'grid',
+                        gridTemplateColumns: '60px 1fr 60px 2fr 40px',
+                        gap: '0.5rem',
+                        marginBottom: '0.75rem',
+                        padding: '0 0.5rem',
+                    }}>
+                        <span className="text-muted mono-text" style={{ fontSize: '0.7rem' }}>ORDER</span>
+                        <span className="text-muted mono-text" style={{ fontSize: '0.7rem' }}>NAME</span>
+                        <span className="text-muted mono-text" style={{ fontSize: '0.7rem' }}>VALUE</span>
+                        <span className="text-muted mono-text" style={{ fontSize: '0.7rem' }}>DESCRIPTION</span>
+                        <span></span>
+                    </div>
+
+                    {flaws.length === 0 && (
+                        <p className="text-muted mono-text" style={{
+                            textAlign: 'center', padding: '2rem 0', fontStyle: 'italic', fontSize: '0.85rem'
+                        }}>
+                            No global flaws registered.
+                        </p>
+                    )}
+
+                    {flaws.map(flaw => (
+                        <div key={flaw.id} className="tech-border" style={{
+                            display: 'grid',
+                            gridTemplateColumns: '60px 1fr 60px 2fr 40px',
+                            gap: '0.5rem',
+                            padding: '0.5rem',
+                            marginBottom: '0.25rem',
+                            alignItems: 'center',
+                            borderLeft: '3px solid var(--accent-warning)',
+                            opacity: saving === flaw.id ? 0.7 : 1,
+                            transition: 'opacity 0.2s',
+                        }}>
+                            <EditableCell value={flaw.order} field="order" flawId={flaw.id} onSave={saveFlaw} type="number" />
+                            <EditableCell value={flaw.name} field="name" flawId={flaw.id} onSave={saveFlaw} />
+                            <EditableCell value={flaw.value} field="value" flawId={flaw.id} onSave={saveFlaw} type="number" />
+                            <EditableCell value={flaw.description} field="description" flawId={flaw.id} onSave={saveFlaw} />
+                            <button
+                                onClick={() => deleteFlaw(flaw.id)}
+                                title="Delete global flaw"
+                                style={{
+                                    background: 'transparent',
+                                    border: 'none',
+                                    color: 'var(--accent-danger)',
+                                    cursor: 'pointer',
+                                    fontSize: '1.1rem',
+                                    padding: '0.25rem',
+                                }}
+                            >
+                                <Icon name="x" size={16} />
+                            </button>
+                        </div>
+                    ))}
+
+                    {/* Add button */}
+                    <div style={{ textAlign: 'center', marginTop: '1rem' }}>
+                        <button
+                            onClick={createFlaw}
+                            disabled={creating}
+                            className="mono-text"
+                            style={{
+                                background: 'transparent',
+                                border: '1px solid var(--accent-warning)',
+                                color: 'var(--accent-warning)',
+                                padding: '0.6rem 2rem',
+                                cursor: creating ? 'wait' : 'pointer',
+                                fontWeight: 'bold',
+                                fontFamily: 'var(--font-mono)',
+                                fontSize: '0.85rem',
+                                letterSpacing: '1px',
+                                borderRadius: 'var(--radius-sm)',
+                                opacity: creating ? 0.6 : 1,
+                            }}
+                        >
+                            {creating ? 'CREATING...' : '+ ADD GLOBAL FLAW'}
+                        </button>
+                    </div>
+                </div>
+            </div>
+        );
+    };
+
+    const root = ReactDOM.createRoot(document.getElementById('app-root'));
+    root.render(<GlobalFlawsManager />);
+</script>
+{% endverbatim %}
+{% endblock %}

@@ -1,5 +1,16 @@
 # Changelog
 
+## v0.2.0
+- Added Global Flaws system — flaws that apply to all agencies, managed by superadmins
+- Added FTL Projects system — global FTL travel research with per-agency progress tracking
+- Added United Interstellar Council — agreements, initiatives, and laws visible on all agency sheets
+- Council management page with filter tabs and inline editing (superadmin only)
+- FTL project management page with pros/cons lists (superadmin only)
+- Global flaws management page with inline editing (superadmin only)
+- Agency sheets now display global flaws, FTL project assignments, and council items as read-only
+- Admin navigation buttons for Global Flaws, FTL Projects, and Interstellar Council on agency list
+- Switched to manual version control (removed auto-increment on push)
+
 ## v0.1.25
 - Rebranded from FOUNDATION to BLACKLOG.NET across all page titles, navigation, login screen, and boot sequence
 

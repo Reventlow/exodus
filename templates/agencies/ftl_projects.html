@@ -1,0 +1,435 @@
+{% extends "base.html" %}
+
+{% block title %}FTL PROJECTS // BLACKLOG.NET{% endblock %}
+
+{% block content %}
+<div id="app-root">
+    <div class="loading-screen">
+        <h1 class="mono-text">LOADING FTL PROJECT REGISTRY...</h1>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    const IS_ADMIN = {{ user.is_superuser|yesno:"true,false" }};
+    const CSRF_TOKEN = '{{ csrf_token }}';
+</script>
+{% verbatim %}
+<script type="text/babel">
+    const { useState, useEffect, useRef, useCallback } = React;
+
+    function getCookie(name) {
+        let cookieValue = null;
+        if (document.cookie && document.cookie !== '') {
+            const cookies = document.cookie.split(';');
+            for (let i = 0; i < cookies.length; i++) {
+                const cookie = cookies[i].trim();
+                if (cookie.substring(0, name.length + 1) === (name + '=')) {
+                    cookieValue = decodeURIComponent(cookie.substring(name.length + 1));
+                    break;
+                }
+            }
+        }
+        return cookieValue;
+    }
+
+    const FTL_ACCENT = '#3b82f6';
+
+    const Icon = ({ name, size = 16, className = "" }) => {
+        useEffect(() => {
+            if (window.lucide) window.lucide.createIcons();
+        }, [name]);
+        return <i data-lucide={name} width={size} height={size} className={className}></i>;
+    };
+
+    // --- Inline editable cell with save-on-blur ---
+    const EditableCell = ({ value, field, projectId, onSave, type = "text", style = {} }) => {
+        const ref = useRef(null);
+        return (
+            <input
+                ref={ref}
+                type={type}
+                defaultValue={value}
+                className="mono-text"
+                style={{
+                    background: 'rgba(255,255,255,0.03)',
+                    border: '1px solid var(--border-color)',
+                    color: 'var(--text-primary)',
+                    padding: '0.4rem 0.6rem',
+                    fontSize: '0.85rem',
+                    width: '100%',
+                    boxSizing: 'border-box',
+                    borderRadius: 'var(--radius-sm)',
+                    ...style,
+                }}
+                onBlur={() => {
+                    const v = type === 'number' ? parseInt(ref.current.value, 10) || 0 : ref.current.value;
+                    onSave(projectId, field, v);
+                }}
+            />
+        );
+    };
+
+    // --- Editable text area with save-on-blur ---
+    const EditableTextArea = ({ value, field, projectId, onSave }) => {
+        const ref = useRef(null);
+        return (
+            <textarea
+                ref={ref}
+                defaultValue={value}
+                className="mono-text"
+                rows={3}
+                style={{
+                    background: 'rgba(255,255,255,0.03)',
+                    border: '1px solid var(--border-color)',
+                    color: 'var(--text-primary)',
+                    padding: '0.4rem 0.6rem',
+                    fontSize: '0.85rem',
+                    width: '100%',
+                    boxSizing: 'border-box',
+                    borderRadius: 'var(--radius-sm)',
+                    resize: 'vertical',
+                    fontFamily: 'var(--font-mono)',
+                }}
+                onBlur={() => {
+                    onSave(projectId, field, ref.current.value);
+                }}
+            />
+        );
+    };
+
+    // --- List editor for pros/cons ---
+    const ListEditor = ({ items, field, projectId, onSave, accentColor }) => {
+        const addItem = () => {
+            const updated = [...items, { text: '' }];
+            onSave(projectId, field, updated);
+        };
+
+        const removeItem = (idx) => {
+            const updated = items.filter((_, i) => i !== idx);
+            onSave(projectId, field, updated);
+        };
+
+        const updateItem = (idx, text) => {
+            const updated = items.map((item, i) => i === idx ? { text } : item);
+            onSave(projectId, field, updated);
+        };
+
+        return (
+            <div>
+                {items.map((item, idx) => (
+                    <div key={idx} style={{
+                        display: 'flex', alignItems: 'center', gap: '0.25rem',
+                        marginBottom: '0.25rem'
+                    }}>
+                        <span style={{ color: accentColor, fontSize: '0.8rem', minWidth: '12px' }}>
+                            {field === 'pros' ? '+' : '-'}
+                        </span>
+                        <input
+                            type="text"
+                            defaultValue={item.text}
+                            className="mono-text"
+                            placeholder={`${field === 'pros' ? 'Advantage' : 'Disadvantage'}...`}
+                            onBlur={e => updateItem(idx, e.target.value)}
+                            style={{
+                                background: 'rgba(255,255,255,0.03)',
+                                border: '1px solid var(--border-color)',
+                                color: 'var(--text-primary)',
+                                padding: '0.3rem 0.5rem',
+                                fontSize: '0.8rem',
+                                flex: 1,
+                                borderRadius: 'var(--radius-sm)',
+                            }}
+                        />
+                        <button
+                            onClick={() => removeItem(idx)}
+                            title={`Remove ${field === 'pros' ? 'pro' : 'con'}`}
+                            style={{
+                                background: 'transparent', border: 'none',
+                                color: 'var(--accent-danger)', cursor: 'pointer',
+                                padding: '2px',
+                            }}
+                        >
+                            <Icon name="x" size={14} />
+                        </button>
+                    </div>
+                ))}
+                <button
+                    onClick={addItem}
+                    style={{
+                        background: 'transparent',
+                        border: '1px dashed var(--border-color)',
+                        color: 'var(--text-muted)',
+                        width: '100%',
+                        padding: '0.25rem',
+                        cursor: 'pointer',
+                        fontSize: '0.75rem',
+                        marginTop: '0.25rem',
+                        borderRadius: 'var(--radius-sm)',
+                    }}
+                >
+                    + Add {field === 'pros' ? 'Pro' : 'Con'}
+                </button>
+            </div>
+        );
+    };
+
+    // --- Single FTL Project Card ---
+    const FTLProjectCard = ({ project, onSave, onDelete, saving }) => {
+        return (
+            <div className="tech-border" style={{
+                padding: '1.25rem',
+                marginBottom: '1rem',
+                borderLeft: `3px solid ${FTL_ACCENT}`,
+                opacity: saving ? 0.7 : 1,
+                transition: 'opacity 0.2s',
+            }}>
+                {/* Name + Delete */}
+                <div style={{
+                    display: 'flex', justifyContent: 'space-between',
+                    alignItems: 'flex-start', marginBottom: '0.75rem'
+                }}>
+                    <div style={{ flex: 1, marginRight: '1rem' }}>
+                        <label className="text-muted mono-text" style={{ fontSize: '0.7rem', display: 'block', marginBottom: '0.25rem' }}>
+                            PROJECT NAME
+                        </label>
+                        <EditableCell
+                            value={project.name}
+                            field="name"
+                            projectId={project.id}
+                            onSave={onSave}
+                            style={{ fontSize: '1rem', fontWeight: 'bold' }}
+                        />
+                    </div>
+                    <button
+                        onClick={() => onDelete(project.id)}
+                        title="Delete FTL project"
+                        style={{
+                            background: 'transparent', border: '1px solid var(--accent-danger)',
+                            color: 'var(--accent-danger)', cursor: 'pointer',
+                            padding: '0.3rem 0.6rem', fontSize: '0.75rem',
+                            fontFamily: 'var(--font-mono)', borderRadius: 'var(--radius-sm)',
+                            marginTop: '1rem',
+                        }}
+                    >
+                        DELETE
+                    </button>
+                </div>
+
+                {/* Description */}
+                <div style={{ marginBottom: '0.75rem' }}>
+                    <label className="text-muted mono-text" style={{ fontSize: '0.7rem', display: 'block', marginBottom: '0.25rem' }}>
+                        DESCRIPTION
+                    </label>
+                    <EditableTextArea
+                        value={project.description}
+                        field="description"
+                        projectId={project.id}
+                        onSave={onSave}
+                    />
+                </div>
+
+                {/* Required Successes */}
+                <div style={{ marginBottom: '0.75rem' }}>
+                    <label className="text-muted mono-text" style={{ fontSize: '0.7rem', display: 'block', marginBottom: '0.25rem' }}>
+                        REQUIRED SUCCESSES
+                    </label>
+                    <EditableCell
+                        value={project.requiredSuccesses}
+                        field="requiredSuccesses"
+                        projectId={project.id}
+                        onSave={onSave}
+                        type="number"
+                        style={{ width: '100px' }}
+                    />
+                </div>
+
+                {/* Pros and Cons side by side */}
+                <div style={{
+                    display: 'grid',
+                    gridTemplateColumns: '1fr 1fr',
+                    gap: '1rem',
+                }}>
+                    <div>
+                        <label className="mono-text" style={{
+                            fontSize: '0.7rem', display: 'block', marginBottom: '0.25rem',
+                            color: 'var(--accent-primary)',
+                        }}>
+                            PROS
+                        </label>
+                        <ListEditor
+                            items={project.pros || []}
+                            field="pros"
+                            projectId={project.id}
+                            onSave={onSave}
+                            accentColor="var(--accent-primary)"
+                        />
+                    </div>
+                    <div>
+                        <label className="mono-text" style={{
+                            fontSize: '0.7rem', display: 'block', marginBottom: '0.25rem',
+                            color: 'var(--accent-danger)',
+                        }}>
+                            CONS
+                        </label>
+                        <ListEditor
+                            items={project.cons || []}
+                            field="cons"
+                            projectId={project.id}
+                            onSave={onSave}
+                            accentColor="var(--accent-danger)"
+                        />
+                    </div>
+                </div>
+            </div>
+        );
+    };
+
+    const FTLProjectsManager = () => {
+        const [projects, setProjects] = useState([]);
+        const [loading, setLoading] = useState(true);
+        const [saving, setSaving] = useState(null);
+        const [creating, setCreating] = useState(false);
+
+        const fetchProjects = async () => {
+            const res = await fetch('/api/ftl-projects/', {
+                headers: { 'X-CSRFToken': getCookie('csrftoken') || CSRF_TOKEN }
+            });
+            if (res.ok) {
+                const data = await res.json();
+                setProjects(data);
+            }
+            setLoading(false);
+        };
+
+        useEffect(() => { fetchProjects(); }, []);
+
+        const saveProject = async (id, field, value) => {
+            setSaving(id);
+            await fetch(`/api/ftl-projects/${id}/`, {
+                method: 'PUT',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRFToken': getCookie('csrftoken') || CSRF_TOKEN,
+                },
+                body: JSON.stringify({ [field]: value }),
+            });
+            // Re-fetch to keep state in sync (especially for pros/cons lists)
+            await fetchProjects();
+            setSaving(null);
+        };
+
+        const createProject = async () => {
+            setCreating(true);
+            const res = await fetch('/api/ftl-projects/', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRFToken': getCookie('csrftoken') || CSRF_TOKEN,
+                },
+                body: JSON.stringify({
+                    name: 'NEW FTL PROJECT',
+                    description: '',
+                    pros: [],
+                    cons: [],
+                    requiredSuccesses: 10,
+                }),
+            });
+            if (res.ok) {
+                await fetchProjects();
+            }
+            setCreating(false);
+        };
+
+        const deleteProject = async (id) => {
+            await fetch(`/api/ftl-projects/${id}/`, {
+                method: 'DELETE',
+                headers: { 'X-CSRFToken': getCookie('csrftoken') || CSRF_TOKEN },
+            });
+            setProjects(prev => prev.filter(p => p.id !== id));
+        };
+
+        if (loading) {
+            return (
+                <div className="loading-screen">
+                    <h1 className="mono-text">LOADING FTL PROJECT REGISTRY...</h1>
+                </div>
+            );
+        }
+
+        return (
+            <div style={{ maxWidth: '1000px', margin: '0 auto', padding: '2rem 1rem' }}>
+                {/* Header */}
+                <div style={{ marginBottom: '2rem' }}>
+                    <a href="/agencies/" className="mono-text text-muted"
+                        style={{ textDecoration: 'none', fontSize: '0.8rem', display: 'block', marginBottom: '0.5rem' }}>
+                        &lt; BACK TO AGENCIES
+                    </a>
+                    <h1 className="mono-text" style={{
+                        color: FTL_ACCENT,
+                        fontSize: '1.5rem',
+                        letterSpacing: '2px',
+                        borderBottom: `2px solid ${FTL_ACCENT}`,
+                        paddingBottom: '0.5rem'
+                    }}>
+                        FTL PROJECTS // MANAGEMENT
+                    </h1>
+                    <p className="text-muted mono-text" style={{ fontSize: '0.75rem', marginTop: '0.5rem' }}>
+                        Faster Than Light travel research projects. Assign to agencies to track progress toward completion.
+                    </p>
+                </div>
+
+                {/* Project cards */}
+                <div className="glass-panel" style={{ padding: '1.5rem' }}>
+                    {projects.length === 0 && (
+                        <p className="text-muted mono-text" style={{
+                            textAlign: 'center', padding: '2rem 0', fontStyle: 'italic', fontSize: '0.85rem'
+                        }}>
+                            No FTL projects registered.
+                        </p>
+                    )}
+
+                    {projects.map(project => (
+                        <FTLProjectCard
+                            key={project.id}
+                            project={project}
+                            onSave={saveProject}
+                            onDelete={deleteProject}
+                            saving={saving === project.id}
+                        />
+                    ))}
+
+                    {/* Add button */}
+                    <div style={{ textAlign: 'center', marginTop: '1rem' }}>
+                        <button
+                            onClick={createProject}
+                            disabled={creating}
+                            className="mono-text"
+                            style={{
+                                background: 'transparent',
+                                border: `1px solid ${FTL_ACCENT}`,
+                                color: FTL_ACCENT,
+                                padding: '0.6rem 2rem',
+                                cursor: creating ? 'wait' : 'pointer',
+                                fontWeight: 'bold',
+                                fontFamily: 'var(--font-mono)',
+                                fontSize: '0.85rem',
+                                letterSpacing: '1px',
+                                borderRadius: 'var(--radius-sm)',
+                                opacity: creating ? 0.6 : 1,
+                            }}
+                        >
+                            {creating ? 'CREATING...' : '+ ADD FTL PROJECT'}
+                        </button>
+                    </div>
+                </div>
+            </div>
+        );
+    };
+
+    const root = ReactDOM.createRoot(document.getElementById('app-root'));
+    root.render(<FTLProjectsManager />);
+</script>
+{% endverbatim %}
+{% endblock %}

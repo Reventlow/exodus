@@ -57,6 +57,9 @@
         specializations: [],
         merits: [],
         flaws: [],
+        globalFlaws: [],
+        ftlProjects: [],
+        councilItems: [],
         assets: [],
         fleet: [],
         conditions: [],
@@ -471,6 +474,139 @@
         );
     };
 
+    // --- GLOBAL FLAWS DISPLAY (read-only, shown on every agency) ---
+    const GlobalFlawsDisplay = ({ globalFlaws }) => {
+        if (!globalFlaws || globalFlaws.length === 0) return null;
+
+        return (
+            <div className="glass-panel" style={{
+                padding: '1.5rem', marginTop: '0.5rem',
+                borderLeft: '3px solid var(--accent-warning)'
+            }}>
+                <h3 className="mono-text" style={{
+                    borderBottom: '1px solid var(--border-color)',
+                    paddingBottom: '0.5rem', marginBottom: '1rem',
+                    color: 'var(--accent-warning)', fontSize: '0.95rem'
+                }}>
+                    GLOBAL FLAWS
+                    <span className="text-muted" style={{ fontSize: '0.7rem', marginLeft: '0.5rem' }}>
+                        (SYSTEM-WIDE // READ ONLY)
+                    </span>
+                </h3>
+                <div style={{
+                    display: 'grid',
+                    gridTemplateColumns: '1fr 60px 2fr',
+                    gap: '0.5rem', marginBottom: '0.5rem', padding: '0 0.5rem'
+                }}>
+                    <span className="text-muted mono-text" style={{ fontSize: '0.7rem' }}>NAME</span>
+                    <span className="text-muted mono-text" style={{ fontSize: '0.7rem' }}>VALUE</span>
+                    <span className="text-muted mono-text" style={{ fontSize: '0.7rem' }}>DESCRIPTION</span>
+                </div>
+                {globalFlaws.map(flaw => (
+                    <div key={flaw.id} className="tech-border" style={{
+                        display: 'grid',
+                        gridTemplateColumns: '1fr 60px 2fr',
+                        gap: '0.5rem', padding: '0.5rem', marginBottom: '0.25rem',
+                        background: 'rgba(234, 179, 8, 0.05)', alignItems: 'center'
+                    }}>
+                        <span style={{ color: 'var(--text-primary)', fontSize: '0.85rem' }}>
+                            {flaw.name}
+                        </span>
+                        <span className="mono-text" style={{ color: 'var(--accent-warning)', fontSize: '0.85rem' }}>
+                            {flaw.value}
+                        </span>
+                        <span style={{ color: 'var(--text-secondary)', fontSize: '0.85rem' }}>
+                            {flaw.description}
+                        </span>
+                    </div>
+                ))}
+            </div>
+        );
+    };
+
+    // --- COUNCIL ITEMS DISPLAY (read-only, shown on every agency) ---
+    const CouncilDisplay = ({ councilItems }) => {
+        if (!councilItems || councilItems.length === 0) return null;
+
+        const COUNCIL_ACCENT = '#a855f7';
+
+        const statusColors = {
+            proposed: '#facc15',
+            active: 'var(--accent-primary)',
+            suspended: 'var(--accent-warning)',
+            repealed: 'var(--accent-danger)',
+        };
+
+        const typeLabels = {
+            agreement: 'AGREEMENT',
+            initiative: 'INITIATIVE',
+            law: 'LAW',
+        };
+
+        // Only show active/proposed items on agency sheets
+        const visibleItems = councilItems.filter(i => i.status === 'active' || i.status === 'proposed');
+        if (visibleItems.length === 0) return null;
+
+        return (
+            <div className="glass-panel" style={{
+                padding: '1.5rem', marginTop: '1rem',
+                borderLeft: `3px solid ${COUNCIL_ACCENT}`
+            }}>
+                <h3 className="mono-text" style={{
+                    borderBottom: '1px solid var(--border-color)',
+                    paddingBottom: '0.5rem', marginBottom: '1rem',
+                    color: COUNCIL_ACCENT, fontSize: '0.95rem'
+                }}>
+                    UNITED INTERSTELLAR COUNCIL
+                    <span className="text-muted" style={{ fontSize: '0.7rem', marginLeft: '0.5rem' }}>
+                        (COUNCIL RECORD // READ ONLY)
+                    </span>
+                </h3>
+                {visibleItems.map(item => (
+                    <div key={item.id} className="tech-border" style={{
+                        padding: '0.75rem', marginBottom: '0.5rem',
+                        background: 'rgba(168, 85, 247, 0.05)',
+                    }}>
+                        <div style={{
+                            display: 'flex', justifyContent: 'space-between',
+                            alignItems: 'center', marginBottom: '0.25rem'
+                        }}>
+                            <span className="mono-text" style={{ color: 'var(--text-primary)', fontSize: '0.9rem', fontWeight: 'bold' }}>
+                                {item.name}
+                            </span>
+                            <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+                                <span className="mono-text" style={{
+                                    fontSize: '0.65rem', padding: '2px 6px',
+                                    border: `1px solid ${COUNCIL_ACCENT}`,
+                                    color: COUNCIL_ACCENT,
+                                }}>
+                                    {typeLabels[item.itemType] || item.itemType.toUpperCase()}
+                                </span>
+                                <span className="mono-text" style={{
+                                    fontSize: '0.65rem', padding: '2px 6px',
+                                    border: `1px solid ${statusColors[item.status] || 'var(--text-muted)'}`,
+                                    color: statusColors[item.status] || 'var(--text-muted)',
+                                }}>
+                                    {item.status.toUpperCase()}
+                                </span>
+                            </div>
+                        </div>
+                        {item.proposedBy && (
+                            <p className="text-muted mono-text" style={{ fontSize: '0.75rem', marginBottom: '0.25rem' }}>
+                                Proposed by: {item.proposedBy}
+                            </p>
+                        )}
+                        {item.description && (
+                            <p className="text-secondary" style={{ fontSize: '0.85rem', marginTop: '0.25rem' }}>
+                                {item.description}
+                            </p>
+                        )}
+                    </div>
+                ))}
+            </div>
+        );
+    };
+
     // --- GENERIC TABLE MODULE ---
     const TableModule = ({ title, field, items, columns, update, onSave, visibility, onToggleVis, emptyItem, getFreshItems }) => {
         const isClassified = items === 'CLASSIFIED';
@@ -581,6 +717,367 @@
                         No data recorded.
                     </p>
                 )}
+            </div>
+        );
+    };
+
+    // --- FTL PROJECTS MODULE (per-agency assignments with progress tracking) ---
+    const FTL_ACCENT = '#3b82f6';
+
+    const FTLProjectsModule = ({ ftlProjects, agencyId }) => {
+        const [projects, setProjects] = useState(ftlProjects || []);
+        const [showAssign, setShowAssign] = useState(false);
+        const [allFTL, setAllFTL] = useState([]);
+        const [loadingFTL, setLoadingFTL] = useState(false);
+
+        // Keep in sync when parent re-renders with new data
+        useEffect(() => {
+            setProjects(ftlProjects || []);
+        }, [ftlProjects]);
+
+        const fetchAllFTL = async () => {
+            setLoadingFTL(true);
+            try {
+                const res = await fetch('/api/ftl-projects/');
+                if (res.ok) setAllFTL(await res.json());
+            } catch (err) {
+                console.error('Failed to fetch FTL projects:', err);
+            }
+            setLoadingFTL(false);
+        };
+
+        const openAssign = () => {
+            fetchAllFTL();
+            setShowAssign(true);
+        };
+
+        const assignProject = async (ftlProjectId) => {
+            try {
+                const res = await fetch(`/api/agencies/${agencyId}/ftl/`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-CSRFToken': getCookie('csrftoken') || CSRF_TOKEN,
+                    },
+                    body: JSON.stringify({ ftlProjectId }),
+                });
+                if (res.ok) {
+                    const newAssignment = await res.json();
+                    setProjects(prev => [...prev, newAssignment]);
+                    setShowAssign(false);
+                }
+            } catch (err) {
+                console.error('Failed to assign FTL project:', err);
+            }
+        };
+
+        const unassignProject = async (assignmentId) => {
+            try {
+                const res = await fetch(`/api/agencies/${agencyId}/ftl/${assignmentId}/`, {
+                    method: 'DELETE',
+                    headers: { 'X-CSRFToken': getCookie('csrftoken') || CSRF_TOKEN },
+                });
+                if (res.ok) {
+                    setProjects(prev => prev.filter(p => p.assignmentId !== assignmentId));
+                }
+            } catch (err) {
+                console.error('Failed to unassign FTL project:', err);
+            }
+        };
+
+        const updateSuccesses = async (assignmentId, delta) => {
+            const proj = projects.find(p => p.assignmentId === assignmentId);
+            if (!proj) return;
+            const newVal = Math.max(0, proj.currentSuccesses + delta);
+            try {
+                const res = await fetch(`/api/agencies/${agencyId}/ftl/${assignmentId}/`, {
+                    method: 'PUT',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-CSRFToken': getCookie('csrftoken') || CSRF_TOKEN,
+                    },
+                    body: JSON.stringify({ currentSuccesses: newVal }),
+                });
+                if (res.ok) {
+                    const updated = await res.json();
+                    setProjects(prev => prev.map(p =>
+                        p.assignmentId === assignmentId
+                            ? { ...p, currentSuccesses: updated.currentSuccesses }
+                            : p
+                    ));
+                }
+            } catch (err) {
+                console.error('Failed to update successes:', err);
+            }
+        };
+
+        // Unassigned projects for the dropdown
+        const assignedIds = projects.map(p => p.id);
+        const unassigned = allFTL.filter(fp => !assignedIds.includes(fp.id));
+
+        return (
+            <div className="glass-panel" style={{
+                padding: '1.5rem', marginBottom: '1rem',
+                borderLeft: `3px solid ${FTL_ACCENT}`,
+            }}>
+                <h3 className="mono-text" style={{
+                    borderBottom: '1px solid var(--border-color)',
+                    paddingBottom: '0.5rem', marginBottom: '1rem',
+                    color: FTL_ACCENT, fontSize: '0.95rem',
+                    display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+                }}>
+                    <span>
+                        FTL PROJECTS
+                        <span className="text-muted" style={{ fontSize: '0.7rem', marginLeft: '0.5rem' }}>
+                            (FASTER THAN LIGHT RESEARCH)
+                        </span>
+                    </span>
+                    {IS_ADMIN && (
+                        <button onClick={openAssign} style={{
+                            background: 'transparent', border: `1px solid ${FTL_ACCENT}`,
+                            color: FTL_ACCENT, padding: '4px 12px',
+                            cursor: 'pointer', fontFamily: 'var(--font-mono)', fontSize: '0.75rem',
+                            borderRadius: 'var(--radius-sm)',
+                        }}>
+                            ASSIGN FTL PROJECT
+                        </button>
+                    )}
+                </h3>
+
+                {/* Assign dropdown */}
+                {showAssign && IS_ADMIN && (
+                    <div className="tech-border" style={{
+                        padding: '0.75rem', marginBottom: '1rem',
+                        background: 'rgba(59, 130, 246, 0.05)',
+                    }}>
+                        {loadingFTL ? (
+                            <span className="text-muted mono-text" style={{ fontSize: '0.8rem' }}>
+                                Loading available projects...
+                            </span>
+                        ) : unassigned.length === 0 ? (
+                            <div>
+                                <span className="text-muted mono-text" style={{ fontSize: '0.8rem', fontStyle: 'italic' }}>
+                                    All FTL projects are already assigned.
+                                </span>
+                                <button onClick={() => setShowAssign(false)} style={{
+                                    background: 'transparent', border: '1px solid var(--border-color)',
+                                    color: 'var(--text-muted)', padding: '3px 10px', cursor: 'pointer',
+                                    marginLeft: '0.5rem', fontSize: '0.75rem',
+                                }}>CLOSE</button>
+                            </div>
+                        ) : (
+                            <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', flexWrap: 'wrap' }}>
+                                <select
+                                    id="ftl-assign-select"
+                                    style={{
+                                        background: 'var(--bg-input, #1a1a2e)',
+                                        border: '1px solid var(--border-color)',
+                                        color: 'var(--text-primary)',
+                                        padding: '0.3rem 0.5rem',
+                                        fontFamily: 'var(--font-mono)',
+                                        fontSize: '0.8rem',
+                                        flex: 1,
+                                        minWidth: '200px',
+                                    }}
+                                >
+                                    {unassigned.map(fp => (
+                                        <option key={fp.id} value={fp.id}>{fp.name}</option>
+                                    ))}
+                                </select>
+                                <button
+                                    onClick={() => {
+                                        const sel = document.getElementById('ftl-assign-select');
+                                        if (sel && sel.value) assignProject(parseInt(sel.value));
+                                    }}
+                                    style={{
+                                        background: FTL_ACCENT, border: 'none',
+                                        color: 'var(--bg-dark)', padding: '4px 12px',
+                                        cursor: 'pointer', fontFamily: 'var(--font-mono)',
+                                        fontSize: '0.8rem', fontWeight: 'bold',
+                                        borderRadius: 'var(--radius-sm)',
+                                    }}
+                                >ASSIGN</button>
+                                <button onClick={() => setShowAssign(false)} style={{
+                                    background: 'transparent', border: '1px solid var(--border-color)',
+                                    color: 'var(--text-muted)', padding: '4px 12px', cursor: 'pointer',
+                                    fontSize: '0.8rem',
+                                }}>CANCEL</button>
+                            </div>
+                        )}
+                    </div>
+                )}
+
+                {/* Project cards */}
+                {projects.length === 0 && (
+                    <p className="text-muted text-center" style={{ fontSize: '0.8rem', fontStyle: 'italic' }}>
+                        No FTL projects assigned.
+                    </p>
+                )}
+
+                {projects.map(proj => {
+                    const pct = proj.requiredSuccesses > 0
+                        ? Math.min(100, Math.round((proj.currentSuccesses / proj.requiredSuccesses) * 100))
+                        : 0;
+                    const isComplete = proj.currentSuccesses >= proj.requiredSuccesses;
+
+                    return (
+                        <div key={proj.assignmentId} className="tech-border" style={{
+                            padding: '1rem', marginBottom: '0.5rem',
+                            background: isComplete
+                                ? 'rgba(59, 130, 246, 0.08)'
+                                : 'rgba(0,0,0,0.2)',
+                        }}>
+                            {/* Header row */}
+                            <div style={{
+                                display: 'flex', justifyContent: 'space-between',
+                                alignItems: 'flex-start', marginBottom: '0.5rem',
+                            }}>
+                                <div>
+                                    <span className="mono-text" style={{
+                                        color: FTL_ACCENT, fontSize: '0.95rem', fontWeight: 'bold',
+                                    }}>
+                                        {proj.name}
+                                    </span>
+                                    {isComplete && (
+                                        <span className="mono-text" style={{
+                                            fontSize: '0.7rem', padding: '2px 6px',
+                                            border: `1px solid ${FTL_ACCENT}`,
+                                            color: FTL_ACCENT, marginLeft: '0.5rem',
+                                        }}>COMPLETE</span>
+                                    )}
+                                </div>
+                                {IS_ADMIN && (
+                                    <button
+                                        onClick={() => unassignProject(proj.assignmentId)}
+                                        title="Unassign FTL project"
+                                        style={{
+                                            background: 'transparent', border: 'none',
+                                            color: 'var(--accent-danger)', cursor: 'pointer',
+                                            padding: '2px',
+                                        }}
+                                    >
+                                        <Icon name="x" size={16} />
+                                    </button>
+                                )}
+                            </div>
+
+                            {/* Description */}
+                            {proj.description && (
+                                <p style={{
+                                    color: 'var(--text-secondary)', fontSize: '0.85rem',
+                                    marginBottom: '0.5rem',
+                                }}>
+                                    {proj.description}
+                                </p>
+                            )}
+
+                            {/* Pros and Cons */}
+                            <div style={{
+                                display: 'grid', gridTemplateColumns: '1fr 1fr',
+                                gap: '0.75rem', marginBottom: '0.75rem',
+                            }}>
+                                {proj.pros && proj.pros.length > 0 && (
+                                    <div>
+                                        <span className="mono-text" style={{
+                                            fontSize: '0.7rem', color: 'var(--accent-primary)',
+                                        }}>PROS</span>
+                                        <ul style={{
+                                            margin: '0.25rem 0 0 0', paddingLeft: '1rem',
+                                            fontSize: '0.8rem', color: 'var(--text-secondary)',
+                                        }}>
+                                            {proj.pros.map((p, i) => (
+                                                <li key={i} style={{ marginBottom: '0.15rem' }}>{p.text}</li>
+                                            ))}
+                                        </ul>
+                                    </div>
+                                )}
+                                {proj.cons && proj.cons.length > 0 && (
+                                    <div>
+                                        <span className="mono-text" style={{
+                                            fontSize: '0.7rem', color: 'var(--accent-danger)',
+                                        }}>CONS</span>
+                                        <ul style={{
+                                            margin: '0.25rem 0 0 0', paddingLeft: '1rem',
+                                            fontSize: '0.8rem', color: 'var(--text-secondary)',
+                                        }}>
+                                            {proj.cons.map((c, i) => (
+                                                <li key={i} style={{ marginBottom: '0.15rem' }}>{c.text}</li>
+                                            ))}
+                                        </ul>
+                                    </div>
+                                )}
+                            </div>
+
+                            {/* Progress bar + counter */}
+                            <div style={{ marginTop: '0.5rem' }}>
+                                <div style={{
+                                    display: 'flex', justifyContent: 'space-between',
+                                    alignItems: 'center', marginBottom: '0.25rem',
+                                }}>
+                                    <span className="text-muted mono-text" style={{ fontSize: '0.7rem' }}>
+                                        PROGRESS
+                                    </span>
+                                    <span className="mono-text" style={{
+                                        fontSize: '0.8rem', color: FTL_ACCENT,
+                                    }}>
+                                        {proj.currentSuccesses} / {proj.requiredSuccesses}
+                                    </span>
+                                </div>
+                                {/* Progress bar */}
+                                <div style={{
+                                    width: '100%', height: '8px',
+                                    background: 'rgba(255,255,255,0.05)',
+                                    borderRadius: '4px', overflow: 'hidden',
+                                    border: '1px solid var(--border-color)',
+                                }}>
+                                    <div style={{
+                                        width: `${pct}%`, height: '100%',
+                                        background: isComplete
+                                            ? 'var(--accent-primary)'
+                                            : FTL_ACCENT,
+                                        transition: 'width 0.3s ease',
+                                    }} />
+                                </div>
+                                {/* +/- buttons (admin only) */}
+                                {IS_ADMIN && (
+                                    <div style={{
+                                        display: 'flex', gap: '0.5rem',
+                                        justifyContent: 'center', marginTop: '0.5rem',
+                                    }}>
+                                        <button
+                                            onClick={() => updateSuccesses(proj.assignmentId, -1)}
+                                            disabled={proj.currentSuccesses <= 0}
+                                            style={{
+                                                background: 'transparent',
+                                                border: '1px solid var(--border-color)',
+                                                color: 'var(--text-primary)',
+                                                width: '28px', height: '28px',
+                                                cursor: proj.currentSuccesses <= 0 ? 'not-allowed' : 'pointer',
+                                                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                                fontFamily: 'var(--font-mono)', fontSize: '1rem',
+                                                borderRadius: 'var(--radius-sm)',
+                                                opacity: proj.currentSuccesses <= 0 ? 0.3 : 1,
+                                            }}
+                                        >-</button>
+                                        <button
+                                            onClick={() => updateSuccesses(proj.assignmentId, 1)}
+                                            style={{
+                                                background: 'transparent',
+                                                border: `1px solid ${FTL_ACCENT}`,
+                                                color: FTL_ACCENT,
+                                                width: '28px', height: '28px',
+                                                cursor: 'pointer',
+                                                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                                fontFamily: 'var(--font-mono)', fontSize: '1rem',
+                                                borderRadius: 'var(--radius-sm)',
+                                            }}
+                                        >+</button>
+                                    </div>
+                                )}
+                            </div>
+                        </div>
+                    );
+                })}
             </div>
         );
     };
@@ -1070,20 +1567,23 @@
                         getFreshItems={() => agencyRef.current.merits || []}
                         visibility={vis} onToggleVis={toggleVisibility}
                     />
-                    <TableModule
-                        title="FLAWS" field="flaws"
-                        items={agency.flaws}
-                        columns={[
-                            { key: 'name', label: 'NAME', width: '1fr' },
-                            { key: 'value', label: 'VALUE', width: '60px', type: 'number' },
-                            { key: 'description', label: 'DESCRIPTION', width: '2fr' },
-                        ]}
-                        emptyItem={{ name: '', value: 0, description: '' }}
-                        update={val => updateAgency({ flaws: val })}
-                        onSave={val => saveAgencyQuiet({ flaws: val })}
-                        getFreshItems={() => agencyRef.current.flaws || []}
-                        visibility={vis} onToggleVis={toggleVisibility}
-                    />
+                    <div>
+                        <TableModule
+                            title="FLAWS" field="flaws"
+                            items={agency.flaws}
+                            columns={[
+                                { key: 'name', label: 'NAME', width: '1fr' },
+                                { key: 'value', label: 'VALUE', width: '60px', type: 'number' },
+                                { key: 'description', label: 'DESCRIPTION', width: '2fr' },
+                            ]}
+                            emptyItem={{ name: '', value: 0, description: '' }}
+                            update={val => updateAgency({ flaws: val })}
+                            onSave={val => saveAgencyQuiet({ flaws: val })}
+                            getFreshItems={() => agencyRef.current.flaws || []}
+                            visibility={vis} onToggleVis={toggleVisibility}
+                        />
+                        <GlobalFlawsDisplay globalFlaws={agency.globalFlaws} />
+                    </div>
                 </div>
 
                 <TableModule
@@ -1151,6 +1651,11 @@
                     visibility={vis} onToggleVis={toggleVisibility}
                 />
 
+                <FTLProjectsModule
+                    ftlProjects={agency.ftlProjects}
+                    agencyId={AGENCY_ID}
+                />
+
                 <TableModule
                     title="HISTORY" field="history"
                     items={agency.history}
@@ -1165,6 +1670,8 @@
                     getFreshItems={() => agencyRef.current.history || []}
                     visibility={vis} onToggleVis={toggleVisibility}
                 />
+
+                <CouncilDisplay councilItems={agency.councilItems} />
 
                 {/* Change Request Panel — only for player agency */}
                 {IS_PLAYER_AGENCY && (

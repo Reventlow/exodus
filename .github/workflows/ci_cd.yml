@@ -57,11 +57,10 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
-      # 3. Calculate new version and update version.txt before build
-      - name: Calculate and set new version
+      # 3. Read version from version.txt (manually controlled)
+      - name: Read version
         run: |
-          echo "NEW_VERSION=$(python scripts/calculate_version.py)" >> $GITHUB_ENV
-          python scripts/update_version_txt.py
+          echo "NEW_VERSION=$(cat version.txt | tr -d '[:space:]')" >> $GITHUB_ENV
 
       # 4. Log in to DockerHub
       - name: Login to DockerHub
@@ -83,13 +82,13 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
-      # 6. Update docker-compose.yml and commit version bump
+      # 6. Update docker-compose.yml image tag and commit if changed
       - name: Update docker-compose.yml and commit
         if: success()
         run: |
           python scripts/update_docker_compose.py ${{ env.NEW_VERSION }}
           git config user.name github-actions
           git config user.email github-actions@github.com
-          git add docker-compose.yml version.txt
-          git diff --staged --quiet || git commit -m "chore: bump version to ${{ env.NEW_VERSION }} [skip ci]"
+          git add docker-compose.yml
+          git diff --staged --quiet || git commit -m "chore: update docker-compose to v${{ env.NEW_VERSION }} [skip ci]"
           git push

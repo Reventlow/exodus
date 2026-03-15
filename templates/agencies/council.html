@@ -1,0 +1,474 @@
+{% extends "base.html" %}
+
+{% block title %}UNITED INTERSTELLAR COUNCIL // BLACKLOG.NET{% endblock %}
+
+{% block content %}
+<div id="app-root">
+    <div class="loading-screen">
+        <h1 class="mono-text">LOADING COUNCIL REGISTRY...</h1>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    const IS_ADMIN = {{ user.is_superuser|yesno:"true,false" }};
+    const CSRF_TOKEN = '{{ csrf_token }}';
+</script>
+{% verbatim %}
+<script type="text/babel">
+    const { useState, useEffect, useRef } = React;
+
+    const COUNCIL_ACCENT = '#a855f7';
+
+    function getCookie(name) {
+        let cookieValue = null;
+        if (document.cookie && document.cookie !== '') {
+            const cookies = document.cookie.split(';');
+            for (let i = 0; i < cookies.length; i++) {
+                const cookie = cookies[i].trim();
+                if (cookie.substring(0, name.length + 1) === (name + '=')) {
+                    cookieValue = decodeURIComponent(cookie.substring(name.length + 1));
+                    break;
+                }
+            }
+        }
+        return cookieValue;
+    }
+
+    const Icon = ({ name, size = 16, className = "" }) => {
+        useEffect(() => {
+            if (window.lucide) window.lucide.createIcons();
+        }, [name]);
+        return <i data-lucide={name} width={size} height={size} className={className}></i>;
+    };
+
+    const EditableCell = ({ value, field, itemId, onSave, type = "text", style = {} }) => {
+        const ref = useRef(null);
+        return (
+            <input
+                ref={ref}
+                type={type}
+                defaultValue={value}
+                className="mono-text"
+                style={{
+                    background: 'rgba(255,255,255,0.03)',
+                    border: '1px solid var(--border-color)',
+                    color: 'var(--text-primary)',
+                    padding: '0.4rem 0.6rem',
+                    fontSize: '0.85rem',
+                    width: '100%',
+                    boxSizing: 'border-box',
+                    borderRadius: 'var(--radius-sm)',
+                    ...style,
+                }}
+                onBlur={() => {
+                    const v = type === 'number' ? parseInt(ref.current.value, 10) || 0 : ref.current.value;
+                    onSave(itemId, field, v);
+                }}
+            />
+        );
+    };
+
+    const EditableTextArea = ({ value, field, itemId, onSave }) => {
+        const ref = useRef(null);
+        return (
+            <textarea
+                ref={ref}
+                defaultValue={value}
+                className="mono-text"
+                rows={3}
+                style={{
+                    background: 'rgba(255,255,255,0.03)',
+                    border: '1px solid var(--border-color)',
+                    color: 'var(--text-primary)',
+                    padding: '0.4rem 0.6rem',
+                    fontSize: '0.85rem',
+                    width: '100%',
+                    boxSizing: 'border-box',
+                    borderRadius: 'var(--radius-sm)',
+                    resize: 'vertical',
+                    fontFamily: 'var(--font-mono)',
+                }}
+                onBlur={() => {
+                    onSave(itemId, field, ref.current.value);
+                }}
+            />
+        );
+    };
+
+    const SelectField = ({ value, field, itemId, onSave, options }) => {
+        const ref = useRef(null);
+        return (
+            <select
+                ref={ref}
+                defaultValue={value}
+                className="mono-text"
+                style={{
+                    background: 'rgba(255,255,255,0.03)',
+                    border: '1px solid var(--border-color)',
+                    color: 'var(--text-primary)',
+                    padding: '0.4rem 0.6rem',
+                    fontSize: '0.85rem',
+                    width: '100%',
+                    boxSizing: 'border-box',
+                    borderRadius: 'var(--radius-sm)',
+                }}
+                onChange={() => {
+                    onSave(itemId, field, ref.current.value);
+                }}
+            >
+                {options.map(opt => (
+                    <option key={opt.value} value={opt.value}>{opt.label}</option>
+                ))}
+            </select>
+        );
+    };
+
+    const TYPE_OPTIONS = [
+        { value: 'agreement', label: 'Agreement' },
+        { value: 'initiative', label: 'Initiative' },
+        { value: 'law', label: 'Law' },
+    ];
+
+    const STATUS_OPTIONS = [
+        { value: 'proposed', label: 'Proposed' },
+        { value: 'active', label: 'Active' },
+        { value: 'suspended', label: 'Suspended' },
+        { value: 'repealed', label: 'Repealed' },
+    ];
+
+    const STATUS_COLORS = {
+        proposed: '#facc15',
+        active: 'var(--accent-primary)',
+        suspended: 'var(--accent-warning)',
+        repealed: 'var(--accent-danger)',
+    };
+
+    const TYPE_ICONS = {
+        agreement: 'handshake',
+        initiative: 'target',
+        law: 'scale',
+    };
+
+    const CouncilItemCard = ({ item, onSave, onDelete, saving }) => {
+        return (
+            <div className="tech-border" style={{
+                padding: '1.25rem',
+                marginBottom: '1rem',
+                borderLeft: `3px solid ${COUNCIL_ACCENT}`,
+                opacity: saving ? 0.7 : 1,
+                transition: 'opacity 0.2s',
+            }}>
+                {/* Header: Name + Type badge + Delete */}
+                <div style={{
+                    display: 'flex', justifyContent: 'space-between',
+                    alignItems: 'flex-start', marginBottom: '0.75rem'
+                }}>
+                    <div style={{ flex: 1, marginRight: '1rem' }}>
+                        <label className="text-muted mono-text" style={{ fontSize: '0.7rem', display: 'block', marginBottom: '0.25rem' }}>
+                            ITEM NAME
+                        </label>
+                        <EditableCell
+                            value={item.name}
+                            field="name"
+                            itemId={item.id}
+                            onSave={onSave}
+                            style={{ fontSize: '1rem', fontWeight: 'bold' }}
+                        />
+                    </div>
+                    <button
+                        onClick={() => onDelete(item.id)}
+                        title="Delete council item"
+                        style={{
+                            background: 'transparent', border: '1px solid var(--accent-danger)',
+                            color: 'var(--accent-danger)', cursor: 'pointer',
+                            padding: '0.3rem 0.6rem', fontSize: '0.75rem',
+                            fontFamily: 'var(--font-mono)', borderRadius: 'var(--radius-sm)',
+                            marginTop: '1rem',
+                        }}
+                    >
+                        DELETE
+                    </button>
+                </div>
+
+                {/* Type + Status + Order + Proposed By */}
+                <div style={{
+                    display: 'grid',
+                    gridTemplateColumns: '1fr 1fr 80px 1fr',
+                    gap: '0.75rem',
+                    marginBottom: '0.75rem',
+                }}>
+                    <div>
+                        <label className="text-muted mono-text" style={{ fontSize: '0.7rem', display: 'block', marginBottom: '0.25rem' }}>
+                            TYPE
+                        </label>
+                        <SelectField
+                            value={item.itemType}
+                            field="itemType"
+                            itemId={item.id}
+                            onSave={onSave}
+                            options={TYPE_OPTIONS}
+                        />
+                    </div>
+                    <div>
+                        <label className="text-muted mono-text" style={{ fontSize: '0.7rem', display: 'block', marginBottom: '0.25rem' }}>
+                            STATUS
+                        </label>
+                        <SelectField
+                            value={item.status}
+                            field="status"
+                            itemId={item.id}
+                            onSave={onSave}
+                            options={STATUS_OPTIONS}
+                        />
+                    </div>
+                    <div>
+                        <label className="text-muted mono-text" style={{ fontSize: '0.7rem', display: 'block', marginBottom: '0.25rem' }}>
+                            ORDER
+                        </label>
+                        <EditableCell
+                            value={item.order}
+                            field="order"
+                            itemId={item.id}
+                            onSave={onSave}
+                            type="number"
+                        />
+                    </div>
+                    <div>
+                        <label className="text-muted mono-text" style={{ fontSize: '0.7rem', display: 'block', marginBottom: '0.25rem' }}>
+                            PROPOSED BY
+                        </label>
+                        <EditableCell
+                            value={item.proposedBy}
+                            field="proposedBy"
+                            itemId={item.id}
+                            onSave={onSave}
+                        />
+                    </div>
+                </div>
+
+                {/* Description */}
+                <div style={{ marginBottom: '0.75rem' }}>
+                    <label className="text-muted mono-text" style={{ fontSize: '0.7rem', display: 'block', marginBottom: '0.25rem' }}>
+                        DESCRIPTION
+                    </label>
+                    <EditableTextArea
+                        value={item.description}
+                        field="description"
+                        itemId={item.id}
+                        onSave={onSave}
+                    />
+                </div>
+
+                {/* Notes */}
+                <div>
+                    <label className="text-muted mono-text" style={{ fontSize: '0.7rem', display: 'block', marginBottom: '0.25rem' }}>
+                        NOTES
+                    </label>
+                    <EditableTextArea
+                        value={item.notes}
+                        field="notes"
+                        itemId={item.id}
+                        onSave={onSave}
+                    />
+                </div>
+            </div>
+        );
+    };
+
+    const CouncilManager = () => {
+        const [items, setItems] = useState([]);
+        const [loading, setLoading] = useState(true);
+        const [saving, setSaving] = useState(null);
+        const [creating, setCreating] = useState(false);
+        const [filterType, setFilterType] = useState('all');
+
+        const fetchItems = async () => {
+            const res = await fetch('/api/council/', {
+                headers: { 'X-CSRFToken': getCookie('csrftoken') || CSRF_TOKEN }
+            });
+            if (res.ok) {
+                setItems(await res.json());
+            }
+            setLoading(false);
+        };
+
+        useEffect(() => { fetchItems(); }, []);
+
+        const saveItem = async (id, field, value) => {
+            setSaving(id);
+            await fetch(`/api/council/${id}/`, {
+                method: 'PUT',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRFToken': getCookie('csrftoken') || CSRF_TOKEN,
+                },
+                body: JSON.stringify({ [field]: value }),
+            });
+            await fetchItems();
+            setSaving(null);
+        };
+
+        const createItem = async (itemType) => {
+            setCreating(true);
+            const typeLabels = { agreement: 'AGREEMENT', initiative: 'INITIATIVE', law: 'LAW' };
+            const res = await fetch('/api/council/', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRFToken': getCookie('csrftoken') || CSRF_TOKEN,
+                },
+                body: JSON.stringify({
+                    name: `NEW ${typeLabels[itemType]}`,
+                    itemType: itemType,
+                    order: items.length,
+                }),
+            });
+            if (res.ok) {
+                await fetchItems();
+            }
+            setCreating(false);
+        };
+
+        const deleteItem = async (id) => {
+            await fetch(`/api/council/${id}/`, {
+                method: 'DELETE',
+                headers: { 'X-CSRFToken': getCookie('csrftoken') || CSRF_TOKEN },
+            });
+            setItems(prev => prev.filter(i => i.id !== id));
+        };
+
+        if (loading) {
+            return (
+                <div className="loading-screen">
+                    <h1 className="mono-text">LOADING COUNCIL REGISTRY...</h1>
+                </div>
+            );
+        }
+
+        const filtered = filterType === 'all' ? items : items.filter(i => i.itemType === filterType);
+
+        const counts = {
+            all: items.length,
+            agreement: items.filter(i => i.itemType === 'agreement').length,
+            initiative: items.filter(i => i.itemType === 'initiative').length,
+            law: items.filter(i => i.itemType === 'law').length,
+        };
+
+        return (
+            <div style={{ maxWidth: '1000px', margin: '0 auto', padding: '2rem 1rem' }}>
+                {/* Header */}
+                <div style={{ marginBottom: '2rem' }}>
+                    <a href="/agencies/" className="mono-text text-muted"
+                        style={{ textDecoration: 'none', fontSize: '0.8rem', display: 'block', marginBottom: '0.5rem' }}>
+                        &lt; BACK TO AGENCIES
+                    </a>
+                    <h1 className="mono-text" style={{
+                        color: COUNCIL_ACCENT,
+                        fontSize: '1.5rem',
+                        letterSpacing: '2px',
+                        borderBottom: `2px solid ${COUNCIL_ACCENT}`,
+                        paddingBottom: '0.5rem'
+                    }}>
+                        <Icon name="landmark" size={22} /> UNITED INTERSTELLAR COUNCIL
+                    </h1>
+                    <p className="text-muted mono-text" style={{ fontSize: '0.75rem', marginTop: '0.5rem' }}>
+                        Agreements, common goal initiatives, and laws established by the council. Visible on all agency sheets.
+                    </p>
+                </div>
+
+                {/* Filter tabs */}
+                <div style={{
+                    display: 'flex', gap: '0.5rem', marginBottom: '1.5rem', flexWrap: 'wrap'
+                }}>
+                    {[
+                        { key: 'all', label: 'ALL' },
+                        { key: 'agreement', label: 'AGREEMENTS' },
+                        { key: 'initiative', label: 'INITIATIVES' },
+                        { key: 'law', label: 'LAWS' },
+                    ].map(tab => (
+                        <button
+                            key={tab.key}
+                            onClick={() => setFilterType(tab.key)}
+                            className="mono-text"
+                            style={{
+                                background: filterType === tab.key ? COUNCIL_ACCENT : 'transparent',
+                                border: `1px solid ${COUNCIL_ACCENT}`,
+                                color: filterType === tab.key ? 'var(--bg-dark)' : COUNCIL_ACCENT,
+                                padding: '0.4rem 1rem',
+                                cursor: 'pointer',
+                                fontWeight: 'bold',
+                                fontSize: '0.8rem',
+                                letterSpacing: '1px',
+                                borderRadius: 'var(--radius-sm)',
+                            }}
+                        >
+                            {tab.label} ({counts[tab.key]})
+                        </button>
+                    ))}
+                </div>
+
+                {/* Items */}
+                <div className="glass-panel" style={{ padding: '1.5rem' }}>
+                    {filtered.length === 0 && (
+                        <p className="text-muted mono-text" style={{
+                            textAlign: 'center', padding: '2rem 0', fontStyle: 'italic', fontSize: '0.85rem'
+                        }}>
+                            No council items registered{filterType !== 'all' ? ` of type "${filterType}"` : ''}.
+                        </p>
+                    )}
+
+                    {filtered.map(item => (
+                        <CouncilItemCard
+                            key={item.id}
+                            item={item}
+                            onSave={saveItem}
+                            onDelete={deleteItem}
+                            saving={saving === item.id}
+                        />
+                    ))}
+
+                    {/* Create buttons */}
+                    <div style={{
+                        textAlign: 'center', marginTop: '1rem',
+                        display: 'flex', gap: '0.75rem', justifyContent: 'center', flexWrap: 'wrap'
+                    }}>
+                        {[
+                            { type: 'agreement', label: '+ AGREEMENT', icon: 'handshake' },
+                            { type: 'initiative', label: '+ INITIATIVE', icon: 'target' },
+                            { type: 'law', label: '+ LAW', icon: 'scale' },
+                        ].map(btn => (
+                            <button
+                                key={btn.type}
+                                onClick={() => createItem(btn.type)}
+                                disabled={creating}
+                                className="mono-text"
+                                style={{
+                                    background: 'transparent',
+                                    border: `1px solid ${COUNCIL_ACCENT}`,
+                                    color: COUNCIL_ACCENT,
+                                    padding: '0.6rem 1.5rem',
+                                    cursor: creating ? 'wait' : 'pointer',
+                                    fontWeight: 'bold',
+                                    fontFamily: 'var(--font-mono)',
+                                    fontSize: '0.85rem',
+                                    letterSpacing: '1px',
+                                    borderRadius: 'var(--radius-sm)',
+                                    opacity: creating ? 0.6 : 1,
+                                }}
+                            >
+                                {creating ? 'CREATING...' : btn.label}
+                            </button>
+                        ))}
+                    </div>
+                </div>
+            </div>
+        );
+    };
+
+    const root = ReactDOM.createRoot(document.getElementById('app-root'));
+    root.render(<CouncilManager />);
+</script>
+{% endverbatim %}
+{% endblock %}

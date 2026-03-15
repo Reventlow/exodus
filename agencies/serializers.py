@@ -1,5 +1,7 @@
 """Manual JSON serialization for Agency models. No DRF dependency."""
 
+from .models import GlobalFlaw, FTLProject, AgencyFTLProject, CouncilItem
+
 CLASSIFIED = "CLASSIFIED"
 
 
@@ -75,6 +77,22 @@ def serialize_agency(agency, user):
         "history": vis("history", agency.history),
     }
 
+    # Global flaws — visible to everyone, not editable per-agency
+    data["globalFlaws"] = [serialize_global_flaw(gf) for gf in GlobalFlaw.objects.all()]
+
+    # Council items — visible to everyone, not editable per-agency
+    data["councilItems"] = [serialize_council_item(ci) for ci in CouncilItem.objects.all()]
+
+    # FTL project assignments with progress
+    data["ftlProjects"] = [
+        {
+            **serialize_ftl_project(afp.ftl_project),
+            "assignmentId": afp.id,
+            "currentSuccesses": afp.current_successes,
+        }
+        for afp in agency.ftl_assignments.select_related("ftl_project").all()
+    ]
+
     # Include visibility map and change request counts for admins
     if is_admin:
         data["fieldVisibility"] = agency.field_visibility
@@ -100,6 +118,52 @@ def serialize_agency_summary(agency, user):
         "alliance": vis("alliance", agency.alliance),
         "isPlayerAgency": agency.is_player_agency,
         "motto": vis("motto", agency.motto),
+    }
+
+
+def serialize_global_flaw(gf):
+    """Serialize a GlobalFlaw model instance."""
+    return {
+        "id": gf.id,
+        "name": gf.name,
+        "value": gf.value,
+        "description": gf.description,
+        "order": gf.order,
+    }
+
+
+def serialize_ftl_project(fp):
+    """Serialize an FTLProject model instance."""
+    return {
+        "id": fp.id,
+        "name": fp.name,
+        "description": fp.description,
+        "pros": fp.pros,
+        "cons": fp.cons,
+        "requiredSuccesses": fp.required_successes,
+    }
+
+
+def serialize_agency_ftl_project(afp):
+    """Serialize an AgencyFTLProject join record with nested project data."""
+    return {
+        **serialize_ftl_project(afp.ftl_project),
+        "assignmentId": afp.id,
+        "currentSuccesses": afp.current_successes,
+    }
+
+
+def serialize_council_item(ci):
+    """Serialize a CouncilItem model instance."""
+    return {
+        "id": ci.id,
+        "name": ci.name,
+        "itemType": ci.item_type,
+        "description": ci.description,
+        "status": ci.status,
+        "proposedBy": ci.proposed_by,
+        "notes": ci.notes,
+        "order": ci.order,
     }
 
 
