@@ -1,5 +1,8 @@
 # Changelog
 
+## v0.2.1
+- Fixed Interstellar Council link not visible to non-admin players on agency list page
+
 ## v0.2.0
 - Added Global Flaws system — flaws that apply to all agencies, managed by superadmins
 - Added FTL Projects system — global FTL travel research with per-agency progress tracking
