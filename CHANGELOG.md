@@ -1,5 +1,8 @@
 # Changelog
 
+## v0.2.2
+- Fixed charter page blank — pinned marked.js to v14.1.4 (latest version removed marked.min.js)
+
 ## v0.2.1
 - Fixed Interstellar Council link not visible to non-admin players on agency list page
 
