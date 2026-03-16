@@ -16,7 +16,10 @@
     const NPC_ID = {{ npc_id }};
     const IS_EDITOR = {{ is_editor|yesno:"true,false" }};
     const IS_ADMIN = {{ is_admin|yesno:"true,false" }};
+    const IS_NPC_DOSSIER = {{ is_npc_dossier|yesno:"true,false" }};
     const CSRF_TOKEN = '{{ csrf_token }}';
+    const CURRENT_USER = '{{ user.username }}';
+    const CURRENT_USER_ID = {{ user.id }};
 </script>
 {% verbatim %}
 <script type="text/babel">
@@ -52,9 +55,6 @@
     };
 
     // --- AUTO-SAVE INPUT (uncontrolled) ---
-    // Uses defaultValue so React never touches the DOM input after mount.
-    // The DOM manages typing; we just read values via onChange to update
-    // the data ref and schedule a background save.
     const AutoSaveInput = ({ defaultValue, onSave, delay = 1500, component = 'input', ...props }) => {
         const timerRef = useRef(null);
 
@@ -152,7 +152,6 @@
                 console.error('Image upload error:', err);
             } finally {
                 setUploading(false);
-                // Reset the input so the same file can be re-selected
                 if (fileInputRef.current) fileInputRef.current.value = '';
             }
         };
@@ -184,7 +183,6 @@
                         <Icon name="user" size={48} className="text-muted" />
                     )}
 
-                    {/* Uploading overlay */}
                     {uploading && (
                         <div style={{
                             position: 'absolute', top: 0, left: 0,
@@ -200,7 +198,6 @@
                     )}
                 </div>
 
-                {/* Hidden file input */}
                 <input
                     ref={fileInputRef}
                     type="file"
@@ -215,7 +212,6 @@
     // --- DEMOGRAPHICS MODULE ---
     const DemographicsModule = ({ npc, onSave }) => {
         if (!IS_EDITOR) {
-            // Read-only view
             return (
                 <div className="glass-panel" style={{
                     padding: '1.5rem', marginBottom: '1rem',
@@ -375,6 +371,63 @@
         );
     };
 
+    // --- AGENCY MODULE (NPC dossiers only) ---
+    const AgencyModule = ({ npc, onSave }) => {
+        const [agencies, setAgencies] = useState([]);
+
+        useEffect(() => {
+            if (IS_ADMIN) {
+                fetch('/api/agencies/')
+                    .then(r => r.json())
+                    .then(data => setAgencies(data.filter(a => !a.isPlayerAgency)))
+                    .catch(() => {});
+            }
+        }, []);
+
+        if (!IS_NPC_DOSSIER) return null;
+
+        if (!IS_ADMIN) {
+            return (
+                <div className="glass-panel" style={{ padding: '1.5rem', marginBottom: '1rem' }}>
+                    <label className="text-secondary mono-text" style={{ fontSize: '0.8rem' }}>AGENCY</label>
+                    <div className="mono-text" style={{
+                        marginTop: '0.25rem', color: 'var(--accent-warning)',
+                        fontSize: '1rem',
+                    }}>
+                        {npc.agencyName || 'UNASSIGNED'}
+                    </div>
+                </div>
+            );
+        }
+
+        return (
+            <div className="glass-panel" style={{ padding: '1.5rem', marginBottom: '1rem' }}>
+                <label className="text-secondary mono-text" style={{ fontSize: '0.8rem' }}>AGENCY</label>
+                <select
+                    value={npc.agencyId || ''}
+                    onChange={e => onSave({ agencyId: parseInt(e.target.value) || null })}
+                    style={{
+                        display: 'block', marginTop: '0.25rem',
+                        background: 'transparent',
+                        border: '1px solid var(--accent-warning)',
+                        color: 'var(--accent-warning)',
+                        padding: '0.5rem', width: '100%',
+                        fontFamily: 'var(--font-mono)',
+                        fontSize: '0.9rem', cursor: 'pointer',
+                    }}
+                >
+                    <option value="" style={{ background: 'var(--bg-dark)' }}>-- Unassigned --</option>
+                    {agencies.map(a => (
+                        <option key={a.id} value={a.id}
+                            style={{ background: 'var(--bg-dark)', color: 'var(--text-primary)' }}>
+                            {a.name}
+                        </option>
+                    ))}
+                </select>
+            </div>
+        );
+    };
+
     // --- BIO MODULE (Markdown editor with preview toggle) ---
     const BioModule = ({ npc, onSave }) => {
         const [editMode, setEditMode] = useState(false);
@@ -439,6 +492,250 @@
         );
     };
 
+    // --- NOTES MODULE (available on all dossiers, any player can add) ---
+    const NotesModule = ({ npc }) => {
+        const [notes, setNotes] = useState(npc.notes || []);
+        const [newNote, setNewNote] = useState('');
+        const [submitting, setSubmitting] = useState(false);
+        const [editingId, setEditingId] = useState(null);
+        const [editText, setEditText] = useState('');
+
+        const renderMarkdown = (text) => {
+            try {
+                return window.marked.parse(text);
+            } catch (err) {
+                return '<p>' + text + '</p>';
+            }
+        };
+
+        const submitNote = async () => {
+            if (!newNote.trim()) return;
+            setSubmitting(true);
+            try {
+                const response = await fetch('/api/npcs/' + NPC_ID + '/notes/', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-CSRFToken': getCookie('csrftoken') || CSRF_TOKEN,
+                    },
+                    body: JSON.stringify({ text: newNote }),
+                });
+                if (response.ok) {
+                    const note = await response.json();
+                    setNotes([note, ...notes]);
+                    setNewNote('');
+                }
+            } catch (err) {
+                console.error('Failed to submit note:', err);
+            } finally {
+                setSubmitting(false);
+            }
+        };
+
+        const deleteNote = async (noteId) => {
+            try {
+                const response = await fetch('/api/npcs/' + NPC_ID + '/notes/' + noteId + '/', {
+                    method: 'DELETE',
+                    headers: {
+                        'X-CSRFToken': getCookie('csrftoken') || CSRF_TOKEN,
+                    },
+                });
+                if (response.ok) {
+                    setNotes(notes.filter(n => n.id !== noteId));
+                }
+            } catch (err) {
+                console.error('Failed to delete note:', err);
+            }
+        };
+
+        const startEdit = (note) => {
+            setEditingId(note.id);
+            setEditText(note.text);
+        };
+
+        const saveEdit = async (noteId) => {
+            if (!editText.trim()) return;
+            try {
+                const response = await fetch('/api/npcs/' + NPC_ID + '/notes/' + noteId + '/', {
+                    method: 'PUT',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-CSRFToken': getCookie('csrftoken') || CSRF_TOKEN,
+                    },
+                    body: JSON.stringify({ text: editText }),
+                });
+                if (response.ok) {
+                    const updated = await response.json();
+                    setNotes(notes.map(n => n.id === noteId ? updated : n));
+                    setEditingId(null);
+                    setEditText('');
+                }
+            } catch (err) {
+                console.error('Failed to update note:', err);
+            }
+        };
+
+        const formatDate = (iso) => {
+            try {
+                const d = new Date(iso);
+                return d.toLocaleDateString() + ' ' + d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+            } catch {
+                return iso;
+            }
+        };
+
+        return (
+            <div className="glass-panel" style={{ padding: '1.5rem', marginBottom: '1rem' }}>
+                <h3 className="mono-text text-accent" style={{
+                    borderBottom: '1px solid var(--border-color)',
+                    paddingBottom: '0.5rem', marginBottom: '1rem',
+                }}>
+                    <Icon name="sticky-note" size={16} /> FIELD NOTES
+                </h3>
+
+                {/* Add note form */}
+                <div style={{ marginBottom: '1.5rem' }}>
+                    <textarea
+                        value={newNote}
+                        onChange={e => setNewNote(e.target.value)}
+                        placeholder="Add a note... (Markdown supported)"
+                        style={{
+                            width: '100%', minHeight: '80px',
+                            background: 'rgba(0,0,0,0.2)',
+                            border: '1px solid var(--border-color)',
+                            color: 'var(--text-primary)',
+                            padding: '0.75rem', fontFamily: 'var(--font-mono)',
+                            fontSize: '0.85rem', resize: 'vertical',
+                            marginBottom: '0.5rem',
+                        }}
+                    />
+                    <button
+                        onClick={submitNote}
+                        disabled={submitting || !newNote.trim()}
+                        className="mono-text"
+                        style={{
+                            background: newNote.trim() ? 'var(--accent-primary)' : 'transparent',
+                            border: newNote.trim() ? 'none' : '1px solid var(--border-color)',
+                            color: newNote.trim() ? 'var(--bg-dark)' : 'var(--text-muted)',
+                            padding: '0.4rem 1rem',
+                            cursor: submitting || !newNote.trim() ? 'default' : 'pointer',
+                            fontSize: '0.8rem', fontWeight: 'bold',
+                            fontFamily: 'var(--font-mono)',
+                            opacity: submitting ? 0.6 : 1,
+                        }}
+                    >
+                        {submitting ? 'SUBMITTING...' : 'ADD NOTE'}
+                    </button>
+                </div>
+
+                {/* Notes list */}
+                {notes.length === 0 && (
+                    <p className="text-muted mono-text" style={{
+                        textAlign: 'center', fontStyle: 'italic', padding: '1rem 0',
+                    }}>
+                        No field notes recorded.
+                    </p>
+                )}
+
+                {notes.map(note => (
+                    <div key={note.id} style={{
+                        borderLeft: '2px solid var(--accent-primary)',
+                        paddingLeft: '1rem',
+                        marginBottom: '1rem',
+                        paddingBottom: '0.5rem',
+                        borderBottom: '1px solid var(--border-color)',
+                    }}>
+                        <div style={{
+                            display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+                            marginBottom: '0.5rem',
+                        }}>
+                            <span className="mono-text" style={{ fontSize: '0.75rem', color: 'var(--accent-primary)' }}>
+                                {note.author} — {formatDate(note.createdAt)}
+                            </span>
+                            {(note.author === CURRENT_USER || IS_ADMIN) && editingId !== note.id && (
+                                <div style={{ display: 'flex', gap: '0.5rem' }}>
+                                    <button
+                                        onClick={() => startEdit(note)}
+                                        className="mono-text"
+                                        style={{
+                                            background: 'transparent', border: 'none',
+                                            color: 'var(--text-muted)', cursor: 'pointer',
+                                            fontSize: '0.7rem', padding: '0.2rem 0.4rem',
+                                        }}
+                                    >
+                                        EDIT
+                                    </button>
+                                    <button
+                                        onClick={() => deleteNote(note.id)}
+                                        className="mono-text"
+                                        style={{
+                                            background: 'transparent', border: 'none',
+                                            color: 'var(--accent-danger)', cursor: 'pointer',
+                                            fontSize: '0.7rem', padding: '0.2rem 0.4rem',
+                                        }}
+                                    >
+                                        DELETE
+                                    </button>
+                                </div>
+                            )}
+                        </div>
+
+                        {editingId === note.id ? (
+                            <div>
+                                <textarea
+                                    value={editText}
+                                    onChange={e => setEditText(e.target.value)}
+                                    style={{
+                                        width: '100%', minHeight: '60px',
+                                        background: 'rgba(0,0,0,0.2)',
+                                        border: '1px solid var(--border-color)',
+                                        color: 'var(--text-primary)',
+                                        padding: '0.5rem', fontFamily: 'var(--font-mono)',
+                                        fontSize: '0.85rem', resize: 'vertical',
+                                        marginBottom: '0.5rem',
+                                    }}
+                                />
+                                <div style={{ display: 'flex', gap: '0.5rem' }}>
+                                    <button
+                                        onClick={() => saveEdit(note.id)}
+                                        className="mono-text"
+                                        style={{
+                                            background: 'var(--accent-primary)', border: 'none',
+                                            color: 'var(--bg-dark)', padding: '0.3rem 0.75rem',
+                                            cursor: 'pointer', fontSize: '0.75rem', fontWeight: 'bold',
+                                            fontFamily: 'var(--font-mono)',
+                                        }}
+                                    >
+                                        SAVE
+                                    </button>
+                                    <button
+                                        onClick={() => { setEditingId(null); setEditText(''); }}
+                                        className="mono-text"
+                                        style={{
+                                            background: 'transparent',
+                                            border: '1px solid var(--border-color)',
+                                            color: 'var(--text-muted)', padding: '0.3rem 0.75rem',
+                                            cursor: 'pointer', fontSize: '0.75rem',
+                                            fontFamily: 'var(--font-mono)',
+                                        }}
+                                    >
+                                        CANCEL
+                                    </button>
+                                </div>
+                            </div>
+                        ) : (
+                            <div
+                                className="dossier-content"
+                                style={{ fontSize: '0.9rem' }}
+                                dangerouslySetInnerHTML={{ __html: renderMarkdown(note.text) }}
+                            />
+                        )}
+                    </div>
+                ))}
+            </div>
+        );
+    };
+
     // --- ADMIN PANEL ---
     const AdminPanel = ({ npc, onSave }) => {
         const [users, setUsers] = useState([]);
@@ -490,33 +787,35 @@
                     paddingBottom: '0.5rem', marginBottom: '1rem'
                 }}>ADMIN PANEL</h3>
 
-                {/* Reassign dropdown */}
-                <div style={{ marginBottom: '1.5rem' }}>
-                    <label className="text-secondary mono-text" style={{ fontSize: '0.8rem' }}>
-                        REASSIGN CONTACT
-                    </label>
-                    <select
-                        value={npc.assignedToId || ''}
-                        onChange={e => onSave({ assignedToId: parseInt(e.target.value) || null })}
-                        style={{
-                            display: 'block', marginTop: '0.25rem',
-                            background: 'transparent',
-                            border: '1px solid var(--accent-primary)',
-                            color: 'var(--text-primary)',
-                            padding: '0.5rem', width: '100%',
-                            fontFamily: 'var(--font-mono)',
-                            fontSize: '0.9rem', cursor: 'pointer'
-                        }}
-                    >
-                        <option value="" style={{ background: 'var(--bg-dark)' }}>-- Unassigned --</option>
-                        {users.map(user => (
-                            <option key={user.id} value={user.id}
-                                style={{ background: 'var(--bg-dark)', color: 'var(--text-primary)' }}>
-                                {user.username}
-                            </option>
-                        ))}
-                    </select>
-                </div>
+                {/* Reassign dropdown (player contacts only) */}
+                {!IS_NPC_DOSSIER && (
+                    <div style={{ marginBottom: '1.5rem' }}>
+                        <label className="text-secondary mono-text" style={{ fontSize: '0.8rem' }}>
+                            REASSIGN CONTACT
+                        </label>
+                        <select
+                            value={npc.assignedToId || ''}
+                            onChange={e => onSave({ assignedToId: parseInt(e.target.value) || null })}
+                            style={{
+                                display: 'block', marginTop: '0.25rem',
+                                background: 'transparent',
+                                border: '1px solid var(--accent-primary)',
+                                color: 'var(--text-primary)',
+                                padding: '0.5rem', width: '100%',
+                                fontFamily: 'var(--font-mono)',
+                                fontSize: '0.9rem', cursor: 'pointer'
+                            }}
+                        >
+                            <option value="" style={{ background: 'var(--bg-dark)' }}>-- Unassigned --</option>
+                            {users.map(user => (
+                                <option key={user.id} value={user.id}
+                                    style={{ background: 'var(--bg-dark)', color: 'var(--text-primary)' }}>
+                                    {user.username}
+                                </option>
+                            ))}
+                        </select>
+                    </div>
+                )}
 
                 {/* Delete button */}
                 <div>
@@ -579,7 +878,6 @@
         const saveTimerRef = useRef(null);
         const charRef = useRef(null);
 
-        // Load NPC data on mount
         useEffect(() => {
             fetchNPC();
         }, []);
@@ -601,7 +899,6 @@
             }
         };
 
-        // Debounced auto-save
         const saveNPC = useCallback(async (data) => {
             setSaveStatus('saving');
             try {
@@ -625,8 +922,6 @@
             }
         }, []);
 
-        // Full update: sets state (re-renders) + ref + schedules save.
-        // Use for structural changes (dropdown selections, state changes).
         const updateNPC = (updates) => {
             if (!IS_EDITOR) return;
             const updated = { ...charRef.current, ...updates };
@@ -640,8 +935,6 @@
             }, 1000);
         };
 
-        // Silent save: updates ref + state and sends to server.
-        // Safe with uncontrolled inputs (defaultValue) — typing is never interrupted.
         const quietSaveTimerRef = useRef(null);
         const saveNPCQuiet = useCallback((updates) => {
             if (!IS_EDITOR) return;
@@ -697,9 +990,20 @@
                     gap: '0.5rem',
                     borderBottom: '1px solid var(--border-color)'
                 }}>
-                    <h2 className="mono-text text-accent" style={{ fontSize: '1.2rem' }}>
-                        CONTACT DOSSIER
-                    </h2>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+                        <h2 className="mono-text text-accent" style={{ fontSize: '1.2rem' }}>
+                            {IS_NPC_DOSSIER ? 'NPC DOSSIER' : 'CONTACT DOSSIER'}
+                        </h2>
+                        {IS_NPC_DOSSIER && npc.agencyName && (
+                            <span className="mono-text" style={{
+                                fontSize: '0.75rem', color: 'var(--accent-warning)',
+                                border: '1px solid var(--accent-warning)',
+                                padding: '0.15rem 0.5rem',
+                            }}>
+                                {npc.agencyName}
+                            </span>
+                        )}
+                    </div>
                     <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem', alignItems: 'center' }}>
                         {!IS_EDITOR && (
                             <span className="mono-text" style={{
@@ -734,7 +1038,12 @@
 
                 <StateModule npc={npc} onSave={updateNPC} />
 
+                <AgencyModule npc={npc} onSave={updateNPC} />
+
                 <BioModule npc={npc} onSave={saveNPCQuiet} />
+
+                {/* Notes section - available on all dossiers */}
+                {IS_NPC_DOSSIER && <NotesModule npc={npc} />}
 
                 <AdminPanel npc={npc} onSave={updateNPC} />
             </div>

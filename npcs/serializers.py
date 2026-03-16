@@ -1,9 +1,21 @@
 """Manual JSON serialization for NPC model. No DRF dependency."""
 
 
+def serialize_npc_note(note):
+    """Single note data."""
+    return {
+        "id": note.id,
+        "author": note.author.username,
+        "authorId": note.author.id,
+        "text": note.text,
+        "createdAt": note.created_at.isoformat(),
+        "updatedAt": note.updated_at.isoformat(),
+    }
+
+
 def serialize_npc(npc):
     """Full NPC data for API responses."""
-    return {
+    data = {
         "id": npc.id,
         "name": npc.name,
         "image": npc.image.url if npc.image else None,
@@ -14,12 +26,22 @@ def serialize_npc(npc):
         "occupation": npc.occupation,
         "state": npc.state,
         "bio": npc.bio,
-        "assignedTo": npc.assigned_to.username,
-        "assignedToId": npc.assigned_to.id,
+        "assignedTo": npc.assigned_to.username if npc.assigned_to else None,
+        "assignedToId": npc.assigned_to.id if npc.assigned_to else None,
         "createdBy": npc.created_by.username if npc.created_by else None,
         "createdAt": npc.created_at.isoformat(),
         "updatedAt": npc.updated_at.isoformat(),
+        "isNpcDossier": npc.is_npc_dossier,
+        "agencyId": npc.agency_id,
+        "agencyName": npc.agency.name if npc.agency else None,
     }
+
+    # Include notes for NPC dossiers
+    if npc.is_npc_dossier:
+        notes = npc.notes.select_related("author").all()
+        data["notes"] = [serialize_npc_note(n) for n in notes]
+
+    return data
 
 
 def serialize_npc_summary(npc):
@@ -30,5 +52,7 @@ def serialize_npc_summary(npc):
         "image": npc.image.url if npc.image else None,
         "occupation": npc.occupation,
         "state": npc.state,
-        "assignedTo": npc.assigned_to.username,
+        "assignedTo": npc.assigned_to.username if npc.assigned_to else None,
+        "isNpcDossier": npc.is_npc_dossier,
+        "agencyName": npc.agency.name if npc.agency else None,
     }

@@ -21,11 +21,24 @@ class NPC(models.Model):
     state = models.CharField(max_length=20, choices=STATE_CHOICES, default="active")
     bio = models.TextField(blank=True, default="")
     assigned_to = models.ForeignKey(
-        User, on_delete=models.CASCADE, related_name="assigned_npcs"
+        User, on_delete=models.CASCADE, related_name="assigned_npcs",
+        blank=True, null=True,
     )
     created_by = models.ForeignKey(
         User, on_delete=models.SET_NULL, null=True, related_name="created_npcs"
     )
+
+    # NPC dossier fields
+    is_npc_dossier = models.BooleanField(
+        default=False,
+        help_text="NPC dossiers are admin-managed and linked to NPC agencies.",
+    )
+    agency = models.ForeignKey(
+        "agencies.Agency", on_delete=models.SET_NULL,
+        null=True, blank=True, related_name="npc_dossiers",
+        help_text="The NPC agency this dossier belongs to.",
+    )
+
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
@@ -33,4 +46,21 @@ class NPC(models.Model):
         ordering = ["-updated_at"]
 
     def __str__(self):
-        return f"{self.name} ({self.get_state_display()})"
+        prefix = "[NPC] " if self.is_npc_dossier else ""
+        return f"{prefix}{self.name} ({self.get_state_display()})"
+
+
+class NPCNote(models.Model):
+    """Player-submitted notes on NPC dossiers."""
+
+    npc = models.ForeignKey(NPC, on_delete=models.CASCADE, related_name="notes")
+    author = models.ForeignKey(User, on_delete=models.CASCADE, related_name="npc_notes")
+    text = models.TextField()
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+
+    def __str__(self):
+        return f"Note by {self.author.username} on {self.npc.name}"

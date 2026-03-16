@@ -15,6 +15,7 @@
     // Django context variables — outside verbatim block
     const CURRENT_USER = '{{ user.username }}';
     const CURRENT_USER_ID = {{ user.id }};
+    const IS_ADMIN = {{ user.is_superuser|yesno:"true,false" }};
     const CSRF_TOKEN = '{{ csrf_token }}';
 </script>
 {% verbatim %}
@@ -160,9 +161,21 @@
                     justifyContent: 'space-between',
                     alignItems: 'center',
                 }}>
-                    <span className="text-muted" style={{ fontSize: '0.75rem' }}>
-                        HANDLER: {npc.handler || 'UNASSIGNED'}
-                    </span>
+                    {npc.isNpcDossier ? (
+                        <span className="mono-text" style={{
+                            fontSize: '0.7rem',
+                            color: 'var(--accent-warning)',
+                            border: '1px solid var(--accent-warning)',
+                            padding: '0.1rem 0.4rem',
+                            letterSpacing: '1px',
+                        }}>
+                            {npc.agencyName || 'NPC'}
+                        </span>
+                    ) : (
+                        <span className="text-muted" style={{ fontSize: '0.75rem' }}>
+                            HANDLER: {npc.assignedTo || 'UNASSIGNED'}
+                        </span>
+                    )}
                     <span className="text-muted" style={{ fontSize: '0.75rem' }}>
                         ID: {String(npc.id).substring(0, 6)}
                     </span>
@@ -176,6 +189,7 @@
         const filters = [
             { key: 'all', label: 'ALL' },
             { key: 'my_contacts', label: 'MY CONTACTS' },
+            { key: 'npc_dossiers', label: 'NPC DOSSIERS' },
             { key: 'active', label: 'ACTIVE' },
             { key: 'deceased', label: 'DECEASED' },
         ];
@@ -212,12 +226,110 @@
         );
     };
 
+    // NPC agency selector for creating NPC dossiers
+    const CreateNPCDossierDialog = ({ agencies, onClose, onCreate }) => {
+        const [name, setName] = useState('NEW OPERATIVE');
+        const [agencyId, setAgencyId] = useState('');
+        const [creating, setCreating] = useState(false);
+
+        const handleCreate = async () => {
+            setCreating(true);
+            await onCreate(name, agencyId ? parseInt(agencyId) : null);
+        };
+
+        return (
+            <div style={{
+                position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
+                background: 'rgba(0,0,0,0.8)', display: 'flex',
+                alignItems: 'center', justifyContent: 'center', zIndex: 1000,
+            }} onClick={onClose}>
+                <div className="glass-panel" style={{
+                    padding: '2rem', maxWidth: '400px', width: '90%',
+                }} onClick={e => e.stopPropagation()}>
+                    <h3 className="mono-text text-accent" style={{
+                        marginBottom: '1.5rem',
+                        borderBottom: '1px solid var(--border-color)',
+                        paddingBottom: '0.5rem',
+                    }}>
+                        CREATE NPC DOSSIER
+                    </h3>
+
+                    <div style={{ marginBottom: '1rem' }}>
+                        <label className="text-secondary mono-text" style={{ fontSize: '0.8rem' }}>NAME</label>
+                        <input
+                            type="text"
+                            value={name}
+                            onChange={e => setName(e.target.value)}
+                            style={{
+                                display: 'block', width: '100%', marginTop: '0.25rem',
+                                background: 'transparent', border: '1px solid var(--border-color)',
+                                color: 'var(--text-primary)', padding: '0.5rem',
+                                fontFamily: 'var(--font-mono)',
+                            }}
+                        />
+                    </div>
+
+                    <div style={{ marginBottom: '1.5rem' }}>
+                        <label className="text-secondary mono-text" style={{ fontSize: '0.8rem' }}>AGENCY</label>
+                        <select
+                            value={agencyId}
+                            onChange={e => setAgencyId(e.target.value)}
+                            style={{
+                                display: 'block', width: '100%', marginTop: '0.25rem',
+                                background: 'transparent', border: '1px solid var(--border-color)',
+                                color: 'var(--text-primary)', padding: '0.5rem',
+                                fontFamily: 'var(--font-mono)', cursor: 'pointer',
+                            }}
+                        >
+                            <option value="" style={{ background: 'var(--bg-dark)' }}>-- No Agency --</option>
+                            {agencies.map(a => (
+                                <option key={a.id} value={a.id} style={{ background: 'var(--bg-dark)' }}>
+                                    {a.name}
+                                </option>
+                            ))}
+                        </select>
+                    </div>
+
+                    <div style={{ display: 'flex', gap: '0.5rem' }}>
+                        <button
+                            onClick={handleCreate}
+                            disabled={creating}
+                            className="mono-text"
+                            style={{
+                                flex: 1, background: 'var(--accent-primary)', border: 'none',
+                                color: 'var(--bg-dark)', padding: '0.6rem',
+                                cursor: creating ? 'wait' : 'pointer', fontWeight: 'bold',
+                                fontFamily: 'var(--font-mono)', fontSize: '0.85rem',
+                                opacity: creating ? 0.6 : 1,
+                            }}
+                        >
+                            {creating ? 'CREATING...' : 'CREATE'}
+                        </button>
+                        <button
+                            onClick={onClose}
+                            className="mono-text"
+                            style={{
+                                background: 'transparent', border: '1px solid var(--border-color)',
+                                color: 'var(--text-muted)', padding: '0.6rem 1rem',
+                                cursor: 'pointer', fontFamily: 'var(--font-mono)', fontSize: '0.85rem',
+                            }}
+                        >
+                            CANCEL
+                        </button>
+                    </div>
+                </div>
+            </div>
+        );
+    };
+
     // Main application component
     const DossierList = () => {
         const [npcs, setNpcs] = useState([]);
         const [loading, setLoading] = useState(true);
         const [creating, setCreating] = useState(false);
         const [activeFilter, setActiveFilter] = useState('all');
+        const [showNpcDialog, setShowNpcDialog] = useState(false);
+        const [npcAgencies, setNpcAgencies] = useState([]);
 
         useEffect(() => {
             fetchNpcs();
@@ -237,7 +349,20 @@
             }
         };
 
-        const createNpc = async () => {
+        const fetchNpcAgencies = async () => {
+            try {
+                const response = await fetch('/api/agencies/');
+                if (response.ok) {
+                    const data = await response.json();
+                    // Filter to NPC agencies only
+                    setNpcAgencies(data.filter(a => !a.isPlayerAgency));
+                }
+            } catch (err) {
+                console.error('Failed to fetch agencies:', err);
+            }
+        };
+
+        const createContact = async () => {
             setCreating(true);
             try {
                 const response = await fetch('/api/npcs/', {
@@ -261,10 +386,42 @@
             }
         };
 
+        const handleCreateNpcDossier = async () => {
+            await fetchNpcAgencies();
+            setShowNpcDialog(true);
+        };
+
+        const createNpcDossier = async (name, agencyId) => {
+            try {
+                const response = await fetch('/api/npcs/', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-CSRFToken': getCookie('csrftoken') || CSRF_TOKEN,
+                    },
+                    body: JSON.stringify({
+                        name: name,
+                        isNpcDossier: true,
+                        agencyId: agencyId,
+                    }),
+                });
+                if (response.ok) {
+                    const newNpc = await response.json();
+                    window.location.href = '/npcs/' + newNpc.id + '/';
+                } else {
+                    console.error('Failed to create NPC dossier');
+                }
+            } catch (err) {
+                console.error('Failed to create NPC dossier:', err);
+            }
+        };
+
         const getFilteredNpcs = () => {
             switch (activeFilter) {
                 case 'my_contacts':
-                    return npcs.filter(n => n.handler === CURRENT_USER);
+                    return npcs.filter(n => !n.isNpcDossier && n.assignedTo === CURRENT_USER);
+                case 'npc_dossiers':
+                    return npcs.filter(n => n.isNpcDossier);
                 case 'active':
                     return npcs.filter(n => n.state === 'active');
                 case 'deceased':
@@ -309,9 +466,12 @@
 
                     <FilterBar activeFilter={activeFilter} onFilterChange={setActiveFilter} />
 
-                    <div style={{ textAlign: 'right', marginBottom: '1.5rem' }}>
+                    <div style={{
+                        textAlign: 'right', marginBottom: '1.5rem',
+                        display: 'flex', gap: '0.5rem', justifyContent: 'flex-end', flexWrap: 'wrap',
+                    }}>
                         <button
-                            onClick={createNpc}
+                            onClick={createContact}
                             disabled={creating}
                             style={{
                                 background: 'var(--accent-primary)',
@@ -330,6 +490,27 @@
                         >
                             {creating ? 'INITIALIZING...' : 'CREATE NEW CONTACT'}
                         </button>
+
+                        {IS_ADMIN && (
+                            <button
+                                onClick={handleCreateNpcDossier}
+                                style={{
+                                    background: 'transparent',
+                                    border: '1px solid var(--accent-warning)',
+                                    color: 'var(--accent-warning)',
+                                    padding: '0.6rem 1.5rem',
+                                    cursor: 'pointer',
+                                    fontWeight: 'bold',
+                                    fontFamily: 'var(--font-mono)',
+                                    fontSize: '0.85rem',
+                                    letterSpacing: '1px',
+                                    borderRadius: 'var(--radius-sm)',
+                                    transition: 'opacity 0.2s',
+                                }}
+                            >
+                                CREATE NPC DOSSIER
+                            </button>
+                        )}
                     </div>
 
                     <div style={{
@@ -357,6 +538,14 @@
                         </p>
                     )}
                 </div>
+
+                {showNpcDialog && (
+                    <CreateNPCDossierDialog
+                        agencies={npcAgencies}
+                        onClose={() => setShowNpcDialog(false)}
+                        onCreate={createNpcDossier}
+                    />
+                )}
             </div>
         );
     };

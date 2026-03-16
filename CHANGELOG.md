@@ -1,5 +1,15 @@
 # Changelog
 
+## v0.3.0
+- Added NPC dossiers — admin-created dossiers that can be assigned to NPC agencies
+- NPC dossiers are read-only for players; only admins can edit demographics, bio, state, and images
+- Players can add, edit, and delete their own field notes on NPC dossiers (Markdown supported)
+- NPC dossier creation dialog with agency selector (admin only)
+- Agency badge displayed on NPC dossier cards in list view
+- "NPC DOSSIERS" filter tab on contact dossiers list page
+- Agency assignment module on NPC dossier detail page (admin can reassign)
+- NPC dossier detail header shows type label and agency badge
+
 ## v0.2.2
 - Fixed charter page blank — pinned marked.js to v14.1.4 (latest version removed marked.min.js)
 

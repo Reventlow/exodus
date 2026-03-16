@@ -7,4 +7,10 @@ urlpatterns = [
     path("api/npcs/", views.api_npc_list, name="api_npc_list"),
     path("api/npcs/<int:pk>/", views.api_npc_detail, name="api_npc_detail"),
     path("api/npcs/<int:pk>/image/", views.api_npc_image, name="api_npc_image"),
+    path("api/npcs/<int:pk>/notes/", views.api_npc_notes, name="api_npc_notes"),
+    path(
+        "api/npcs/<int:pk>/notes/<int:note_pk>/",
+        views.api_npc_note_detail,
+        name="api_npc_note_detail",
+    ),
 ]
