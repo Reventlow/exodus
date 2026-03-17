@@ -102,6 +102,31 @@
         return NATIONALITY_FLAGS[nationality.toLowerCase().trim()] || null;
     };
 
+    // Image lightbox modal
+    const ImageLightbox = ({ src, alt, onClose }) => {
+        if (!src) return null;
+        return (
+            <div
+                onClick={onClose}
+                style={{
+                    position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
+                    background: 'rgba(0,0,0,0.85)', display: 'flex',
+                    alignItems: 'center', justifyContent: 'center', zIndex: 2000,
+                    cursor: 'pointer',
+                }}
+            >
+                <img src={src} alt={alt || 'Image'}
+                    onClick={e => e.stopPropagation()}
+                    style={{
+                        maxWidth: '90vw', maxHeight: '90vh', objectFit: 'contain',
+                        border: '2px solid var(--border-color)', borderRadius: '4px',
+                        cursor: 'default',
+                    }}
+                />
+            </div>
+        );
+    };
+
     // State color mapping for NPC status
     const STATE_COLORS = {
         active: 'var(--accent-primary)',
@@ -125,27 +150,38 @@
     };
 
     // NPC portrait with state-colored border
-    const Portrait = ({ npc }) => {
+    const Portrait = ({ npc, onImageClick }) => {
         const color = getStateColor(npc.state);
         const firstLetter = npc.name ? npc.name.charAt(0).toUpperCase() : '?';
         const hasImage = !!npc.image;
 
+        const handleClick = (e) => {
+            if (hasImage && onImageClick) {
+                e.stopPropagation();
+                onImageClick(npc.image, npc.name);
+            }
+        };
+
         return (
-            <div style={{
-                width: '60px',
-                height: '60px',
-                borderRadius: '50%',
-                border: `2px solid ${color}`,
-                flexShrink: 0,
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                overflow: 'hidden',
-                background: hasImage ? 'transparent' : 'var(--bg-dark)',
-                backgroundImage: hasImage ? `url(${npc.image})` : 'none',
-                backgroundSize: 'cover',
-                backgroundPosition: 'center',
-            }}>
+            <div
+                onClick={handleClick}
+                style={{
+                    width: '60px',
+                    height: '60px',
+                    borderRadius: '50%',
+                    border: `2px solid ${color}`,
+                    flexShrink: 0,
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    overflow: 'hidden',
+                    background: hasImage ? 'transparent' : 'var(--bg-dark)',
+                    backgroundImage: hasImage ? `url(${npc.image})` : 'none',
+                    backgroundSize: 'cover',
+                    backgroundPosition: 'center',
+                    cursor: hasImage ? 'zoom-in' : 'default',
+                }}
+            >
                 {!hasImage && (
                     <span className="mono-text" style={{
                         fontSize: '1.4rem',
@@ -160,7 +196,7 @@
     };
 
     // NPC card component
-    const NPCCard = ({ npc, onClick }) => {
+    const NPCCard = ({ npc, onClick, onImageClick }) => {
         const stateColor = getStateColor(npc.state);
 
         return (
@@ -175,7 +211,7 @@
             >
                 <div style={{ display: 'flex', gap: '1rem', alignItems: 'flex-start' }}>
                     <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', flexShrink: 0 }}>
-                        <Portrait npc={npc} />
+                        <Portrait npc={npc} onImageClick={onImageClick} />
                         {getNationalityFlag(npc.nationality) && (
                             <span style={{ fontSize: '1.2rem', marginTop: '0.25rem' }}>
                                 {getNationalityFlag(npc.nationality)}
@@ -395,6 +431,7 @@
         const [activeFilter, setActiveFilter] = useState('all');
         const [showNpcDialog, setShowNpcDialog] = useState(false);
         const [npcAgencies, setNpcAgencies] = useState([]);
+        const [lightbox, setLightbox] = useState(null);
 
         useEffect(() => {
             fetchNpcs();
@@ -589,6 +626,7 @@
                                 key={npc.id}
                                 npc={npc}
                                 onClick={() => { window.location.href = '/npcs/' + npc.id + '/'; }}
+                                onImageClick={(src, alt) => setLightbox({ src, alt })}
                             />
                         ))}
                     </div>
@@ -609,6 +647,14 @@
                         agencies={npcAgencies}
                         onClose={() => setShowNpcDialog(false)}
                         onCreate={createNpcDossier}
+                    />
+                )}
+
+                {lightbox && (
+                    <ImageLightbox
+                        src={lightbox.src}
+                        alt={lightbox.alt}
+                        onClose={() => setLightbox(null)}
                     />
                 )}
             </div>

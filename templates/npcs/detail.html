@@ -115,13 +115,47 @@
     ];
 
     // --- PROFILE PICTURE MODULE ---
+    // Image lightbox modal
+    const ImageLightbox = ({ src, alt, onClose }) => {
+        if (!src) return null;
+        return (
+            <div
+                onClick={onClose}
+                style={{
+                    position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
+                    background: 'rgba(0,0,0,0.85)', display: 'flex',
+                    alignItems: 'center', justifyContent: 'center', zIndex: 2000,
+                    cursor: 'pointer',
+                }}
+            >
+                <img src={src} alt={alt || 'Image'}
+                    onClick={e => e.stopPropagation()}
+                    style={{
+                        maxWidth: '90vw', maxHeight: '90vh', objectFit: 'contain',
+                        border: '2px solid var(--border-color)', borderRadius: '4px',
+                        cursor: 'default',
+                    }}
+                />
+            </div>
+        );
+    };
+
     const ProfilePictureModule = ({ npc, onImageUploaded }) => {
         const [uploading, setUploading] = useState(false);
+        const [hoverEdit, setHoverEdit] = useState(false);
+        const [showLightbox, setShowLightbox] = useState(false);
         const fileInputRef = useRef(null);
 
-        const handleClick = () => {
+        const handleEditClick = (e) => {
+            e.stopPropagation();
             if (IS_EDITOR && fileInputRef.current) {
                 fileInputRef.current.click();
+            }
+        };
+
+        const handleImageClick = () => {
+            if (npc.image) {
+                setShowLightbox(true);
             }
         };
 
@@ -164,12 +198,14 @@
                 display: 'flex', justifyContent: 'center'
             }}>
                 <div
-                    onClick={handleClick}
+                    onClick={handleImageClick}
+                    onMouseEnter={() => setHoverEdit(true)}
+                    onMouseLeave={() => setHoverEdit(false)}
                     style={{
                         width: '150px', height: '150px', borderRadius: '50%',
                         border: '3px solid ' + stateColor,
                         overflow: 'hidden', position: 'relative',
-                        cursor: IS_EDITOR ? 'pointer' : 'default',
+                        cursor: npc.image ? 'zoom-in' : 'default',
                         background: 'rgba(0,0,0,0.3)',
                         display: 'flex', alignItems: 'center', justifyContent: 'center'
                     }}
@@ -181,6 +217,24 @@
                             }} />
                     ) : (
                         <Icon name="user" size={48} className="text-muted" />
+                    )}
+
+                    {IS_EDITOR && hoverEdit && !uploading && (
+                        <div
+                            onClick={handleEditClick}
+                            style={{
+                                position: 'absolute', bottom: 0, left: 0,
+                                width: '100%', height: '40%',
+                                background: 'rgba(0,0,0,0.7)',
+                                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                cursor: 'pointer',
+                            }}
+                        >
+                            <span className="mono-text" style={{
+                                fontSize: '0.7rem', color: 'var(--accent-primary)',
+                                fontWeight: 'bold', letterSpacing: '1px',
+                            }}>EDIT</span>
+                        </div>
                     )}
 
                     {uploading && (
@@ -205,6 +259,14 @@
                     onChange={handleFileChange}
                     style={{ display: 'none' }}
                 />
+
+                {showLightbox && (
+                    <ImageLightbox
+                        src={npc.image}
+                        alt={npc.name}
+                        onClose={() => setShowLightbox(false)}
+                    />
+                )}
             </div>
         );
     };
