@@ -105,7 +105,7 @@
     // Image lightbox modal
     const ImageLightbox = ({ src, alt, onClose }) => {
         if (!src) return null;
-        return (
+        return ReactDOM.createPortal(
             <div
                 onClick={onClose}
                 style={{
@@ -123,7 +123,8 @@
                         cursor: 'default',
                     }}
                 />
-            </div>
+            </div>,
+            document.body
         );
     };
 

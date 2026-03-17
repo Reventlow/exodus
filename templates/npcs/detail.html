@@ -115,10 +115,10 @@
     ];
 
     // --- PROFILE PICTURE MODULE ---
-    // Image lightbox modal
+    // Image lightbox modal (rendered via portal to avoid overflow clipping)
     const ImageLightbox = ({ src, alt, onClose }) => {
         if (!src) return null;
-        return (
+        return ReactDOM.createPortal(
             <div
                 onClick={onClose}
                 style={{
@@ -136,7 +136,8 @@
                         cursor: 'default',
                     }}
                 />
-            </div>
+            </div>,
+            document.body
         );
     };
 
