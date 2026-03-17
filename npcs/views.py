@@ -158,6 +158,37 @@ def api_npc_detail(request, pk):
             else:
                 npc.agency = None
 
+        # Admin transfer: convert between player dossier and NPC dossier
+        if "transfer" in data and request.user.is_superuser:
+            transfer = data["transfer"]
+            target_type = transfer.get("type")  # "player" or "agency"
+
+            if target_type == "player":
+                # Transfer to a player — convert to player dossier
+                user_id = transfer.get("userId")
+                if user_id:
+                    try:
+                        new_user = User.objects.get(pk=user_id)
+                        npc.is_npc_dossier = False
+                        npc.assigned_to = new_user
+                        npc.agency = None
+                    except User.DoesNotExist:
+                        pass
+
+            elif target_type == "agency":
+                # Transfer to an NPC agency — convert to NPC dossier
+                agency_id = transfer.get("agencyId")
+                if agency_id:
+                    try:
+                        agency = Agency.objects.get(
+                            pk=agency_id, is_player_agency=False
+                        )
+                        npc.is_npc_dossier = True
+                        npc.agency = agency
+                        npc.assigned_to = None
+                    except Agency.DoesNotExist:
+                        pass
+
         npc.save()
         return JsonResponse(serialize_npc(npc))
 

@@ -739,10 +739,16 @@
     // --- ADMIN PANEL ---
     const AdminPanel = ({ npc, onSave }) => {
         const [users, setUsers] = useState([]);
+        const [agencies, setAgencies] = useState([]);
         const [confirmDelete, setConfirmDelete] = useState(false);
+        const [transferMode, setTransferMode] = useState(null); // null, 'player', 'agency'
+        const [transferTarget, setTransferTarget] = useState('');
+        const [confirmTransfer, setConfirmTransfer] = useState(false);
+        const [transferring, setTransferring] = useState(false);
 
         useEffect(() => {
             fetchUsers();
+            fetchAgencies();
         }, []);
 
         const fetchUsers = async () => {
@@ -755,6 +761,53 @@
             } catch (err) {
                 console.error('Failed to fetch users:', err);
             }
+        };
+
+        const fetchAgencies = async () => {
+            try {
+                const response = await fetch('/api/agencies/');
+                if (response.ok) {
+                    const data = await response.json();
+                    setAgencies(data.filter(a => !a.isPlayerAgency));
+                }
+            } catch (err) {
+                console.error('Failed to fetch agencies:', err);
+            }
+        };
+
+        const handleTransfer = async () => {
+            if (!transferTarget) return;
+            setTransferring(true);
+            try {
+                const transfer = transferMode === 'player'
+                    ? { type: 'player', userId: parseInt(transferTarget) }
+                    : { type: 'agency', agencyId: parseInt(transferTarget) };
+
+                const response = await fetch('/api/npcs/' + NPC_ID + '/', {
+                    method: 'PUT',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-CSRFToken': getCookie('csrftoken') || CSRF_TOKEN,
+                    },
+                    body: JSON.stringify({ transfer }),
+                });
+                if (response.ok) {
+                    // Reload page to reflect new dossier type
+                    window.location.reload();
+                } else {
+                    console.error('Transfer failed:', response.status);
+                }
+            } catch (err) {
+                console.error('Transfer error:', err);
+            } finally {
+                setTransferring(false);
+            }
+        };
+
+        const resetTransfer = () => {
+            setTransferMode(null);
+            setTransferTarget('');
+            setConfirmTransfer(false);
         };
 
         const handleDelete = async () => {
@@ -777,6 +830,16 @@
 
         if (!IS_ADMIN) return null;
 
+        // Build transfer label for confirmation
+        const getTransferLabel = () => {
+            if (transferMode === 'player') {
+                const u = users.find(u => u.id === parseInt(transferTarget));
+                return u ? u.displayName : '?';
+            }
+            const a = agencies.find(a => a.id === parseInt(transferTarget));
+            return a ? a.name : '?';
+        };
+
         return (
             <div className="glass-panel" style={{
                 padding: '1.5rem', marginBottom: '1rem',
@@ -788,7 +851,7 @@
                 }}>ADMIN PANEL</h3>
 
                 {/* Reassign dropdown (player contacts only) */}
-                {!IS_NPC_DOSSIER && (
+                {!npc.isNpcDossier && (
                     <div style={{ marginBottom: '1.5rem' }}>
                         <label className="text-secondary mono-text" style={{ fontSize: '0.8rem' }}>
                             REASSIGN CONTACT
@@ -810,12 +873,181 @@
                             {users.map(user => (
                                 <option key={user.id} value={user.id}
                                     style={{ background: 'var(--bg-dark)', color: 'var(--text-primary)' }}>
-                                    {user.username}
+                                    {user.displayName}
                                 </option>
                             ))}
                         </select>
                     </div>
                 )}
+
+                {/* Transfer dossier */}
+                <div style={{ marginBottom: '1.5rem' }}>
+                    <label className="text-secondary mono-text" style={{
+                        fontSize: '0.8rem', display: 'block', marginBottom: '0.5rem'
+                    }}>
+                        TRANSFER DOSSIER
+                    </label>
+
+                    {!transferMode ? (
+                        <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+                            <button
+                                onClick={() => setTransferMode('player')}
+                                className="mono-text"
+                                style={{
+                                    background: 'transparent',
+                                    border: '1px solid var(--accent-primary)',
+                                    color: 'var(--accent-primary)',
+                                    padding: '0.4rem 1rem',
+                                    cursor: 'pointer', fontSize: '0.8rem',
+                                    fontFamily: 'var(--font-mono)',
+                                }}
+                            >
+                                TO PLAYER
+                            </button>
+                            <button
+                                onClick={() => setTransferMode('agency')}
+                                className="mono-text"
+                                style={{
+                                    background: 'transparent',
+                                    border: '1px solid var(--accent-warning)',
+                                    color: 'var(--accent-warning)',
+                                    padding: '0.4rem 1rem',
+                                    cursor: 'pointer', fontSize: '0.8rem',
+                                    fontFamily: 'var(--font-mono)',
+                                }}
+                            >
+                                TO AGENCY
+                            </button>
+                        </div>
+                    ) : !confirmTransfer ? (
+                        <div>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.5rem' }}>
+                                <span className="mono-text" style={{
+                                    fontSize: '0.75rem',
+                                    color: transferMode === 'player' ? 'var(--accent-primary)' : 'var(--accent-warning)',
+                                }}>
+                                    {transferMode === 'player' ? 'SELECT PLAYER' : 'SELECT AGENCY'}
+                                </span>
+                            </div>
+                            <select
+                                value={transferTarget}
+                                onChange={e => setTransferTarget(e.target.value)}
+                                style={{
+                                    display: 'block',
+                                    background: 'transparent',
+                                    border: `1px solid ${transferMode === 'player' ? 'var(--accent-primary)' : 'var(--accent-warning)'}`,
+                                    color: 'var(--text-primary)',
+                                    padding: '0.5rem', width: '100%',
+                                    fontFamily: 'var(--font-mono)',
+                                    fontSize: '0.9rem', cursor: 'pointer',
+                                    marginBottom: '0.5rem',
+                                }}
+                            >
+                                <option value="" style={{ background: 'var(--bg-dark)' }}>
+                                    -- {transferMode === 'player' ? 'Select Player' : 'Select Agency'} --
+                                </option>
+                                {transferMode === 'player'
+                                    ? users.map(u => (
+                                        <option key={u.id} value={u.id}
+                                            style={{ background: 'var(--bg-dark)', color: 'var(--text-primary)' }}>
+                                            {u.displayName}
+                                        </option>
+                                    ))
+                                    : agencies.map(a => (
+                                        <option key={a.id} value={a.id}
+                                            style={{ background: 'var(--bg-dark)', color: 'var(--text-primary)' }}>
+                                            {a.name}
+                                        </option>
+                                    ))
+                                }
+                            </select>
+                            <div style={{ display: 'flex', gap: '0.5rem' }}>
+                                <button
+                                    onClick={() => transferTarget && setConfirmTransfer(true)}
+                                    disabled={!transferTarget}
+                                    className="mono-text"
+                                    style={{
+                                        background: transferTarget ? 'var(--accent-warning)' : 'transparent',
+                                        border: transferTarget ? 'none' : '1px solid var(--border-color)',
+                                        color: transferTarget ? 'var(--bg-dark)' : 'var(--text-muted)',
+                                        padding: '0.4rem 1rem',
+                                        cursor: transferTarget ? 'pointer' : 'default',
+                                        fontSize: '0.8rem', fontWeight: 'bold',
+                                        fontFamily: 'var(--font-mono)',
+                                    }}
+                                >
+                                    TRANSFER
+                                </button>
+                                <button
+                                    onClick={resetTransfer}
+                                    className="mono-text"
+                                    style={{
+                                        background: 'transparent',
+                                        border: '1px solid var(--border-color)',
+                                        color: 'var(--text-muted)',
+                                        padding: '0.4rem 1rem',
+                                        cursor: 'pointer', fontSize: '0.8rem',
+                                        fontFamily: 'var(--font-mono)',
+                                    }}
+                                >
+                                    CANCEL
+                                </button>
+                            </div>
+                        </div>
+                    ) : (
+                        <div>
+                            <p className="mono-text" style={{
+                                fontSize: '0.85rem', color: 'var(--accent-warning)',
+                                marginBottom: '0.75rem',
+                            }}>
+                                Transfer "{npc.name}" to {transferMode === 'player' ? 'player' : 'agency'}: <strong>{getTransferLabel()}</strong>?
+                                {npc.isNpcDossier && transferMode === 'player' && (
+                                    <span style={{ display: 'block', marginTop: '0.25rem', fontSize: '0.75rem', color: 'var(--text-muted)' }}>
+                                        This will convert the NPC dossier into a player contact.
+                                    </span>
+                                )}
+                                {!npc.isNpcDossier && transferMode === 'agency' && (
+                                    <span style={{ display: 'block', marginTop: '0.25rem', fontSize: '0.75rem', color: 'var(--text-muted)' }}>
+                                        This will convert the player contact into an NPC dossier.
+                                    </span>
+                                )}
+                            </p>
+                            <div style={{ display: 'flex', gap: '0.5rem' }}>
+                                <button
+                                    onClick={handleTransfer}
+                                    disabled={transferring}
+                                    className="mono-text"
+                                    style={{
+                                        background: 'var(--accent-warning)',
+                                        border: 'none',
+                                        color: 'var(--bg-dark)',
+                                        padding: '0.4rem 1rem',
+                                        cursor: transferring ? 'wait' : 'pointer',
+                                        fontSize: '0.8rem', fontWeight: 'bold',
+                                        fontFamily: 'var(--font-mono)',
+                                        opacity: transferring ? 0.6 : 1,
+                                    }}
+                                >
+                                    {transferring ? 'TRANSFERRING...' : 'CONFIRM TRANSFER'}
+                                </button>
+                                <button
+                                    onClick={resetTransfer}
+                                    className="mono-text"
+                                    style={{
+                                        background: 'transparent',
+                                        border: '1px solid var(--border-color)',
+                                        color: 'var(--text-muted)',
+                                        padding: '0.4rem 1rem',
+                                        cursor: 'pointer', fontSize: '0.8rem',
+                                        fontFamily: 'var(--font-mono)',
+                                    }}
+                                >
+                                    CANCEL
+                                </button>
+                            </div>
+                        </div>
+                    )}
+                </div>
 
                 {/* Delete button */}
                 <div>

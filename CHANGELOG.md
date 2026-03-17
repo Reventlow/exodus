@@ -1,6 +1,8 @@
 # Changelog
 
 ## v0.3.1
+- Dossier transfers — superusers can transfer dossiers between players, from player to agency (converts to NPC dossier), from agency to player (converts to player contact), and between agencies
+- Player dossiers now show "BIFROST UNION" badge on the list page, matching how NPC dossiers display their agency
 - Fixed occupation field too small on dossier detail page — now spans full grid width in both read-only and editable views
 - Fixed occupation text truncated on dossier list cards — text now wraps instead of clipping
 
