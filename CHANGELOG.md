@@ -1,5 +1,8 @@
 # Changelog
 
+## v0.4.1
+- Fixed notes columns in agency tables (assets, fleet, projects) getting cut off — now renders as resizable textareas
+
 ## v0.4.0
 - Django admin user list now shows active status, last login, and staff/superuser columns
 - Registration now requires admin approval — new accounts are created as inactive until a superuser activates them via Django admin
