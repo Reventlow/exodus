@@ -46,6 +46,62 @@
         return <i data-lucide={name} width={size} height={size} className={className}></i>;
     };
 
+    // Nationality to flag emoji mapping
+    const NATIONALITY_FLAGS = {
+        'afghan': '🇦🇫', 'albanian': '🇦🇱', 'algerian': '🇩🇿', 'american': '🇺🇸',
+        'andorran': '🇦🇩', 'angolan': '🇦🇴', 'argentine': '🇦🇷', 'argentinian': '🇦🇷',
+        'armenian': '🇦🇲', 'australian': '🇦🇺', 'austrian': '🇦🇹', 'azerbaijani': '🇦🇿',
+        'bahamian': '🇧🇸', 'bahraini': '🇧🇭', 'bangladeshi': '🇧🇩', 'barbadian': '🇧🇧',
+        'belarusian': '🇧🇾', 'belgian': '🇧🇪', 'belizean': '🇧🇿', 'beninese': '🇧🇯',
+        'bhutanese': '🇧🇹', 'bolivian': '🇧🇴', 'bosnian': '🇧🇦', 'brazilian': '🇧🇷',
+        'british': '🇬🇧', 'bruneian': '🇧🇳', 'bulgarian': '🇧🇬', 'burkinabe': '🇧🇫',
+        'burmese': '🇲🇲', 'burundian': '🇧🇮', 'cambodian': '🇰🇭', 'cameroonian': '🇨🇲',
+        'canadian': '🇨🇦', 'cape verdean': '🇨🇻', 'central african': '🇨🇫',
+        'chadian': '🇹🇩', 'chilean': '🇨🇱', 'chinese': '🇨🇳', 'colombian': '🇨🇴',
+        'comorian': '🇰🇲', 'congolese': '🇨🇬', 'costa rican': '🇨🇷', 'croatian': '🇭🇷',
+        'cuban': '🇨🇺', 'cypriot': '🇨🇾', 'czech': '🇨🇿', 'danish': '🇩🇰',
+        'djiboutian': '🇩🇯', 'dominican': '🇩🇴', 'dutch': '🇳🇱', 'ecuadorian': '🇪🇨',
+        'egyptian': '🇪🇬', 'emirati': '🇦🇪', 'english': '🏴󠁧󠁢󠁥󠁮󠁧󠁿',
+        'equatorial guinean': '🇬🇶', 'eritrean': '🇪🇷', 'estonian': '🇪🇪',
+        'ethiopian': '🇪🇹', 'fijian': '🇫🇯', 'filipino': '🇵🇭', 'finnish': '🇫🇮',
+        'french': '🇫🇷', 'gabonese': '🇬🇦', 'gambian': '🇬🇲', 'georgian': '🇬🇪',
+        'german': '🇩🇪', 'ghanaian': '🇬🇭', 'greek': '🇬🇷', 'grenadian': '🇬🇩',
+        'guatemalan': '🇬🇹', 'guinean': '🇬🇳', 'guyanese': '🇬🇾', 'haitian': '🇭🇹',
+        'honduran': '🇭🇳', 'hungarian': '🇭🇺', 'icelandic': '🇮🇸', 'indian': '🇮🇳',
+        'indonesian': '🇮🇩', 'iranian': '🇮🇷', 'iraqi': '🇮🇶', 'irish': '🇮🇪',
+        'israeli': '🇮🇱', 'italian': '🇮🇹', 'ivorian': '🇨🇮', 'jamaican': '🇯🇲',
+        'japanese': '🇯🇵', 'jordanian': '🇯🇴', 'kazakh': '🇰🇿', 'kenyan': '🇰🇪',
+        'korean': '🇰🇷', 'south korean': '🇰🇷', 'north korean': '🇰🇵',
+        'kosovar': '🇽🇰', 'kuwaiti': '🇰🇼', 'kyrgyz': '🇰🇬', 'lao': '🇱🇦',
+        'latvian': '🇱🇻', 'lebanese': '🇱🇧', 'liberian': '🇱🇷', 'libyan': '🇱🇾',
+        'liechtensteiner': '🇱🇮', 'lithuanian': '🇱🇹', 'luxembourgish': '🇱🇺',
+        'macedonian': '🇲🇰', 'malagasy': '🇲🇬', 'malawian': '🇲🇼', 'malaysian': '🇲🇾',
+        'maldivian': '🇲🇻', 'malian': '🇲🇱', 'maltese': '🇲🇹', 'mauritanian': '🇲🇷',
+        'mauritian': '🇲🇺', 'mexican': '🇲🇽', 'moldovan': '🇲🇩', 'monacan': '🇲🇨',
+        'mongolian': '🇲🇳', 'montenegrin': '🇲🇪', 'moroccan': '🇲🇦',
+        'mozambican': '🇲🇿', 'namibian': '🇳🇦', 'nepalese': '🇳🇵', 'nepali': '🇳🇵',
+        'new zealander': '🇳🇿', 'nicaraguan': '🇳🇮', 'nigerien': '🇳🇪',
+        'nigerian': '🇳🇬', 'norwegian': '🇳🇴', 'omani': '🇴🇲', 'pakistani': '🇵🇰',
+        'palestinian': '🇵🇸', 'panamanian': '🇵🇦', 'paraguayan': '🇵🇾',
+        'peruvian': '🇵🇪', 'polish': '🇵🇱', 'portuguese': '🇵🇹', 'qatari': '🇶🇦',
+        'romanian': '🇷🇴', 'russian': '🇷🇺', 'rwandan': '🇷🇼', 'saudi': '🇸🇦',
+        'saudi arabian': '🇸🇦', 'scottish': '🏴󠁧󠁢󠁳󠁣󠁴󠁿', 'senegalese': '🇸🇳',
+        'serbian': '🇷🇸', 'sierra leonean': '🇸🇱', 'singaporean': '🇸🇬',
+        'slovak': '🇸🇰', 'slovenian': '🇸🇮', 'somali': '🇸🇴', 'south african': '🇿🇦',
+        'spanish': '🇪🇸', 'sri lankan': '🇱🇰', 'sudanese': '🇸🇩', 'surinamese': '🇸🇷',
+        'swazi': '🇸🇿', 'swedish': '🇸🇪', 'swiss': '🇨🇭', 'syrian': '🇸🇾',
+        'taiwanese': '🇹🇼', 'tajik': '🇹🇯', 'tanzanian': '🇹🇿', 'thai': '🇹🇭',
+        'togolese': '🇹🇬', 'trinidadian': '🇹🇹', 'tunisian': '🇹🇳', 'turkish': '🇹🇷',
+        'turkmen': '🇹🇲', 'ugandan': '🇺🇬', 'ukrainian': '🇺🇦', 'uruguayan': '🇺🇾',
+        'uzbek': '🇺🇿', 'venezuelan': '🇻🇪', 'vietnamese': '🇻🇳', 'welsh': '🏴󠁧󠁢󠁷󠁬󠁳󠁿',
+        'yemeni': '🇾🇪', 'zambian': '🇿🇲', 'zimbabwean': '🇿🇼',
+    };
+
+    const getNationalityFlag = (nationality) => {
+        if (!nationality) return null;
+        return NATIONALITY_FLAGS[nationality.toLowerCase().trim()] || null;
+    };
+
     // State color mapping for NPC status
     const STATE_COLORS = {
         active: 'var(--accent-primary)',
@@ -118,7 +174,14 @@
                 onClick={onClick}
             >
                 <div style={{ display: 'flex', gap: '1rem', alignItems: 'flex-start' }}>
-                    <Portrait npc={npc} />
+                    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', flexShrink: 0 }}>
+                        <Portrait npc={npc} />
+                        {getNationalityFlag(npc.nationality) && (
+                            <span style={{ fontSize: '1.2rem', marginTop: '0.25rem' }}>
+                                {getNationalityFlag(npc.nationality)}
+                            </span>
+                        )}
+                    </div>
                     <div style={{ flex: 1, minWidth: 0 }}>
                         <h3 className="text-accent mono-text" style={{
                             fontSize: '1.1rem',

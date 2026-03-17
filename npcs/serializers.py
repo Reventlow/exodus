@@ -50,6 +50,7 @@ def serialize_npc_summary(npc):
         "id": npc.id,
         "name": npc.name,
         "image": npc.image.url if npc.image else None,
+        "nationality": npc.nationality,
         "occupation": npc.occupation,
         "state": npc.state,
         "assignedTo": npc.assigned_to.username if npc.assigned_to else None,
