@@ -1,5 +1,9 @@
 # Changelog
 
+## v0.3.3
+- Added explainer text on operatives page describing its purpose to players
+- Fixed dossier names being cut off on list cards — names now wrap instead of truncating
+
 ## v0.3.2
 - Dossier transfers — superusers can transfer dossiers between players, from player to agency (converts to NPC dossier), from agency to player (converts to player contact), and between agencies
 - Player dossiers now show "BIFROST UNION" badge on the list page, matching how NPC dossiers display their agency
