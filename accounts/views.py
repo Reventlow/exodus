@@ -20,7 +20,18 @@ def login_view(request):
             next_url = request.GET.get("next", "/")
             return redirect(next_url)
         else:
-            messages.error(request, "ACCESS DENIED. Invalid credentials.")
+            # Check if account exists but is inactive (pending approval)
+            try:
+                pending = User.objects.get(username=username)
+                if not pending.is_active:
+                    messages.error(
+                        request,
+                        "ACCOUNT PENDING. Awaiting administrator approval.",
+                    )
+                else:
+                    messages.error(request, "ACCESS DENIED. Invalid credentials.")
+            except User.DoesNotExist:
+                messages.error(request, "ACCESS DENIED. Invalid credentials.")
 
     return render(request, "accounts/login.html")
 
@@ -55,10 +66,15 @@ def register_view(request):
             for error in errors:
                 messages.error(request, error)
         else:
-            user = User.objects.create_user(username=username, password=password)
-            login(request, user)
-            messages.success(request, "OPERATIVE REGISTERED. Welcome, Agent.")
-            return redirect("/")
+            user = User.objects.create_user(
+                username=username, password=password, is_active=False
+            )
+            messages.success(
+                request,
+                "REGISTRATION SUBMITTED. Your account requires administrator "
+                "approval before access is granted.",
+            )
+            return redirect("accounts:login")
 
     return render(request, "accounts/register.html")
 

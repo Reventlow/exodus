@@ -1,5 +1,9 @@
 # Changelog
 
+## v0.3.6
+- Registration now requires admin approval — new accounts are created as inactive until a superuser activates them via Django admin
+- Inactive users see "ACCOUNT PENDING" message on login instead of generic "invalid credentials"
+
 ## v0.3.5
 - Fixed lightbox clipping — image overlay now renders at document root via portal
 
