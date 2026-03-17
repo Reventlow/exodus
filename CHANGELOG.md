@@ -1,5 +1,8 @@
 # Changelog
 
+## v0.4.2
+- Added favicon — cyan X with crosshair and corner brackets on dark navy, matching the BLACKLOG.NET theme
+
 ## v0.4.1
 - Fixed notes columns in agency tables (assets, fleet, projects) getting cut off — now renders as resizable textareas
 
