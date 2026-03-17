@@ -1,5 +1,8 @@
 # Changelog
 
+## v0.4.3
+- Redesigned favicon — overlapping EX monogram with white E and cyan X on dark navy
+
 ## v0.4.2
 - Added favicon — cyan X with crosshair and corner brackets on dark navy, matching the BLACKLOG.NET theme
 
