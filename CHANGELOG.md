@@ -1,5 +1,11 @@
 # Changelog
 
+## v0.3.4
+- Image lightbox on dossier pages — clicking a portrait shows the full-size image in an overlay
+- Edit overlay on detail page portrait — hovering the bottom of the image reveals an EDIT button for users with access
+- Added explainer text on operatives page describing its purpose to players
+- Fixed dossier names being cut off on list cards — names now wrap instead of truncating
+
 ## v0.3.3
 - Added explainer text on operatives page describing its purpose to players
 - Fixed dossier names being cut off on list cards — names now wrap instead of truncating
