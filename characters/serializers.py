@@ -27,6 +27,7 @@ def serialize_character(character):
         "flaws": character.flaws,
         "pullingStrings": character.pulling_strings,
         "inventory": character.inventory,
+        "specialisations": character.specialisations,
         "experience": character.experience,
         "willpower": {"current": character.willpower_current},
     }

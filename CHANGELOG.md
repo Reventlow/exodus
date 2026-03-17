@@ -1,5 +1,9 @@
 # Changelog
 
+## v0.4.4
+- Added skill specialisations to operative character sheets — select a skill and name the specialisation (e.g., Firearms: Pistols)
+- Specialisations panel with add/remove, auto-save, and read-only view for non-owners
+
 ## v0.4.3
 - Redesigned favicon — overlapping EX monogram with white E and cyan X on dark navy
 

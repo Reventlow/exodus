@@ -82,6 +82,7 @@ class Character(models.Model):
     flaws = models.JSONField(default=list)
     pulling_strings = models.JSONField(default=list)
     inventory = models.JSONField(default=list)
+    specialisations = models.JSONField(default=list)  # [{skill, name}]
 
     # Experience
     experience = models.IntegerField(default=0)

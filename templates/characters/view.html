@@ -52,6 +52,7 @@
         flaws: [],
         pullingStrings: [],
         inventory: [],
+        specialisations: [],
         health: { bashing: 0, lethal: 0, aggravated: 0 },
         willpower: { current: 0, max_mod: 0 },
         size: 5,
@@ -280,6 +281,38 @@
             </div>
         );
     };
+
+    // --- SPECIALISATIONS MODULE (read-only) ---
+    const SpecialisationsModule = ({ specialisations }) => (
+        <div className="glass-panel" style={{ padding: '1.5rem', marginBottom: '1rem' }}>
+            <h3 className="mono-text text-accent" style={{
+                borderBottom: '1px solid var(--border-color)',
+                paddingBottom: '0.5rem', marginBottom: '1rem'
+            }}>SPECIALISATIONS</h3>
+            {specialisations.map((spec, idx) => (
+                <div key={idx} className="tech-border" style={{
+                    padding: '0.5rem', marginBottom: '0.5rem', background: 'rgba(0,0,0,0.2)',
+                    display: 'flex', gap: '0.5rem', alignItems: 'center'
+                }}>
+                    <span style={{
+                        color: 'var(--accent-primary)',
+                        fontFamily: 'var(--font-mono)', fontSize: '0.85rem',
+                        minWidth: '120px'
+                    }}>
+                        {spec.skill || <span className="text-muted">—</span>}
+                    </span>
+                    <span style={{ color: 'var(--text-primary)', fontFamily: 'var(--font-mono)' }}>
+                        {spec.name || <span className="text-muted">Unnamed</span>}
+                    </span>
+                </div>
+            ))}
+            {specialisations.length === 0 && (
+                <p className="text-muted text-center" style={{ fontSize: '0.8rem', fontStyle: 'italic' }}>
+                    No specialisations recorded.
+                </p>
+            )}
+        </div>
+    );
 
     // --- DERIVED TRAITS MODULE (read-only) ---
     const DerivedTraitsModule = ({ char }) => {
@@ -657,6 +690,7 @@
                         flaws: data.flaws || [],
                         pullingStrings: data.pullingStrings || data.pulling_strings || [],
                         inventory: data.inventory || [],
+                        specialisations: data.specialisations || [],
                     };
                     setChar(merged);
                 } else {
@@ -740,6 +774,8 @@
                     <AttributesModule attributes={char.attributes} />
                     <SkillsModule skills={char.skills} />
                 </div>
+
+                <SpecialisationsModule specialisations={char.specialisations || []} />
 
                 <DerivedTraitsModule char={char} />
 

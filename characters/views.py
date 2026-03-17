@@ -103,6 +103,8 @@ def api_character_detail(request, pk):
             character.pulling_strings = data["pullingStrings"]
         if "inventory" in data:
             character.inventory = data["inventory"]
+        if "specialisations" in data:
+            character.specialisations = data["specialisations"]
 
         # Update health
         if "health" in data:

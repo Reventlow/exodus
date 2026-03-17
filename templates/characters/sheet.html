@@ -68,6 +68,7 @@
         flaws: [],
         pullingStrings: [],
         inventory: [],
+        specialisations: [],
         health: { bashing: 0, lethal: 0, aggravated: 0 },
         willpower: { current: 0, max_mod: 0 },
         size: 5,
@@ -447,6 +448,100 @@
             </div>
         );
     };
+
+    // --- SPECIALISATIONS MODULE ---
+    const ALL_SKILLS = [
+        'Academics', 'Computer', 'Crafts', 'Investigation', 'Medicine', 'Occult', 'Politics', 'Science',
+        'Athletics', 'Brawl', 'Drive', 'Firearms', 'Larceny', 'Stealth', 'Survival', 'Weaponry',
+        'Animal Ken', 'Empathy', 'Expression', 'Intimidation', 'Persuasion', 'Socialize', 'Streetwise', 'Subterfuge'
+    ];
+
+    const SpecialisationsModule = ({ specialisations, update, quietUpdate, getFresh }) => (
+        <div className="glass-panel" style={{ padding: '1.5rem', marginBottom: '1rem' }}>
+            <h3 className="mono-text text-accent" style={{
+                borderBottom: '1px solid var(--border-color)',
+                paddingBottom: '0.5rem', marginBottom: '1rem',
+                display: 'flex', justifyContent: 'space-between', alignItems: 'center'
+            }}>
+                SPECIALISATIONS
+                {IS_OWNER && (
+                    <button onClick={() => {
+                        document.activeElement?.blur();
+                        const fresh = getFresh ? getFresh() : specialisations;
+                        update([...fresh, { skill: "", name: "" }]);
+                    }}
+                        title="Add Specialisation" style={{
+                            background: 'transparent', border: '1px solid var(--accent-primary)',
+                            color: 'var(--accent-primary)', width: '24px', height: '24px',
+                            borderRadius: '4px', cursor: 'pointer',
+                            display: 'flex', alignItems: 'center', justifyContent: 'center'
+                        }}>
+                        <Icon name="plus" size={14} />
+                    </button>
+                )}
+            </h3>
+            {specialisations.map((spec, idx) => (
+                <div key={idx} className="tech-border" style={{
+                    padding: '0.5rem', marginBottom: '0.5rem', background: 'rgba(0,0,0,0.2)',
+                    display: 'flex', gap: '0.5rem', alignItems: 'center'
+                }}>
+                    <select
+                        value={spec.skill}
+                        onChange={e => {
+                            const fresh = getFresh ? getFresh() : specialisations;
+                            update(fresh.map((s, i) => i === idx ? { ...s, skill: e.target.value } : s));
+                        }}
+                        disabled={!IS_OWNER}
+                        style={{
+                            background: 'var(--bg-input)', border: '1px solid var(--border-color)',
+                            color: 'var(--accent-primary)', padding: '0.25rem',
+                            fontFamily: 'var(--font-mono)', fontSize: '0.85rem',
+                            minWidth: '120px'
+                        }}
+                    >
+                        <option value="">— Skill —</option>
+                        {ALL_SKILLS.map(s => (
+                            <option key={s} value={s}>{s}</option>
+                        ))}
+                    </select>
+                    <AutoSaveInput
+                        type="text"
+                        placeholder="Specialisation name..."
+                        defaultValue={spec.name}
+                        onSave={val => {
+                            const fresh = getFresh ? getFresh() : specialisations;
+                            (quietUpdate || update)(fresh.map((s, i) => i === idx ? { ...s, name: val } : s));
+                        }}
+                        disabled={!IS_OWNER}
+                        style={{
+                            background: 'transparent', border: 'none',
+                            borderBottom: '1px solid var(--text-muted)',
+                            color: 'var(--text-primary)', flex: 1,
+                            fontFamily: 'var(--font-mono)'
+                        }}
+                    />
+                    {IS_OWNER && (
+                        <button onClick={() => {
+                            document.activeElement?.blur();
+                            const fresh = getFresh ? getFresh() : specialisations;
+                            update(fresh.filter((_, i) => i !== idx));
+                        }}
+                            style={{
+                                background: 'transparent', border: 'none',
+                                color: 'var(--accent-danger)', cursor: 'pointer'
+                            }}>
+                            <Icon name="x" size={14} />
+                        </button>
+                    )}
+                </div>
+            ))}
+            {specialisations.length === 0 && (
+                <p className="text-muted text-center" style={{ fontSize: '0.8rem', fontStyle: 'italic' }}>
+                    No specialisations recorded.
+                </p>
+            )}
+        </div>
+    );
 
     // --- DERIVED TRAITS MODULE ---
     const DerivedTraitsModule = ({ char, update }) => {
@@ -1040,6 +1135,7 @@
                         flaws: data.flaws || [],
                         pullingStrings: data.pullingStrings || data.pulling_strings || [],
                         inventory: data.inventory || [],
+                        specialisations: data.specialisations || [],
                     };
                     setChar(merged);
                     charRef.current = merged;
@@ -1188,6 +1284,13 @@
                         skills={char.skills}
                         update={skills => updateCharacter({ skills })} />
                 </div>
+
+                <SpecialisationsModule
+                    specialisations={char.specialisations || []}
+                    update={specs => updateCharacter({ specialisations: specs })}
+                    quietUpdate={specs => saveCharacterQuiet({ specialisations: specs })}
+                    getFresh={() => charRef.current.specialisations || []}
+                />
 
                 <DerivedTraitsModule char={char} update={updateCharacter} />
 
