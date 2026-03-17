@@ -1,5 +1,10 @@
 # Changelog
 
+## v0.4.0
+- Django admin user list now shows active status, last login, and staff/superuser columns
+- Registration now requires admin approval — new accounts are created as inactive until a superuser activates them via Django admin
+- Inactive users see "ACCOUNT PENDING" message on login instead of generic "invalid credentials"
+
 ## v0.3.6
 - Registration now requires admin approval — new accounts are created as inactive until a superuser activates them via Django admin
 - Inactive users see "ACCOUNT PENDING" message on login instead of generic "invalid credentials"
