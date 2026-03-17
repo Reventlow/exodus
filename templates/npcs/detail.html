@@ -243,7 +243,7 @@
                         <label className="text-secondary mono-text" style={{ fontSize: '0.8rem' }}>NATIONALITY</label>
                         <div style={{ color: 'var(--text-primary)' }}>{npc.nationality || '-'}</div>
                     </div>
-                    <div>
+                    <div style={{ gridColumn: '1 / -1' }}>
                         <label className="text-secondary mono-text" style={{ fontSize: '0.8rem' }}>OCCUPATION</label>
                         <div style={{ color: 'var(--text-primary)' }}>{npc.occupation || '-'}</div>
                     </div>
@@ -309,7 +309,7 @@
                             color: 'var(--text-primary)', width: '100%'
                         }} />
                 </div>
-                <div>
+                <div style={{ gridColumn: '1 / -1' }}>
                     <label className="text-secondary mono-text" style={{ fontSize: '0.8rem' }}>OCCUPATION</label>
                     <AutoSaveInput type="text" defaultValue={npc.occupation}
                         onSave={val => onSave({ occupation: val })}

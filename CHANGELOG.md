@@ -1,5 +1,9 @@
 # Changelog
 
+## v0.3.1
+- Fixed occupation field too small on dossier detail page — now spans full grid width in both read-only and editable views
+- Fixed occupation text truncated on dossier list cards — text now wraps instead of clipping
+
 ## v0.3.0
 - Added NPC dossiers — admin-created dossiers that can be assigned to NPC agencies
 - NPC dossiers are read-only for players; only admins can edit demographics, bio, state, and images
