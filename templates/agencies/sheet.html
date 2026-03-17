@@ -772,30 +772,35 @@
                         display: 'grid',
                         gridTemplateColumns: columns.map(c => c.width || '1fr').join(' ') + (IS_ADMIN ? ' 30px' : ''),
                         gap: '0.5rem', padding: '0.5rem', marginBottom: '0.25rem',
-                        background: 'rgba(0,0,0,0.2)', alignItems: 'center'
+                        background: 'rgba(0,0,0,0.2)', alignItems: 'start'
                     }}>
-                        {columns.map(col => (
-                            <AutoSaveInput
-                                key={col.key}
-                                type={col.type || 'text'}
-                                placeholder={col.label}
-                                defaultValue={item[col.key] || (col.type === 'number' ? 0 : '')}
-                                onSave={val => {
-                                    const parsed = col.type === 'number' ? (parseInt(val) || 0) : val;
-                                    const updated = actualItems.map((it, i) =>
-                                        i === idx ? { ...it, [col.key]: parsed } : it
-                                    );
-                                    onSave(updated);
-                                }}
-                                disabled={!IS_ADMIN}
-                                style={{
-                                    background: 'transparent', border: 'none',
-                                    borderBottom: '1px solid var(--border-color)',
-                                    color: 'var(--text-primary)', width: '100%',
-                                    fontSize: '0.85rem'
-                                }}
-                            />
-                        ))}
+                        {columns.map(col => {
+                            const isNotes = col.key === 'notes' || col.type === 'textarea';
+                            return (
+                                <AutoSaveInput
+                                    key={col.key}
+                                    type={col.type || 'text'}
+                                    component={isNotes ? 'textarea' : 'input'}
+                                    placeholder={col.label}
+                                    defaultValue={item[col.key] || (col.type === 'number' ? 0 : '')}
+                                    onSave={val => {
+                                        const parsed = col.type === 'number' ? (parseInt(val) || 0) : val;
+                                        const updated = actualItems.map((it, i) =>
+                                            i === idx ? { ...it, [col.key]: parsed } : it
+                                        );
+                                        onSave(updated);
+                                    }}
+                                    disabled={!IS_ADMIN}
+                                    style={{
+                                        background: 'transparent', border: 'none',
+                                        borderBottom: '1px solid var(--border-color)',
+                                        color: 'var(--text-primary)', width: '100%',
+                                        fontSize: '0.85rem',
+                                        ...(isNotes ? { minHeight: '2.5rem', resize: 'vertical', fontFamily: 'inherit' } : {}),
+                                    }}
+                                />
+                            );
+                        })}
                         {IS_ADMIN && (
                             <button onClick={() => removeItem(idx)} style={{
                                 background: 'transparent', border: 'none',
