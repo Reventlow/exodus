@@ -497,7 +497,7 @@
                 </h3>
                 <div style={{
                     display: 'grid',
-                    gridTemplateColumns: '1fr 60px 2fr',
+                    gridTemplateColumns: 'minmax(120px, 1.5fr) 60px minmax(120px, 2fr)',
                     gap: '0.5rem', marginBottom: '0.5rem', padding: '0 0.5rem'
                 }}>
                     <span className="text-muted mono-text" style={{ fontSize: '0.7rem' }}>NAME</span>
@@ -507,7 +507,7 @@
                 {globalFlaws.map(flaw => (
                     <div key={flaw.id} className="tech-border" style={{
                         display: 'grid',
-                        gridTemplateColumns: '1fr 60px 2fr',
+                        gridTemplateColumns: 'minmax(120px, 1.5fr) 60px minmax(120px, 2fr)',
                         gap: '0.5rem', padding: '0.5rem', marginBottom: '0.25rem',
                         background: 'rgba(234, 179, 8, 0.05)', alignItems: 'center'
                     }}>
@@ -1657,9 +1657,9 @@
                         title="MERITS" field="merits"
                         items={agency.merits}
                         columns={[
-                            { key: 'name', label: 'NAME', width: '1fr' },
+                            { key: 'name', label: 'NAME', width: 'minmax(120px, 1.5fr)' },
                             { key: 'value', label: 'VALUE', width: '60px', type: 'number' },
-                            { key: 'description', label: 'DESCRIPTION', width: '2fr' },
+                            { key: 'description', label: 'DESCRIPTION', width: 'minmax(120px, 2fr)' },
                         ]}
                         emptyItem={{ name: '', value: 0, description: '' }}
                         update={val => updateAgency({ merits: val })}
@@ -1672,9 +1672,9 @@
                             title="FLAWS" field="flaws"
                             items={agency.flaws}
                             columns={[
-                                { key: 'name', label: 'NAME', width: '1fr' },
+                                { key: 'name', label: 'NAME', width: 'minmax(120px, 1.5fr)' },
                                 { key: 'value', label: 'VALUE', width: '60px', type: 'number' },
-                                { key: 'description', label: 'DESCRIPTION', width: '2fr' },
+                                { key: 'description', label: 'DESCRIPTION', width: 'minmax(120px, 2fr)' },
                             ]}
                             emptyItem={{ name: '', value: 0, description: '' }}
                             update={val => updateAgency({ flaws: val })}

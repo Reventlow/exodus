@@ -1,5 +1,9 @@
 # Changelog
 
+## v0.4.5
+- Player dossier cards now show the owner's username (or "GM" for superadmins) on the contact dossiers list
+- Fixed agency merits, flaws, and global flaws names getting cut off — columns now have minimum widths
+
 ## v0.4.4
 - Added skill specialisations to operative character sheets — select a skill and name the specialisation (e.g., Firearms: Pistols)
 - Specialisations panel with add/remove, auto-save, and read-only view for non-owners

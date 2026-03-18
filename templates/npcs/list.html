@@ -268,15 +268,25 @@
                             {npc.agencyName || 'NPC'}
                         </span>
                     ) : (
-                        <span className="mono-text" style={{
-                            fontSize: '0.7rem',
-                            color: 'var(--accent-primary)',
-                            border: '1px solid var(--accent-primary)',
-                            padding: '0.1rem 0.4rem',
-                            letterSpacing: '1px',
-                        }}>
-                            BIFROST UNION
-                        </span>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.25rem' }}>
+                            <span className="mono-text" style={{
+                                fontSize: '0.7rem',
+                                color: 'var(--accent-primary)',
+                                border: '1px solid var(--accent-primary)',
+                                padding: '0.1rem 0.4rem',
+                                letterSpacing: '1px',
+                            }}>
+                                BIFROST UNION
+                            </span>
+                            {npc.assignedTo && (
+                                <span className="mono-text text-muted" style={{
+                                    fontSize: '0.65rem',
+                                    letterSpacing: '0.5px',
+                                }}>
+                                    {npc.assignedToIsAdmin ? 'GM' : npc.assignedTo}
+                                </span>
+                            )}
+                        </div>
                     )}
                     <span className="text-muted" style={{ fontSize: '0.75rem' }}>
                         ID: {String(npc.id).substring(0, 6)}

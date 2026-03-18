@@ -54,6 +54,7 @@ def serialize_npc_summary(npc):
         "occupation": npc.occupation,
         "state": npc.state,
         "assignedTo": npc.assigned_to.username if npc.assigned_to else None,
+        "assignedToIsAdmin": npc.assigned_to.is_superuser if npc.assigned_to else False,
         "isNpcDossier": npc.is_npc_dossier,
         "agencyName": npc.agency.name if npc.agency else None,
     }
