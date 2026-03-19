@@ -389,6 +389,13 @@ def default_base_facility_types():
                 {"level": 4, "name": "Superb (+5)", "exp": 10, "size": 1, "description": "Superb workspace (+5 to rolls)."},
             ],
         },
+        {
+            "key": "hr_offboarding",
+            "name": "HR Off-boarding Office Suite 55",
+            "levels": [
+                {"level": 1, "name": "Suite 55", "exp": 5, "size": 2, "description": "HR off-boarding office suite 55."},
+            ],
+        },
     ]
 
 
