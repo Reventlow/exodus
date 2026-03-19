@@ -1468,13 +1468,22 @@
     // --- BASES MODULE ---
     const BASE_ACCENT = '#22c55e';
 
-    const BasesModule = ({ bases: initialBases, baseConfig, agencyId }) => {
+    const BasesModule = ({ bases: initialBases, baseConfig, agencyId, onBasesChange }) => {
         const [bases, setBases] = useState(initialBases || []);
         const [expandedBase, setExpandedBase] = useState(null);
         const [creating, setCreating] = useState(false);
         const saveTimers = useRef({});
 
         useEffect(() => { setBases(initialBases || []); }, [initialBases]);
+
+        // Notify parent whenever bases change so EXP totals stay in sync
+        const updateBases = (updater) => {
+            setBases(prev => {
+                const next = typeof updater === 'function' ? updater(prev) : updater;
+                if (onBasesChange) onBasesChange(next);
+                return next;
+            });
+        };
 
         const headers = () => ({
             'Content-Type': 'application/json',
@@ -1520,7 +1529,7 @@
                     });
                     if (res.ok) {
                         const updated = await res.json();
-                        setBases(prev => prev.map(b => b.id === baseId ? updated : b));
+                        updateBases(prev => prev.map(b => b.id === baseId ? updated : b));
                     }
                 } catch (err) { console.error('Base save error:', err); }
             }, 500);
@@ -1534,7 +1543,7 @@
                 });
                 if (res.ok) {
                     const newBase = await res.json();
-                    setBases(prev => [...prev, newBase]);
+                    updateBases(prev => [...prev, newBase]);
                     setExpandedBase(newBase.id);
                 }
             } catch (err) { console.error('Create base error:', err); }
@@ -1546,13 +1555,13 @@
                 await fetch(`/api/agencies/${agencyId}/bases/${baseId}/`, {
                     method: 'DELETE', headers: headers(),
                 });
-                setBases(prev => prev.filter(b => b.id !== baseId));
+                updateBases(prev => prev.filter(b => b.id !== baseId));
                 if (expandedBase === baseId) setExpandedBase(null);
             } catch (err) { console.error('Delete base error:', err); }
         };
 
         const updateBaseField = (baseId, field, value) => {
-            setBases(prev => prev.map(b => {
+            updateBases(prev => prev.map(b => {
                 if (b.id !== baseId) return b;
                 const updated = { ...b, [field]: value };
                 saveBase(baseId, updated);
@@ -2197,6 +2206,11 @@
                     bases={agency.bases}
                     baseConfig={agency.baseConfig}
                     agencyId={AGENCY_ID}
+                    onBasesChange={(newBases) => {
+                        const updated = { ...agencyRef.current, bases: newBases };
+                        setAgency(updated);
+                        agencyRef.current = updated;
+                    }}
                 />
 
                 <TableModule
