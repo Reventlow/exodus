@@ -1,5 +1,15 @@
 # Changelog
 
+## v0.5.0
+- Added agency bases system — agencies can now have multiple bases with configurable locations, merits, facilities, and equipment
+- Bases track EXP cost and space usage with a visual capacity bar
+- Location types: Official Building, Estate, Military Base, Black Site
+- Location merits: Armored, Underwater, Underground, Extra/Super Large, Front
+- Facilities with levels: Aviation, Auditorium, Barracks, Armory, Brig, Medical, Computer Core, Storage, Workspace
+- Facility equipment: Aviation units, Base defenses
+- Admin settings page to configure all base options (prices, sizes, descriptions) — accessible from the agencies list
+- Bases are purchased from the agency EXP pool
+
 ## v0.4.5
 - Player dossier cards now show the owner's username (or "GM" for superadmins) on the contact dossiers list
 - Fixed agency merits, flaws, and global flaws names getting cut off — columns now have minimum widths

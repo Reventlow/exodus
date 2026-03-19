@@ -8,7 +8,7 @@ from django.contrib.auth.decorators import login_required
 from django.views.decorators.http import require_http_methods
 from django.utils import timezone
 
-from .models import Agency, ChangeRequest, GlobalFlaw, FTLProject, AgencyFTLProject, CouncilItem
+from .models import Agency, ChangeRequest, GlobalFlaw, FTLProject, AgencyFTLProject, CouncilItem, BaseConfig, Base
 from .serializers import (
     serialize_agency,
     serialize_agency_summary,
@@ -17,6 +17,8 @@ from .serializers import (
     serialize_ftl_project,
     serialize_agency_ftl_project,
     serialize_council_item,
+    serialize_base,
+    serialize_base_config,
 )
 
 
@@ -678,3 +680,131 @@ def _apply_changes(agency, changes):
         model_field = field_map.get(key)
         if model_field:
             setattr(agency, model_field, value)
+
+
+# ---------------------------------------------------------------------------
+# Page view — Base Configuration Settings
+# ---------------------------------------------------------------------------
+
+
+@login_required
+def base_config_page(request):
+    """Base configuration settings page. Superuser only."""
+    if not request.user.is_superuser:
+        return JsonResponse(
+            {"error": "ACCESS DENIED. Administrator clearance required."}, status=403
+        )
+    return render(request, "agencies/base_config.html")
+
+
+# ---------------------------------------------------------------------------
+# API views — Base Configuration (singleton, superuser only)
+# ---------------------------------------------------------------------------
+
+
+@login_required
+@require_http_methods(["GET", "PUT"])
+def api_base_config(request):
+    """GET: retrieve base config. PUT: update base config. Admin only."""
+    if not request.user.is_superuser:
+        return JsonResponse(
+            {"error": "ACCESS DENIED. Administrator clearance required."}, status=403
+        )
+
+    config = BaseConfig.load()
+
+    if request.method == "GET":
+        return JsonResponse(serialize_base_config(config))
+
+    # PUT
+    try:
+        data = json.loads(request.body)
+    except json.JSONDecodeError:
+        return JsonResponse({"error": "Invalid data stream."}, status=400)
+
+    if "locationTypes" in data:
+        config.location_types = data["locationTypes"]
+    if "locationMerits" in data:
+        config.location_merits = data["locationMerits"]
+    if "facilityTypes" in data:
+        config.facility_types = data["facilityTypes"]
+    if "equipmentTypes" in data:
+        config.equipment_types = data["equipmentTypes"]
+
+    config.save()
+    return JsonResponse(serialize_base_config(config))
+
+
+# ---------------------------------------------------------------------------
+# API views — Agency Bases (CRUD, superuser only)
+# ---------------------------------------------------------------------------
+
+
+@login_required
+@require_http_methods(["GET", "POST"])
+def api_agency_base_list(request, pk):
+    """GET: list bases for an agency. POST: create a new base. Admin only."""
+    agency = get_object_or_404(Agency, pk=pk)
+
+    if request.method == "GET":
+        bases = agency.bases.all()
+        data = [serialize_base(b) for b in bases]
+        return JsonResponse(data, safe=False)
+
+    # POST — admin only
+    if not request.user.is_superuser:
+        return JsonResponse(
+            {"error": "ACCESS DENIED. Administrator clearance required."}, status=403
+        )
+
+    try:
+        body = json.loads(request.body) if request.body else {}
+    except json.JSONDecodeError:
+        body = {}
+
+    base = Base.objects.create(
+        agency=agency,
+        name=body.get("name", "NEW BASE"),
+    )
+    return JsonResponse(serialize_base(base), status=201)
+
+
+@login_required
+@require_http_methods(["GET", "PUT", "DELETE"])
+def api_agency_base_detail(request, pk, base_id):
+    """GET/PUT/DELETE a single base. Admin only for PUT/DELETE."""
+    base = get_object_or_404(Base, pk=base_id, agency_id=pk)
+
+    if request.method == "GET":
+        return JsonResponse(serialize_base(base))
+
+    if not request.user.is_superuser:
+        return JsonResponse(
+            {"error": "ACCESS DENIED. Administrator clearance required."}, status=403
+        )
+
+    if request.method == "DELETE":
+        base.delete()
+        return JsonResponse({"status": "Base record terminated."})
+
+    # PUT
+    try:
+        data = json.loads(request.body)
+    except json.JSONDecodeError:
+        return JsonResponse({"error": "Invalid data stream."}, status=400)
+
+    if "name" in data:
+        base.name = data["name"]
+    if "locationType" in data:
+        base.location_type = data["locationType"]
+    if "merits" in data:
+        base.merits = data["merits"]
+    if "facilities" in data:
+        base.facilities = data["facilities"]
+    if "equipment" in data:
+        base.equipment = data["equipment"]
+    if "notes" in data:
+        base.notes = data["notes"]
+
+    base.save()
+    return JsonResponse(serialize_base(base))

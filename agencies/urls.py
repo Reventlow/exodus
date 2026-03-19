@@ -74,4 +74,19 @@ urlpatterns = [
         views.api_council_detail,
         name="api_council_detail",
     ),
+    # Pages — base config
+    path("agencies/base-config/", views.base_config_page, name="base_config"),
+    # API — base config (singleton)
+    path("api/base-config/", views.api_base_config, name="api_base_config"),
+    # API — agency bases
+    path(
+        "api/agencies/<int:pk>/bases/",
+        views.api_agency_base_list,
+        name="api_agency_base_list",
+    ),
+    path(
+        "api/agencies/<int:pk>/bases/<int:base_id>/",
+        views.api_agency_base_detail,
+        name="api_agency_base_detail",
+    ),
 ]

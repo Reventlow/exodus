@@ -1,6 +1,6 @@
 """Manual JSON serialization for Agency models. No DRF dependency."""
 
-from .models import GlobalFlaw, FTLProject, AgencyFTLProject, CouncilItem
+from .models import GlobalFlaw, FTLProject, AgencyFTLProject, CouncilItem, BaseConfig, Base
 
 CLASSIFIED = "CLASSIFIED"
 
@@ -84,6 +84,13 @@ def serialize_agency(agency, user):
 
     # Council items — visible to everyone, not editable per-agency
     data["councilItems"] = [serialize_council_item(ci) for ci in CouncilItem.objects.all()]
+
+    # Bases + config for cost lookups
+    data["bases"] = [
+        serialize_base(b) for b in agency.bases.all()
+    ]
+    config = BaseConfig.load()
+    data["baseConfig"] = serialize_base_config(config)
 
     # FTL project assignments with progress
     data["ftlProjects"] = [
@@ -184,4 +191,27 @@ def serialize_change_request(cr):
         "reviewedBy": cr.reviewed_by.username if cr.reviewed_by else None,
         "createdAt": cr.created_at.isoformat(),
         "reviewedAt": cr.reviewed_at.isoformat() if cr.reviewed_at else None,
+    }
+
+
+def serialize_base(base):
+    """Serialize a Base model instance."""
+    return {
+        "id": base.id,
+        "name": base.name,
+        "locationType": base.location_type,
+        "merits": base.merits,
+        "facilities": base.facilities,
+        "equipment": base.equipment,
+        "notes": base.notes,
+    }
+
+
+def serialize_base_config(config):
+    """Serialize the BaseConfig singleton."""
+    return {
+        "locationTypes": config.location_types,
+        "locationMerits": config.location_merits,
+        "facilityTypes": config.facility_types,
+        "equipmentTypes": config.equipment_types,
     }

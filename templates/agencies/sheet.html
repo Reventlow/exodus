@@ -67,6 +67,8 @@
         conditions: [],
         projects: [],
         history: [],
+        bases: [],
+        baseConfig: { locationTypes: [], locationMerits: [], facilityTypes: [], equipmentTypes: [] },
         fieldVisibility: {}
     };
 
@@ -1426,6 +1428,442 @@
         );
     };
 
+    // --- BASES MODULE ---
+    const BASE_ACCENT = '#22c55e';
+
+    const BasesModule = ({ bases: initialBases, baseConfig, agencyId }) => {
+        const [bases, setBases] = useState(initialBases || []);
+        const [expandedBase, setExpandedBase] = useState(null);
+        const [creating, setCreating] = useState(false);
+        const saveTimers = useRef({});
+
+        useEffect(() => { setBases(initialBases || []); }, [initialBases]);
+
+        const headers = () => ({
+            'Content-Type': 'application/json',
+            'X-CSRFToken': getCookie('csrftoken') || CSRF_TOKEN,
+        });
+
+        // Lookup helpers
+        const getLocationType = (key) => (baseConfig.locationTypes || []).find(lt => lt.key === key);
+        const getMerit = (key) => (baseConfig.locationMerits || []).find(m => m.key === key);
+        const getFacilityType = (key) => (baseConfig.facilityTypes || []).find(f => f.key === key);
+        const getEquipment = (key) => (baseConfig.equipmentTypes || []).find(e => e.key === key);
+
+        const calcBaseCosts = (base) => {
+            let totalExp = 0;
+            let totalSpace = 0;
+            let usedSpace = 0;
+            const loc = getLocationType(base.locationType);
+            if (loc) { totalExp += loc.exp; totalSpace += loc.space; }
+            (base.merits || []).forEach(mk => {
+                const m = getMerit(mk);
+                if (m) { totalExp += m.exp; totalSpace += (m.extraSpace || 0); }
+            });
+            (base.facilities || []).forEach(f => {
+                const ft = getFacilityType(f.key);
+                if (ft) {
+                    const lvl = ft.levels.find(l => l.level === f.level);
+                    if (lvl) { totalExp += lvl.exp; usedSpace += lvl.size; }
+                }
+            });
+            (base.equipment || []).forEach(ek => {
+                const eq = getEquipment(ek);
+                if (eq) { totalExp += eq.exp; }
+            });
+            return { totalExp, totalSpace, usedSpace, freeSpace: totalSpace - usedSpace };
+        };
+
+        const saveBase = (baseId, data) => {
+            if (saveTimers.current[baseId]) clearTimeout(saveTimers.current[baseId]);
+            saveTimers.current[baseId] = setTimeout(async () => {
+                try {
+                    const res = await fetch(`/api/agencies/${agencyId}/bases/${baseId}/`, {
+                        method: 'PUT', headers: headers(), body: JSON.stringify(data),
+                    });
+                    if (res.ok) {
+                        const updated = await res.json();
+                        setBases(prev => prev.map(b => b.id === baseId ? updated : b));
+                    }
+                } catch (err) { console.error('Base save error:', err); }
+            }, 500);
+        };
+
+        const createBase = async () => {
+            setCreating(true);
+            try {
+                const res = await fetch(`/api/agencies/${agencyId}/bases/`, {
+                    method: 'POST', headers: headers(), body: JSON.stringify({ name: 'NEW BASE' }),
+                });
+                if (res.ok) {
+                    const newBase = await res.json();
+                    setBases(prev => [...prev, newBase]);
+                    setExpandedBase(newBase.id);
+                }
+            } catch (err) { console.error('Create base error:', err); }
+            setCreating(false);
+        };
+
+        const deleteBase = async (baseId) => {
+            try {
+                await fetch(`/api/agencies/${agencyId}/bases/${baseId}/`, {
+                    method: 'DELETE', headers: headers(),
+                });
+                setBases(prev => prev.filter(b => b.id !== baseId));
+                if (expandedBase === baseId) setExpandedBase(null);
+            } catch (err) { console.error('Delete base error:', err); }
+        };
+
+        const updateBaseField = (baseId, field, value) => {
+            setBases(prev => prev.map(b => {
+                if (b.id !== baseId) return b;
+                const updated = { ...b, [field]: value };
+                saveBase(baseId, updated);
+                return updated;
+            }));
+        };
+
+        const toggleMerit = (baseId, meritKey) => {
+            const base = bases.find(b => b.id === baseId);
+            if (!base) return;
+            const current = base.merits || [];
+            const newMerits = current.includes(meritKey)
+                ? current.filter(k => k !== meritKey)
+                : [...current, meritKey];
+            updateBaseField(baseId, 'merits', newMerits);
+        };
+
+        const setFacility = (baseId, facilityKey, level) => {
+            const base = bases.find(b => b.id === baseId);
+            if (!base) return;
+            const current = base.facilities || [];
+            let newFacilities;
+            if (level === 0) {
+                newFacilities = current.filter(f => f.key !== facilityKey);
+            } else {
+                const existing = current.find(f => f.key === facilityKey);
+                if (existing) {
+                    newFacilities = current.map(f => f.key === facilityKey ? { ...f, level } : f);
+                } else {
+                    newFacilities = [...current, { key: facilityKey, level }];
+                }
+            }
+            updateBaseField(baseId, 'facilities', newFacilities);
+        };
+
+        const toggleEquipment = (baseId, eqKey) => {
+            const base = bases.find(b => b.id === baseId);
+            if (!base) return;
+            const current = base.equipment || [];
+            const newEquip = current.includes(eqKey)
+                ? current.filter(k => k !== eqKey)
+                : [...current, eqKey];
+            updateBaseField(baseId, 'equipment', newEquip);
+        };
+
+        const BaseCard = ({ base }) => {
+            const isExpanded = expandedBase === base.id;
+            const costs = calcBaseCosts(base);
+            const loc = getLocationType(base.locationType);
+            const spacePercent = costs.totalSpace > 0 ? Math.min(100, (costs.usedSpace / costs.totalSpace) * 100) : 0;
+
+            return (
+                <div className="glass-panel" style={{ padding: '1rem', marginBottom: '0.75rem', borderLeft: `3px solid ${BASE_ACCENT}` }}>
+                    {/* Header row */}
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', cursor: 'pointer' }}
+                         onClick={() => setExpandedBase(isExpanded ? null : base.id)}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', flex: 1 }}>
+                            <Icon name={isExpanded ? "chevron-down" : "chevron-right"} size={16} />
+                            <span className="mono-text" style={{ color: BASE_ACCENT, fontSize: '1rem', fontWeight: 'bold' }}>
+                                {base.name || 'UNNAMED BASE'}
+                            </span>
+                            {loc && (
+                                <span className="text-muted mono-text" style={{ fontSize: '0.75rem' }}>
+                                    [{loc.name}]
+                                </span>
+                            )}
+                        </div>
+                        <div style={{ display: 'flex', gap: '1rem', alignItems: 'center' }}>
+                            <span className="mono-text" style={{ fontSize: '0.75rem', color: '#f59e0b' }}>
+                                EXP: {costs.totalExp}
+                            </span>
+                            <span className="mono-text" style={{
+                                fontSize: '0.75rem',
+                                color: costs.freeSpace < 0 ? 'var(--accent-danger)' : BASE_ACCENT
+                            }}>
+                                SPACE: {costs.usedSpace}/{costs.totalSpace}
+                            </span>
+                        </div>
+                    </div>
+
+                    {isExpanded && (
+                        <div style={{ marginTop: '1rem', borderTop: '1px solid var(--border-color)', paddingTop: '1rem' }}>
+                            {/* Base name */}
+                            <div style={{ marginBottom: '1rem' }}>
+                                <label className="text-muted mono-text" style={{ fontSize: '0.7rem', display: 'block', marginBottom: '0.25rem' }}>BASE NAME</label>
+                                <AutoSaveInput type="text" defaultValue={base.name}
+                                    onSave={val => updateBaseField(base.id, 'name', val)}
+                                    disabled={!IS_ADMIN}
+                                    style={{
+                                        background: 'transparent', border: 'none',
+                                        borderBottom: `1px solid ${BASE_ACCENT}`,
+                                        color: 'var(--text-primary)', width: '100%',
+                                        fontSize: '1rem', fontFamily: 'var(--font-mono)',
+                                    }} />
+                            </div>
+
+                            {/* Location Type */}
+                            <div style={{ marginBottom: '1rem' }}>
+                                <label className="text-muted mono-text" style={{ fontSize: '0.7rem', display: 'block', marginBottom: '0.5rem' }}>LOCATION TYPE</label>
+                                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem' }}>
+                                    {(baseConfig.locationTypes || []).map(lt => {
+                                        const selected = base.locationType === lt.key;
+                                        return (
+                                            <button key={lt.key}
+                                                onClick={() => IS_ADMIN && updateBaseField(base.id, 'locationType', selected ? '' : lt.key)}
+                                                disabled={!IS_ADMIN}
+                                                title={`${lt.description}${lt.included ? '\n' + lt.included : ''}`}
+                                                style={{
+                                                    background: selected ? `${BASE_ACCENT}22` : 'rgba(0,0,0,0.2)',
+                                                    border: `1px solid ${selected ? BASE_ACCENT : 'var(--border-color)'}`,
+                                                    color: selected ? BASE_ACCENT : 'var(--text-muted)',
+                                                    padding: '0.4rem 0.75rem', cursor: IS_ADMIN ? 'pointer' : 'default',
+                                                    fontFamily: 'var(--font-mono)', fontSize: '0.8rem',
+                                                    borderRadius: 'var(--radius-sm)',
+                                                }}>
+                                                {lt.name}
+                                                <span style={{ fontSize: '0.65rem', marginLeft: '0.5rem', opacity: 0.7 }}>
+                                                    E:{lt.exp} S:{lt.space}
+                                                </span>
+                                            </button>
+                                        );
+                                    })}
+                                </div>
+                                {loc && loc.included && (
+                                    <p className="text-muted" style={{ fontSize: '0.75rem', marginTop: '0.5rem', fontStyle: 'italic' }}>
+                                        {loc.included}
+                                    </p>
+                                )}
+                            </div>
+
+                            {/* Location Merits */}
+                            <div style={{ marginBottom: '1rem' }}>
+                                <label className="text-muted mono-text" style={{ fontSize: '0.7rem', display: 'block', marginBottom: '0.5rem' }}>LOCATION MERITS</label>
+                                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem' }}>
+                                    {(baseConfig.locationMerits || []).map(m => {
+                                        const selected = (base.merits || []).includes(m.key);
+                                        return (
+                                            <button key={m.key}
+                                                onClick={() => IS_ADMIN && toggleMerit(base.id, m.key)}
+                                                disabled={!IS_ADMIN}
+                                                title={m.description}
+                                                style={{
+                                                    background: selected ? '#3b82f622' : 'rgba(0,0,0,0.2)',
+                                                    border: `1px solid ${selected ? '#3b82f6' : 'var(--border-color)'}`,
+                                                    color: selected ? '#3b82f6' : 'var(--text-muted)',
+                                                    padding: '0.4rem 0.75rem', cursor: IS_ADMIN ? 'pointer' : 'default',
+                                                    fontFamily: 'var(--font-mono)', fontSize: '0.8rem',
+                                                    borderRadius: 'var(--radius-sm)',
+                                                }}>
+                                                {m.name}
+                                                <span style={{ fontSize: '0.65rem', marginLeft: '0.5rem', opacity: 0.7 }}>
+                                                    E:+{m.exp}{m.extraSpace > 0 ? ` S:+${m.extraSpace}` : ''}
+                                                </span>
+                                            </button>
+                                        );
+                                    })}
+                                </div>
+                            </div>
+
+                            {/* Space Usage Bar */}
+                            {costs.totalSpace > 0 && (
+                                <div style={{ marginBottom: '1rem' }}>
+                                    <label className="text-muted mono-text" style={{ fontSize: '0.7rem', display: 'block', marginBottom: '0.25rem' }}>
+                                        SPACE USAGE: {costs.usedSpace} / {costs.totalSpace}
+                                        {costs.freeSpace < 0 && <span style={{ color: 'var(--accent-danger)', marginLeft: '0.5rem' }}>OVER CAPACITY!</span>}
+                                    </label>
+                                    <div style={{ background: 'rgba(0,0,0,0.3)', height: '8px', borderRadius: '4px', overflow: 'hidden' }}>
+                                        <div style={{
+                                            width: `${spacePercent}%`, height: '100%',
+                                            background: costs.freeSpace < 0 ? 'var(--accent-danger)' : BASE_ACCENT,
+                                            transition: 'width 0.3s',
+                                        }} />
+                                    </div>
+                                </div>
+                            )}
+
+                            {/* Facilities */}
+                            <div style={{ marginBottom: '1rem' }}>
+                                <label className="text-muted mono-text" style={{ fontSize: '0.7rem', display: 'block', marginBottom: '0.5rem' }}>FACILITIES</label>
+                                {(baseConfig.facilityTypes || []).map(ft => {
+                                    const current = (base.facilities || []).find(f => f.key === ft.key);
+                                    const currentLevel = current ? current.level : 0;
+                                    return (
+                                        <div key={ft.key} className="tech-border" style={{
+                                            padding: '0.5rem', marginBottom: '0.25rem',
+                                            background: currentLevel > 0 ? 'rgba(34,197,94,0.05)' : 'rgba(0,0,0,0.15)',
+                                        }}>
+                                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                                <span className="mono-text" style={{
+                                                    fontSize: '0.85rem',
+                                                    color: currentLevel > 0 ? BASE_ACCENT : 'var(--text-muted)',
+                                                }}>
+                                                    {ft.name}
+                                                    {currentLevel > 0 && (
+                                                        <span style={{ fontSize: '0.7rem', marginLeft: '0.5rem', opacity: 0.7 }}>
+                                                            [LVL {currentLevel}: {ft.levels.find(l => l.level === currentLevel)?.name}]
+                                                        </span>
+                                                    )}
+                                                </span>
+                                                {IS_ADMIN && (
+                                                    <div style={{ display: 'flex', gap: '0.25rem', alignItems: 'center' }}>
+                                                        <select
+                                                            value={currentLevel}
+                                                            onChange={e => setFacility(base.id, ft.key, parseInt(e.target.value))}
+                                                            style={{
+                                                                background: 'rgba(0,0,0,0.3)', color: 'var(--text-primary)',
+                                                                border: '1px solid var(--border-color)', padding: '0.2rem 0.4rem',
+                                                                fontFamily: 'var(--font-mono)', fontSize: '0.75rem',
+                                                                borderRadius: 'var(--radius-sm)',
+                                                            }}>
+                                                            <option value={0}>None</option>
+                                                            {ft.levels.map(lvl => (
+                                                                <option key={lvl.level} value={lvl.level}>
+                                                                    Lvl {lvl.level}: {lvl.name} (E:{lvl.exp} S:{lvl.size})
+                                                                </option>
+                                                            ))}
+                                                        </select>
+                                                    </div>
+                                                )}
+                                            </div>
+                                            {currentLevel > 0 && (
+                                                <p className="text-muted" style={{ fontSize: '0.7rem', marginTop: '0.25rem', marginBottom: 0 }}>
+                                                    {ft.levels.find(l => l.level === currentLevel)?.description}
+                                                </p>
+                                            )}
+                                        </div>
+                                    );
+                                })}
+                            </div>
+
+                            {/* Equipment */}
+                            <div style={{ marginBottom: '1rem' }}>
+                                <label className="text-muted mono-text" style={{ fontSize: '0.7rem', display: 'block', marginBottom: '0.5rem' }}>FACILITY EQUIPMENT</label>
+                                {(() => {
+                                    const categories = {};
+                                    (baseConfig.equipmentTypes || []).forEach(eq => {
+                                        const cat = eq.category || 'Other';
+                                        if (!categories[cat]) categories[cat] = [];
+                                        categories[cat].push(eq);
+                                    });
+                                    return Object.entries(categories).map(([cat, items]) => (
+                                        <div key={cat} style={{ marginBottom: '0.5rem' }}>
+                                            <span className="mono-text text-muted" style={{ fontSize: '0.7rem', display: 'block', marginBottom: '0.25rem', borderBottom: '1px solid var(--border-color)', paddingBottom: '0.15rem' }}>
+                                                {cat}
+                                            </span>
+                                            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.4rem' }}>
+                                                {items.map(eq => {
+                                                    const selected = (base.equipment || []).includes(eq.key);
+                                                    return (
+                                                        <button key={eq.key}
+                                                            onClick={() => IS_ADMIN && toggleEquipment(base.id, eq.key)}
+                                                            disabled={!IS_ADMIN}
+                                                            title={eq.requires || eq.name}
+                                                            style={{
+                                                                background: selected ? '#f59e0b22' : 'rgba(0,0,0,0.2)',
+                                                                border: `1px solid ${selected ? '#f59e0b' : 'var(--border-color)'}`,
+                                                                color: selected ? '#f59e0b' : 'var(--text-muted)',
+                                                                padding: '0.3rem 0.6rem', cursor: IS_ADMIN ? 'pointer' : 'default',
+                                                                fontFamily: 'var(--font-mono)', fontSize: '0.75rem',
+                                                                borderRadius: 'var(--radius-sm)',
+                                                            }}>
+                                                            {eq.name}
+                                                            <span style={{ fontSize: '0.6rem', marginLeft: '0.4rem', opacity: 0.7 }}>E:{eq.exp}</span>
+                                                        </button>
+                                                    );
+                                                })}
+                                            </div>
+                                        </div>
+                                    ));
+                                })()}
+                            </div>
+
+                            {/* Notes */}
+                            <div style={{ marginBottom: '0.5rem' }}>
+                                <label className="text-muted mono-text" style={{ fontSize: '0.7rem', display: 'block', marginBottom: '0.25rem' }}>NOTES</label>
+                                <AutoSaveInput component="textarea" defaultValue={base.notes || ''}
+                                    onSave={val => updateBaseField(base.id, 'notes', val)}
+                                    disabled={!IS_ADMIN}
+                                    style={{
+                                        background: 'rgba(0,0,0,0.2)', border: '1px solid var(--border-color)',
+                                        color: 'var(--text-primary)', width: '100%', minHeight: '3rem',
+                                        fontSize: '0.85rem', fontFamily: 'inherit', padding: '0.5rem',
+                                        resize: 'vertical', borderRadius: 'var(--radius-sm)',
+                                    }} />
+                            </div>
+
+                            {/* Delete button */}
+                            {IS_ADMIN && (
+                                <div style={{ textAlign: 'right', marginTop: '0.5rem' }}>
+                                    <button onClick={() => deleteBase(base.id)}
+                                        className="mono-text"
+                                        style={{
+                                            background: 'transparent', border: '1px solid var(--accent-danger)',
+                                            color: 'var(--accent-danger)', padding: '0.3rem 1rem',
+                                            cursor: 'pointer', fontSize: '0.75rem', fontFamily: 'var(--font-mono)',
+                                            borderRadius: 'var(--radius-sm)',
+                                        }}>
+                                        DELETE BASE
+                                    </button>
+                                </div>
+                            )}
+                        </div>
+                    )}
+                </div>
+            );
+        };
+
+        // Total exp across all bases
+        const totalBaseExp = bases.reduce((sum, b) => sum + calcBaseCosts(b).totalExp, 0);
+
+        return (
+            <div className="glass-panel" style={{ padding: '1.5rem', marginBottom: '1rem' }}>
+                <h3 className="mono-text" style={{
+                    color: BASE_ACCENT,
+                    borderBottom: `1px solid ${BASE_ACCENT}`,
+                    paddingBottom: '0.5rem', marginBottom: '1rem',
+                    display: 'flex', justifyContent: 'space-between', alignItems: 'center'
+                }}>
+                    <span>
+                        BASES
+                        <span className="text-muted" style={{ fontSize: '0.75rem', marginLeft: '0.75rem' }}>
+                            ({bases.length}) // TOTAL EXP: {totalBaseExp}
+                        </span>
+                    </span>
+                    {IS_ADMIN && (
+                        <button onClick={createBase} disabled={creating}
+                            style={{
+                                background: 'transparent', border: `1px solid ${BASE_ACCENT}`,
+                                color: BASE_ACCENT, width: '24px', height: '24px',
+                                borderRadius: '4px', cursor: creating ? 'wait' : 'pointer',
+                                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                            }}>
+                            <Icon name="plus" size={14} />
+                        </button>
+                    )}
+                </h3>
+
+                {bases.map(base => <BaseCard key={base.id} base={base} />)}
+
+                {bases.length === 0 && (
+                    <p className="text-muted text-center" style={{ fontSize: '0.8rem', fontStyle: 'italic' }}>
+                        No bases established.
+                    </p>
+                )}
+            </div>
+        );
+    };
+
     // --- MAIN APP ---
     const AgencySheet = () => {
         const [agency, setAgency] = useState(null);
@@ -1716,6 +2154,12 @@
                     onSave={val => saveAgencyQuiet({ fleet: val })}
                     getFreshItems={() => agencyRef.current.fleet || []}
                     visibility={vis} onToggleVis={toggleVisibility}
+                />
+
+                <BasesModule
+                    bases={agency.bases}
+                    baseConfig={agency.baseConfig}
+                    agencyId={AGENCY_ID}
                 />
 
                 <TableModule

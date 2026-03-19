@@ -1,0 +1,896 @@
+{% extends "base.html" %}
+
+{% block title %}BASE CONFIG // BLACKLOG.NET{% endblock %}
+
+{% block content %}
+<div id="app-root">
+    <div class="loading-screen">
+        <h1 class="mono-text">LOADING BASE CONFIGURATION...</h1>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    const IS_ADMIN = {{ user.is_superuser|yesno:"true,false" }};
+    const CSRF_TOKEN = '{{ csrf_token }}';
+</script>
+{% verbatim %}
+<script type="text/babel">
+    const { useState, useEffect, useRef, useCallback } = React;
+
+    function getCookie(name) {
+        let cookieValue = null;
+        if (document.cookie && document.cookie !== '') {
+            const cookies = document.cookie.split(';');
+            for (let i = 0; i < cookies.length; i++) {
+                const cookie = cookies[i].trim();
+                if (cookie.substring(0, name.length + 1) === (name + '=')) {
+                    cookieValue = decodeURIComponent(cookie.substring(name.length + 1));
+                    break;
+                }
+            }
+        }
+        return cookieValue;
+    }
+
+    const BASE_ACCENT = '#22c55e';
+
+    const Icon = ({ name, size = 16, className = "" }) => {
+        useEffect(() => {
+            if (window.lucide) window.lucide.createIcons();
+        }, [name]);
+        return <i data-lucide={name} width={size} height={size} className={className}></i>;
+    };
+
+    // --- Shared input styling ---
+    const inputStyle = {
+        background: 'rgba(255,255,255,0.03)',
+        border: '1px solid var(--border-color)',
+        color: 'var(--text-primary)',
+        padding: '0.4rem 0.6rem',
+        fontSize: '0.85rem',
+        width: '100%',
+        boxSizing: 'border-box',
+        borderRadius: 'var(--radius-sm)',
+        fontFamily: 'var(--font-mono)',
+    };
+
+    const textareaStyle = {
+        ...inputStyle,
+        resize: 'vertical',
+        minHeight: '60px',
+    };
+
+    // --- Inline editable text input ---
+    const EditableInput = ({ value, onChange, type = "text", placeholder = "", style: extraStyle = {} }) => {
+        const ref = useRef(null);
+        return (
+            <input
+                ref={ref}
+                type={type}
+                defaultValue={value}
+                placeholder={placeholder}
+                className="mono-text"
+                style={{ ...inputStyle, ...extraStyle }}
+                onBlur={() => {
+                    const v = type === 'number' ? (parseFloat(ref.current.value) || 0) : ref.current.value;
+                    onChange(v);
+                }}
+                onKeyDown={(e) => {
+                    if (e.key === 'Enter') ref.current.blur();
+                }}
+            />
+        );
+    };
+
+    // --- Inline editable textarea ---
+    const EditableTextArea = ({ value, onChange, placeholder = "" }) => {
+        const ref = useRef(null);
+        return (
+            <textarea
+                ref={ref}
+                defaultValue={value}
+                placeholder={placeholder}
+                className="mono-text"
+                rows={2}
+                style={textareaStyle}
+                onBlur={() => onChange(ref.current.value)}
+            />
+        );
+    };
+
+    // --- Field label ---
+    const FieldLabel = ({ children }) => (
+        <label className="text-muted mono-text" style={{
+            fontSize: '0.65rem', display: 'block', marginBottom: '0.2rem',
+            textTransform: 'uppercase', letterSpacing: '0.5px',
+        }}>
+            {children}
+        </label>
+    );
+
+    // --- Collapsible section panel ---
+    const SectionPanel = ({ title, count, children, defaultOpen = false }) => {
+        const [open, setOpen] = useState(defaultOpen);
+        return (
+            <div className="glass-panel" style={{ marginBottom: '1.5rem', overflow: 'hidden' }}>
+                <button
+                    onClick={() => setOpen(!open)}
+                    className="mono-text"
+                    style={{
+                        width: '100%',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'space-between',
+                        padding: '1rem 1.5rem',
+                        background: 'transparent',
+                        border: 'none',
+                        borderBottom: open ? '1px solid var(--border-color)' : 'none',
+                        color: BASE_ACCENT,
+                        cursor: 'pointer',
+                        fontSize: '0.95rem',
+                        fontWeight: 'bold',
+                        letterSpacing: '1.5px',
+                        textAlign: 'left',
+                        fontFamily: 'var(--font-mono)',
+                    }}
+                >
+                    <span>
+                        {open ? '[-]' : '[+]'} {title}
+                        <span className="text-muted" style={{ fontSize: '0.75rem', marginLeft: '0.75rem', fontWeight: 'normal' }}>
+                            ({count} {count === 1 ? 'ENTRY' : 'ENTRIES'})
+                        </span>
+                    </span>
+                    <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>
+                        {open ? 'COLLAPSE' : 'EXPAND'}
+                    </span>
+                </button>
+                {open && (
+                    <div style={{ padding: '1.5rem' }}>
+                        {children}
+                    </div>
+                )}
+            </div>
+        );
+    };
+
+    // --- Delete button ---
+    const DeleteButton = ({ onClick, title = "Delete", small = false }) => (
+        <button
+            onClick={onClick}
+            title={title}
+            style={{
+                background: 'transparent',
+                border: 'none',
+                color: 'var(--accent-danger)',
+                cursor: 'pointer',
+                padding: small ? '2px' : '0.25rem',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                flexShrink: 0,
+            }}
+        >
+            <Icon name="x" size={small ? 14 : 16} />
+        </button>
+    );
+
+    // --- Add button ---
+    const AddButton = ({ onClick, label, disabled = false }) => (
+        <div style={{ textAlign: 'center', marginTop: '1rem' }}>
+            <button
+                onClick={onClick}
+                disabled={disabled}
+                className="mono-text"
+                style={{
+                    background: 'transparent',
+                    border: `1px solid ${BASE_ACCENT}`,
+                    color: BASE_ACCENT,
+                    padding: '0.6rem 2rem',
+                    cursor: disabled ? 'wait' : 'pointer',
+                    fontWeight: 'bold',
+                    fontFamily: 'var(--font-mono)',
+                    fontSize: '0.85rem',
+                    letterSpacing: '1px',
+                    borderRadius: 'var(--radius-sm)',
+                    opacity: disabled ? 0.6 : 1,
+                }}
+            >
+                {label}
+            </button>
+        </div>
+    );
+
+    // --- Save status indicator ---
+    const SaveIndicator = ({ status }) => {
+        if (!status) return null;
+        const colors = {
+            saving: 'var(--accent-warning)',
+            saved: BASE_ACCENT,
+            error: 'var(--accent-danger)',
+        };
+        const labels = {
+            saving: 'SAVING...',
+            saved: 'SAVED',
+            error: 'ERROR',
+        };
+        return (
+            <span className="mono-text" style={{
+                fontSize: '0.7rem',
+                color: colors[status],
+                padding: '0.2rem 0.5rem',
+                border: `1px solid ${colors[status]}`,
+                borderRadius: 'var(--radius-sm)',
+                animation: status === 'saving' ? 'pulse 1s infinite' : 'none',
+            }}>
+                {labels[status]}
+            </span>
+        );
+    };
+
+    // =====================================================================
+    //  LOCATION TYPES SECTION
+    // =====================================================================
+    const LocationTypesSection = ({ items, onUpdate }) => {
+        const updateItem = (idx, field, value) => {
+            const updated = items.map((item, i) =>
+                i === idx ? { ...item, [field]: value } : item
+            );
+            onUpdate('locationTypes', updated);
+        };
+
+        const addItem = () => {
+            const key = 'new_location_' + Date.now();
+            onUpdate('locationTypes', [...items, {
+                key, name: 'New Location Type', exp: 0, space: 0,
+                description: '', included: '',
+            }]);
+        };
+
+        const removeItem = (idx) => {
+            onUpdate('locationTypes', items.filter((_, i) => i !== idx));
+        };
+
+        return (
+            <SectionPanel title="LOCATION TYPES" count={items.length} defaultOpen={true}>
+                {/* Column headers */}
+                <div style={{
+                    display: 'grid',
+                    gridTemplateColumns: '1fr 70px 70px 2fr 2fr 32px',
+                    gap: '0.5rem',
+                    marginBottom: '0.5rem',
+                    padding: '0 0.25rem',
+                }}>
+                    <span className="text-muted mono-text" style={{ fontSize: '0.65rem' }}>NAME</span>
+                    <span className="text-muted mono-text" style={{ fontSize: '0.65rem' }}>EXP COST</span>
+                    <span className="text-muted mono-text" style={{ fontSize: '0.65rem' }}>SPACE</span>
+                    <span className="text-muted mono-text" style={{ fontSize: '0.65rem' }}>DESCRIPTION</span>
+                    <span className="text-muted mono-text" style={{ fontSize: '0.65rem' }}>INCLUDED</span>
+                    <span></span>
+                </div>
+
+                {items.length === 0 && (
+                    <p className="text-muted mono-text" style={{
+                        textAlign: 'center', padding: '2rem 0', fontStyle: 'italic', fontSize: '0.85rem',
+                    }}>
+                        No location types configured.
+                    </p>
+                )}
+
+                {items.map((item, idx) => (
+                    <div key={item.key} className="tech-border" style={{
+                        display: 'grid',
+                        gridTemplateColumns: '1fr 70px 70px 2fr 2fr 32px',
+                        gap: '0.5rem',
+                        padding: '0.5rem',
+                        marginBottom: '0.25rem',
+                        alignItems: 'start',
+                        borderLeft: `3px solid ${BASE_ACCENT}`,
+                    }}>
+                        <EditableInput
+                            value={item.name}
+                            onChange={(v) => updateItem(idx, 'name', v)}
+                            placeholder="Location name"
+                        />
+                        <EditableInput
+                            value={item.exp}
+                            onChange={(v) => updateItem(idx, 'exp', v)}
+                            type="number"
+                            style={{ textAlign: 'center' }}
+                        />
+                        <EditableInput
+                            value={item.space}
+                            onChange={(v) => updateItem(idx, 'space', v)}
+                            type="number"
+                            style={{ textAlign: 'center' }}
+                        />
+                        <EditableInput
+                            value={item.description}
+                            onChange={(v) => updateItem(idx, 'description', v)}
+                            placeholder="Description..."
+                        />
+                        <EditableInput
+                            value={item.included}
+                            onChange={(v) => updateItem(idx, 'included', v)}
+                            placeholder="What is included..."
+                        />
+                        <DeleteButton onClick={() => removeItem(idx)} title="Remove location type" />
+                    </div>
+                ))}
+
+                <AddButton onClick={addItem} label="+ ADD LOCATION TYPE" />
+            </SectionPanel>
+        );
+    };
+
+    // =====================================================================
+    //  LOCATION MERITS SECTION
+    // =====================================================================
+    const LocationMeritsSection = ({ items, onUpdate }) => {
+        const updateItem = (idx, field, value) => {
+            const updated = items.map((item, i) =>
+                i === idx ? { ...item, [field]: value } : item
+            );
+            onUpdate('locationMerits', updated);
+        };
+
+        const addItem = () => {
+            const key = 'new_merit_' + Date.now();
+            onUpdate('locationMerits', [...items, {
+                key, name: 'New Merit', exp: 0, extraSpace: 0, description: '',
+            }]);
+        };
+
+        const removeItem = (idx) => {
+            onUpdate('locationMerits', items.filter((_, i) => i !== idx));
+        };
+
+        return (
+            <SectionPanel title="LOCATION MERITS" count={items.length}>
+                {/* Column headers */}
+                <div style={{
+                    display: 'grid',
+                    gridTemplateColumns: '1fr 70px 90px 3fr 32px',
+                    gap: '0.5rem',
+                    marginBottom: '0.5rem',
+                    padding: '0 0.25rem',
+                }}>
+                    <span className="text-muted mono-text" style={{ fontSize: '0.65rem' }}>NAME</span>
+                    <span className="text-muted mono-text" style={{ fontSize: '0.65rem' }}>EXP COST</span>
+                    <span className="text-muted mono-text" style={{ fontSize: '0.65rem' }}>EXTRA SPACE</span>
+                    <span className="text-muted mono-text" style={{ fontSize: '0.65rem' }}>DESCRIPTION</span>
+                    <span></span>
+                </div>
+
+                {items.length === 0 && (
+                    <p className="text-muted mono-text" style={{
+                        textAlign: 'center', padding: '2rem 0', fontStyle: 'italic', fontSize: '0.85rem',
+                    }}>
+                        No location merits configured.
+                    </p>
+                )}
+
+                {items.map((item, idx) => (
+                    <div key={item.key} className="tech-border" style={{
+                        display: 'grid',
+                        gridTemplateColumns: '1fr 70px 90px 3fr 32px',
+                        gap: '0.5rem',
+                        padding: '0.5rem',
+                        marginBottom: '0.25rem',
+                        alignItems: 'start',
+                        borderLeft: `3px solid ${BASE_ACCENT}`,
+                    }}>
+                        <EditableInput
+                            value={item.name}
+                            onChange={(v) => updateItem(idx, 'name', v)}
+                            placeholder="Merit name"
+                        />
+                        <EditableInput
+                            value={item.exp}
+                            onChange={(v) => updateItem(idx, 'exp', v)}
+                            type="number"
+                            style={{ textAlign: 'center' }}
+                        />
+                        <EditableInput
+                            value={item.extraSpace}
+                            onChange={(v) => updateItem(idx, 'extraSpace', v)}
+                            type="number"
+                            style={{ textAlign: 'center' }}
+                        />
+                        <EditableInput
+                            value={item.description}
+                            onChange={(v) => updateItem(idx, 'description', v)}
+                            placeholder="Description..."
+                        />
+                        <DeleteButton onClick={() => removeItem(idx)} title="Remove merit" />
+                    </div>
+                ))}
+
+                <AddButton onClick={addItem} label="+ ADD LOCATION MERIT" />
+            </SectionPanel>
+        );
+    };
+
+    // =====================================================================
+    //  FACILITY TYPES SECTION (with nested levels)
+    // =====================================================================
+    const FacilityTypesSection = ({ items, onUpdate }) => {
+        const updateFacility = (idx, field, value) => {
+            const updated = items.map((item, i) =>
+                i === idx ? { ...item, [field]: value } : item
+            );
+            onUpdate('facilityTypes', updated);
+        };
+
+        const updateLevel = (facilityIdx, levelIdx, field, value) => {
+            const updated = items.map((item, fi) => {
+                if (fi !== facilityIdx) return item;
+                const newLevels = item.levels.map((lv, li) =>
+                    li === levelIdx ? { ...lv, [field]: value } : lv
+                );
+                return { ...item, levels: newLevels };
+            });
+            onUpdate('facilityTypes', updated);
+        };
+
+        const addFacility = () => {
+            const key = 'new_facility_' + Date.now();
+            onUpdate('facilityTypes', [...items, {
+                key, name: 'New Facility', levels: [
+                    { level: 1, name: 'Level 1', exp: 0, size: 0, description: '' },
+                ],
+            }]);
+        };
+
+        const removeFacility = (idx) => {
+            onUpdate('facilityTypes', items.filter((_, i) => i !== idx));
+        };
+
+        const addLevel = (facilityIdx) => {
+            const updated = items.map((item, fi) => {
+                if (fi !== facilityIdx) return item;
+                const nextLevel = item.levels.length + 1;
+                return {
+                    ...item,
+                    levels: [...item.levels, {
+                        level: nextLevel,
+                        name: `Level ${nextLevel}`,
+                        exp: 0,
+                        size: 0,
+                        description: '',
+                    }],
+                };
+            });
+            onUpdate('facilityTypes', updated);
+        };
+
+        const removeLevel = (facilityIdx, levelIdx) => {
+            const updated = items.map((item, fi) => {
+                if (fi !== facilityIdx) return item;
+                return {
+                    ...item,
+                    levels: item.levels.filter((_, li) => li !== levelIdx),
+                };
+            });
+            onUpdate('facilityTypes', updated);
+        };
+
+        return (
+            <SectionPanel title="FACILITY TYPES" count={items.length}>
+                {items.length === 0 && (
+                    <p className="text-muted mono-text" style={{
+                        textAlign: 'center', padding: '2rem 0', fontStyle: 'italic', fontSize: '0.85rem',
+                    }}>
+                        No facility types configured.
+                    </p>
+                )}
+
+                {items.map((facility, fIdx) => (
+                    <div key={facility.key} className="tech-border" style={{
+                        padding: '1rem',
+                        marginBottom: '1rem',
+                        borderLeft: `3px solid ${BASE_ACCENT}`,
+                    }}>
+                        {/* Facility header */}
+                        <div style={{
+                            display: 'flex', justifyContent: 'space-between',
+                            alignItems: 'center', marginBottom: '0.75rem',
+                        }}>
+                            <div style={{ flex: 1, marginRight: '1rem' }}>
+                                <FieldLabel>FACILITY KEY</FieldLabel>
+                                <EditableInput
+                                    value={facility.key}
+                                    onChange={(v) => updateFacility(fIdx, 'key', v)}
+                                    placeholder="unique_key"
+                                    style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}
+                                />
+                            </div>
+                            <div style={{ flex: 2, marginRight: '1rem' }}>
+                                <FieldLabel>FACILITY NAME</FieldLabel>
+                                <EditableInput
+                                    value={facility.name}
+                                    onChange={(v) => updateFacility(fIdx, 'name', v)}
+                                    placeholder="Facility name"
+                                    style={{ fontWeight: 'bold' }}
+                                />
+                            </div>
+                            <button
+                                onClick={() => removeFacility(fIdx)}
+                                title="Delete facility type"
+                                className="mono-text"
+                                style={{
+                                    background: 'transparent',
+                                    border: '1px solid var(--accent-danger)',
+                                    color: 'var(--accent-danger)',
+                                    cursor: 'pointer',
+                                    padding: '0.3rem 0.6rem',
+                                    fontSize: '0.7rem',
+                                    fontFamily: 'var(--font-mono)',
+                                    borderRadius: 'var(--radius-sm)',
+                                    marginTop: '1rem',
+                                    flexShrink: 0,
+                                }}
+                            >
+                                DELETE
+                            </button>
+                        </div>
+
+                        {/* Levels */}
+                        <div style={{
+                            background: 'rgba(0,0,0,0.15)',
+                            borderRadius: 'var(--radius-sm)',
+                            padding: '0.75rem',
+                        }}>
+                            <div style={{
+                                display: 'flex', justifyContent: 'space-between',
+                                alignItems: 'center', marginBottom: '0.5rem',
+                            }}>
+                                <span className="mono-text" style={{
+                                    fontSize: '0.7rem', color: BASE_ACCENT, letterSpacing: '1px',
+                                }}>
+                                    LEVELS ({facility.levels.length})
+                                </span>
+                            </div>
+
+                            {/* Level column headers */}
+                            <div style={{
+                                display: 'grid',
+                                gridTemplateColumns: '50px 1fr 70px 70px 2fr 32px',
+                                gap: '0.4rem',
+                                marginBottom: '0.4rem',
+                                padding: '0 0.25rem',
+                            }}>
+                                <span className="text-muted mono-text" style={{ fontSize: '0.6rem' }}>LVL</span>
+                                <span className="text-muted mono-text" style={{ fontSize: '0.6rem' }}>NAME</span>
+                                <span className="text-muted mono-text" style={{ fontSize: '0.6rem' }}>EXP COST</span>
+                                <span className="text-muted mono-text" style={{ fontSize: '0.6rem' }}>SIZE</span>
+                                <span className="text-muted mono-text" style={{ fontSize: '0.6rem' }}>DESCRIPTION</span>
+                                <span></span>
+                            </div>
+
+                            {facility.levels.map((level, lIdx) => (
+                                <div key={lIdx} style={{
+                                    display: 'grid',
+                                    gridTemplateColumns: '50px 1fr 70px 70px 2fr 32px',
+                                    gap: '0.4rem',
+                                    marginBottom: '0.2rem',
+                                    alignItems: 'start',
+                                }}>
+                                    <EditableInput
+                                        value={level.level}
+                                        onChange={(v) => updateLevel(fIdx, lIdx, 'level', v)}
+                                        type="number"
+                                        style={{ textAlign: 'center', fontSize: '0.8rem' }}
+                                    />
+                                    <EditableInput
+                                        value={level.name}
+                                        onChange={(v) => updateLevel(fIdx, lIdx, 'name', v)}
+                                        placeholder="Level name"
+                                        style={{ fontSize: '0.8rem' }}
+                                    />
+                                    <EditableInput
+                                        value={level.exp}
+                                        onChange={(v) => updateLevel(fIdx, lIdx, 'exp', v)}
+                                        type="number"
+                                        style={{ textAlign: 'center', fontSize: '0.8rem' }}
+                                    />
+                                    <EditableInput
+                                        value={level.size}
+                                        onChange={(v) => updateLevel(fIdx, lIdx, 'size', v)}
+                                        type="number"
+                                        style={{ textAlign: 'center', fontSize: '0.8rem' }}
+                                    />
+                                    <EditableInput
+                                        value={level.description}
+                                        onChange={(v) => updateLevel(fIdx, lIdx, 'description', v)}
+                                        placeholder="Level description..."
+                                        style={{ fontSize: '0.8rem' }}
+                                    />
+                                    <DeleteButton
+                                        onClick={() => removeLevel(fIdx, lIdx)}
+                                        title="Remove level"
+                                        small
+                                    />
+                                </div>
+                            ))}
+
+                            {/* Add level button */}
+                            <button
+                                onClick={() => addLevel(fIdx)}
+                                className="mono-text"
+                                style={{
+                                    background: 'transparent',
+                                    border: '1px dashed var(--border-color)',
+                                    color: 'var(--text-muted)',
+                                    width: '100%',
+                                    padding: '0.35rem',
+                                    cursor: 'pointer',
+                                    fontSize: '0.75rem',
+                                    marginTop: '0.5rem',
+                                    borderRadius: 'var(--radius-sm)',
+                                    fontFamily: 'var(--font-mono)',
+                                }}
+                            >
+                                + ADD LEVEL
+                            </button>
+                        </div>
+                    </div>
+                ))}
+
+                <AddButton onClick={addFacility} label="+ ADD FACILITY TYPE" />
+            </SectionPanel>
+        );
+    };
+
+    // =====================================================================
+    //  EQUIPMENT TYPES SECTION
+    // =====================================================================
+    const EquipmentTypesSection = ({ items, onUpdate }) => {
+        const updateItem = (idx, field, value) => {
+            const updated = items.map((item, i) =>
+                i === idx ? { ...item, [field]: value } : item
+            );
+            onUpdate('equipmentTypes', updated);
+        };
+
+        const addItem = () => {
+            const key = 'new_equipment_' + Date.now();
+            onUpdate('equipmentTypes', [...items, {
+                key, name: 'New Equipment', exp: 0, category: '', requires: '',
+            }]);
+        };
+
+        const removeItem = (idx) => {
+            onUpdate('equipmentTypes', items.filter((_, i) => i !== idx));
+        };
+
+        // Group by category for display
+        const categories = {};
+        items.forEach((item, idx) => {
+            const cat = item.category || 'Uncategorized';
+            if (!categories[cat]) categories[cat] = [];
+            categories[cat].push({ ...item, _idx: idx });
+        });
+
+        return (
+            <SectionPanel title="EQUIPMENT TYPES" count={items.length}>
+                {/* Column headers */}
+                <div style={{
+                    display: 'grid',
+                    gridTemplateColumns: '1.5fr 70px 1fr 2fr 32px',
+                    gap: '0.5rem',
+                    marginBottom: '0.5rem',
+                    padding: '0 0.25rem',
+                }}>
+                    <span className="text-muted mono-text" style={{ fontSize: '0.65rem' }}>NAME</span>
+                    <span className="text-muted mono-text" style={{ fontSize: '0.65rem' }}>EXP COST</span>
+                    <span className="text-muted mono-text" style={{ fontSize: '0.65rem' }}>CATEGORY</span>
+                    <span className="text-muted mono-text" style={{ fontSize: '0.65rem' }}>REQUIRES</span>
+                    <span></span>
+                </div>
+
+                {items.length === 0 && (
+                    <p className="text-muted mono-text" style={{
+                        textAlign: 'center', padding: '2rem 0', fontStyle: 'italic', fontSize: '0.85rem',
+                    }}>
+                        No equipment types configured.
+                    </p>
+                )}
+
+                {Object.entries(categories).map(([cat, catItems]) => (
+                    <div key={cat}>
+                        {/* Category header */}
+                        <div style={{
+                            padding: '0.5rem 0.25rem 0.25rem',
+                            marginTop: '0.5rem',
+                            borderBottom: `1px solid rgba(34, 197, 94, 0.2)`,
+                            marginBottom: '0.4rem',
+                        }}>
+                            <span className="mono-text" style={{
+                                fontSize: '0.7rem', color: BASE_ACCENT,
+                                letterSpacing: '1px', textTransform: 'uppercase',
+                            }}>
+                                {cat}
+                            </span>
+                        </div>
+
+                        {catItems.map(item => (
+                            <div key={item.key} className="tech-border" style={{
+                                display: 'grid',
+                                gridTemplateColumns: '1.5fr 70px 1fr 2fr 32px',
+                                gap: '0.5rem',
+                                padding: '0.5rem',
+                                marginBottom: '0.25rem',
+                                alignItems: 'start',
+                                borderLeft: `3px solid ${BASE_ACCENT}`,
+                            }}>
+                                <EditableInput
+                                    value={item.name}
+                                    onChange={(v) => updateItem(item._idx, 'name', v)}
+                                    placeholder="Equipment name"
+                                />
+                                <EditableInput
+                                    value={item.exp}
+                                    onChange={(v) => updateItem(item._idx, 'exp', v)}
+                                    type="number"
+                                    style={{ textAlign: 'center' }}
+                                />
+                                <EditableInput
+                                    value={item.category}
+                                    onChange={(v) => updateItem(item._idx, 'category', v)}
+                                    placeholder="Category"
+                                />
+                                <EditableInput
+                                    value={item.requires}
+                                    onChange={(v) => updateItem(item._idx, 'requires', v)}
+                                    placeholder="Requirements..."
+                                />
+                                <DeleteButton onClick={() => removeItem(item._idx)} title="Remove equipment" />
+                            </div>
+                        ))}
+                    </div>
+                ))}
+
+                <AddButton onClick={addItem} label="+ ADD EQUIPMENT TYPE" />
+            </SectionPanel>
+        );
+    };
+
+    // =====================================================================
+    //  MAIN APP COMPONENT
+    // =====================================================================
+    const BaseConfigManager = () => {
+        const [config, setConfig] = useState(null);
+        const [loading, setLoading] = useState(true);
+        const [saveStatus, setSaveStatus] = useState(null);
+        const saveTimerRef = useRef(null);
+
+        // Fetch configuration from API
+        const fetchConfig = async () => {
+            try {
+                const res = await fetch('/api/base-config/', {
+                    headers: { 'X-CSRFToken': getCookie('csrftoken') || CSRF_TOKEN },
+                });
+                if (res.ok) {
+                    const data = await res.json();
+                    setConfig(data);
+                }
+            } catch (err) {
+                console.error('Failed to load base config:', err);
+            }
+            setLoading(false);
+        };
+
+        useEffect(() => { fetchConfig(); }, []);
+
+        // Save full config via PUT (debounced)
+        const saveConfig = useCallback((updatedConfig) => {
+            setConfig(updatedConfig);
+            setSaveStatus('saving');
+
+            // Debounce saves to avoid hammering the API on rapid edits
+            if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
+            saveTimerRef.current = setTimeout(async () => {
+                try {
+                    const res = await fetch('/api/base-config/', {
+                        method: 'PUT',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'X-CSRFToken': getCookie('csrftoken') || CSRF_TOKEN,
+                        },
+                        body: JSON.stringify(updatedConfig),
+                    });
+                    if (res.ok) {
+                        setSaveStatus('saved');
+                        // Clear the saved indicator after 2 seconds
+                        setTimeout(() => setSaveStatus(null), 2000);
+                    } else {
+                        setSaveStatus('error');
+                    }
+                } catch (err) {
+                    console.error('Failed to save base config:', err);
+                    setSaveStatus('error');
+                }
+            }, 500);
+        }, []);
+
+        // Handler passed to each section: update a top-level key and save
+        const handleUpdate = useCallback((key, value) => {
+            const updated = { ...config, [key]: value };
+            saveConfig(updated);
+        }, [config, saveConfig]);
+
+        if (loading) {
+            return (
+                <div className="loading-screen">
+                    <h1 className="mono-text">LOADING BASE CONFIGURATION...</h1>
+                </div>
+            );
+        }
+
+        if (!config) {
+            return (
+                <div style={{ maxWidth: '1000px', margin: '0 auto', padding: '2rem 1rem' }}>
+                    <p className="mono-text" style={{ color: 'var(--accent-danger)', textAlign: 'center' }}>
+                        FAILED TO LOAD BASE CONFIGURATION. CHECK API ENDPOINT.
+                    </p>
+                </div>
+            );
+        }
+
+        return (
+            <div style={{ maxWidth: '1100px', margin: '0 auto', padding: '2rem 1rem' }}>
+                {/* Header */}
+                <div style={{ marginBottom: '2rem' }}>
+                    <a href="/agencies/" className="mono-text text-muted"
+                        style={{ textDecoration: 'none', fontSize: '0.8rem', display: 'block', marginBottom: '0.5rem' }}>
+                        &lt; BACK TO AGENCIES
+                    </a>
+                    <div style={{
+                        display: 'flex', justifyContent: 'space-between',
+                        alignItems: 'center', flexWrap: 'wrap', gap: '0.5rem',
+                    }}>
+                        <h1 className="mono-text" style={{
+                            color: BASE_ACCENT,
+                            fontSize: '1.5rem',
+                            letterSpacing: '2px',
+                            borderBottom: `2px solid ${BASE_ACCENT}`,
+                            paddingBottom: '0.5rem',
+                        }}>
+                            BASE CONFIGURATION // MANAGEMENT
+                        </h1>
+                        <SaveIndicator status={saveStatus} />
+                    </div>
+                    <p className="text-muted mono-text" style={{ fontSize: '0.75rem', marginTop: '0.5rem' }}>
+                        Configure location types, merits, facilities, and equipment available for agency bases.
+                        Changes save automatically on blur.
+                    </p>
+                </div>
+
+                {/* Sections */}
+                <LocationTypesSection
+                    items={config.locationTypes || []}
+                    onUpdate={handleUpdate}
+                />
+                <LocationMeritsSection
+                    items={config.locationMerits || []}
+                    onUpdate={handleUpdate}
+                />
+                <FacilityTypesSection
+                    items={config.facilityTypes || []}
+                    onUpdate={handleUpdate}
+                />
+                <EquipmentTypesSection
+                    items={config.equipmentTypes || []}
+                    onUpdate={handleUpdate}
+                />
+            </div>
+        );
+    };
+
+    const root = ReactDOM.createRoot(document.getElementById('app-root'));
+    root.render(<BaseConfigManager />);
+</script>
+{% endverbatim %}
+{% endblock %}
