@@ -1476,7 +1476,7 @@
     // --- BASES MODULE ---
     const BASE_ACCENT = '#22c55e';
 
-    const BasesModule = ({ bases: initialBases, baseConfig, agencyId, onBasesChange, assignableCharacters, assignableNpcs }) => {
+    const BasesModule = ({ bases: initialBases, baseConfig, agencyId, onBasesChange, assignableCharacters, assignableNpcs, visibility, onToggleVis, classifiedBases }) => {
         const [bases, setBases] = useState(initialBases || []);
         const [expandedBase, setExpandedBase] = useState(null);
         const [creating, setCreating] = useState(false);
@@ -1639,10 +1639,25 @@
         };
 
         const BaseCard = ({ base }) => {
+            // Classified base — non-admin sees just the name
+            if (base.classified && !IS_ADMIN) {
+                return (
+                    <div className="glass-panel" style={{ padding: '1rem', marginBottom: '0.75rem', borderLeft: `3px solid ${BASE_ACCENT}` }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+                            <span className="mono-text" style={{ color: BASE_ACCENT, fontSize: '1rem', fontWeight: 'bold' }}>
+                                {base.name || 'UNNAMED BASE'}
+                            </span>
+                            <Classified />
+                        </div>
+                    </div>
+                );
+            }
+
             const isExpanded = expandedBase === base.id;
             const costs = calcBaseCosts(base);
             const loc = getLocationType(base.locationType);
             const spacePercent = costs.totalSpace > 0 ? Math.min(100, (costs.usedSpace / costs.totalSpace) * 100) : 0;
+            const basePath = `bases.${base.id}`;
 
             return (
                 <div className="glass-panel" style={{ padding: '1rem', marginBottom: '0.75rem', borderLeft: `3px solid ${BASE_ACCENT}` }}>
@@ -1660,6 +1675,7 @@
                                     [{loc.name}]
                                 </span>
                             )}
+                            <VisibilityToggle field={basePath} visibility={visibility} onToggle={onToggleVis} />
                         </div>
                         <div style={{ display: 'flex', gap: '1rem', alignItems: 'center' }}>
                             <span className="mono-text" style={{ fontSize: '0.75rem', color: '#f59e0b' }}>
@@ -1772,8 +1788,11 @@
 
                             {/* Facilities (multi-select, excludes workspace) */}
                             <div style={{ marginBottom: '1rem' }}>
-                                <label className="text-muted mono-text" style={{ fontSize: '0.7rem', display: 'block', marginBottom: '0.5rem' }}>FACILITIES</label>
-                                {(baseConfig.facilityTypes || []).filter(ft => ft.key !== 'workspace').map(ft => {
+                                <label className="text-muted mono-text" style={{ fontSize: '0.7rem', display: 'block', marginBottom: '0.5rem' }}>
+                                    FACILITIES
+                                    <VisibilityToggle field={`${basePath}.facilities`} visibility={visibility} onToggle={onToggleVis} />
+                                </label>
+                                {base.classifiedFacilities && !IS_ADMIN ? <Classified /> : (baseConfig.facilityTypes || []).filter(ft => ft.key !== 'workspace').map(ft => {
                                     const selectedLevels = (base.facilities || []).filter(f => f.key === ft.key).map(f => f.level);
                                     const hasAny = selectedLevels.length > 0;
                                     return (
@@ -1814,13 +1833,19 @@
                                             </div>
                                         </div>
                                     );
-                                })}
+                                }))}
                             </div>
 
                             {/* Workspaces (multi-instance with assignment) */}
                             {(() => {
                                 const wsConfig = getWorkspaceConfig(baseConfig);
                                 if (!wsConfig) return null;
+                                if (base.classifiedWorkspaces && !IS_ADMIN) return (
+                                    <div style={{ marginBottom: '1rem' }}>
+                                        <label className="text-muted mono-text" style={{ fontSize: '0.7rem', marginBottom: '0.5rem' }}>WORKSPACES</label>
+                                        <Classified />
+                                    </div>
+                                );
                                 const workspaces = base.workspaces || [];
                                 return (
                                     <div style={{ marginBottom: '1rem' }}>
@@ -1828,7 +1853,10 @@
                                             fontSize: '0.7rem', display: 'flex', justifyContent: 'space-between',
                                             alignItems: 'center', marginBottom: '0.5rem',
                                         }}>
-                                            <span>WORKSPACES ({workspaces.length})</span>
+                                            <span>
+                                                WORKSPACES ({workspaces.length})
+                                                <VisibilityToggle field={`${basePath}.workspaces`} visibility={visibility} onToggle={onToggleVis} />
+                                            </span>
                                             {IS_ADMIN && (
                                                 <select
                                                     value=""
@@ -1921,8 +1949,11 @@
 
                             {/* Equipment */}
                             <div style={{ marginBottom: '1rem' }}>
-                                <label className="text-muted mono-text" style={{ fontSize: '0.7rem', display: 'block', marginBottom: '0.5rem' }}>FACILITY EQUIPMENT</label>
-                                {(() => {
+                                <label className="text-muted mono-text" style={{ fontSize: '0.7rem', display: 'block', marginBottom: '0.5rem' }}>
+                                    FACILITY EQUIPMENT
+                                    <VisibilityToggle field={`${basePath}.equipment`} visibility={visibility} onToggle={onToggleVis} />
+                                </label>
+                                {base.classifiedEquipment && !IS_ADMIN ? <Classified /> : (() => {
                                     const categories = {};
                                     (baseConfig.equipmentTypes || []).forEach(eq => {
                                         const cat = eq.category || 'Other';
@@ -1997,7 +2028,17 @@
         };
 
         // Total exp across all bases
-        const totalBaseExp = bases.reduce((sum, b) => sum + calcBaseCosts(b).totalExp, 0);
+        const totalBaseExp = bases.reduce((sum, b) => b.classified ? sum : sum + calcBaseCosts(b).totalExp, 0);
+
+        // If entire bases section is classified for non-admins
+        if (classifiedBases && !IS_ADMIN) {
+            return (
+                <div className="glass-panel" style={{ padding: '1.5rem', marginBottom: '1rem' }}>
+                    <h3 className="mono-text" style={{ color: BASE_ACCENT, marginBottom: '1rem' }}>BASES</h3>
+                    <Classified />
+                </div>
+            );
+        }
 
         return (
             <div className="glass-panel" style={{ padding: '1.5rem', marginBottom: '1rem' }}>
@@ -2009,6 +2050,7 @@
                 }}>
                     <span>
                         BASES
+                        <VisibilityToggle field="bases" visibility={visibility} onToggle={onToggleVis} />
                         <span className="text-muted" style={{ fontSize: '0.75rem', marginLeft: '0.75rem' }}>
                             ({bases.length}) // TOTAL EXP: {totalBaseExp}
                         </span>
@@ -2335,6 +2377,9 @@
                     agencyId={AGENCY_ID}
                     assignableCharacters={agency.assignableCharacters || []}
                     assignableNpcs={agency.assignableNpcs || []}
+                    visibility={vis}
+                    onToggleVis={toggleVisibility}
+                    classifiedBases={agency.classifiedBases}
                     onBasesChange={(newBases) => {
                         const updated = { ...agencyRef.current, bases: newBases };
                         setAgency(updated);
