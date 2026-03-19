@@ -1,5 +1,10 @@
 # Changelog
 
+## v0.5.4
+- NPC agency bases now support the CLASSIFIED visibility system
+- Admins can classify/declassify: entire bases section, individual bases, facilities, workspaces, and equipment per base
+- Non-admin users see CLASSIFIED placeholders for hidden base data
+
 ## v0.5.3
 - Facilities now use multi-select — pick any combination of options instead of a single level (barracks, armory, brig, medical, computer core, storage, aviation, etc.)
 - Workspaces are now a separate section — can add multiple workspaces per base, each assignable to a character or NPC

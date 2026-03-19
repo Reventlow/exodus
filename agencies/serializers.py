@@ -87,10 +87,31 @@ def serialize_agency(agency, user):
     # Council items — visible to everyone, not editable per-agency
     data["councilItems"] = [serialize_council_item(ci) for ci in CouncilItem.objects.all()]
 
-    # Bases + config for cost lookups
-    data["bases"] = [
-        serialize_base(b) for b in agency.bases.all()
-    ]
+    # Bases + config for cost lookups (with per-base visibility for NPC agencies)
+    if show_all:
+        data["bases"] = [serialize_base(b) for b in agency.bases.all()]
+    elif is_field_visible(agency, "bases"):
+        serialized_bases = []
+        for b in agency.bases.all():
+            base_path = f"bases.{b.id}"
+            if not is_field_visible(agency, base_path):
+                serialized_bases.append({"id": b.id, "name": b.name, "classified": True})
+            else:
+                sb = serialize_base(b)
+                if not is_field_visible(agency, f"{base_path}.facilities"):
+                    sb["facilities"] = []
+                    sb["classifiedFacilities"] = True
+                if not is_field_visible(agency, f"{base_path}.workspaces"):
+                    sb["workspaces"] = []
+                    sb["classifiedWorkspaces"] = True
+                if not is_field_visible(agency, f"{base_path}.equipment"):
+                    sb["equipment"] = []
+                    sb["classifiedEquipment"] = True
+                serialized_bases.append(sb)
+        data["bases"] = serialized_bases
+    else:
+        data["bases"] = []
+        data["classifiedBases"] = True
     config = BaseConfig.load()
     data["baseConfig"] = serialize_base_config(config)
 
