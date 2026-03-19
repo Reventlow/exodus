@@ -1616,7 +1616,8 @@
             return (
                 <div className="glass-panel" style={{ padding: '1rem', marginBottom: '0.75rem', borderLeft: `3px solid ${BASE_ACCENT}` }}>
                     {/* Header row */}
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', cursor: 'pointer' }}
+                    <div title={loc ? `${loc.description}${loc.included ? '\n' + loc.included : ''}` : ''}
+                         style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', cursor: 'pointer' }}
                          onClick={() => setExpandedBase(isExpanded ? null : base.id)}>
                         <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', flex: 1 }}>
                             <Icon name={isExpanded ? "chevron-down" : "chevron-right"} size={16} />
@@ -1745,7 +1746,11 @@
                                     const current = (base.facilities || []).find(f => f.key === ft.key);
                                     const currentLevel = current ? current.level : 0;
                                     return (
-                                        <div key={ft.key} className="tech-border" style={{
+                                        <div key={ft.key} className="tech-border"
+                                            title={currentLevel > 0
+                                                ? ft.levels.find(l => l.level === currentLevel)?.description
+                                                : ft.levels.map(l => `Lvl ${l.level}: ${l.name} (E:${l.exp} S:${l.size})`).join('\n')}
+                                            style={{
                                             padding: '0.5rem', marginBottom: '0.25rem',
                                             background: currentLevel > 0 ? 'rgba(34,197,94,0.05)' : 'rgba(0,0,0,0.15)',
                                         }}>

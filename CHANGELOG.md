@@ -1,5 +1,9 @@
 # Changelog
 
+## v0.5.2
+- Hover tooltips on all base elements — location types, merits, facilities, equipment, and collapsed base headers show descriptions on hover
+- Fixed EXP sync between bases and core stats display
+
 ## v0.5.1
 - Experience pool now shows used/total when bases are present (turns red when overspent)
 - Added HR Off-boarding Office Suite 55 facility (Exp 5, Size 2)
