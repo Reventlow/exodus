@@ -1,5 +1,9 @@
 # Changelog
 
+## v0.5.1
+- Experience pool now shows used/total when bases are present (turns red when overspent)
+- Added HR Off-boarding Office Suite 55 facility (Exp 5, Size 2)
+
 ## v0.5.0
 - Added agency bases system — agencies can now have multiple bases with configurable locations, merits, facilities, and equipment
 - Bases track EXP cost and space usage with a visual capacity bar
