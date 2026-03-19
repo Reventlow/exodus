@@ -69,6 +69,8 @@
         history: [],
         bases: [],
         baseConfig: { locationTypes: [], locationMerits: [], facilityTypes: [], equipmentTypes: [] },
+        assignableCharacters: [],
+        assignableNpcs: [],
         fieldVisibility: {}
     };
 
@@ -345,12 +347,15 @@
     );
 
     // --- INTEGRITY & EXPERIENCE MODULE ---
+    const getWorkspaceConfig = (baseConfig) => (baseConfig.facilityTypes || []).find(f => f.key === 'workspace');
+
     const calcTotalBaseExp = (bases, baseConfig) => {
         if (!bases || !baseConfig) return 0;
         const getLocationType = (key) => (baseConfig.locationTypes || []).find(lt => lt.key === key);
         const getMerit = (key) => (baseConfig.locationMerits || []).find(m => m.key === key);
         const getFacilityType = (key) => (baseConfig.facilityTypes || []).find(f => f.key === key);
         const getEquipment = (key) => (baseConfig.equipmentTypes || []).find(e => e.key === key);
+        const wsConfig = getWorkspaceConfig(baseConfig);
         let total = 0;
         (bases || []).forEach(base => {
             const loc = getLocationType(base.locationType);
@@ -359,6 +364,9 @@
             (base.facilities || []).forEach(f => {
                 const ft = getFacilityType(f.key);
                 if (ft) { const lvl = ft.levels.find(l => l.level === f.level); if (lvl) total += lvl.exp; }
+            });
+            (base.workspaces || []).forEach(w => {
+                if (wsConfig) { const lvl = wsConfig.levels.find(l => l.level === w.level); if (lvl) total += lvl.exp; }
             });
             (base.equipment || []).forEach(ek => { const eq = getEquipment(ek); if (eq) total += eq.exp; });
         });
@@ -1468,7 +1476,7 @@
     // --- BASES MODULE ---
     const BASE_ACCENT = '#22c55e';
 
-    const BasesModule = ({ bases: initialBases, baseConfig, agencyId, onBasesChange }) => {
+    const BasesModule = ({ bases: initialBases, baseConfig, agencyId, onBasesChange, assignableCharacters, assignableNpcs }) => {
         const [bases, setBases] = useState(initialBases || []);
         const [expandedBase, setExpandedBase] = useState(null);
         const [creating, setCreating] = useState(false);
@@ -1510,6 +1518,13 @@
                 const ft = getFacilityType(f.key);
                 if (ft) {
                     const lvl = ft.levels.find(l => l.level === f.level);
+                    if (lvl) { totalExp += lvl.exp; usedSpace += lvl.size; }
+                }
+            });
+            const wsConfig = getWorkspaceConfig(baseConfig);
+            (base.workspaces || []).forEach(w => {
+                if (wsConfig) {
+                    const lvl = wsConfig.levels.find(l => l.level === w.level);
                     if (lvl) { totalExp += lvl.exp; usedSpace += lvl.size; }
                 }
             });
@@ -1579,22 +1594,38 @@
             updateBaseField(baseId, 'merits', newMerits);
         };
 
-        const setFacility = (baseId, facilityKey, level) => {
+        const toggleFacilityLevel = (baseId, facilityKey, level) => {
             const base = bases.find(b => b.id === baseId);
             if (!base) return;
             const current = base.facilities || [];
+            const has = current.some(f => f.key === facilityKey && f.level === level);
             let newFacilities;
-            if (level === 0) {
-                newFacilities = current.filter(f => f.key !== facilityKey);
+            if (has) {
+                newFacilities = current.filter(f => !(f.key === facilityKey && f.level === level));
             } else {
-                const existing = current.find(f => f.key === facilityKey);
-                if (existing) {
-                    newFacilities = current.map(f => f.key === facilityKey ? { ...f, level } : f);
-                } else {
-                    newFacilities = [...current, { key: facilityKey, level }];
-                }
+                newFacilities = [...current, { key: facilityKey, level }];
             }
             updateBaseField(baseId, 'facilities', newFacilities);
+        };
+
+        const addWorkspace = (baseId, level) => {
+            const base = bases.find(b => b.id === baseId);
+            if (!base) return;
+            const ws = [...(base.workspaces || []), { level, assignedTo: null, assignedType: null }];
+            updateBaseField(baseId, 'workspaces', ws);
+        };
+
+        const removeWorkspace = (baseId, idx) => {
+            const base = bases.find(b => b.id === baseId);
+            if (!base) return;
+            updateBaseField(baseId, 'workspaces', (base.workspaces || []).filter((_, i) => i !== idx));
+        };
+
+        const updateWorkspace = (baseId, idx, updates) => {
+            const base = bases.find(b => b.id === baseId);
+            if (!base) return;
+            const ws = (base.workspaces || []).map((w, i) => i === idx ? { ...w, ...updates } : w);
+            updateBaseField(baseId, 'workspaces', ws);
         };
 
         const toggleEquipment = (baseId, eqKey) => {
@@ -1739,63 +1770,154 @@
                                 </div>
                             )}
 
-                            {/* Facilities */}
+                            {/* Facilities (multi-select, excludes workspace) */}
                             <div style={{ marginBottom: '1rem' }}>
                                 <label className="text-muted mono-text" style={{ fontSize: '0.7rem', display: 'block', marginBottom: '0.5rem' }}>FACILITIES</label>
-                                {(baseConfig.facilityTypes || []).map(ft => {
-                                    const current = (base.facilities || []).find(f => f.key === ft.key);
-                                    const currentLevel = current ? current.level : 0;
+                                {(baseConfig.facilityTypes || []).filter(ft => ft.key !== 'workspace').map(ft => {
+                                    const selectedLevels = (base.facilities || []).filter(f => f.key === ft.key).map(f => f.level);
+                                    const hasAny = selectedLevels.length > 0;
                                     return (
                                         <div key={ft.key} className="tech-border"
-                                            title={currentLevel > 0
-                                                ? ft.levels.find(l => l.level === currentLevel)?.description
-                                                : ft.levels.map(l => `Lvl ${l.level}: ${l.name} (E:${l.exp} S:${l.size})`).join('\n')}
                                             style={{
                                             padding: '0.5rem', marginBottom: '0.25rem',
-                                            background: currentLevel > 0 ? 'rgba(34,197,94,0.05)' : 'rgba(0,0,0,0.15)',
+                                            background: hasAny ? 'rgba(34,197,94,0.05)' : 'rgba(0,0,0,0.15)',
                                         }}>
-                                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                                                <span className="mono-text" style={{
-                                                    fontSize: '0.85rem',
-                                                    color: currentLevel > 0 ? BASE_ACCENT : 'var(--text-muted)',
-                                                }}>
-                                                    {ft.name}
-                                                    {currentLevel > 0 && (
-                                                        <span style={{ fontSize: '0.7rem', marginLeft: '0.5rem', opacity: 0.7 }}>
-                                                            [LVL {currentLevel}: {ft.levels.find(l => l.level === currentLevel)?.name}]
-                                                        </span>
-                                                    )}
-                                                </span>
-                                                {IS_ADMIN && (
-                                                    <div style={{ display: 'flex', gap: '0.25rem', alignItems: 'center' }}>
-                                                        <select
-                                                            value={currentLevel}
-                                                            onChange={e => setFacility(base.id, ft.key, parseInt(e.target.value))}
+                                            <span className="mono-text" style={{
+                                                fontSize: '0.85rem', display: 'block', marginBottom: '0.35rem',
+                                                color: hasAny ? BASE_ACCENT : 'var(--text-muted)',
+                                            }}>
+                                                {ft.name}
+                                            </span>
+                                            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.3rem' }}>
+                                                {ft.levels.map(lvl => {
+                                                    const active = selectedLevels.includes(lvl.level);
+                                                    return (
+                                                        <button key={lvl.level}
+                                                            onClick={() => IS_ADMIN && toggleFacilityLevel(base.id, ft.key, lvl.level)}
+                                                            disabled={!IS_ADMIN}
+                                                            title={lvl.description}
                                                             style={{
-                                                                background: 'rgba(0,0,0,0.3)', color: 'var(--text-primary)',
-                                                                border: '1px solid var(--border-color)', padding: '0.2rem 0.4rem',
-                                                                fontFamily: 'var(--font-mono)', fontSize: '0.75rem',
+                                                                background: active ? `${BASE_ACCENT}22` : 'rgba(0,0,0,0.2)',
+                                                                border: `1px solid ${active ? BASE_ACCENT : 'var(--border-color)'}`,
+                                                                color: active ? BASE_ACCENT : 'var(--text-muted)',
+                                                                padding: '0.25rem 0.5rem', cursor: IS_ADMIN ? 'pointer' : 'default',
+                                                                fontFamily: 'var(--font-mono)', fontSize: '0.7rem',
                                                                 borderRadius: 'var(--radius-sm)',
                                                             }}>
-                                                            <option value={0}>None</option>
-                                                            {ft.levels.map(lvl => (
-                                                                <option key={lvl.level} value={lvl.level}>
-                                                                    Lvl {lvl.level}: {lvl.name} (E:{lvl.exp} S:{lvl.size})
-                                                                </option>
-                                                            ))}
-                                                        </select>
-                                                    </div>
-                                                )}
+                                                            {lvl.name}
+                                                            <span style={{ fontSize: '0.6rem', marginLeft: '0.3rem', opacity: 0.7 }}>
+                                                                E:{lvl.exp} S:{lvl.size}
+                                                            </span>
+                                                        </button>
+                                                    );
+                                                })}
                                             </div>
-                                            {currentLevel > 0 && (
-                                                <p className="text-muted" style={{ fontSize: '0.7rem', marginTop: '0.25rem', marginBottom: 0 }}>
-                                                    {ft.levels.find(l => l.level === currentLevel)?.description}
-                                                </p>
-                                            )}
                                         </div>
                                     );
                                 })}
                             </div>
+
+                            {/* Workspaces (multi-instance with assignment) */}
+                            {(() => {
+                                const wsConfig = getWorkspaceConfig(baseConfig);
+                                if (!wsConfig) return null;
+                                const workspaces = base.workspaces || [];
+                                return (
+                                    <div style={{ marginBottom: '1rem' }}>
+                                        <label className="text-muted mono-text" style={{
+                                            fontSize: '0.7rem', display: 'flex', justifyContent: 'space-between',
+                                            alignItems: 'center', marginBottom: '0.5rem',
+                                        }}>
+                                            <span>WORKSPACES ({workspaces.length})</span>
+                                            {IS_ADMIN && (
+                                                <select
+                                                    value=""
+                                                    onChange={e => { if (e.target.value) addWorkspace(base.id, parseInt(e.target.value)); e.target.value = ''; }}
+                                                    style={{
+                                                        background: 'rgba(0,0,0,0.3)', color: BASE_ACCENT,
+                                                        border: `1px solid ${BASE_ACCENT}`, padding: '0.2rem 0.4rem',
+                                                        fontFamily: 'var(--font-mono)', fontSize: '0.7rem',
+                                                        borderRadius: 'var(--radius-sm)', cursor: 'pointer',
+                                                    }}>
+                                                    <option value="">+ Add Workspace</option>
+                                                    {wsConfig.levels.map(lvl => (
+                                                        <option key={lvl.level} value={lvl.level}>
+                                                            {lvl.name} (E:{lvl.exp} S:{lvl.size})
+                                                        </option>
+                                                    ))}
+                                                </select>
+                                            )}
+                                        </label>
+                                        {workspaces.map((ws, idx) => {
+                                            const lvl = wsConfig.levels.find(l => l.level === ws.level);
+                                            return (
+                                                <div key={idx} className="tech-border" title={lvl?.description || ''}
+                                                    style={{
+                                                    padding: '0.5rem', marginBottom: '0.25rem',
+                                                    background: 'rgba(34,197,94,0.05)',
+                                                    display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap',
+                                                }}>
+                                                    <span className="mono-text" style={{ fontSize: '0.8rem', color: BASE_ACCENT, minWidth: '120px' }}>
+                                                        {lvl?.name || `Level ${ws.level}`}
+                                                        <span style={{ fontSize: '0.65rem', marginLeft: '0.3rem', opacity: 0.7 }}>
+                                                            E:{lvl?.exp || 0} S:{lvl?.size || 0}
+                                                        </span>
+                                                    </span>
+                                                    {IS_ADMIN ? (
+                                                        <select
+                                                            value={ws.assignedTo ? `${ws.assignedType}:${ws.assignedTo}` : ''}
+                                                            onChange={e => {
+                                                                if (!e.target.value) {
+                                                                    updateWorkspace(base.id, idx, { assignedTo: null, assignedType: null });
+                                                                } else {
+                                                                    const [type, id] = e.target.value.split(':');
+                                                                    updateWorkspace(base.id, idx, { assignedTo: parseInt(id), assignedType: type });
+                                                                }
+                                                            }}
+                                                            style={{
+                                                                background: 'rgba(0,0,0,0.3)', color: 'var(--text-primary)',
+                                                                border: '1px solid var(--border-color)', padding: '0.2rem 0.4rem',
+                                                                fontFamily: 'var(--font-mono)', fontSize: '0.75rem',
+                                                                borderRadius: 'var(--radius-sm)', flex: 1, minWidth: '150px',
+                                                            }}>
+                                                            <option value="">Unassigned</option>
+                                                            {assignableCharacters.length > 0 && (
+                                                                <optgroup label="Characters">
+                                                                    {assignableCharacters.map(c => (
+                                                                        <option key={`character:${c.id}`} value={`character:${c.id}`}>{c.name}</option>
+                                                                    ))}
+                                                                </optgroup>
+                                                            )}
+                                                            {assignableNpcs.length > 0 && (
+                                                                <optgroup label="NPCs">
+                                                                    {assignableNpcs.map(n => (
+                                                                        <option key={`npc:${n.id}`} value={`npc:${n.id}`}>{n.name}</option>
+                                                                    ))}
+                                                                </optgroup>
+                                                            )}
+                                                        </select>
+                                                    ) : (
+                                                        <span className="text-muted mono-text" style={{ fontSize: '0.75rem' }}>
+                                                            {ws.assignedName || 'Unassigned'}
+                                                        </span>
+                                                    )}
+                                                    {IS_ADMIN && (
+                                                        <button onClick={() => removeWorkspace(base.id, idx)} style={{
+                                                            background: 'transparent', border: 'none',
+                                                            color: 'var(--accent-danger)', cursor: 'pointer', padding: '2px',
+                                                        }}>
+                                                            <Icon name="x" size={14} />
+                                                        </button>
+                                                    )}
+                                                </div>
+                                            );
+                                        })}
+                                        {workspaces.length === 0 && (
+                                            <p className="text-muted" style={{ fontSize: '0.75rem', fontStyle: 'italic' }}>No workspaces assigned.</p>
+                                        )}
+                                    </div>
+                                );
+                            })()}
 
                             {/* Equipment */}
                             <div style={{ marginBottom: '1rem' }}>
@@ -2211,6 +2333,8 @@
                     bases={agency.bases}
                     baseConfig={agency.baseConfig}
                     agencyId={AGENCY_ID}
+                    assignableCharacters={agency.assignableCharacters || []}
+                    assignableNpcs={agency.assignableNpcs || []}
                     onBasesChange={(newBases) => {
                         const updated = { ...agencyRef.current, bases: newBases };
                         setAgency(updated);
