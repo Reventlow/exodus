@@ -1,5 +1,8 @@
 # Changelog
 
+## v0.5.5
+- Fixed agency pages stuck on "DECRYPTING..." — syntax error in facility classification ternary prevented React from loading
+
 ## v0.5.4
 - NPC agency bases now support the CLASSIFIED visibility system
 - Admins can classify/declassify: entire bases section, individual bases, facilities, workspaces, and equipment per base
