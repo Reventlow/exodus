@@ -1,5 +1,7 @@
 """Manual JSON serialization for Agency models. No DRF dependency."""
 
+from characters.models import Character
+from npcs.models import NPC
 from .models import GlobalFlaw, FTLProject, AgencyFTLProject, CouncilItem, BaseConfig, Base
 
 CLASSIFIED = "CLASSIFIED"
@@ -91,6 +93,15 @@ def serialize_agency(agency, user):
     ]
     config = BaseConfig.load()
     data["baseConfig"] = serialize_base_config(config)
+
+    # Assignable entities for workspace assignment
+    data["assignableCharacters"] = [
+        {"id": c.id, "name": c.name} for c in Character.objects.all().order_by("name").only("id", "name")
+    ]
+    data["assignableNpcs"] = [
+        {"id": n.id, "name": n.name}
+        for n in NPC.objects.filter(agency=agency).order_by("name").only("id", "name")
+    ]
 
     # FTL project assignments with progress
     data["ftlProjects"] = [
@@ -194,6 +205,25 @@ def serialize_change_request(cr):
     }
 
 
+def _resolve_workspace_names(workspaces):
+    """Resolve assignedTo IDs to names for display."""
+    char_ids = [w["assignedTo"] for w in workspaces if w.get("assignedType") == "character" and w.get("assignedTo")]
+    npc_ids = [w["assignedTo"] for w in workspaces if w.get("assignedType") == "npc" and w.get("assignedTo")]
+    char_names = {c.id: c.name for c in Character.objects.filter(id__in=char_ids).only("id", "name")} if char_ids else {}
+    npc_names = {n.id: n.name for n in NPC.objects.filter(id__in=npc_ids).only("id", "name")} if npc_ids else {}
+    result = []
+    for w in workspaces:
+        entry = {**w}
+        if w.get("assignedType") == "character":
+            entry["assignedName"] = char_names.get(w.get("assignedTo"), "Unknown")
+        elif w.get("assignedType") == "npc":
+            entry["assignedName"] = npc_names.get(w.get("assignedTo"), "Unknown")
+        else:
+            entry["assignedName"] = None
+        result.append(entry)
+    return result
+
+
 def serialize_base(base):
     """Serialize a Base model instance."""
     return {
@@ -202,6 +232,7 @@ def serialize_base(base):
         "locationType": base.location_type,
         "merits": base.merits,
         "facilities": base.facilities,
+        "workspaces": _resolve_workspace_names(base.workspaces or []),
         "equipment": base.equipment,
         "notes": base.notes,
     }

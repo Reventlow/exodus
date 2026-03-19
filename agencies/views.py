@@ -801,6 +801,8 @@ def api_agency_base_detail(request, pk, base_id):
         base.merits = data["merits"]
     if "facilities" in data:
         base.facilities = data["facilities"]
+    if "workspaces" in data:
+        base.workspaces = data["workspaces"]
     if "equipment" in data:
         base.equipment = data["equipment"]
     if "notes" in data:

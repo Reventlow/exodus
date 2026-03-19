@@ -513,6 +513,7 @@ class Base(models.Model):
     location_type = models.CharField(max_length=100, blank=True, default="")
     merits = models.JSONField(default=list)  # [merit_key, ...]
     facilities = models.JSONField(default=list)  # [{key, level}]
+    workspaces = models.JSONField(default=list)  # [{level, assignedTo, assignedType}]
     equipment = models.JSONField(default=list)  # [equipment_key, ...]
     notes = models.TextField(blank=True, default="")
 

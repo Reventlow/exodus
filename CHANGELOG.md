@@ -1,5 +1,10 @@
 # Changelog
 
+## v0.5.3
+- Facilities now use multi-select — pick any combination of options instead of a single level (barracks, armory, brig, medical, computer core, storage, aviation, etc.)
+- Workspaces are now a separate section — can add multiple workspaces per base, each assignable to a character or NPC
+- Workspace assignment dropdown shows characters and agency NPCs grouped by type
+
 ## v0.5.2
 - Hover tooltips on all base elements — location types, merits, facilities, equipment, and collapsed base headers show descriptions on hover
 - Fixed EXP sync between bases and core stats display
