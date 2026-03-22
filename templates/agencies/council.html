@@ -209,10 +209,10 @@
                             <ReadOnlyField value={item.name} style={{ fontSize: '1rem', fontWeight: 'bold' }} />
                         )}
                     </div>
-                    {IS_ADMIN && (
+                    {(IS_ADMIN || (!IS_ADMIN && item.proposedBy === USER_AGENCY_NAME && item.status === 'proposed')) && (
                         <button
                             onClick={() => onDelete(item.id)}
-                            title="Delete council item"
+                            title={IS_ADMIN ? "Delete council item" : "Withdraw proposal"}
                             style={{
                                 background: 'transparent', border: '1px solid var(--accent-danger)',
                                 color: 'var(--accent-danger)', cursor: 'pointer',
@@ -221,7 +221,7 @@
                                 marginTop: '1rem',
                             }}
                         >
-                            DELETE
+                            {IS_ADMIN ? 'DELETE' : 'WITHDRAW'}
                         </button>
                     )}
                 </div>

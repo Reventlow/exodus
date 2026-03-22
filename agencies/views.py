@@ -632,13 +632,44 @@ def api_council_list(request):
 @login_required
 @require_http_methods(["GET", "PUT", "DELETE"])
 def api_council_detail(request, pk):
-    """GET/PUT/DELETE a single council item. Admin only."""
+    """GET/PUT/DELETE a single council item."""
+    ci = get_object_or_404(CouncilItem, pk=pk)
+
+    # Non-admin users may only DELETE their own agency's proposals in "proposed" status
     if not request.user.is_superuser:
+        if request.method == "DELETE":
+            # Find the user's agency name
+            char_ids = set(
+                request.user.characters.values_list("id", flat=True)
+            )
+            user_agency_name = None
+            if char_ids:
+                for base in Base.objects.filter(
+                    agency__is_player_agency=True
+                ).select_related("agency"):
+                    for ws in base.workspaces or []:
+                        if (
+                            ws.get("assignedType") == "character"
+                            and ws.get("assignedTo") in char_ids
+                        ):
+                            user_agency_name = base.agency.name
+                            break
+                    if user_agency_name:
+                        break
+            if (
+                user_agency_name
+                and ci.proposed_by == user_agency_name
+                and ci.status == "proposed"
+            ):
+                ci.delete()
+                return JsonResponse({"status": "Council item record terminated."})
+            return JsonResponse(
+                {"error": "ACCESS DENIED. Can only withdraw your own proposals in 'proposed' status."},
+                status=403,
+            )
         return JsonResponse(
             {"error": "ACCESS DENIED. Administrator clearance required."}, status=403
         )
-
-    ci = get_object_or_404(CouncilItem, pk=pk)
 
     if request.method == "GET":
         return JsonResponse(serialize_council_item(ci))

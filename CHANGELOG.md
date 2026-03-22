@@ -1,5 +1,8 @@
 # Changelog
 
+## v0.6.5
+- Players can withdraw their own council proposals while still in "proposed" status
+
 ## v0.6.4
 - Council proposals: "Proposed By" is now an agency dropdown for superadmins, auto-set to the player's agency for players
 - Players with an agency can create council proposals (proposedBy auto-filled)
