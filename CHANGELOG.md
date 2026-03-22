@@ -1,5 +1,8 @@
 # Changelog
 
+## v0.6.3
+- Added COUNCIL link to the top navigation menu
+
 ## v0.6.2
 - Superusers can now add or remove multiple successes at once on FTL projects per agency — input field replaces the old +1/−1 buttons
 
