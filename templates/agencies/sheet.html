@@ -1226,37 +1226,61 @@
                                         transition: 'width 0.3s ease',
                                     }} />
                                 </div>
-                                {/* +/- buttons (admin only) */}
+                                {/* Add/remove successes (admin only) */}
                                 {IS_ADMIN && (
                                     <div style={{
                                         display: 'flex', gap: '0.5rem',
-                                        justifyContent: 'center', marginTop: '0.5rem',
+                                        alignItems: 'center', justifyContent: 'center',
+                                        marginTop: '0.5rem',
                                     }}>
                                         <button
-                                            onClick={() => updateSuccesses(proj.assignmentId, -1)}
+                                            onClick={() => {
+                                                const input = document.getElementById(`ftl-delta-${proj.assignmentId}`);
+                                                const val = parseInt(input?.value) || 1;
+                                                updateSuccesses(proj.assignmentId, -val);
+                                            }}
                                             disabled={proj.currentSuccesses <= 0}
+                                            title="Remove successes"
                                             style={{
                                                 background: 'transparent',
                                                 border: '1px solid var(--border-color)',
                                                 color: 'var(--text-primary)',
-                                                width: '28px', height: '28px',
+                                                padding: '4px 10px',
                                                 cursor: proj.currentSuccesses <= 0 ? 'not-allowed' : 'pointer',
-                                                display: 'flex', alignItems: 'center', justifyContent: 'center',
-                                                fontFamily: 'var(--font-mono)', fontSize: '1rem',
+                                                fontFamily: 'var(--font-mono)', fontSize: '0.8rem',
                                                 borderRadius: 'var(--radius-sm)',
                                                 opacity: proj.currentSuccesses <= 0 ? 0.3 : 1,
                                             }}
-                                        >-</button>
-                                        <button
-                                            onClick={() => updateSuccesses(proj.assignmentId, 1)}
+                                        >−</button>
+                                        <input
+                                            id={`ftl-delta-${proj.assignmentId}`}
+                                            type="number"
+                                            defaultValue={1}
+                                            min={1}
                                             style={{
-                                                background: 'transparent',
+                                                width: '50px', textAlign: 'center',
+                                                background: 'var(--bg-input)',
+                                                border: '1px solid var(--border-color)',
+                                                color: 'var(--text-primary)',
+                                                padding: '4px',
+                                                fontFamily: 'var(--font-mono)', fontSize: '0.8rem',
+                                                borderRadius: 'var(--radius-sm)',
+                                            }}
+                                        />
+                                        <button
+                                            onClick={() => {
+                                                const input = document.getElementById(`ftl-delta-${proj.assignmentId}`);
+                                                const val = parseInt(input?.value) || 1;
+                                                updateSuccesses(proj.assignmentId, val);
+                                            }}
+                                            title="Add successes"
+                                            style={{
+                                                background: 'rgba(59, 130, 246, 0.15)',
                                                 border: `1px solid ${FTL_ACCENT}`,
                                                 color: FTL_ACCENT,
-                                                width: '28px', height: '28px',
+                                                padding: '4px 10px',
                                                 cursor: 'pointer',
-                                                display: 'flex', alignItems: 'center', justifyContent: 'center',
-                                                fontFamily: 'var(--font-mono)', fontSize: '1rem',
+                                                fontFamily: 'var(--font-mono)', fontSize: '0.8rem',
                                                 borderRadius: 'var(--radius-sm)',
                                             }}
                                         >+</button>

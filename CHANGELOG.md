@@ -1,5 +1,8 @@
 # Changelog
 
+## v0.6.2
+- Superusers can now add or remove multiple successes at once on FTL projects per agency — input field replaces the old +1/−1 buttons
+
 ## v0.6.1
 - Fixed linked dossier links on agency sheets being hard to read — added missing btn-cyber styling with cyan border, glow hover, and proper contrast on dark backgrounds
 
