@@ -63,6 +63,7 @@ urlpatterns = [
     ),
     # API — council items & membership
     path("api/council/", views.api_council_list, name="api_council_list"),
+    path("api/council/reorder/", views.api_council_reorder, name="api_council_reorder"),
     path("api/council/members/", views.api_council_members, name="api_council_members"),
     path(
         "api/council/chairman/<int:pk>/",

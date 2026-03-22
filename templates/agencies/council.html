@@ -14,12 +14,18 @@
 <script>
     const IS_ADMIN = {{ user.is_superuser|yesno:"true,false" }};
     const CSRF_TOKEN = '{{ csrf_token }}';
+    const USER_AGENCY_ID = {{ user_agency_id }};
+    const USER_AGENCY_NAME = '{{ user_agency_name|escapejs }}';
+    const IS_CHAIRMAN = {{ is_chairman|yesno:"true,false" }};
+    const ALL_AGENCIES = {{ agencies_json|safe }};
 </script>
 {% verbatim %}
 <script type="text/babel">
-    const { useState, useEffect, useRef } = React;
+    const { useState, useEffect, useRef, useCallback } = React;
 
     const COUNCIL_ACCENT = '#a855f7';
+    const CAN_REORDER = IS_ADMIN || IS_CHAIRMAN;
+    const CAN_CREATE = IS_ADMIN || USER_AGENCY_ID > 0;
 
     function getCookie(name) {
         let cookieValue = null;
@@ -153,6 +159,8 @@
         law: 'scale',
     };
 
+    const AGENCY_OPTIONS = ALL_AGENCIES.map(a => ({ value: a.name, label: a.name }));
+
     const ReadOnlyField = ({ value, style = {} }) => (
         <span className="mono-text" style={{
             color: 'var(--text-primary)', fontSize: '0.85rem',
@@ -163,18 +171,23 @@
         </span>
     );
 
-    const CouncilItemCard = ({ item, onSave, onDelete, saving }) => {
+    const CouncilItemCard = ({ item, onSave, onDelete, saving, dragHandlers }) => {
         const statusLabel = STATUS_OPTIONS.find(o => o.value === item.status)?.label || item.status;
         const typeLabel = TYPE_OPTIONS.find(o => o.value === item.itemType)?.label || item.itemType;
 
         return (
-            <div className="tech-border" style={{
-                padding: '1.25rem',
-                marginBottom: '1rem',
-                borderLeft: `3px solid ${COUNCIL_ACCENT}`,
-                opacity: saving ? 0.7 : 1,
-                transition: 'opacity 0.2s',
-            }}>
+            <div
+                className="tech-border"
+                {...dragHandlers}
+                style={{
+                    padding: '1.25rem',
+                    marginBottom: '1rem',
+                    borderLeft: `3px solid ${COUNCIL_ACCENT}`,
+                    opacity: saving ? 0.7 : 1,
+                    transition: 'opacity 0.2s',
+                    cursor: CAN_REORDER ? 'grab' : 'default',
+                }}
+            >
                 {/* Header: Name + Type badge + Delete */}
                 <div style={{
                     display: 'flex', justifyContent: 'space-between',
@@ -277,11 +290,12 @@
                             PROPOSED BY
                         </label>
                         {IS_ADMIN ? (
-                            <EditableCell
+                            <SelectField
                                 value={item.proposedBy}
                                 field="proposedBy"
                                 itemId={item.id}
                                 onSave={onSave}
+                                options={[{ value: '', label: '— Select Agency —' }, ...AGENCY_OPTIONS]}
                             />
                         ) : (
                             <ReadOnlyField value={item.proposedBy} />
@@ -461,6 +475,8 @@
         const [saving, setSaving] = useState(null);
         const [creating, setCreating] = useState(false);
         const [filterType, setFilterType] = useState('all');
+        const dragItem = useRef(null);
+        const dragOverItem = useRef(null);
 
         const fetchItems = async () => {
             const res = await fetch('/api/council/', {
@@ -491,17 +507,23 @@
         const createItem = async (itemType) => {
             setCreating(true);
             const typeLabels = { agreement: 'AGREEMENT', initiative: 'INITIATIVE', law: 'LAW' };
+            const body = {
+                name: `NEW ${typeLabels[itemType]}`,
+                itemType: itemType,
+                order: items.length,
+            };
+            // Admin selects proposedBy via dropdown on the card after creation;
+            // players auto-set via the backend
+            if (!IS_ADMIN && USER_AGENCY_NAME) {
+                body.proposedBy = USER_AGENCY_NAME;
+            }
             const res = await fetch('/api/council/', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
                     'X-CSRFToken': getCookie('csrftoken') || CSRF_TOKEN,
                 },
-                body: JSON.stringify({
-                    name: `NEW ${typeLabels[itemType]}`,
-                    itemType: itemType,
-                    order: items.length,
-                }),
+                body: JSON.stringify(body),
             });
             if (res.ok) {
                 await fetchItems();
@@ -515,6 +537,58 @@
                 headers: { 'X-CSRFToken': getCookie('csrftoken') || CSRF_TOKEN },
             });
             setItems(prev => prev.filter(i => i.id !== id));
+        };
+
+        // --- Drag and drop reorder ---
+        const handleDragStart = (idx) => {
+            dragItem.current = idx;
+        };
+
+        const handleDragEnter = (idx) => {
+            dragOverItem.current = idx;
+        };
+
+        const handleDragOver = (e) => {
+            e.preventDefault();
+        };
+
+        const handleDrop = async (e) => {
+            e.preventDefault();
+            if (dragItem.current === null || dragOverItem.current === null) return;
+            if (dragItem.current === dragOverItem.current) return;
+
+            const reordered = [...filtered];
+            const [dragged] = reordered.splice(dragItem.current, 1);
+            reordered.splice(dragOverItem.current, 0, dragged);
+
+            // Assign new order values
+            const updates = reordered.map((item, idx) => ({ id: item.id, order: idx }));
+
+            // Optimistic update
+            const newItems = items.map(item => {
+                const upd = updates.find(u => u.id === item.id);
+                return upd ? { ...item, order: upd.order } : item;
+            });
+            newItems.sort((a, b) => a.order - b.order || a.name.localeCompare(b.name));
+            setItems(newItems);
+
+            dragItem.current = null;
+            dragOverItem.current = null;
+
+            // Persist to backend
+            await fetch('/api/council/reorder/', {
+                method: 'PUT',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRFToken': getCookie('csrftoken') || CSRF_TOKEN,
+                },
+                body: JSON.stringify({ items: updates }),
+            });
+        };
+
+        const handleDragEnd = () => {
+            dragItem.current = null;
+            dragOverItem.current = null;
         };
 
         if (loading) {
@@ -574,6 +648,23 @@
                 {/* Council Members */}
                 <CouncilMembersPanel />
 
+                {/* Reorder hint for chairman */}
+                {CAN_REORDER && !IS_ADMIN && (
+                    <div style={{
+                        background: 'rgba(168, 85, 247, 0.08)',
+                        border: `1px solid ${COUNCIL_ACCENT}`,
+                        borderRadius: 'var(--radius-sm)',
+                        padding: '0.5rem 0.75rem',
+                        marginBottom: '1rem',
+                        display: 'flex', alignItems: 'center', gap: '0.5rem',
+                    }}>
+                        <Icon name="grip-vertical" size={14} />
+                        <span className="mono-text text-muted" style={{ fontSize: '0.75rem' }}>
+                            As chairman, drag proposals to reorder them.
+                        </span>
+                    </div>
+                )}
+
                 {/* Filter tabs */}
                 <div style={{
                     display: 'flex', gap: '0.5rem', marginBottom: '1.5rem', flexWrap: 'wrap'
@@ -615,18 +706,26 @@
                         </p>
                     )}
 
-                    {filtered.map(item => (
+                    {filtered.map((item, idx) => (
                         <CouncilItemCard
                             key={item.id}
                             item={item}
                             onSave={saveItem}
                             onDelete={deleteItem}
                             saving={saving === item.id}
+                            dragHandlers={CAN_REORDER ? {
+                                draggable: true,
+                                onDragStart: () => handleDragStart(idx),
+                                onDragEnter: () => handleDragEnter(idx),
+                                onDragOver: handleDragOver,
+                                onDrop: handleDrop,
+                                onDragEnd: handleDragEnd,
+                            } : {}}
                         />
                     ))}
 
-                    {/* Create buttons — admin only */}
-                    {IS_ADMIN && (
+                    {/* Create buttons — admin or player with agency */}
+                    {CAN_CREATE && (
                         <div style={{
                             textAlign: 'center', marginTop: '1rem',
                             display: 'flex', gap: '0.75rem', justifyContent: 'center', flexWrap: 'wrap'

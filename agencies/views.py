@@ -72,7 +72,41 @@ def ftl_projects_page(request):
 @login_required
 def council_page(request):
     """United Interstellar Council page. Viewable by all, editable by superusers."""
-    return render(request, "agencies/council.html")
+    user_agency = None
+    is_chairman = False
+    if not request.user.is_superuser:
+        char_ids = set(
+            request.user.characters.values_list("id", flat=True)
+        )
+        if char_ids:
+            for base in Base.objects.filter(
+                agency__is_player_agency=True
+            ).select_related("agency"):
+                for ws in base.workspaces or []:
+                    if (
+                        ws.get("assignedType") == "character"
+                        and ws.get("assignedTo") in char_ids
+                    ):
+                        user_agency = base.agency
+                        is_chairman = base.agency.is_council_chairman
+                        break
+                if user_agency:
+                    break
+    agencies = list(
+        Agency.objects.order_by("name").values_list("id", "name")
+    )
+    return render(
+        request,
+        "agencies/council.html",
+        {
+            "user_agency_id": user_agency.id if user_agency else 0,
+            "user_agency_name": user_agency.name if user_agency else "",
+            "is_chairman": is_chairman,
+            "agencies_json": json.dumps(
+                [{"id": a[0], "name": a[1]} for a in agencies]
+            ),
+        },
+    )
 
 
 @login_required
@@ -546,22 +580,49 @@ def api_council_list(request):
         data = [serialize_council_item(ci) for ci in items]
         return JsonResponse(data, safe=False)
 
-    # POST — admin only
+    # POST — admin or any logged-in user with an agency
     if not request.user.is_superuser:
-        return JsonResponse(
-            {"error": "ACCESS DENIED. Administrator clearance required."}, status=403
+        # Check the user has an agency (via character workspace assignment)
+        char_ids = set(
+            request.user.characters.values_list("id", flat=True)
         )
+        user_agency = None
+        if char_ids:
+            for base in Base.objects.filter(
+                agency__is_player_agency=True
+            ).select_related("agency"):
+                for ws in base.workspaces or []:
+                    if (
+                        ws.get("assignedType") == "character"
+                        and ws.get("assignedTo") in char_ids
+                    ):
+                        user_agency = base.agency
+                        break
+                if user_agency:
+                    break
+        if not user_agency:
+            return JsonResponse(
+                {"error": "ACCESS DENIED. No agency affiliation found."},
+                status=403,
+            )
+
     try:
         body = json.loads(request.body) if request.body else {}
     except json.JSONDecodeError:
         body = {}
+
+    # Admin can set proposedBy freely; players auto-set to their agency
+    if request.user.is_superuser:
+        proposed_by = body.get("proposedBy", "")
+    else:
+        proposed_by = user_agency.name
 
     ci = CouncilItem.objects.create(
         name=body.get("name", "NEW COUNCIL ITEM"),
         item_type=body.get("itemType", "agreement"),
         description=body.get("description", ""),
         status=body.get("status", "proposed"),
-        proposed_by=body.get("proposedBy", ""),
+        proposed_by=proposed_by,
         notes=body.get("notes", ""),
         order=body.get("order", 0),
     )
@@ -609,6 +670,52 @@ def api_council_detail(request, pk):
     if request.method == "DELETE":
         ci.delete()
         return JsonResponse({"status": "Council item record terminated."})
+
+
+@login_required
+@require_http_methods(["PUT"])
+def api_council_reorder(request):
+    """Bulk reorder council items. Admin or chairman agency player."""
+    if not request.user.is_superuser:
+        # Check the user's agency is chairman
+        char_ids = set(
+            request.user.characters.values_list("id", flat=True)
+        )
+        is_chairman = False
+        if char_ids:
+            for base in Base.objects.filter(
+                agency__is_player_agency=True,
+                agency__is_council_chairman=True,
+            ).select_related("agency"):
+                for ws in base.workspaces or []:
+                    if (
+                        ws.get("assignedType") == "character"
+                        and ws.get("assignedTo") in char_ids
+                    ):
+                        is_chairman = True
+                        break
+                if is_chairman:
+                    break
+        if not is_chairman:
+            return JsonResponse(
+                {"error": "ACCESS DENIED. Chairman clearance required."},
+                status=403,
+            )
+
+    try:
+        data = json.loads(request.body)
+    except json.JSONDecodeError:
+        return JsonResponse({"error": "Invalid data stream."}, status=400)
+
+    # data.items is [{id, order}, ...]
+    items = data.get("items", [])
+    for entry in items:
+        CouncilItem.objects.filter(pk=entry["id"]).update(order=entry["order"])
+
+    all_items = CouncilItem.objects.all()
+    return JsonResponse(
+        [serialize_council_item(ci) for ci in all_items], safe=False
+    )
 
 
 # ---------------------------------------------------------------------------

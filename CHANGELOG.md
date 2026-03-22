@@ -1,5 +1,10 @@
 # Changelog
 
+## v0.6.4
+- Council proposals: "Proposed By" is now an agency dropdown for superadmins, auto-set to the player's agency for players
+- Players with an agency can create council proposals (proposedBy auto-filled)
+- Chairman agency players can reorder council proposals via drag and drop
+
 ## v0.6.3
 - Added COUNCIL link to the top navigation menu
 
