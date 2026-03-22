@@ -279,8 +279,9 @@ function MemberManager({ thread, users, onClose, onAddMember, onRemoveMember }) 
 // MessageInput
 // ---------------------------------------------------------------------------
 
-function MessageInput({ onSend }) {
+function MessageInput({ onSend, dossiers }) {
   const [text, setText] = useState("");
+  const [postingAs, setPostingAs] = useState(null); // {type, id, name} or null
 
   function handleKeyDown(e) {
     if (e.key === "Enter" && !e.shiftKey) {
@@ -292,21 +293,45 @@ function MessageInput({ onSend }) {
   function submit() {
     const trimmed = text.trim();
     if (!trimmed) return;
-    onSend(trimmed);
+    onSend(trimmed, postingAs);
     setText("");
   }
 
   return (
-    <div style={S.inputBar}>
-      <textarea
-        value={text}
-        onChange={e => setText(e.target.value)}
-        onKeyDown={handleKeyDown}
-        placeholder="Type message..."
-        rows={1}
-        style={Object.assign({}, inputStyle, {flex: 1, resize: "none"})}
-      />
-      <button onClick={submit} style={btnPrimary}>TRANSMIT</button>
+    <div style={S.inputBarWrap}>
+      {IS_STAFF && dossiers && dossiers.length > 0 && (
+        <div style={S.postingAsBar}>
+          <label className="mono-text text-muted" style={S.postingAsLabel}>POST AS:</label>
+          <select
+            value={postingAs ? `${postingAs.type}:${postingAs.id}` : ""}
+            onChange={e => {
+              if (!e.target.value) { setPostingAs(null); return; }
+              const [type, id] = e.target.value.split(":");
+              const d = dossiers.find(d => d.type === type && d.id === parseInt(id));
+              if (d) setPostingAs(d);
+            }}
+            style={S.postingAsSelect}
+          >
+            <option value="">SELF</option>
+            {dossiers.map(d => (
+              <option key={`${d.type}:${d.id}`} value={`${d.type}:${d.id}`}>
+                [{d.type === "character" ? "PC" : "NPC"}] {d.name}
+              </option>
+            ))}
+          </select>
+        </div>
+      )}
+      <div style={S.inputBar}>
+        <textarea
+          value={text}
+          onChange={e => setText(e.target.value)}
+          onKeyDown={handleKeyDown}
+          placeholder={postingAs ? `Posting as ${postingAs.name}...` : "Type message..."}
+          rows={1}
+          style={Object.assign({}, inputStyle, {flex: 1, resize: "none"})}
+        />
+        <button onClick={submit} style={btnPrimary}>TRANSMIT</button>
+      </div>
     </div>
   );
 }
@@ -315,7 +340,7 @@ function MessageInput({ onSend }) {
 // ThreadView
 // ---------------------------------------------------------------------------
 
-function ThreadView({ thread, onSend, onBack, onOpenMembers }) {
+function ThreadView({ thread, onSend, onBack, onOpenMembers, dossiers }) {
   const messagesEndRef = useRef(null);
 
   useEffect(() => {
@@ -349,13 +374,24 @@ function ThreadView({ thread, onSend, onBack, onOpenMembers }) {
       {/* Messages */}
       <div style={S.messageList}>
         {(thread.messages || []).map(msg => {
-          const isOwn = msg.sender.id === CURRENT_USER_ID;
+          const isOwn = msg.sender.id === CURRENT_USER_ID && !msg.postedAs;
+          const displayName = msg.postedAs ? msg.postedAs.name : msg.sender.displayName;
+          const dossierUrl = msg.postedAs
+            ? (msg.postedAs.type === "character" ? `/character/${msg.postedAs.id}/` : `/npcs/${msg.postedAs.id}/`)
+            : null;
           return (
             <div key={msg.id} style={isOwn ? S.msgRowOwn : S.msgRowOther}>
               <div style={isOwn ? S.msgBubbleOwn : S.msgBubbleOther}>
                 {!isOwn && (
                   <div className="mono-text text-accent" style={S.msgSender}>
-                    {msg.sender.displayName}
+                    {dossierUrl ? (
+                      <a href={dossierUrl} style={S.postedAsLink}>{displayName}</a>
+                    ) : displayName}
+                    {msg.postedAs && (
+                      <span style={S.postedAsBadge}>
+                        {msg.postedAs.type === "character" ? "PC" : "NPC"}
+                      </span>
+                    )}
                   </div>
                 )}
                 <div style={S.msgContent}>{msg.content}</div>
@@ -370,7 +406,7 @@ function ThreadView({ thread, onSend, onBack, onOpenMembers }) {
       </div>
 
       {/* Input */}
-      <MessageInput onSend={onSend} />
+      <MessageInput onSend={onSend} dossiers={dossiers} />
     </div>
   );
 }
@@ -440,10 +476,14 @@ function CommsApp() {
   const [showNewThread, setShowNewThread] = useState(false);
   const [showMembers, setShowMembers] = useState(false);
   const [mobileShowThread, setMobileShowThread] = useState(false);
+  const [dossiers, setDossiers] = useState([]);
 
   useEffect(() => {
     api("/api/comms/threads/").then(setThreads);
     api("/api/comms/users/").then(setUsers);
+    if (IS_STAFF) {
+      api("/api/comms/dossiers/").then(setDossiers).catch(() => {});
+    }
   }, []);
 
   useEffect(() => {
@@ -522,11 +562,16 @@ function CommsApp() {
     });
   }
 
-  function handleSendMessage(content) {
+  function handleSendMessage(content, postingAs) {
     if (!activeThreadId) return;
+    const payload = { content: content };
+    if (postingAs) {
+      payload.postedAsType = postingAs.type;
+      payload.postedAsId = postingAs.id;
+    }
     api("/api/comms/threads/" + activeThreadId + "/messages/", {
       method: "POST",
-      body: JSON.stringify({ content: content }),
+      body: JSON.stringify(payload),
     });
   }
 
@@ -572,6 +617,7 @@ function CommsApp() {
           onSend={handleSendMessage}
           onBack={() => setMobileShowThread(false)}
           onOpenMembers={() => setShowMembers(true)}
+          dossiers={dossiers}
         />
       </div>
       {showNewThread && (
@@ -624,9 +670,30 @@ const S = {
     border: "none", color: "var(--accent-primary)",
     cursor: "pointer", fontSize: "0.85rem", borderRadius: "var(--radius-sm)",
   },
+  inputBarWrap: {
+    borderTop: "1px solid var(--border-color)", background: "var(--bg-panel)",
+  },
   inputBar: {
     display: "flex", gap: "0.5rem", padding: "0.75rem",
-    borderTop: "1px solid var(--border-color)", background: "var(--bg-panel)",
+  },
+  postingAsBar: {
+    display: "flex", alignItems: "center", gap: "0.5rem",
+    padding: "0.5rem 0.75rem 0", fontSize: "0.75rem",
+  },
+  postingAsLabel: { fontSize: "0.7rem", flexShrink: 0 },
+  postingAsSelect: {
+    flex: 1, background: "var(--bg-input)", border: "1px solid var(--border-color)",
+    borderRadius: "var(--radius-sm)", color: "var(--text-primary)",
+    fontFamily: "var(--font-mono)", fontSize: "0.75rem", padding: "0.3rem 0.5rem",
+    outline: "none",
+  },
+  postedAsLink: {
+    color: "var(--accent-primary)", textDecoration: "none",
+  },
+  postedAsBadge: {
+    fontSize: "0.6rem", marginLeft: "0.4rem", opacity: 0.7,
+    border: "1px solid currentColor", padding: "0.05rem 0.25rem",
+    borderRadius: "2px", verticalAlign: "middle",
   },
   emptyState: {
     flex: 1, display: "flex", alignItems: "center", justifyContent: "center",

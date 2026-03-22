@@ -913,6 +913,23 @@
                     paddingBottom: '0.5rem', marginBottom: '1rem'
                 }}>ADMIN PANEL</h3>
 
+                {/* Hidden toggle */}
+                <div style={{ marginBottom: '1.5rem' }}>
+                    <label style={{
+                        display: 'flex', alignItems: 'center', gap: '0.5rem',
+                        cursor: 'pointer', fontFamily: 'var(--font-mono)',
+                        fontSize: '0.8rem', color: npc.isHidden ? 'var(--accent-danger)' : 'var(--text-secondary)',
+                    }}>
+                        <input
+                            type="checkbox"
+                            checked={npc.isHidden || false}
+                            onChange={e => onSave({ isHidden: e.target.checked })}
+                            style={{ accentColor: 'var(--accent-danger)' }}
+                        />
+                        HIDDEN (only visible to admins)
+                    </label>
+                </div>
+
                 {/* Reassign dropdown (player contacts only) */}
                 {!npc.isNpcDossier && (
                     <div style={{ marginBottom: '1.5rem' }}>
@@ -1296,6 +1313,15 @@
                                 padding: '0.15rem 0.5rem',
                             }}>
                                 {npc.agencyName}
+                            </span>
+                        )}
+                        {npc.isHidden && (
+                            <span className="mono-text" style={{
+                                fontSize: '0.75rem', color: 'var(--accent-danger)',
+                                border: '1px solid var(--accent-danger)',
+                                padding: '0.15rem 0.5rem',
+                            }}>
+                                HIDDEN
                             </span>
                         )}
                     </div>

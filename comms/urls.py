@@ -24,4 +24,5 @@ urlpatterns = [
     path("api/comms/threads/<int:thread_id>/read/", views.mark_read, name="mark-read"),
     path("api/comms/unread/", views.unread_count, name="unread-count"),
     path("api/comms/users/", views.user_list, name="user-list"),
+    path("api/comms/dossiers/", views.dossier_list, name="dossier-list"),
 ]

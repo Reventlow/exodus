@@ -23,7 +23,7 @@ def _get_display_name(user: User) -> str:
 
 def serialize_message(message: Message) -> dict:
     """Serialize a single message."""
-    return {
+    data = {
         "id": message.pk,
         "threadId": message.thread_id,
         "sender": {
@@ -33,6 +33,13 @@ def serialize_message(message: Message) -> dict:
         "content": message.content,
         "createdAt": localtime(message.created_at).isoformat(),
     }
+    if message.posted_as_type and message.posted_as_name:
+        data["postedAs"] = {
+            "type": message.posted_as_type,
+            "id": message.posted_as_id,
+            "name": message.posted_as_name,
+        }
+    return data
 
 
 def serialize_thread_summary(thread: Thread, user: User) -> dict:

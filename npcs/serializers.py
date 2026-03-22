@@ -34,6 +34,7 @@ def serialize_npc(npc):
         "isNpcDossier": npc.is_npc_dossier,
         "agencyId": npc.agency_id,
         "agencyName": npc.agency.name if npc.agency else None,
+        "isHidden": npc.is_hidden,
     }
 
     # Include notes for NPC dossiers
@@ -57,4 +58,5 @@ def serialize_npc_summary(npc):
         "assignedToIsAdmin": npc.assigned_to.is_superuser if npc.assigned_to else False,
         "isNpcDossier": npc.is_npc_dossier,
         "agencyName": npc.agency.name if npc.agency else None,
+        "isHidden": npc.is_hidden,
     }

@@ -7,6 +7,12 @@ Thread-based conversations with membership tracking and unread counts.
 from django.contrib.auth.models import User
 from django.db import models
 
+POSTED_AS_TYPE_CHOICES = [
+    ("", "Self"),
+    ("character", "Character"),
+    ("npc", "NPC"),
+]
+
 
 class Thread(models.Model):
     """A conversation thread with one or more members."""
@@ -64,10 +70,23 @@ class Message(models.Model):
         related_name="sent_messages",
     )
     content = models.TextField()
+    posted_as_type = models.CharField(
+        max_length=20, choices=POSTED_AS_TYPE_CHOICES, blank=True, default="",
+        help_text="If set, the message is displayed as this dossier instead of the sender.",
+    )
+    posted_as_id = models.PositiveIntegerField(
+        null=True, blank=True,
+        help_text="PK of the Character or NPC being impersonated.",
+    )
+    posted_as_name = models.CharField(
+        max_length=200, blank=True, default="",
+        help_text="Denormalized display name for the impersonated dossier.",
+    )
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
         ordering = ["created_at"]
 
     def __str__(self) -> str:
-        return f"{self.sender.username}: {self.content[:50]}"
+        name = self.posted_as_name or self.sender.username
+        return f"{name}: {self.content[:50]}"

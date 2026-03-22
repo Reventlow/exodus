@@ -258,15 +258,28 @@
                     alignItems: 'center',
                 }}>
                     {npc.isNpcDossier ? (
-                        <span className="mono-text" style={{
-                            fontSize: '0.7rem',
-                            color: 'var(--accent-warning)',
-                            border: '1px solid var(--accent-warning)',
-                            padding: '0.1rem 0.4rem',
-                            letterSpacing: '1px',
-                        }}>
-                            {npc.agencyName || 'NPC'}
-                        </span>
+                        <div style={{ display: 'flex', gap: '0.4rem', alignItems: 'center', flexWrap: 'wrap' }}>
+                            <span className="mono-text" style={{
+                                fontSize: '0.7rem',
+                                color: 'var(--accent-warning)',
+                                border: '1px solid var(--accent-warning)',
+                                padding: '0.1rem 0.4rem',
+                                letterSpacing: '1px',
+                            }}>
+                                {npc.agencyName || 'UNAFFILIATED'}
+                            </span>
+                            {npc.isHidden && (
+                                <span className="mono-text" style={{
+                                    fontSize: '0.65rem',
+                                    color: 'var(--accent-danger)',
+                                    border: '1px solid var(--accent-danger)',
+                                    padding: '0.1rem 0.4rem',
+                                    letterSpacing: '1px',
+                                }}>
+                                    HIDDEN
+                                </span>
+                            )}
+                        </div>
                     ) : (
                         <div style={{ display: 'flex', flexDirection: 'column', gap: '0.25rem' }}>
                             <span className="mono-text" style={{
@@ -302,9 +315,11 @@
             { key: 'all', label: 'ALL' },
             { key: 'my_contacts', label: 'MY CONTACTS' },
             { key: 'npc_dossiers', label: 'NPC DOSSIERS' },
+            { key: 'unaffiliated', label: 'UNAFFILIATED' },
             { key: 'active', label: 'ACTIVE' },
             { key: 'deceased', label: 'DECEASED' },
         ];
+        if (IS_ADMIN) filters.push({ key: 'hidden', label: 'HIDDEN' });
 
         return (
             <div style={{
@@ -342,11 +357,12 @@
     const CreateNPCDossierDialog = ({ agencies, onClose, onCreate }) => {
         const [name, setName] = useState('NEW OPERATIVE');
         const [agencyId, setAgencyId] = useState('');
+        const [hidden, setHidden] = useState(false);
         const [creating, setCreating] = useState(false);
 
         const handleCreate = async () => {
             setCreating(true);
-            await onCreate(name, agencyId ? parseInt(agencyId) : null);
+            await onCreate(name, agencyId ? parseInt(agencyId) : null, hidden);
         };
 
         return (
@@ -400,6 +416,22 @@
                                 </option>
                             ))}
                         </select>
+                    </div>
+
+                    <div style={{ marginBottom: '1.5rem' }}>
+                        <label style={{
+                            display: 'flex', alignItems: 'center', gap: '0.5rem',
+                            cursor: 'pointer', fontFamily: 'var(--font-mono)',
+                            fontSize: '0.8rem', color: 'var(--text-secondary)',
+                        }}>
+                            <input
+                                type="checkbox"
+                                checked={hidden}
+                                onChange={e => setHidden(e.target.checked)}
+                                style={{ accentColor: 'var(--accent-danger)' }}
+                            />
+                            HIDDEN (only visible to admins)
+                        </label>
                     </div>
 
                     <div style={{ display: 'flex', gap: '0.5rem' }}>
@@ -504,7 +536,7 @@
             setShowNpcDialog(true);
         };
 
-        const createNpcDossier = async (name, agencyId) => {
+        const createNpcDossier = async (name, agencyId, isHidden) => {
             try {
                 const response = await fetch('/api/npcs/', {
                     method: 'POST',
@@ -516,6 +548,7 @@
                         name: name,
                         isNpcDossier: true,
                         agencyId: agencyId,
+                        isHidden: isHidden,
                     }),
                 });
                 if (response.ok) {
@@ -535,10 +568,14 @@
                     return npcs.filter(n => !n.isNpcDossier && n.assignedTo === CURRENT_USER);
                 case 'npc_dossiers':
                     return npcs.filter(n => n.isNpcDossier);
+                case 'unaffiliated':
+                    return npcs.filter(n => n.isNpcDossier && !n.agencyName);
                 case 'active':
                     return npcs.filter(n => n.state === 'active');
                 case 'deceased':
                     return npcs.filter(n => n.state === 'deceased');
+                case 'hidden':
+                    return npcs.filter(n => n.isHidden);
                 default:
                     return npcs;
             }

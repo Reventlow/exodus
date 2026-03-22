@@ -27,6 +27,10 @@ def npc_detail_page(request, pk):
     """NPC detail page. Editable for assigned user or admin."""
     npc = get_object_or_404(NPC, pk=pk)
 
+    if npc.is_hidden and not request.user.is_superuser:
+        from django.http import HttpResponseForbidden
+        return HttpResponseForbidden("ACCESS DENIED. Insufficient clearance level.")
+
     if npc.is_npc_dossier:
         # NPC dossiers: only admin can edit fields
         is_editor = request.user.is_superuser
@@ -53,6 +57,8 @@ def api_npc_list(request):
     """GET: list all NPCs. POST: create a new NPC."""
     if request.method == "GET":
         npcs = NPC.objects.select_related("assigned_to", "agency").all()
+        if not request.user.is_superuser:
+            npcs = npcs.filter(is_hidden=False)
         data = [serialize_npc_summary(n) for n in npcs]
         return JsonResponse(data, safe=False)
 
@@ -85,6 +91,7 @@ def api_npc_list(request):
             name=body.get("name", "UNKNOWN OPERATIVE"),
             is_npc_dossier=True,
             agency=agency,
+            is_hidden=bool(body.get("isHidden", False)),
             created_by=request.user,
         )
     else:
@@ -102,6 +109,9 @@ def api_npc_list(request):
 def api_npc_detail(request, pk):
     """GET: full NPC data. PUT: update (assigned_to or admin). DELETE: admin only."""
     npc = get_object_or_404(NPC, pk=pk)
+
+    if npc.is_hidden and not request.user.is_superuser:
+        return JsonResponse({"error": "ACCESS DENIED."}, status=403)
 
     if request.method == "GET":
         return JsonResponse(serialize_npc(npc))
@@ -144,6 +154,10 @@ def api_npc_detail(request, pk):
                     npc.assigned_to = new_user
                 except User.DoesNotExist:
                     pass
+
+        # Admin can toggle hidden status
+        if "isHidden" in data and request.user.is_superuser:
+            npc.is_hidden = bool(data["isHidden"])
 
         # Admin can assign/change agency (NPC dossiers)
         if "agencyId" in data and request.user.is_superuser and npc.is_npc_dossier:

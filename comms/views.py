@@ -16,6 +16,9 @@ from django.shortcuts import get_object_or_404, render
 from django.utils import timezone
 from django.views.decorators.http import require_GET, require_http_methods, require_POST
 
+from characters.models import Character
+from npcs.models import NPC
+
 from .models import Message, Thread, ThreadMembership
 from .serializers import (
     _get_display_name,
@@ -128,10 +131,37 @@ def send_message(request, thread_id):
     if not content:
         return JsonResponse({"error": "Content is required"}, status=400)
 
+    # Superusers can post as a character or NPC dossier
+    posted_as_type = ""
+    posted_as_id = None
+    posted_as_name = ""
+    if request.user.is_superuser:
+        pa_type = body.get("postedAsType", "")
+        pa_id = body.get("postedAsId")
+        if pa_type == "character" and pa_id:
+            try:
+                char = Character.objects.only("id", "name").get(pk=pa_id)
+                posted_as_type = "character"
+                posted_as_id = char.id
+                posted_as_name = char.name
+            except Character.DoesNotExist:
+                pass
+        elif pa_type == "npc" and pa_id:
+            try:
+                npc = NPC.objects.only("id", "name").get(pk=pa_id)
+                posted_as_type = "npc"
+                posted_as_id = npc.id
+                posted_as_name = npc.name
+            except NPC.DoesNotExist:
+                pass
+
     message = Message.objects.create(
         thread=thread,
         sender=request.user,
         content=content,
+        posted_as_type=posted_as_type,
+        posted_as_id=posted_as_id,
+        posted_as_name=posted_as_name,
     )
 
     # Touch thread updated_at
@@ -298,6 +328,23 @@ def user_list(request):
         for u in users
     ]
     return JsonResponse(data, safe=False)
+
+
+@login_required
+@require_GET
+def dossier_list(request):
+    """List all characters and NPCs for the 'post as' picker. Superuser only."""
+    if not request.user.is_superuser:
+        return JsonResponse({"error": "Forbidden"}, status=403)
+    characters = [
+        {"type": "character", "id": c.id, "name": c.name}
+        for c in Character.objects.all().order_by("name").only("id", "name")
+    ]
+    npcs = [
+        {"type": "npc", "id": n.id, "name": n.name}
+        for n in NPC.objects.all().order_by("name").only("id", "name")
+    ]
+    return JsonResponse(characters + npcs, safe=False)
 
 
 # ---------------------------------------------------------------------------

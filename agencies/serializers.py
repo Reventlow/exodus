@@ -124,6 +124,22 @@ def serialize_agency(agency, user):
         for n in NPC.objects.filter(agency=agency).order_by("name").only("id", "name")
     ]
 
+    # Linked dossiers: characters assigned to workspaces + NPC dossiers
+    char_ids = set()
+    for b in agency.bases.all():
+        for w in (b.workspaces or []):
+            if w.get("assignedType") == "character" and w.get("assignedTo"):
+                char_ids.add(w["assignedTo"])
+    linked_characters = [
+        {"id": c.id, "name": c.name, "type": "character"}
+        for c in Character.objects.filter(id__in=char_ids).order_by("name").only("id", "name")
+    ] if char_ids else []
+    linked_npcs = [
+        {"id": n.id, "name": n.name, "type": "npc"}
+        for n in NPC.objects.filter(agency=agency).order_by("name").only("id", "name")
+    ]
+    data["linkedDossiers"] = linked_characters + linked_npcs
+
     # FTL project assignments with progress
     data["ftlProjects"] = [
         {

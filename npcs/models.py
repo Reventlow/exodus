@@ -38,6 +38,10 @@ class NPC(models.Model):
         null=True, blank=True, related_name="npc_dossiers",
         help_text="The NPC agency this dossier belongs to.",
     )
+    is_hidden = models.BooleanField(
+        default=False,
+        help_text="Hidden dossiers are only visible to superusers.",
+    )
 
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
