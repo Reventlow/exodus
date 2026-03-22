@@ -1,5 +1,8 @@
 # Changelog
 
+## v0.6.1
+- Fixed linked dossier links on agency sheets being hard to read — added missing btn-cyber styling with cyan border, glow hover, and proper contrast on dark backgrounds
+
 ## v0.6.0
 - Agency EXP section now shows available points (pool minus used) as the big number, with an admin button to add EXP
 - Agency sheets display linked dossiers (characters from workspaces + NPC dossiers) with clickable links to their sheets
