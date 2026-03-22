@@ -16,13 +16,14 @@ os.environ.setdefault("DJANGO_SETTINGS_MODULE", "exodus.settings")
 # Initialize Django ASGI application early to populate AppRegistry
 django_asgi_app = get_asgi_application()
 
-from comms.routing import websocket_urlpatterns  # noqa: E402
+from comms.routing import websocket_urlpatterns as comms_ws  # noqa: E402
+from agencies.routing import websocket_urlpatterns as council_ws  # noqa: E402
 
 application = ProtocolTypeRouter(
     {
         "http": django_asgi_app,
         "websocket": AllowedHostsOriginValidator(
-            AuthMiddlewareStack(URLRouter(websocket_urlpatterns))
+            AuthMiddlewareStack(URLRouter(comms_ws + council_ws))
         ),
     }
 )

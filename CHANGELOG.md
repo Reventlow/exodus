@@ -1,5 +1,9 @@
 # Changelog
 
+## v0.6.10
+- Council votes now update in real-time via WebSocket — all players see votes as they are cast without refreshing
+- Status changes (call vote, emergency suspend, auto-resolve) also broadcast live to all connected clients
+
 ## v0.6.9
 - Chairman (player or admin) can call a vote on proposals — changes status from "proposed" to "voting"
 - Votes auto-resolve when all council members have voted — status changes to "active" (passed) or "repealed" (failed) with frozen vote record

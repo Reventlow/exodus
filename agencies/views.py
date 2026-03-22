@@ -1,6 +1,8 @@
 import json
 from pathlib import Path
 
+from asgiref.sync import async_to_sync
+from channels.layers import get_channel_layer
 from django.conf import settings
 from django.http import JsonResponse
 from django.shortcuts import render, get_object_or_404
@@ -21,6 +23,20 @@ from .serializers import (
     serialize_base_config,
     build_vote_record,
 )
+
+COUNCIL_GROUP = "council_votes"
+
+
+def _broadcast_council_item(ci):
+    """Broadcast an updated council item to all WebSocket clients."""
+    channel_layer = get_channel_layer()
+    async_to_sync(channel_layer.group_send)(
+        COUNCIL_GROUP,
+        {
+            "type": "council_update",
+            "item": serialize_council_item(ci),
+        },
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -685,12 +701,14 @@ def api_council_detail(request, pk):
                 if ci.status == "proposed" and new_status == "voting":
                     ci.status = "voting"
                     ci.save()
+                    _broadcast_council_item(ci)
                     return JsonResponse(serialize_council_item(ci))
                 # voting → emergency_suspended
                 if ci.status == "voting" and new_status == "emergency_suspended":
                     ci.vote_record = build_vote_record(ci)
                     ci.status = "emergency_suspended"
                     ci.save()
+                    _broadcast_council_item(ci)
                     return JsonResponse(serialize_council_item(ci))
 
             # Own proposal editing (proposed status only)
@@ -754,6 +772,7 @@ def api_council_detail(request, pk):
             ci.order = data["order"]
 
         ci.save()
+        _broadcast_council_item(ci)
         return JsonResponse(serialize_council_item(ci))
 
     if request.method == "DELETE":
@@ -883,8 +902,9 @@ def api_council_vote(request, pk):
         # tied or no_quorum stays in voting (shouldn't happen if all voted)
         ci.save()
 
-    # Return updated item with votes
+    # Return updated item with votes and broadcast to all clients
     ci.refresh_from_db()
+    _broadcast_council_item(ci)
     return JsonResponse(serialize_council_item(ci))
 
 

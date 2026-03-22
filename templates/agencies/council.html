@@ -737,7 +737,30 @@
             }
         };
 
-        useEffect(() => { fetchItems(); fetchMembers(); }, []);
+        useEffect(() => {
+            fetchItems();
+            fetchMembers();
+
+            // WebSocket for live vote updates
+            const proto = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+            const ws = new WebSocket(`${proto}//${window.location.host}/ws/council/`);
+            ws.onmessage = (e) => {
+                const data = JSON.parse(e.data);
+                if (data.type === 'council_update' && data.item) {
+                    setItems(prev => prev.map(i =>
+                        i.id === data.item.id ? data.item : i
+                    ));
+                }
+            };
+            ws.onclose = () => {
+                // Reconnect after a short delay
+                setTimeout(() => {
+                    const reconnect = new WebSocket(`${proto}//${window.location.host}/ws/council/`);
+                    reconnect.onmessage = ws.onmessage;
+                }, 3000);
+            };
+            return () => ws.close();
+        }, []);
 
         const castVote = async (itemId, agencyId, vote) => {
             const res = await fetch(`/api/council/${itemId}/vote/`, {
