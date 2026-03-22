@@ -191,6 +191,7 @@ class CouncilItem(models.Model):
         ("active", "Active"),
         ("suspended", "Suspended"),
         ("repealed", "Repealed"),
+        ("emergency_suspended", "Emergency Suspended"),
     ]
 
     name = models.CharField(max_length=200)
@@ -205,6 +206,10 @@ class CouncilItem(models.Model):
     )
     notes = models.TextField(blank=True, default="")
     order = models.IntegerField(default=0, help_text="Lower numbers appear first.")
+    vote_record = models.JSONField(
+        default=dict, blank=True,
+        help_text="Frozen vote snapshot when vote concludes or is emergency suspended.",
+    )
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 

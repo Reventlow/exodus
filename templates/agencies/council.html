@@ -143,6 +143,7 @@
         { value: 'active', label: 'Active' },
         { value: 'suspended', label: 'Suspended' },
         { value: 'repealed', label: 'Repealed' },
+        { value: 'emergency_suspended', label: 'Emergency Suspended' },
     ];
 
     const STATUS_COLORS = {
@@ -151,6 +152,7 @@
         active: 'var(--accent-primary)',
         suspended: 'var(--accent-warning)',
         repealed: 'var(--accent-danger)',
+        emergency_suspended: '#ef4444',
     };
 
     const TYPE_ICONS = {
@@ -178,6 +180,7 @@
         failed_chairman: 'FAILED (CHAIRMAN TIE-BREAK)',
         tied: 'TIED — AWAITING CHAIRMAN',
         no_quorum: 'NO QUORUM',
+        emergency_suspended: 'EMERGENCY SUSPENDED',
     };
 
     const RESULT_COLORS = {
@@ -187,6 +190,7 @@
         failed_chairman: 'var(--accent-danger)',
         tied: 'var(--accent-warning)',
         no_quorum: 'var(--text-muted)',
+        emergency_suspended: '#ef4444',
     };
 
     const VotingPanel = ({ item, members, onVote }) => {
@@ -240,11 +244,12 @@
 
                 {/* Vote rows per member agency */}
                 <div style={{ marginBottom: '0.75rem' }}>
-                    {members.map(m => {
+                    {/* Use members list for live voting, or votes array for frozen records */}
+                    {(item.status === 'voting' ? members : (votes || []).map(v => ({ id: v.agencyId, name: v.agencyName }))).map(m => {
                         const currentVote = getVote(m.id);
-                        const canVoteForThis = IS_ADMIN || (USER_AGENCY_ID === m.id);
-                        const voteLabel = currentVote
-                            ? currentVote.toUpperCase()
+                        const canVoteForThis = item.status === 'voting' && (IS_ADMIN || (USER_AGENCY_ID === m.id));
+                        const voteLabel = currentVote === 'did_not_vote' ? 'DID NOT VOTE'
+                            : currentVote ? currentVote.toUpperCase()
                             : 'NOT VOTED';
                         const voteColor = currentVote === 'for' ? 'var(--accent-success)'
                             : currentVote === 'against' ? 'var(--accent-danger)'
@@ -272,7 +277,7 @@
                                         }}>CHAIR</span>
                                     )}
                                 </div>
-                                {canVoteForThis && item.status === 'voting' ? (
+                                {canVoteForThis ? (
                                     <div style={{ display: 'flex', gap: '0.25rem' }}>
                                         {voteBtn(m.id, 'for', 'FOR', 'var(--accent-success)')}
                                         {voteBtn(m.id, 'against', 'AGAINST', 'var(--accent-danger)')}
@@ -521,6 +526,54 @@
                         </p>
                     )}
                 </div>
+
+                {/* Chairman actions */}
+                {(IS_ADMIN || IS_CHAIRMAN) && item.status === 'proposed' && (
+                    <div style={{ marginTop: '0.75rem' }}>
+                        <button
+                            onClick={() => onSave(item.id, 'status', 'voting')}
+                            className="mono-text"
+                            style={{
+                                background: 'rgba(168, 85, 247, 0.15)',
+                                border: `1px solid ${COUNCIL_ACCENT}`,
+                                color: COUNCIL_ACCENT,
+                                padding: '0.4rem 1rem',
+                                cursor: 'pointer',
+                                fontSize: '0.8rem',
+                                fontFamily: 'var(--font-mono)',
+                                fontWeight: 'bold',
+                                borderRadius: 'var(--radius-sm)',
+                            }}
+                        >
+                            CALL VOTE
+                        </button>
+                    </div>
+                )}
+
+                {(IS_ADMIN || IS_CHAIRMAN) && item.status === 'voting' && (
+                    <div style={{ marginTop: '0.5rem' }}>
+                        <button
+                            onClick={() => {
+                                if (confirm('Emergency suspend this vote? All current votes will be recorded.')) {
+                                    onSave(item.id, 'status', 'emergency_suspended');
+                                }
+                            }}
+                            className="mono-text"
+                            style={{
+                                background: 'rgba(239, 68, 68, 0.1)',
+                                border: '1px solid var(--accent-danger)',
+                                color: 'var(--accent-danger)',
+                                padding: '0.3rem 0.75rem',
+                                cursor: 'pointer',
+                                fontSize: '0.75rem',
+                                fontFamily: 'var(--font-mono)',
+                                borderRadius: 'var(--radius-sm)',
+                            }}
+                        >
+                            EMERGENCY SUSPEND
+                        </button>
+                    </div>
+                )}
 
                 {/* Voting panel — shown when item has votes/tally data */}
                 {item.tally && (

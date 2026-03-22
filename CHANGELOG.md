@@ -1,5 +1,12 @@
 # Changelog
 
+## v0.6.9
+- Chairman (player or admin) can call a vote on proposals — changes status from "proposed" to "voting"
+- Votes auto-resolve when all council members have voted — status changes to "active" (passed) or "repealed" (failed) with frozen vote record
+- Chairman can emergency suspend an active vote — records all votes including "did not vote" entries
+- UIC Charter updated: Article IV Section 1 now includes the chairman's emergency suspension power
+- New "emergency_suspended" status with red styling and frozen vote display
+
 ## v0.6.8
 - Council voting system: when a proposal enters "voting" status, member agencies can vote for, against, or abstain
 - Superusers can cast votes on behalf of any agency; players vote for their own agency

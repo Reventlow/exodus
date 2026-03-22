@@ -57,7 +57,9 @@ The Chairman of the Council shall:
 2. Preside over Council proceedings and maintain order.
 3. Cast the deciding vote in the event of a tie.
 
-The Chairman holds no additional powers beyond those enumerated above. The Chairman's regular vote is counted as any other member's vote; the tie-breaking power is exercised only when a vote results in an exact tie.
+4. Emergency suspend any active vote, halting proceedings immediately. All votes cast up to the point of suspension are recorded, and agencies that had not yet voted are recorded as "did not vote."
+
+The Chairman holds no additional powers beyond those enumerated above. The Chairman's regular vote is counted as any other member's vote; the tie-breaking power is exercised only when a vote results in an exact tie. The emergency suspension power is intended for extraordinary circumstances and its use is recorded in the Council record.
 
 ### Section 2 — Election
 The Chairman is elected by a simple majority vote (more than 50%) of all member agencies present, provided a quorum is met. Any member agency may nominate itself or another member agency for the position.

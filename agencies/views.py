@@ -19,6 +19,7 @@ from .serializers import (
     serialize_council_item,
     serialize_base,
     serialize_base_config,
+    build_vote_record,
 )
 
 
@@ -642,18 +643,18 @@ def api_council_detail(request, pk):
     """GET/PUT/DELETE a single council item."""
     ci = get_object_or_404(CouncilItem, pk=pk)
 
-    # Non-admin: may edit or delete their own proposals in "proposed" status
+    # Non-admin: players can edit/delete own proposals, chairman can change status
     if not request.user.is_superuser:
         if request.method not in ("PUT", "DELETE"):
             return JsonResponse(
                 {"error": "ACCESS DENIED. Administrator clearance required."},
                 status=403,
             )
-        # Find the user's agency name
+        # Find the user's agency
         char_ids = set(
             request.user.characters.values_list("id", flat=True)
         )
-        user_agency_name = None
+        user_agency = None
         if char_ids:
             for base in Base.objects.filter(
                 agency__is_player_agency=True
@@ -663,37 +664,70 @@ def api_council_detail(request, pk):
                         ws.get("assignedType") == "character"
                         and ws.get("assignedTo") in char_ids
                     ):
-                        user_agency_name = base.agency.name
+                        user_agency = base.agency
                         break
-                if user_agency_name:
+                if user_agency:
                     break
-        if not (
-            user_agency_name
-            and ci.proposed_by == user_agency_name
-            and ci.status == "proposed"
-        ):
+        user_agency_name = user_agency.name if user_agency else None
+        is_chairman = user_agency.is_council_chairman if user_agency else False
+
+        # Parse body for PUT
+        if request.method == "PUT":
+            try:
+                data = json.loads(request.body)
+            except json.JSONDecodeError:
+                return JsonResponse({"error": "Invalid data stream."}, status=400)
+
+            # Chairman status transitions
+            new_status = data.get("status")
+            if new_status and is_chairman:
+                # proposed → voting
+                if ci.status == "proposed" and new_status == "voting":
+                    ci.status = "voting"
+                    ci.save()
+                    return JsonResponse(serialize_council_item(ci))
+                # voting → emergency_suspended
+                if ci.status == "voting" and new_status == "emergency_suspended":
+                    ci.vote_record = build_vote_record(ci)
+                    ci.status = "emergency_suspended"
+                    ci.save()
+                    return JsonResponse(serialize_council_item(ci))
+
+            # Own proposal editing (proposed status only)
+            if (
+                user_agency_name
+                and ci.proposed_by == user_agency_name
+                and ci.status == "proposed"
+            ):
+                for field, attr in [
+                    ("name", "name"),
+                    ("description", "description"),
+                    ("notes", "notes"),
+                    ("itemType", "item_type"),
+                ]:
+                    if field in data:
+                        setattr(ci, attr, data[field])
+                ci.save()
+                return JsonResponse(serialize_council_item(ci))
+
             return JsonResponse(
-                {"error": "ACCESS DENIED. Can only edit your own proposals in 'proposed' status."},
+                {"error": "ACCESS DENIED."},
                 status=403,
             )
+
+        # DELETE — own proposals in proposed status only
         if request.method == "DELETE":
-            ci.delete()
-            return JsonResponse({"status": "Council item record terminated."})
-        # PUT — players can edit name, description, notes, itemType
-        try:
-            data = json.loads(request.body)
-        except json.JSONDecodeError:
-            return JsonResponse({"error": "Invalid data stream."}, status=400)
-        for field, attr in [
-            ("name", "name"),
-            ("description", "description"),
-            ("notes", "notes"),
-            ("itemType", "item_type"),
-        ]:
-            if field in data:
-                setattr(ci, attr, data[field])
-        ci.save()
-        return JsonResponse(serialize_council_item(ci))
+            if (
+                user_agency_name
+                and ci.proposed_by == user_agency_name
+                and ci.status == "proposed"
+            ):
+                ci.delete()
+                return JsonResponse({"status": "Council item record terminated."})
+            return JsonResponse(
+                {"error": "ACCESS DENIED. Can only withdraw your own proposals in 'proposed' status."},
+                status=403,
+            )
 
     if request.method == "GET":
         return JsonResponse(serialize_council_item(ci))
@@ -833,6 +867,21 @@ def api_council_vote(request, pk):
         agency=agency,
         defaults={"vote": vote_value},
     )
+
+    # Auto-transition: if all council members have voted, resolve the vote
+    total_members = Agency.objects.filter(is_council_member=True).count()
+    total_voted = ci.votes.count()
+    if total_voted >= total_members and total_members > 0:
+        # Build the final record and determine outcome
+        record = build_vote_record(ci)
+        result = record["tally"]["result"]
+        ci.vote_record = record
+        if result in ("passed", "passed_chairman"):
+            ci.status = "active"
+        elif result in ("failed", "failed_chairman"):
+            ci.status = "repealed"
+        # tied or no_quorum stays in voting (shouldn't happen if all voted)
+        ci.save()
 
     # Return updated item with votes
     ci.refresh_from_db()
