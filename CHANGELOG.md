@@ -1,5 +1,14 @@
 # Changelog
 
+## v0.6.0
+- Agency EXP section now shows available points (pool minus used) as the big number, with an admin button to add EXP
+- Agency sheets display linked dossiers (characters from workspaces + NPC dossiers) with clickable links to their sheets
+- Superusers can post as any character or NPC dossier in comms via a dropdown selector — messages show the dossier name with a PC/NPC badge
+- NPC dossiers support a hidden flag — hidden dossiers are only visible to superusers, toggleable from the admin panel
+- NPC dossiers without an agency now labelled UNAFFILIATED instead of NPC
+- New dossier list filters: UNAFFILIATED and HIDDEN (admin-only)
+- Hidden checkbox on NPC dossier creation dialog
+
 ## v0.5.5
 - Fixed agency pages stuck on "DECRYPTING..." — syntax error in facility classification ternary prevented React from loading
 
