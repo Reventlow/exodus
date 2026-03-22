@@ -1,5 +1,9 @@
 # Changelog
 
+## v0.6.6
+- Superusers can edit the UIC Charter from the site settings page (Markdown editor)
+- Charter content now stored in the database instead of a static file
+
 ## v0.6.5
 - Players can withdraw their own council proposals while still in "proposed" status
 

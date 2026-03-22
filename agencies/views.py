@@ -112,8 +112,15 @@ def council_page(request):
 @login_required
 def council_charter_page(request):
     """UIC Charter page. Readable by all logged-in users."""
-    charter_path = Path(settings.BASE_DIR) / "UIC_CHARTER.md"
-    charter_content = charter_path.read_text() if charter_path.exists() else ""
+    from exodus.models import SiteSettings
+
+    site = SiteSettings.load()
+    charter_content = site.charter_text
+    # Fallback to file if DB is empty (first-time migration)
+    if not charter_content:
+        charter_path = Path(settings.BASE_DIR) / "UIC_CHARTER.md"
+        if charter_path.exists():
+            charter_content = charter_path.read_text()
     return render(request, "agencies/council_charter.html", {"charter_md": charter_content})
 
 

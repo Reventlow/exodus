@@ -11,6 +11,11 @@ class SiteSettings(models.Model):
         blank=True,
         help_text="Date of the next game session.",
     )
+    charter_text = models.TextField(
+        blank=True,
+        default="",
+        help_text="United Interstellar Council charter content (Markdown).",
+    )
 
     class Meta:
         verbose_name = "Site Settings"

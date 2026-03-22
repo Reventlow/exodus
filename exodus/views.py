@@ -15,6 +15,7 @@ def site_settings(request):
     if request.method == "POST":
         date_value = request.POST.get("next_game_date", "").strip()
         settings_obj.next_game_date = date_value or None
+        settings_obj.charter_text = request.POST.get("charter_text", "")
         settings_obj.save()
         messages.success(request, "Settings updated.")
         return redirect("site-settings")
