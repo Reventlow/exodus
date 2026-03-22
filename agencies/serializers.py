@@ -2,7 +2,7 @@
 
 from characters.models import Character
 from npcs.models import NPC
-from .models import GlobalFlaw, FTLProject, AgencyFTLProject, CouncilItem, BaseConfig, Base
+from .models import GlobalFlaw, FTLProject, AgencyFTLProject, CouncilItem, CouncilVote, BaseConfig, Base
 
 CLASSIFIED = "CLASSIFIED"
 
@@ -211,8 +211,10 @@ def serialize_agency_ftl_project(afp):
 
 
 def serialize_council_item(ci):
-    """Serialize a CouncilItem model instance."""
-    return {
+    """Serialize a CouncilItem model instance, including votes when voting."""
+    from .models import Agency
+
+    data = {
         "id": ci.id,
         "name": ci.name,
         "itemType": ci.item_type,
@@ -222,6 +224,67 @@ def serialize_council_item(ci):
         "notes": ci.notes,
         "order": ci.order,
     }
+
+    # Include votes and tally for items in voting (or later) status
+    if ci.status in ("voting", "active", "suspended", "repealed"):
+        votes = list(
+            ci.votes.select_related("agency").all()
+        )
+        total_members = Agency.objects.filter(is_council_member=True).count()
+        votes_for = sum(1 for v in votes if v.vote == "for")
+        votes_against = sum(1 for v in votes if v.vote == "against")
+        votes_abstain = sum(1 for v in votes if v.vote == "abstain")
+        total_voted = len(votes)
+        quorum_needed = (total_members // 2) + 1
+        quorum_met = total_voted >= quorum_needed
+
+        # Chairman agency for tie-break
+        chairman = Agency.objects.filter(
+            is_council_chairman=True
+        ).first()
+        chairman_vote = None
+        if chairman:
+            cv = next((v for v in votes if v.agency_id == chairman.id), None)
+            if cv:
+                chairman_vote = cv.vote
+
+        # Determine result
+        if not quorum_met:
+            result = "no_quorum"
+        elif votes_for > votes_against:
+            result = "passed"
+        elif votes_against > votes_for:
+            result = "failed"
+        else:
+            # Tie — chairman breaks it
+            if chairman_vote == "for":
+                result = "passed_chairman"
+            elif chairman_vote == "against":
+                result = "failed_chairman"
+            else:
+                result = "tied"
+
+        data["votes"] = [
+            {
+                "agencyId": v.agency_id,
+                "agencyName": v.agency.name,
+                "vote": v.vote,
+            }
+            for v in votes
+        ]
+        data["tally"] = {
+            "totalMembers": total_members,
+            "votesFor": votes_for,
+            "votesAgainst": votes_against,
+            "votesAbstain": votes_abstain,
+            "totalVoted": total_voted,
+            "quorumNeeded": quorum_needed,
+            "quorumMet": quorum_met,
+            "result": result,
+            "chairmanAgencyId": chairman.id if chairman else None,
+        }
+
+    return data
 
 
 def serialize_change_request(cr):

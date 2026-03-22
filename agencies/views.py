@@ -8,7 +8,7 @@ from django.contrib.auth.decorators import login_required
 from django.views.decorators.http import require_http_methods
 from django.utils import timezone
 
-from .models import Agency, ChangeRequest, GlobalFlaw, FTLProject, AgencyFTLProject, CouncilItem, BaseConfig, Base
+from .models import Agency, ChangeRequest, GlobalFlaw, FTLProject, AgencyFTLProject, CouncilItem, CouncilVote, BaseConfig, Base
 from .serializers import (
     serialize_agency,
     serialize_agency_summary,
@@ -771,6 +771,72 @@ def api_council_reorder(request):
     return JsonResponse(
         [serialize_council_item(ci) for ci in all_items], safe=False
     )
+
+
+@login_required
+@require_http_methods(["POST"])
+def api_council_vote(request, pk):
+    """Cast or update a vote on a council item. Body: {agencyId, vote}.
+
+    Admin can vote for any council member agency.
+    Players can only vote for their own agency.
+    Item must be in 'voting' status.
+    """
+    ci = get_object_or_404(CouncilItem, pk=pk)
+    if ci.status != "voting":
+        return JsonResponse(
+            {"error": "Voting is only allowed on items in 'voting' status."},
+            status=400,
+        )
+
+    try:
+        data = json.loads(request.body)
+    except json.JSONDecodeError:
+        return JsonResponse({"error": "Invalid data stream."}, status=400)
+
+    agency_id = data.get("agencyId")
+    vote_value = data.get("vote")
+    if vote_value not in ("for", "against", "abstain"):
+        return JsonResponse({"error": "Vote must be 'for', 'against', or 'abstain'."}, status=400)
+
+    agency = get_object_or_404(Agency, pk=agency_id)
+    if not agency.is_council_member:
+        return JsonResponse({"error": "Agency is not a council member."}, status=400)
+
+    # Permission check: admin can vote for any agency, players only their own
+    if not request.user.is_superuser:
+        char_ids = set(
+            request.user.characters.values_list("id", flat=True)
+        )
+        user_agency = None
+        if char_ids:
+            for base in Base.objects.filter(
+                agency__is_player_agency=True
+            ).select_related("agency"):
+                for ws in base.workspaces or []:
+                    if (
+                        ws.get("assignedType") == "character"
+                        and ws.get("assignedTo") in char_ids
+                    ):
+                        user_agency = base.agency
+                        break
+                if user_agency:
+                    break
+        if not user_agency or user_agency.id != agency.id:
+            return JsonResponse(
+                {"error": "ACCESS DENIED. You can only vote for your own agency."},
+                status=403,
+            )
+
+    CouncilVote.objects.update_or_create(
+        council_item=ci,
+        agency=agency,
+        defaults={"vote": vote_value},
+    )
+
+    # Return updated item with votes
+    ci.refresh_from_db()
+    return JsonResponse(serialize_council_item(ci))
 
 
 # ---------------------------------------------------------------------------

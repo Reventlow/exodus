@@ -171,7 +171,186 @@
         </span>
     );
 
-    const CouncilItemCard = ({ item, onSave, onDelete, saving, dragHandlers }) => {
+    const RESULT_LABELS = {
+        passed: 'PASSED',
+        passed_chairman: 'PASSED (CHAIRMAN TIE-BREAK)',
+        failed: 'FAILED',
+        failed_chairman: 'FAILED (CHAIRMAN TIE-BREAK)',
+        tied: 'TIED — AWAITING CHAIRMAN',
+        no_quorum: 'NO QUORUM',
+    };
+
+    const RESULT_COLORS = {
+        passed: 'var(--accent-success)',
+        passed_chairman: 'var(--accent-success)',
+        failed: 'var(--accent-danger)',
+        failed_chairman: 'var(--accent-danger)',
+        tied: 'var(--accent-warning)',
+        no_quorum: 'var(--text-muted)',
+    };
+
+    const VotingPanel = ({ item, members, onVote }) => {
+        const tally = item.tally;
+        const votes = item.votes || [];
+        if (!tally) return null;
+
+        const getVote = (agencyId) => {
+            const v = votes.find(v => v.agencyId === agencyId);
+            return v ? v.vote : null;
+        };
+
+        const voteBtn = (agencyId, voteValue, label, color) => {
+            const current = getVote(agencyId);
+            const isActive = current === voteValue;
+            return (
+                <button
+                    onClick={() => onVote(item.id, agencyId, voteValue)}
+                    className="mono-text"
+                    style={{
+                        background: isActive ? color : 'transparent',
+                        border: `1px solid ${color}`,
+                        color: isActive ? 'var(--bg-dark)' : color,
+                        padding: '2px 8px',
+                        cursor: 'pointer',
+                        fontSize: '0.7rem',
+                        fontFamily: 'var(--font-mono)',
+                        fontWeight: isActive ? 'bold' : 'normal',
+                        borderRadius: 'var(--radius-sm)',
+                    }}
+                >
+                    {label}
+                </button>
+            );
+        };
+
+        return (
+            <div style={{
+                marginTop: '0.75rem',
+                padding: '0.75rem',
+                background: 'rgba(168, 85, 247, 0.05)',
+                border: `1px solid ${COUNCIL_ACCENT}`,
+                borderRadius: 'var(--radius-sm)',
+            }}>
+                <label className="mono-text" style={{
+                    fontSize: '0.75rem', color: COUNCIL_ACCENT, display: 'block',
+                    marginBottom: '0.5rem', fontWeight: 'bold',
+                }}>
+                    VOTES
+                </label>
+
+                {/* Vote rows per member agency */}
+                <div style={{ marginBottom: '0.75rem' }}>
+                    {members.map(m => {
+                        const currentVote = getVote(m.id);
+                        const canVoteForThis = IS_ADMIN || (USER_AGENCY_ID === m.id);
+                        const voteLabel = currentVote
+                            ? currentVote.toUpperCase()
+                            : 'NOT VOTED';
+                        const voteColor = currentVote === 'for' ? 'var(--accent-success)'
+                            : currentVote === 'against' ? 'var(--accent-danger)'
+                            : currentVote === 'abstain' ? 'var(--accent-warning)'
+                            : 'var(--text-muted)';
+
+                        return (
+                            <div key={m.id} style={{
+                                display: 'flex', justifyContent: 'space-between',
+                                alignItems: 'center', padding: '0.3rem 0',
+                                borderBottom: '1px solid rgba(255,255,255,0.04)',
+                            }}>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                                    <span className="mono-text" style={{
+                                        fontSize: '0.8rem', color: 'var(--text-primary)',
+                                        fontWeight: m.id === tally.chairmanAgencyId ? 'bold' : 'normal',
+                                    }}>
+                                        {m.name}
+                                    </span>
+                                    {m.id === tally.chairmanAgencyId && (
+                                        <span className="mono-text" style={{
+                                            fontSize: '0.55rem', padding: '1px 3px',
+                                            background: COUNCIL_ACCENT, color: 'var(--bg-dark)',
+                                            borderRadius: '2px',
+                                        }}>CHAIR</span>
+                                    )}
+                                </div>
+                                {canVoteForThis && item.status === 'voting' ? (
+                                    <div style={{ display: 'flex', gap: '0.25rem' }}>
+                                        {voteBtn(m.id, 'for', 'FOR', 'var(--accent-success)')}
+                                        {voteBtn(m.id, 'against', 'AGAINST', 'var(--accent-danger)')}
+                                        {voteBtn(m.id, 'abstain', 'ABSTAIN', 'var(--accent-warning)')}
+                                    </div>
+                                ) : (
+                                    <span className="mono-text" style={{
+                                        fontSize: '0.75rem', color: voteColor,
+                                    }}>
+                                        {voteLabel}
+                                    </span>
+                                )}
+                            </div>
+                        );
+                    })}
+                </div>
+
+                {/* Tally bar */}
+                <div style={{ marginBottom: '0.5rem' }}>
+                    <div style={{
+                        display: 'flex', justifyContent: 'space-between',
+                        marginBottom: '0.25rem',
+                    }}>
+                        <span className="mono-text text-muted" style={{ fontSize: '0.7rem' }}>
+                            TALLY: {tally.votesFor} FOR / {tally.votesAgainst} AGAINST / {tally.votesAbstain} ABSTAIN
+                        </span>
+                        <span className="mono-text text-muted" style={{ fontSize: '0.7rem' }}>
+                            {tally.totalVoted} / {tally.totalMembers} VOTED
+                        </span>
+                    </div>
+                    {tally.totalMembers > 0 && (
+                        <div style={{
+                            width: '100%', height: '8px', display: 'flex',
+                            borderRadius: '4px', overflow: 'hidden',
+                            border: '1px solid var(--border-color)',
+                            background: 'rgba(255,255,255,0.05)',
+                        }}>
+                            {tally.votesFor > 0 && <div style={{
+                                width: `${(tally.votesFor / tally.totalMembers) * 100}%`,
+                                background: 'var(--accent-success)', height: '100%',
+                            }} />}
+                            {tally.votesAgainst > 0 && <div style={{
+                                width: `${(tally.votesAgainst / tally.totalMembers) * 100}%`,
+                                background: 'var(--accent-danger)', height: '100%',
+                            }} />}
+                            {tally.votesAbstain > 0 && <div style={{
+                                width: `${(tally.votesAbstain / tally.totalMembers) * 100}%`,
+                                background: 'var(--accent-warning)', height: '100%',
+                            }} />}
+                        </div>
+                    )}
+                </div>
+
+                {/* Quorum + Result */}
+                <div style={{
+                    display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+                }}>
+                    <span className="mono-text" style={{
+                        fontSize: '0.7rem',
+                        color: tally.quorumMet ? 'var(--accent-success)' : 'var(--text-muted)',
+                    }}>
+                        QUORUM: {tally.quorumMet ? 'MET' : 'NOT MET'} ({tally.quorumNeeded} needed)
+                    </span>
+                    <span className="mono-text" style={{
+                        fontSize: '0.75rem', fontWeight: 'bold',
+                        color: RESULT_COLORS[tally.result] || 'var(--text-muted)',
+                        padding: '2px 6px',
+                        border: `1px solid ${RESULT_COLORS[tally.result] || 'var(--text-muted)'}`,
+                        borderRadius: 'var(--radius-sm)',
+                    }}>
+                        {RESULT_LABELS[tally.result] || tally.result}
+                    </span>
+                </div>
+            </div>
+        );
+    };
+
+    const CouncilItemCard = ({ item, onSave, onDelete, saving, dragHandlers, members, onVote }) => {
         const statusLabel = STATUS_OPTIONS.find(o => o.value === item.status)?.label || item.status;
         const typeLabel = TYPE_OPTIONS.find(o => o.value === item.itemType)?.label || item.itemType;
         const isOwnProposal = !IS_ADMIN && item.proposedBy === USER_AGENCY_NAME && item.status === 'proposed';
@@ -342,6 +521,11 @@
                         </p>
                     )}
                 </div>
+
+                {/* Voting panel — shown when item has votes/tally data */}
+                {item.tally && (
+                    <VotingPanel item={item} members={members} onVote={onVote} />
+                )}
             </div>
         );
     };
@@ -473,6 +657,7 @@
 
     const CouncilManager = () => {
         const [items, setItems] = useState([]);
+        const [members, setMembers] = useState([]);
         const [loading, setLoading] = useState(true);
         const [saving, setSaving] = useState(null);
         const [creating, setCreating] = useState(false);
@@ -490,7 +675,31 @@
             setLoading(false);
         };
 
-        useEffect(() => { fetchItems(); }, []);
+        const fetchMembers = async () => {
+            const res = await fetch('/api/council/members/', {
+                headers: { 'X-CSRFToken': getCookie('csrftoken') || CSRF_TOKEN }
+            });
+            if (res.ok) {
+                setMembers(await res.json());
+            }
+        };
+
+        useEffect(() => { fetchItems(); fetchMembers(); }, []);
+
+        const castVote = async (itemId, agencyId, vote) => {
+            const res = await fetch(`/api/council/${itemId}/vote/`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRFToken': getCookie('csrftoken') || CSRF_TOKEN,
+                },
+                body: JSON.stringify({ agencyId, vote }),
+            });
+            if (res.ok) {
+                const updated = await res.json();
+                setItems(prev => prev.map(i => i.id === itemId ? updated : i));
+            }
+        };
 
         const saveItem = async (id, field, value) => {
             setSaving(id);
@@ -723,6 +932,8 @@
                                 onDrop: handleDrop,
                                 onDragEnd: handleDragEnd,
                             } : {}}
+                            members={members}
+                            onVote={castVote}
                         />
                     ))}
 

@@ -1,5 +1,13 @@
 # Changelog
 
+## v0.6.8
+- Council voting system: when a proposal enters "voting" status, member agencies can vote for, against, or abstain
+- Superusers can cast votes on behalf of any agency; players vote for their own agency
+- Live vote tally with progress bar showing for/against/abstain breakdown
+- Quorum check (>50% of members must vote) and result calculation per charter rules
+- Chairman tie-break: if votes are tied, the chairman's vote decides the outcome
+- Votes and results persist and display on proposals that have been through voting
+
 ## v0.6.7
 - Players can now edit the name, description, notes, and type on their own council proposals while in "proposed" status
 

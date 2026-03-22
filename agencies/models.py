@@ -215,6 +215,31 @@ class CouncilItem(models.Model):
         return f"[COUNCIL/{self.item_type.upper()}] {self.name} ({self.status})"
 
 
+class CouncilVote(models.Model):
+    """A vote cast by a member agency on a council item."""
+
+    VOTE_CHOICES = [
+        ("for", "For"),
+        ("against", "Against"),
+        ("abstain", "Abstain"),
+    ]
+
+    council_item = models.ForeignKey(
+        CouncilItem, on_delete=models.CASCADE, related_name="votes"
+    )
+    agency = models.ForeignKey(
+        Agency, on_delete=models.CASCADE, related_name="council_votes"
+    )
+    vote = models.CharField(max_length=10, choices=VOTE_CHOICES)
+    voted_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        unique_together = ["council_item", "agency"]
+
+    def __str__(self):
+        return f"{self.agency.name} — {self.vote} on {self.council_item.name}"
+
+
 def default_base_location_types():
     """Default location types with exp costs and space."""
     return [
