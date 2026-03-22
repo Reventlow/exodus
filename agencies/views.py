@@ -642,41 +642,58 @@ def api_council_detail(request, pk):
     """GET/PUT/DELETE a single council item."""
     ci = get_object_or_404(CouncilItem, pk=pk)
 
-    # Non-admin users may only DELETE their own agency's proposals in "proposed" status
+    # Non-admin: may edit or delete their own proposals in "proposed" status
     if not request.user.is_superuser:
-        if request.method == "DELETE":
-            # Find the user's agency name
-            char_ids = set(
-                request.user.characters.values_list("id", flat=True)
-            )
-            user_agency_name = None
-            if char_ids:
-                for base in Base.objects.filter(
-                    agency__is_player_agency=True
-                ).select_related("agency"):
-                    for ws in base.workspaces or []:
-                        if (
-                            ws.get("assignedType") == "character"
-                            and ws.get("assignedTo") in char_ids
-                        ):
-                            user_agency_name = base.agency.name
-                            break
-                    if user_agency_name:
-                        break
-            if (
-                user_agency_name
-                and ci.proposed_by == user_agency_name
-                and ci.status == "proposed"
-            ):
-                ci.delete()
-                return JsonResponse({"status": "Council item record terminated."})
+        if request.method not in ("PUT", "DELETE"):
             return JsonResponse(
-                {"error": "ACCESS DENIED. Can only withdraw your own proposals in 'proposed' status."},
+                {"error": "ACCESS DENIED. Administrator clearance required."},
                 status=403,
             )
-        return JsonResponse(
-            {"error": "ACCESS DENIED. Administrator clearance required."}, status=403
+        # Find the user's agency name
+        char_ids = set(
+            request.user.characters.values_list("id", flat=True)
         )
+        user_agency_name = None
+        if char_ids:
+            for base in Base.objects.filter(
+                agency__is_player_agency=True
+            ).select_related("agency"):
+                for ws in base.workspaces or []:
+                    if (
+                        ws.get("assignedType") == "character"
+                        and ws.get("assignedTo") in char_ids
+                    ):
+                        user_agency_name = base.agency.name
+                        break
+                if user_agency_name:
+                    break
+        if not (
+            user_agency_name
+            and ci.proposed_by == user_agency_name
+            and ci.status == "proposed"
+        ):
+            return JsonResponse(
+                {"error": "ACCESS DENIED. Can only edit your own proposals in 'proposed' status."},
+                status=403,
+            )
+        if request.method == "DELETE":
+            ci.delete()
+            return JsonResponse({"status": "Council item record terminated."})
+        # PUT — players can edit name, description, notes, itemType
+        try:
+            data = json.loads(request.body)
+        except json.JSONDecodeError:
+            return JsonResponse({"error": "Invalid data stream."}, status=400)
+        for field, attr in [
+            ("name", "name"),
+            ("description", "description"),
+            ("notes", "notes"),
+            ("itemType", "item_type"),
+        ]:
+            if field in data:
+                setattr(ci, attr, data[field])
+        ci.save()
+        return JsonResponse(serialize_council_item(ci))
 
     if request.method == "GET":
         return JsonResponse(serialize_council_item(ci))

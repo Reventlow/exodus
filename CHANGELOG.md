@@ -1,5 +1,8 @@
 # Changelog
 
+## v0.6.7
+- Players can now edit the name, description, notes, and type on their own council proposals while in "proposed" status
+
 ## v0.6.6
 - Superusers can edit the UIC Charter from the site settings page (Markdown editor)
 - Charter content now stored in the database instead of a static file
