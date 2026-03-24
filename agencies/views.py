@@ -84,7 +84,7 @@ def api_map_data(request):
         data.append({
             "id": agency.id,
             "name": agency.name,
-            "color": agency.map_color or ("#00ff88" if agency.is_player_agency else "#666666"),
+            "color": agency.map_color or ("#00ff88" if agency.is_player_agency else "#e05555"),
             "isPlayerAgency": agency.is_player_agency,
             "countries": countries,
             "bases": bases,
