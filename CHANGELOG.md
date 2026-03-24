@@ -1,6 +1,6 @@
 # Changelog
 
-## v0.6.12
+## v0.6.13
 - Bases can be marked as hidden — hidden bases are only visible to superusers
 - Individual base sections can be hidden from players: location type, location merits, space usage, facilities, workspaces, aviation units, and base defenses
 - Admins see lock/eye toggle per section; hidden sections show CLASSIFIED to players
