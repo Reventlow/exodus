@@ -101,7 +101,7 @@ def api_npc_list(request):
             created_by=request.user,
         )
 
-    return JsonResponse(serialize_npc(npc), status=201)
+    return JsonResponse(serialize_npc(npc, is_admin=request.user.is_superuser), status=201)
 
 
 @login_required
@@ -114,7 +114,7 @@ def api_npc_detail(request, pk):
         return JsonResponse({"error": "ACCESS DENIED."}, status=403)
 
     if request.method == "GET":
-        return JsonResponse(serialize_npc(npc))
+        return JsonResponse(serialize_npc(npc, is_admin=request.user.is_superuser))
 
     if request.method == "PUT":
         # NPC dossiers: admin only
@@ -158,6 +158,32 @@ def api_npc_detail(request, pk):
         # Admin can toggle hidden status
         if "isHidden" in data and request.user.is_superuser:
             npc.is_hidden = bool(data["isHidden"])
+
+        # Stats — superuser only
+        if request.user.is_superuser:
+            if "attributes" in data:
+                npc.attributes = data["attributes"]
+            if "skills" in data:
+                npc.skills = data["skills"]
+            if "health" in data:
+                h = data["health"]
+                npc.health_bashing = h.get("bashing", npc.health_bashing)
+                npc.health_lethal = h.get("lethal", npc.health_lethal)
+                npc.health_aggravated = h.get("aggravated", npc.health_aggravated)
+            if "size" in data:
+                npc.size = data["size"]
+            if "mentalLoad" in data:
+                npc.mental_load = data["mentalLoad"]
+            if "willpowerCurrent" in data:
+                npc.willpower_current = data["willpowerCurrent"]
+            if "experience" in data:
+                npc.experience = data["experience"]
+            if "merits" in data:
+                npc.merits = data["merits"]
+            if "flaws" in data:
+                npc.flaws = data["flaws"]
+            if "specialisations" in data:
+                npc.specialisations = data["specialisations"]
 
         # Admin can assign/change agency (NPC dossiers)
         if "agencyId" in data and request.user.is_superuser and npc.is_npc_dossier:
@@ -204,7 +230,7 @@ def api_npc_detail(request, pk):
                         pass
 
         npc.save()
-        return JsonResponse(serialize_npc(npc))
+        return JsonResponse(serialize_npc(npc, is_admin=request.user.is_superuser))
 
     if request.method == "DELETE":
         if not request.user.is_superuser:

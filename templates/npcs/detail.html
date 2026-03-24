@@ -799,6 +799,352 @@
         );
     };
 
+    // --- STAT COMPONENTS (superuser-only) ---
+
+    const StatDots = ({ value, max = 5, onChange, editable }) => {
+        return (
+            <div style={{ display: 'flex', gap: '4px' }}>
+                {[...Array(max)].map((_, i) => (
+                    <div
+                        key={i}
+                        onClick={() => editable && onChange(i + 1 === value && value === 1 ? 0 : i + 1)}
+                        style={{
+                            width: '12px', height: '12px', borderRadius: '50%',
+                            border: '1px solid var(--text-muted)',
+                            background: i < value ? 'var(--accent-primary)' : 'transparent',
+                            cursor: editable ? 'pointer' : 'default',
+                            boxShadow: i < value ? '0 0 5px var(--accent-glow)' : 'none'
+                        }}
+                    />
+                ))}
+            </div>
+        );
+    };
+
+    const NpcAttributesModule = ({ attributes, update }) => {
+        const updateAttr = (cat, type, val) => {
+            update({ ...attributes, [cat]: { ...attributes[cat], [type]: val } });
+        };
+        return (
+            <div className="glass-panel" style={{ padding: '1.5rem', marginBottom: '1rem' }}>
+                <h3 className="mono-text text-accent" style={{
+                    borderBottom: '1px solid var(--border-color)',
+                    paddingBottom: '0.5rem', marginBottom: '1rem'
+                }}>ATTRIBUTES</h3>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '2rem' }}>
+                    <div>
+                        <div className="text-center text-muted mono-text" style={{ marginBottom: '0.5rem' }}>MENTAL</div>
+                        {[['Intelligence', 'power'], ['Wits', 'finesse'], ['Resolve', 'resistance']].map(([label, cat]) => (
+                            <div key={label} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
+                                <span>{label}</span>
+                                <StatDots value={attributes[cat].mental} onChange={v => updateAttr(cat, 'mental', v)} editable={true} />
+                            </div>
+                        ))}
+                    </div>
+                    <div>
+                        <div className="text-center text-muted mono-text" style={{ marginBottom: '0.5rem' }}>PHYSICAL</div>
+                        {[['Strength', 'power'], ['Dexterity', 'finesse'], ['Stamina', 'resistance']].map(([label, cat]) => (
+                            <div key={label} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
+                                <span>{label}</span>
+                                <StatDots value={attributes[cat].physical} onChange={v => updateAttr(cat, 'physical', v)} editable={true} />
+                            </div>
+                        ))}
+                    </div>
+                    <div>
+                        <div className="text-center text-muted mono-text" style={{ marginBottom: '0.5rem' }}>SOCIAL</div>
+                        {[['Presence', 'power'], ['Manipulation', 'finesse'], ['Composure', 'resistance']].map(([label, cat]) => (
+                            <div key={label} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
+                                <span>{label}</span>
+                                <StatDots value={attributes[cat].social} onChange={v => updateAttr(cat, 'social', v)} editable={true} />
+                            </div>
+                        ))}
+                    </div>
+                </div>
+            </div>
+        );
+    };
+
+    const NpcSkillsModule = ({ skills, update }) => {
+        const updateSkill = (cat, name, val) => {
+            update({ ...skills, [cat]: { ...skills[cat], [name]: val } });
+        };
+        const SkillCol = ({ category, title }) => (
+            <div>
+                <h4 className="text-center text-muted mono-text" style={{ marginBottom: '1rem', textTransform: 'uppercase' }}>{title}</h4>
+                {Object.entries(skills[category]).map(([name, val]) => (
+                    <div key={name} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
+                        <span style={{ fontSize: '0.9rem', color: val === 0 ? 'var(--text-muted)' : 'var(--text-primary)' }}>
+                            {name.replace(/([A-Z])/g, ' $1').trim()}
+                            {val === 0 && <span style={{ fontSize: '0.7em', marginLeft: '4px', opacity: 0.5 }}>(-{category === 'mental' ? 3 : 1})</span>}
+                        </span>
+                        <StatDots value={val} onChange={v => updateSkill(category, name, v)} editable={true} />
+                    </div>
+                ))}
+            </div>
+        );
+        return (
+            <div className="glass-panel" style={{ padding: '1.5rem', marginBottom: '1rem' }}>
+                <h3 className="mono-text text-accent" style={{
+                    borderBottom: '1px solid var(--border-color)',
+                    paddingBottom: '0.5rem', marginBottom: '1rem'
+                }}>SKILLS</h3>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))', gap: '2rem' }}>
+                    <SkillCol category="mental" title="Mental (-3 Unskilled)" />
+                    <SkillCol category="physical" title="Physical (-1 Unskilled)" />
+                    <SkillCol category="social" title="Social (-1 Unskilled)" />
+                </div>
+            </div>
+        );
+    };
+
+    const NpcDerivedTraitsModule = ({ npc, update }) => {
+        const attrs = npc.attributes;
+        const speed = 5 + attrs.power.physical + attrs.finesse.physical + (npc.size || 5);
+        const initMod = attrs.finesse.physical + attrs.resistance.social;
+        const defense = Math.min(attrs.finesse.physical, attrs.finesse.mental);
+        const willpowerMax = attrs.resistance.mental + attrs.resistance.social;
+        const healthMax = attrs.resistance.physical + (npc.size || 5);
+        return (
+            <div className="glass-panel" style={{ padding: '1.5rem', marginBottom: '1rem' }}>
+                <h3 className="mono-text text-accent" style={{
+                    borderBottom: '1px solid var(--border-color)',
+                    paddingBottom: '0.5rem', marginBottom: '1rem'
+                }}>DERIVED TRAITS</h3>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: '1rem' }}>
+                    <div className="tech-border text-center" style={{ padding: '0.5rem' }}>
+                        <div className="text-secondary mono-text" style={{ fontSize: '0.8rem' }}>HEALTH</div>
+                        <div className="text-accent" style={{ fontSize: '1.5rem' }}>{healthMax}</div>
+                        <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>Stamina + Size</div>
+                    </div>
+                    <div className="tech-border text-center" style={{ padding: '0.5rem' }}>
+                        <div className="text-secondary mono-text" style={{ fontSize: '0.8rem' }}>WILLPOWER</div>
+                        <div className="text-accent" style={{ fontSize: '1.5rem' }}>{willpowerMax}</div>
+                        <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>Resolve + Composure</div>
+                    </div>
+                    <div className="tech-border text-center" style={{ padding: '0.5rem' }}>
+                        <div className="text-secondary mono-text" style={{ fontSize: '0.8rem' }}>INITIATIVE</div>
+                        <div style={{ fontSize: '1.5rem', color: 'var(--text-primary)' }}>{initMod}</div>
+                        <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>Dex + Comp</div>
+                    </div>
+                    <div className="tech-border text-center" style={{ padding: '0.5rem' }}>
+                        <div className="text-secondary mono-text" style={{ fontSize: '0.8rem' }}>DEFENSE</div>
+                        <div style={{ fontSize: '1.5rem', color: 'var(--text-primary)' }}>{defense}</div>
+                        <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>Lowest(Wits, Dex)</div>
+                    </div>
+                    <div className="tech-border text-center" style={{ padding: '0.5rem' }}>
+                        <div className="text-secondary mono-text" style={{ fontSize: '0.8rem' }}>SPEED</div>
+                        <div style={{ fontSize: '1.5rem', color: 'var(--text-primary)' }}>{speed}</div>
+                        <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>Str + Dex + 5</div>
+                    </div>
+                    <div className="tech-border text-center" style={{ padding: '0.5rem' }}>
+                        <div className="text-secondary mono-text" style={{ fontSize: '0.8rem' }}>SIZE</div>
+                        <input type="number" value={npc.size || 5}
+                            onChange={e => update({ size: parseInt(e.target.value) || 5 })}
+                            style={{
+                                background: 'transparent', border: 'none',
+                                color: 'var(--text-primary)', width: '100%',
+                                textAlign: 'center', fontSize: '1.5rem'
+                            }} />
+                    </div>
+                </div>
+            </div>
+        );
+    };
+
+    const getMentalLoadPenalties = (level) => {
+        let social = 0, cognitive = 0;
+        if (level >= 3) social -= 2;
+        if (level >= 4) cognitive -= 2;
+        if (level >= 5) { social -= 1; cognitive -= 1; }
+        if (level >= 6) { social -= 2; cognitive -= 2; }
+        return { social, cognitive };
+    };
+
+    const NpcHealthModule = ({ health, max, mentalLoad, update, onMentalLoadChange }) => {
+        const deadlyFill = (health.lethal || 0) + (health.aggravated || 0);
+        const isFlatline = max > 0 && deadlyFill >= max;
+        const ekgSpeed = isFlatline ? 0 : Math.max(0.3, 2 - mentalLoad * 0.25);
+        const ekgPath = isFlatline ? "M0,30 L300,30" : "M0,30 L20,30 L25,10 L35,50 L40,30 L300,30";
+        const ekgColor = isFlatline ? 'var(--text-muted)' : 'var(--accent-danger)';
+        const penalties = getMentalLoadPenalties(mentalLoad);
+        return (
+            <div className="glass-panel" style={{ padding: '1.5rem', marginBottom: '1rem', border: '1px solid var(--accent-danger)' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem', flexWrap: 'wrap', gap: '0.5rem' }}>
+                    <h3 className="mono-text text-danger">BIOSIGN MONITOR</h3>
+                    <div className="text-danger mono-text" style={{ animation: isFlatline ? 'none' : 'pulse 2s infinite' }}>
+                        {isFlatline ? 'NO VITAL SIGNS DETECTED' : 'Tracking vital signs...'}
+                    </div>
+                </div>
+                <div style={{ height: '60px', background: 'rgba(0,0,0,0.3)', marginBottom: '1rem', position: 'relative', overflow: 'hidden', borderLeft: '2px solid ' + ekgColor }}>
+                    <svg width="100%" height="100%" viewBox="0 0 300 60" preserveAspectRatio="none">
+                        <path d={ekgPath} fill="none" stroke={ekgColor} strokeWidth="2" vectorEffect="non-scaling-stroke"
+                            style={isFlatline ? {} : { animation: 'dash ' + ekgSpeed + 's linear infinite' }} />
+                    </svg>
+                </div>
+                <div style={{ display: 'flex', justifyContent: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
+                    {[...Array(max)].map((_, i) => {
+                        let symbol = '', color = 'var(--border-color)';
+                        if (i < (health.aggravated || 0)) { symbol = '*'; color = 'var(--accent-danger)'; }
+                        else if (i < (health.aggravated || 0) + (health.lethal || 0)) { symbol = 'X'; color = 'var(--accent-warning)'; }
+                        else if (i < (health.aggravated || 0) + (health.lethal || 0) + (health.bashing || 0)) { symbol = '/'; color = 'var(--text-secondary)'; }
+                        return (
+                            <div key={i} style={{ width: '24px', height: '24px', border: '1px solid var(--accent-danger)', display: 'flex', alignItems: 'center', justifyContent: 'center', color, fontWeight: 'bold', fontSize: '0.9rem' }}>
+                                {symbol}
+                            </div>
+                        );
+                    })}
+                </div>
+                <div style={{ display: 'flex', gap: '2rem', justifyContent: 'center', marginTop: '1rem', flexWrap: 'wrap' }}>
+                    {[['BASHING', 'bashing'], ['LETHAL', 'lethal'], ['AGGRAVATED', 'aggravated']].map(([label, key]) => (
+                        <div key={key} className="text-center">
+                            <label className="text-muted mono-text" style={{ fontSize: '0.8rem' }}>{label}</label>
+                            <input type="number" value={health[key] || 0}
+                                onChange={e => update({ ...health, [key]: parseInt(e.target.value) || 0 })}
+                                style={{ display: 'block', background: 'transparent', border: '1px solid var(--accent-danger)', color: 'var(--accent-danger)', width: '60px', textAlign: 'center', fontSize: '1.2rem' }} />
+                        </div>
+                    ))}
+                </div>
+                <div style={{ marginTop: '1.5rem', paddingTop: '1rem', borderTop: '1px solid var(--border-color)' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.75rem', flexWrap: 'wrap', gap: '0.5rem' }}>
+                        <span className="mono-text text-danger" style={{ fontSize: '0.9rem' }}>MENTAL LOAD</span>
+                        {(penalties.social !== 0 || penalties.cognitive !== 0) && (
+                            <div style={{ display: 'flex', gap: '0.75rem' }}>
+                                {penalties.social !== 0 && <span className="mono-text" style={{ fontSize: '0.75rem', color: 'var(--accent-warning)' }}>SOCIAL {penalties.social}</span>}
+                                {penalties.cognitive !== 0 && <span className="mono-text" style={{ fontSize: '0.75rem', color: 'var(--accent-warning)' }}>COGNITIVE {penalties.cognitive}</span>}
+                            </div>
+                        )}
+                    </div>
+                    <div style={{ display: 'flex', justifyContent: 'center', gap: '0.5rem' }}>
+                        {[...Array(6)].map((_, i) => {
+                            const filled = i < mentalLoad;
+                            const level = i + 1;
+                            let boxColor = 'var(--border-color)';
+                            if (filled && level <= 2) boxColor = 'var(--accent-primary)';
+                            else if (filled && level <= 4) boxColor = 'var(--accent-warning)';
+                            else if (filled) boxColor = 'var(--accent-danger)';
+                            return (
+                                <div key={i}
+                                    onClick={() => onMentalLoadChange(mentalLoad === level ? level - 1 : level)}
+                                    style={{ width: '28px', height: '28px', border: '1px solid var(--accent-danger)', background: filled ? boxColor : 'transparent', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'all 0.2s', boxShadow: filled ? '0 0 6px ' + boxColor : 'none' }}
+                                    title={'Level ' + level}>
+                                    {filled && <span style={{ color: 'var(--bg-dark)', fontWeight: 'bold', fontSize: '0.7rem' }}>{level}</span>}
+                                </div>
+                            );
+                        })}
+                    </div>
+                </div>
+            </div>
+        );
+    };
+
+    const NpcExpandableListModule = ({ title, itemLabel, items, onAdd, onRemove, onUpdate }) => {
+        const [expanded, setExpanded] = useState({});
+        return (
+            <div className="glass-panel" style={{ padding: '1.5rem', marginBottom: '1rem' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
+                    <h3 className="mono-text text-accent" style={{ borderBottom: '1px solid var(--border-color)', paddingBottom: '0.5rem', flex: 1 }}>
+                        {title} ({items.length})
+                    </h3>
+                    <button onClick={onAdd} style={{
+                        background: 'transparent', border: '1px solid var(--accent-primary)',
+                        color: 'var(--accent-primary)', padding: '0.3rem 0.75rem', cursor: 'pointer',
+                        fontFamily: 'var(--font-mono)', fontSize: '0.8rem', marginLeft: '1rem',
+                    }}>+ ADD</button>
+                </div>
+                {items.map((item, idx) => (
+                    <div key={idx} className="tech-border" style={{ padding: '0.75rem', marginBottom: '0.5rem' }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', cursor: 'pointer' }}
+                            onClick={() => setExpanded(prev => ({ ...prev, [idx]: !prev[idx] }))}>
+                            <span className="mono-text" style={{ color: 'var(--accent-primary)' }}>
+                                {item.name || `${itemLabel} ${idx + 1}`}
+                                {item.rating ? ` (${item.rating})` : ''}
+                            </span>
+                            <button onClick={e => { e.stopPropagation(); onRemove(idx); }}
+                                style={{ background: 'transparent', border: 'none', color: 'var(--accent-danger)', cursor: 'pointer', fontSize: '1rem' }}>
+                                X
+                            </button>
+                        </div>
+                        {expanded[idx] && (
+                            <div style={{ marginTop: '0.5rem' }}>
+                                <AutoSaveInput type="text" defaultValue={item.name || ''}
+                                    onSave={val => onUpdate(idx, { ...item, name: val })}
+                                    placeholder="Name"
+                                    style={{ background: 'transparent', border: 'none', borderBottom: '1px solid var(--border-color)', color: 'var(--text-primary)', width: '100%', marginBottom: '0.5rem', fontSize: '0.9rem', fontFamily: 'var(--font-mono)' }} />
+                                <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', marginBottom: '0.5rem' }}>
+                                    <label className="text-muted mono-text" style={{ fontSize: '0.7rem' }}>RATING</label>
+                                    <StatDots value={item.rating || 0} onChange={v => onUpdate(idx, { ...item, rating: v })} editable={true} />
+                                </div>
+                                <AutoSaveInput component="textarea" defaultValue={item.description || ''}
+                                    onSave={val => onUpdate(idx, { ...item, description: val })}
+                                    placeholder="Description"
+                                    style={{ background: 'rgba(0,0,0,0.2)', border: '1px solid var(--border-color)', color: 'var(--text-primary)', width: '100%', minHeight: '2rem', fontSize: '0.85rem', padding: '0.5rem', resize: 'vertical' }} />
+                            </div>
+                        )}
+                    </div>
+                ))}
+                {items.length === 0 && <p className="text-muted" style={{ fontSize: '0.85rem', fontStyle: 'italic' }}>None recorded.</p>}
+            </div>
+        );
+    };
+
+    const NpcStatsPanel = ({ npc, onSave }) => {
+        const DEFAULT_ATTRS = {
+            power: { mental: 1, physical: 1, social: 1 },
+            finesse: { mental: 1, physical: 1, social: 1 },
+            resistance: { mental: 1, physical: 1, social: 1 }
+        };
+        const DEFAULT_SKILLS = {
+            mental: { Academics: 0, Computer: 0, Crafts: 0, Investigation: 0, Medicine: 0, Occult: 0, Politics: 0, Science: 0 },
+            physical: { Athletics: 0, Brawl: 0, Drive: 0, Firearms: 0, Larceny: 0, Stealth: 0, Survival: 0, Weaponry: 0 },
+            social: { AnimalKen: 0, Empathy: 0, Expression: 0, Intimidation: 0, Persuasion: 0, Socialize: 0, Streetwise: 0, Subterfuge: 0 }
+        };
+        const attrs = npc.attributes || DEFAULT_ATTRS;
+        const skills = npc.skills || DEFAULT_SKILLS;
+        const health = npc.health || { bashing: 0, lethal: 0, aggravated: 0 };
+        const healthMax = (attrs.resistance?.physical || 1) + (npc.size || 5);
+
+        return (
+            <div style={{ marginTop: '1rem' }}>
+                <h3 className="mono-text text-accent" style={{
+                    borderBottom: '2px solid var(--accent-primary)',
+                    paddingBottom: '0.5rem', marginBottom: '1rem', fontSize: '1.1rem'
+                }}>OPERATIVE STATS (ADMIN ONLY)</h3>
+
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: '1rem', marginBottom: '1rem' }}>
+                    <NpcAttributesModule attributes={attrs} update={a => onSave({ attributes: a })} />
+                    <NpcSkillsModule skills={skills} update={s => onSave({ skills: s })} />
+                </div>
+
+                <NpcDerivedTraitsModule npc={{ ...npc, attributes: attrs }} update={updates => onSave(updates)} />
+
+                <NpcHealthModule
+                    health={health}
+                    max={healthMax}
+                    mentalLoad={npc.mentalLoad || 0}
+                    update={h => onSave({ health: h })}
+                    onMentalLoadChange={v => onSave({ mentalLoad: v })}
+                />
+
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: '1rem' }}>
+                    <NpcExpandableListModule
+                        title="MERITS" itemLabel="Merit"
+                        items={npc.merits || []}
+                        onAdd={() => onSave({ merits: [...(npc.merits || []), { name: '', rating: 1, description: '' }] })}
+                        onRemove={idx => onSave({ merits: (npc.merits || []).filter((_, i) => i !== idx) })}
+                        onUpdate={(idx, val) => onSave({ merits: (npc.merits || []).map((item, i) => i === idx ? val : item) })}
+                    />
+                    <NpcExpandableListModule
+                        title="FLAWS" itemLabel="Flaw"
+                        items={npc.flaws || []}
+                        onAdd={() => onSave({ flaws: [...(npc.flaws || []), { name: '', rating: 1, description: '' }] })}
+                        onRemove={idx => onSave({ flaws: (npc.flaws || []).filter((_, i) => i !== idx) })}
+                        onUpdate={(idx, val) => onSave({ flaws: (npc.flaws || []).map((item, i) => i === idx ? val : item) })}
+                    />
+                </div>
+            </div>
+        );
+    };
+
     // --- ADMIN PANEL ---
     const AdminPanel = ({ npc, onSave }) => {
         const [users, setUsers] = useState([]);
@@ -1362,6 +1708,9 @@
                 <AgencyModule npc={npc} onSave={updateNPC} />
 
                 <BioModule npc={npc} onSave={saveNPCQuiet} />
+
+                {/* Stats — superuser only */}
+                {IS_ADMIN && npc.attributes && <NpcStatsPanel npc={npc} onSave={saveNPCQuiet} />}
 
                 {/* Notes section - available on all dossiers */}
                 {IS_NPC_DOSSIER && <NotesModule npc={npc} />}

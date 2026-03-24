@@ -1,5 +1,6 @@
 from django.db import models
 from django.contrib.auth.models import User
+from characters.models import default_attributes, default_skills
 
 
 class NPC(models.Model):
@@ -42,6 +43,20 @@ class NPC(models.Model):
         default=False,
         help_text="Hidden dossiers are only visible to superusers.",
     )
+
+    # WoD 2.0 stats (superuser-only, mirrors Character model)
+    attributes = models.JSONField(default=default_attributes)
+    skills = models.JSONField(default=default_skills)
+    health_bashing = models.IntegerField(default=0)
+    health_lethal = models.IntegerField(default=0)
+    health_aggravated = models.IntegerField(default=0)
+    size = models.IntegerField(default=5)
+    mental_load = models.IntegerField(default=0)
+    willpower_current = models.IntegerField(default=0)
+    experience = models.IntegerField(default=0)
+    merits = models.JSONField(default=list)
+    flaws = models.JSONField(default=list)
+    specialisations = models.JSONField(default=list)
 
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)

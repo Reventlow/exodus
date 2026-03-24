@@ -13,8 +13,11 @@ def serialize_npc_note(note):
     }
 
 
-def serialize_npc(npc):
-    """Full NPC data for API responses."""
+def serialize_npc(npc, is_admin=False):
+    """Full NPC data for API responses.
+
+    Stats (attributes, skills, health, etc.) are only included for superusers.
+    """
     data = {
         "id": npc.id,
         "name": npc.name,
@@ -41,6 +44,23 @@ def serialize_npc(npc):
     if npc.is_npc_dossier:
         notes = npc.notes.select_related("author").all()
         data["notes"] = [serialize_npc_note(n) for n in notes]
+
+    # Stats — superuser only
+    if is_admin:
+        data["attributes"] = npc.attributes
+        data["skills"] = npc.skills
+        data["health"] = {
+            "bashing": npc.health_bashing,
+            "lethal": npc.health_lethal,
+            "aggravated": npc.health_aggravated,
+        }
+        data["size"] = npc.size
+        data["mentalLoad"] = npc.mental_load
+        data["willpowerCurrent"] = npc.willpower_current
+        data["experience"] = npc.experience
+        data["merits"] = npc.merits
+        data["flaws"] = npc.flaws
+        data["specialisations"] = npc.specialisations
 
     return data
 
