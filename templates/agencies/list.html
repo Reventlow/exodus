@@ -63,13 +63,22 @@
                 <h3 className="text-accent mono-text" style={{ fontSize: '1.1rem' }}>
                     {agency.name}
                 </h3>
-                {agency.isPlayerAgency && (
-                    <span className="mono-text" style={{
-                        fontSize: '0.7rem', padding: '2px 6px',
-                        border: '1px solid var(--accent-primary)',
-                        color: 'var(--accent-primary)'
-                    }}>PLAYER</span>
-                )}
+                <div style={{ display: 'flex', gap: '0.3rem' }}>
+                    {agency.isHidden && (
+                        <span className="mono-text" style={{
+                            fontSize: '0.7rem', padding: '2px 6px',
+                            border: '1px solid var(--accent-danger)',
+                            color: 'var(--accent-danger)'
+                        }}>HIDDEN</span>
+                    )}
+                    {agency.isPlayerAgency && (
+                        <span className="mono-text" style={{
+                            fontSize: '0.7rem', padding: '2px 6px',
+                            border: '1px solid var(--accent-primary)',
+                            color: 'var(--accent-primary)'
+                        }}>PLAYER</span>
+                    )}
+                </div>
             </div>
             <p className="text-secondary" style={{ fontSize: '0.85rem', marginTop: '0.25rem' }}>
                 {agency.alliance === 'CLASSIFIED' ? <span className="classified">CLASSIFIED</span> :

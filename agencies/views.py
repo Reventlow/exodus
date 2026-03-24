@@ -4,7 +4,7 @@ from pathlib import Path
 from asgiref.sync import async_to_sync
 from channels.layers import get_channel_layer
 from django.conf import settings
-from django.http import JsonResponse
+from django.http import HttpResponseForbidden, JsonResponse
 from django.shortcuts import render, get_object_or_404
 from django.contrib.auth.decorators import login_required
 from django.views.decorators.http import require_http_methods
@@ -54,6 +54,8 @@ def agency_list_page(request):
 def agency_sheet_page(request, pk):
     """Agency sheet page. Shows full agency with React frontend."""
     agency = get_object_or_404(Agency, pk=pk)
+    if agency.is_hidden and not request.user.is_superuser:
+        return HttpResponseForbidden("ACCESS DENIED. Agency record not found.")
     is_admin = request.user.is_superuser
     return render(
         request,
@@ -109,9 +111,10 @@ def council_page(request):
                         break
                 if user_agency:
                     break
-    agencies = list(
-        Agency.objects.order_by("name").values_list("id", "name")
-    )
+    agencies_qs = Agency.objects.order_by("name")
+    if not request.user.is_superuser:
+        agencies_qs = agencies_qs.filter(is_hidden=False)
+    agencies = list(agencies_qs.values_list("id", "name"))
     return render(
         request,
         "agencies/council.html",
@@ -152,6 +155,8 @@ def api_agency_list(request):
     """GET: list all agencies. POST: create a new agency (admin only)."""
     if request.method == "GET":
         agencies = Agency.objects.all()
+        if not request.user.is_superuser:
+            agencies = agencies.filter(is_hidden=False)
         data = [serialize_agency_summary(a, request.user) for a in agencies]
         return JsonResponse(data, safe=False)
 
@@ -178,6 +183,11 @@ def api_agency_list(request):
 def api_agency_detail(request, pk):
     """GET: full agency data. PUT: update (admin only). DELETE: admin only."""
     agency = get_object_or_404(Agency, pk=pk)
+
+    if agency.is_hidden and not request.user.is_superuser:
+        return JsonResponse(
+            {"error": "ACCESS DENIED. Agency record not found."}, status=404
+        )
 
     if request.method == "GET":
         return JsonResponse(serialize_agency(agency, request.user))
@@ -233,6 +243,8 @@ def api_agency_detail(request, pk):
             agency.projects = data["projects"]
         if "history" in data:
             agency.history = data["history"]
+        if "isHidden" in data:
+            agency.is_hidden = bool(data["isHidden"])
 
         agency.save()
         return JsonResponse(serialize_agency(agency, request.user))

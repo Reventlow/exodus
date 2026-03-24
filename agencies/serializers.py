@@ -70,6 +70,7 @@ def serialize_agency(agency, user):
         "isPlayerAgency": agency.is_player_agency,
         "isCouncilMember": agency.is_council_member,
         "isCouncilChairman": agency.is_council_chairman,
+        "isHidden": agency.is_hidden,
         "attributes": vis_attributes(agency.attributes),
         "specializations": vis("specializations", agency.specializations),
         "merits": vis("merits", agency.merits),
@@ -171,13 +172,16 @@ def serialize_agency_summary(agency, user):
             return value
         return CLASSIFIED
 
-    return {
+    data = {
         "id": agency.id,
         "name": agency.name,
         "alliance": vis("alliance", agency.alliance),
         "isPlayerAgency": agency.is_player_agency,
         "motto": vis("motto", agency.motto),
     }
+    if is_admin:
+        data["isHidden"] = agency.is_hidden
+    return data
 
 
 def serialize_global_flaw(gf):

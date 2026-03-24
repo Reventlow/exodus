@@ -1,5 +1,10 @@
 # Changelog
 
+## v0.6.17
+- Agencies can be marked as hidden — hidden agencies are only visible to superusers
+- Hidden agencies are filtered from agency list, council page, and API
+- HIDDEN badge shown on agency list and sheet header for admins
+
 ## v0.6.16
 - NPC dossiers now have full WoD 2.0 operative stats (attributes, skills, derived traits, health, mental load, merits, flaws) — visible and editable by superusers only
 

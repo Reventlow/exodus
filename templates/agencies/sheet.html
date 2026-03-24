@@ -273,6 +273,14 @@
             <div>
                 <label className="text-secondary mono-text" style={{ fontSize: '0.8rem' }}>
                     AGENCY NAME
+                    {IS_ADMIN && agency.isHidden && (
+                        <span className="mono-text" style={{
+                            fontSize: '0.65rem', color: 'var(--accent-danger)',
+                            border: '1px solid var(--accent-danger)',
+                            padding: '0.1rem 0.4rem', borderRadius: 'var(--radius-sm)',
+                            marginLeft: '0.5rem',
+                        }}>HIDDEN</span>
+                    )}
                 </label>
                 <AutoSaveInput type="text" defaultValue={agency.name}
                     onSave={val => onSave({ name: val })}
@@ -283,6 +291,22 @@
                         color: 'var(--text-primary)', width: '100%',
                         fontSize: '1.2rem', fontFamily: 'var(--font-mono)'
                     }} />
+                {IS_ADMIN && (
+                    <label style={{
+                        display: 'flex', alignItems: 'center', gap: '0.5rem',
+                        cursor: 'pointer', fontFamily: 'var(--font-mono)',
+                        fontSize: '0.8rem', marginTop: '0.5rem',
+                        color: agency.isHidden ? 'var(--accent-danger)' : 'var(--text-secondary)',
+                    }}>
+                        <input
+                            type="checkbox"
+                            checked={agency.isHidden || false}
+                            onChange={e => onSave({ isHidden: e.target.checked })}
+                            style={{ accentColor: 'var(--accent-danger)' }}
+                        />
+                        HIDDEN (only visible to admins)
+                    </label>
+                )}
             </div>
             <div>
                 <label className="text-secondary mono-text" style={{ fontSize: '0.8rem' }}>

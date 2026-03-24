@@ -58,6 +58,11 @@ class Agency(models.Model):
     # NPC visibility: {fieldPath: bool} — true = visible, false = classified
     field_visibility = models.JSONField(default=dict)
 
+    is_hidden = models.BooleanField(
+        default=False,
+        help_text="Hidden agencies are only visible to superusers.",
+    )
+
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
