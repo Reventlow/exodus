@@ -1,5 +1,8 @@
 # Changelog
 
+## v0.6.14
+- Fix: missing database migration for hidden_sections field (caused agency load failure)
+
 ## v0.6.13
 - Bases can be marked as hidden — hidden bases are only visible to superusers
 - Individual base sections can be hidden from players: location type, location merits, space usage, facilities, workspaces, aviation units, and base defenses
