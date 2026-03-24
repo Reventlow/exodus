@@ -1,5 +1,9 @@
 # Changelog
 
+## v0.7.1
+- Clickable agency filter on the world map — toggle agencies to show/hide their territories and bases
+- Fixed NPC agency default map color (was invisible on dark tiles)
+
 ## v0.7.0
 - Interactive world map showing agency territories and base locations
 - Agency territories defined by alliance countries — colored polygons on the map
