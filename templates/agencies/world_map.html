@@ -104,7 +104,7 @@
                 attributionControl: false,
             });
             // Dark tile layer
-            L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
+            L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_nolabels/{z}/{x}/{y}{r}.png', {
                 subdomains: 'abcd',
                 maxZoom: 19,
             }).addTo(map);
@@ -169,11 +169,12 @@
                     const name = normalizeCountryName(feature.properties.ADMIN || feature.properties.name);
                     const entries = countryMap[name];
                     if (entries && entries.length > 0) {
+                        const displayName = entries.map(e => e.originalName).join(' / ');
                         const lines = entries.map(e =>
                             `<span style="color:${e.agency.color}">\u25A0</span> ${e.originalName} — ${e.agency.name}`
                         ).join('<br/>');
                         layer.bindTooltip(
-                            `<strong>${feature.properties.ADMIN || feature.properties.name}</strong><br/>${lines}`,
+                            `<strong>${displayName}</strong><br/>${lines}`,
                             { sticky: true, className: 'map-tooltip' }
                         );
                     }

@@ -1,5 +1,9 @@
 # Changelog
 
+## v0.7.3
+- Map now uses label-free tiles — no more real-world country names (Iran, Venezuela, etc.) on the map
+- Tooltips show in-game names only (e.g. "Nova Judea / New Texas" instead of "Iran")
+
 ## v0.7.2
 - Country name labels displayed on highlighted territories using the in-game name (e.g. "Nova Judea" not "Iran")
 - Split territory support — when multiple agencies claim parts of the same country, shown with dashed border and multi-label
