@@ -64,6 +64,7 @@
         const mapInstance = useRef(null);
         const geoLayer = useRef(null);
         const markersLayer = useRef(null);
+        const labelsLayer = useRef(null);
         const [agencies, setAgencies] = useState([]);
         const [loading, setLoading] = useState(true);
         const [geoJson, setGeoJson] = useState(null);
@@ -138,6 +139,7 @@
             // Remove old layers
             if (geoLayer.current) map.removeLayer(geoLayer.current);
             if (markersLayer.current) map.removeLayer(markersLayer.current);
+            if (labelsLayer.current) map.removeLayer(labelsLayer.current);
 
             // Add country polygons
             geoLayer.current = L.geoJSON(geoJson, {
@@ -177,6 +179,33 @@
                     }
                 },
             }).addTo(map);
+
+            // Add country name labels at polygon centers
+            labelsLayer.current = L.layerGroup().addTo(map);
+            geoLayer.current.eachLayer((layer) => {
+                const feature = layer.feature;
+                const name = normalizeCountryName(feature.properties.ADMIN || feature.properties.name);
+                const entries = countryMap[name];
+                if (!entries || entries.length === 0) return;
+
+                // Get center of the polygon bounds
+                const bounds = layer.getBounds();
+                const center = bounds.getCenter();
+
+                // Use original names (e.g. "Nova Judea" instead of "Iran")
+                const labelText = entries.map(e => e.originalName).join(' / ');
+                const primaryColor = entries[0].agency.color;
+
+                const label = L.marker(center, {
+                    icon: L.divIcon({
+                        className: 'country-label',
+                        html: `<span style="color:${primaryColor}">${labelText}</span>`,
+                        iconSize: null,
+                    }),
+                    interactive: false,
+                });
+                label.addTo(labelsLayer.current);
+            });
 
             // Add base markers
             markersLayer.current = L.layerGroup().addTo(map);
@@ -324,6 +353,22 @@
     }
     .leaflet-container {
         background: #0a0a1a !important;
+    }
+    .country-label {
+        background: none !important;
+        border: none !important;
+        box-shadow: none !important;
+        white-space: nowrap;
+        text-align: center;
+        pointer-events: none;
+    }
+    .country-label span {
+        font-family: var(--font-mono, monospace);
+        font-size: 0.7rem;
+        font-weight: bold;
+        text-transform: uppercase;
+        letter-spacing: 1px;
+        text-shadow: 0 0 4px rgba(0,0,0,0.9), 0 0 8px rgba(0,0,0,0.7), 1px 1px 2px rgba(0,0,0,0.9);
     }
 </style>
 {% endverbatim %}

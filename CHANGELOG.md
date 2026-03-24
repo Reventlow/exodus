@@ -1,5 +1,11 @@
 # Changelog
 
+## v0.7.2
+- Country name labels displayed on highlighted territories using the in-game name (e.g. "Nova Judea" not "Iran")
+- Split territory support — when multiple agencies claim parts of the same country, shown with dashed border and multi-label
+- Hidden/classified base coordinates no longer appear on the map for players
+- Map aliases for New America (Venezuela), Nova Judea and New Texas (Iran)
+
 ## v0.7.1
 - Clickable agency filter on the world map — toggle agencies to show/hide their territories and bases
 - Fixed NPC agency default map color (was invisible on dark tiles)
