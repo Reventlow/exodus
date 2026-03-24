@@ -1,5 +1,9 @@
 # Changelog
 
+## v0.7.5
+- Clickable base markers on the world map — navigates to the agency sheet and auto-expands/scrolls to that base
+- Added 'New Americ' alias for Venezuela map matching
+
 ## v0.7.4
 - Fix: country labels now placed at the mainland centroid instead of bounding box center — fixes France, Norway, etc. being labeled in Africa due to overseas territories
 
