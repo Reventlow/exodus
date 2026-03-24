@@ -88,11 +88,13 @@ def serialize_agency(agency, user):
     data["councilItems"] = [serialize_council_item(ci) for ci in CouncilItem.objects.all()]
 
     # Bases + config for cost lookups (with per-base visibility for NPC agencies)
+    # Hidden bases are only visible to superusers
+    bases_qs = agency.bases.all() if is_admin else agency.bases.filter(is_hidden=False)
     if show_all:
-        data["bases"] = [serialize_base(b) for b in agency.bases.all()]
+        data["bases"] = [serialize_base(b) for b in bases_qs]
     elif is_field_visible(agency, "bases"):
         serialized_bases = []
-        for b in agency.bases.all():
+        for b in bases_qs:
             base_path = f"bases.{b.id}"
             if not is_field_visible(agency, base_path):
                 serialized_bases.append({"id": b.id, "name": b.name, "classified": True})
@@ -126,7 +128,7 @@ def serialize_agency(agency, user):
 
     # Linked dossiers: characters assigned to workspaces + NPC dossiers
     char_ids = set()
-    for b in agency.bases.all():
+    for b in bases_qs:
         for w in (b.workspaces or []):
             if w.get("assignedType") == "character" and w.get("assignedTo"):
                 char_ids.add(w["assignedTo"])
@@ -369,6 +371,7 @@ def serialize_base(base):
         "workspaces": _resolve_workspace_names(base.workspaces or []),
         "equipment": base.equipment,
         "notes": base.notes,
+        "isHidden": base.is_hidden,
     }
 
 

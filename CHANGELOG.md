@@ -1,5 +1,8 @@
 # Changelog
 
+## v0.6.12
+- Bases can be marked as hidden — hidden bases are only visible to superusers
+
 ## v0.6.11
 - Chairman and superusers can mark agencies as present/absent in the council members panel
 - Quorum is now based on present agencies, not total members — quorum indicator shows present count

@@ -1091,7 +1091,7 @@ def api_agency_base_list(request, pk):
     agency = get_object_or_404(Agency, pk=pk)
 
     if request.method == "GET":
-        bases = agency.bases.all()
+        bases = agency.bases.all() if request.user.is_superuser else agency.bases.filter(is_hidden=False)
         data = [serialize_base(b) for b in bases]
         return JsonResponse(data, safe=False)
 
@@ -1120,6 +1120,10 @@ def api_agency_base_detail(request, pk, base_id):
     base = get_object_or_404(Base, pk=base_id, agency_id=pk)
 
     if request.method == "GET":
+        if base.is_hidden and not request.user.is_superuser:
+            return JsonResponse(
+                {"error": "ACCESS DENIED. Base record not found."}, status=404
+            )
         return JsonResponse(serialize_base(base))
 
     if not request.user.is_superuser:
@@ -1151,6 +1155,8 @@ def api_agency_base_detail(request, pk, base_id):
         base.equipment = data["equipment"]
     if "notes" in data:
         base.notes = data["notes"]
+    if "isHidden" in data:
+        base.is_hidden = bool(data["isHidden"])
 
     base.save()
     return JsonResponse(serialize_base(base))

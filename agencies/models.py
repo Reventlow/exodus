@@ -547,6 +547,10 @@ class Base(models.Model):
     workspaces = models.JSONField(default=list)  # [{level, assignedTo, assignedType}]
     equipment = models.JSONField(default=list)  # [equipment_key, ...]
     notes = models.TextField(blank=True, default="")
+    is_hidden = models.BooleanField(
+        default=False,
+        help_text="Hidden bases are only visible to superusers.",
+    )
 
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
