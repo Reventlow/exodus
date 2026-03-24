@@ -245,13 +245,14 @@ def _build_live_tally(ci):
         Agency.objects.filter(is_council_member=True).order_by("name")
     )
     total_members = len(members)
-    voted_agency_ids = {v.agency_id for v in votes}
+    present_members = [m for m in members if m.is_council_present]
+    total_present = len(present_members)
     votes_for = sum(1 for v in votes if v.vote == "for")
     votes_against = sum(1 for v in votes if v.vote == "against")
     votes_abstain = sum(1 for v in votes if v.vote == "abstain")
     total_voted = len(votes)
     quorum_needed = (total_members // 2) + 1
-    quorum_met = total_voted >= quorum_needed
+    quorum_met = total_present >= quorum_needed
 
     chairman = next((m for m in members if m.is_council_chairman), None)
     chairman_vote = None
@@ -286,6 +287,7 @@ def _build_live_tally(ci):
 
     tally = {
         "totalMembers": total_members,
+        "totalPresent": total_present,
         "votesFor": votes_for,
         "votesAgainst": votes_against,
         "votesAbstain": votes_abstain,

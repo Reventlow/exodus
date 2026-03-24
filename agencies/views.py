@@ -887,10 +887,12 @@ def api_council_vote(request, pk):
         defaults={"vote": vote_value},
     )
 
-    # Auto-transition: if all council members have voted, resolve the vote
-    total_members = Agency.objects.filter(is_council_member=True).count()
+    # Auto-transition: if all present members have voted, resolve the vote
+    total_present = Agency.objects.filter(
+        is_council_member=True, is_council_present=True
+    ).count()
     total_voted = ci.votes.count()
-    if total_voted >= total_members and total_members > 0:
+    if total_present > 0 and total_voted >= total_present:
         # Build the final record and determine outcome
         record = build_vote_record(ci)
         result = record["tally"]["result"]
@@ -926,6 +928,7 @@ def api_council_members(request):
             "name": a.name,
             "isCouncilChairman": a.is_council_chairman,
             "isPlayerAgency": a.is_player_agency,
+            "isPresent": a.is_council_present,
         }
         for a in members
     ]
@@ -950,6 +953,50 @@ def api_council_set_chairman(request, pk):
     agency.is_council_chairman = True
     agency.save()
     return JsonResponse({"status": "Chairman designation updated.", "agencyId": agency.id})
+
+
+@login_required
+@require_http_methods(["POST"])
+def api_council_toggle_presence(request, pk):
+    """Toggle an agency's council presence. Chairman or admin only."""
+    if not request.user.is_superuser:
+        # Check if user is chairman
+        char_ids = set(
+            request.user.characters.values_list("id", flat=True)
+        )
+        is_chairman = False
+        if char_ids:
+            for base in Base.objects.filter(
+                agency__is_player_agency=True,
+                agency__is_council_chairman=True,
+            ).select_related("agency"):
+                for ws in base.workspaces or []:
+                    if (
+                        ws.get("assignedType") == "character"
+                        and ws.get("assignedTo") in char_ids
+                    ):
+                        is_chairman = True
+                        break
+                if is_chairman:
+                    break
+        if not is_chairman:
+            return JsonResponse(
+                {"error": "ACCESS DENIED. Chairman clearance required."},
+                status=403,
+            )
+
+    agency = get_object_or_404(Agency, pk=pk)
+    if not agency.is_council_member:
+        return JsonResponse(
+            {"error": "Agency is not a council member."}, status=400
+        )
+    agency.is_council_present = not agency.is_council_present
+    agency.save()
+    return JsonResponse({
+        "id": agency.id,
+        "name": agency.name,
+        "isPresent": agency.is_council_present,
+    })
 
 
 def _apply_changes(agency, changes):

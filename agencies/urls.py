@@ -71,6 +71,11 @@ urlpatterns = [
         name="api_council_set_chairman",
     ),
     path(
+        "api/council/presence/<int:pk>/",
+        views.api_council_toggle_presence,
+        name="api_council_toggle_presence",
+    ),
+    path(
         "api/council/<int:pk>/",
         views.api_council_detail,
         name="api_council_detail",

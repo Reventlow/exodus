@@ -339,7 +339,7 @@
                         fontSize: '0.7rem',
                         color: tally.quorumMet ? 'var(--accent-success)' : 'var(--text-muted)',
                     }}>
-                        QUORUM: {tally.quorumMet ? 'MET' : 'NOT MET'} ({tally.quorumNeeded} needed)
+                        QUORUM: {tally.quorumMet ? 'MET' : 'NOT MET'} ({tally.totalPresent || 0} present, {tally.quorumNeeded} needed)
                     </span>
                     <span className="mono-text" style={{
                         fontSize: '0.75rem', fontWeight: 'bold',
@@ -583,7 +583,7 @@
         );
     };
 
-    const CouncilMembersPanel = () => {
+    const CouncilMembersPanel = ({ onPresenceChange }) => {
         const [members, setMembers] = useState([]);
         const [loading, setLoading] = useState(true);
         const [settingChairman, setSettingChairman] = useState(null);
@@ -593,7 +593,9 @@
                 headers: { 'X-CSRFToken': getCookie('csrftoken') || CSRF_TOKEN }
             });
             if (res.ok) {
-                setMembers(await res.json());
+                const data = await res.json();
+                setMembers(data);
+                if (onPresenceChange) onPresenceChange(data);
             }
             setLoading(false);
         };
@@ -610,7 +612,18 @@
             setSettingChairman(null);
         };
 
+        const togglePresence = async (agencyId) => {
+            await fetch(`/api/council/presence/${agencyId}/`, {
+                method: 'POST',
+                headers: { 'X-CSRFToken': getCookie('csrftoken') || CSRF_TOKEN },
+            });
+            await fetchMembers();
+        };
+
         const chairman = members.find(m => m.isCouncilChairman);
+        const presentCount = members.filter(m => m.isPresent).length;
+        const quorumNeeded = Math.floor(members.length / 2) + 1;
+        const quorumMet = presentCount >= quorumNeeded;
 
         return (
             <div className="glass-panel" style={{ padding: '1.5rem', marginBottom: '1.5rem' }}>
@@ -641,6 +654,30 @@
                     </div>
                 )}
 
+                {/* Quorum indicator */}
+                {members.length > 0 && (
+                    <div style={{
+                        display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+                        padding: '0.5rem 0.75rem', marginBottom: '0.75rem',
+                        background: quorumMet ? 'rgba(34, 197, 94, 0.08)' : 'rgba(239, 68, 68, 0.08)',
+                        border: `1px solid ${quorumMet ? 'var(--accent-success)' : 'var(--accent-danger)'}`,
+                        borderRadius: 'var(--radius-sm)',
+                    }}>
+                        <span className="mono-text" style={{
+                            fontSize: '0.75rem',
+                            color: quorumMet ? 'var(--accent-success)' : 'var(--accent-danger)',
+                        }}>
+                            PRESENT: {presentCount} / {members.length}
+                        </span>
+                        <span className="mono-text" style={{
+                            fontSize: '0.75rem', fontWeight: 'bold',
+                            color: quorumMet ? 'var(--accent-success)' : 'var(--accent-danger)',
+                        }}>
+                            {quorumMet ? 'QUORUM MET' : `QUORUM NOT MET (${quorumNeeded} needed)`}
+                        </span>
+                    </div>
+                )}
+
                 {loading ? (
                     <p className="text-muted mono-text" style={{ fontSize: '0.8rem' }}>Loading members...</p>
                 ) : members.length === 0 ? (
@@ -656,8 +693,15 @@
                                 padding: '0.6rem 0.75rem', marginBottom: '0.25rem',
                                 display: 'flex', justifyContent: 'space-between', alignItems: 'center',
                                 background: member.isCouncilChairman ? 'rgba(168, 85, 247, 0.08)' : 'rgba(0,0,0,0.2)',
+                                opacity: member.isPresent ? 1 : 0.5,
                             }}>
                                 <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                                    {/* Presence indicator */}
+                                    <span style={{
+                                        width: '8px', height: '8px', borderRadius: '50%',
+                                        background: member.isPresent ? 'var(--accent-success)' : 'var(--text-muted)',
+                                        display: 'inline-block', flexShrink: 0,
+                                    }} />
                                     <a href={`/agencies/${member.id}/`} className="mono-text" style={{
                                         color: 'var(--text-primary)', textDecoration: 'none',
                                         fontSize: '0.85rem', fontWeight: member.isCouncilChairman ? 'bold' : 'normal',
@@ -679,27 +723,48 @@
                                         }}>CHAIRMAN</span>
                                     )}
                                 </div>
-                                {IS_ADMIN && !member.isCouncilChairman && (
-                                    <button
-                                        onClick={() => setChairman(member.id)}
-                                        disabled={settingChairman !== null}
-                                        className="mono-text"
-                                        title="Designate as Chairman"
-                                        style={{
-                                            background: 'transparent',
-                                            border: `1px solid ${COUNCIL_ACCENT}`,
-                                            color: COUNCIL_ACCENT,
-                                            padding: '0.2rem 0.6rem',
-                                            cursor: settingChairman ? 'wait' : 'pointer',
-                                            fontSize: '0.7rem',
-                                            fontFamily: 'var(--font-mono)',
-                                            borderRadius: 'var(--radius-sm)',
-                                            opacity: settingChairman ? 0.6 : 1,
-                                        }}
-                                    >
-                                        {settingChairman === member.id ? 'SETTING...' : 'SET CHAIRMAN'}
-                                    </button>
-                                )}
+                                <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+                                    {(IS_ADMIN || IS_CHAIRMAN) && (
+                                        <button
+                                            onClick={() => togglePresence(member.id)}
+                                            className="mono-text"
+                                            title={member.isPresent ? 'Mark absent' : 'Mark present'}
+                                            style={{
+                                                background: member.isPresent ? 'rgba(34, 197, 94, 0.15)' : 'transparent',
+                                                border: `1px solid ${member.isPresent ? 'var(--accent-success)' : 'var(--border-color)'}`,
+                                                color: member.isPresent ? 'var(--accent-success)' : 'var(--text-muted)',
+                                                padding: '0.2rem 0.6rem',
+                                                cursor: 'pointer',
+                                                fontSize: '0.7rem',
+                                                fontFamily: 'var(--font-mono)',
+                                                borderRadius: 'var(--radius-sm)',
+                                            }}
+                                        >
+                                            {member.isPresent ? 'PRESENT' : 'ABSENT'}
+                                        </button>
+                                    )}
+                                    {IS_ADMIN && !member.isCouncilChairman && (
+                                        <button
+                                            onClick={() => setChairman(member.id)}
+                                            disabled={settingChairman !== null}
+                                            className="mono-text"
+                                            title="Designate as Chairman"
+                                            style={{
+                                                background: 'transparent',
+                                                border: `1px solid ${COUNCIL_ACCENT}`,
+                                                color: COUNCIL_ACCENT,
+                                                padding: '0.2rem 0.6rem',
+                                                cursor: settingChairman ? 'wait' : 'pointer',
+                                                fontSize: '0.7rem',
+                                                fontFamily: 'var(--font-mono)',
+                                                borderRadius: 'var(--radius-sm)',
+                                                opacity: settingChairman ? 0.6 : 1,
+                                            }}
+                                        >
+                                            {settingChairman === member.id ? 'SETTING...' : 'SET CHAIRMAN'}
+                                        </button>
+                                    )}
+                                </div>
                             </div>
                         ))}
                     </div>
@@ -728,18 +793,8 @@
             setLoading(false);
         };
 
-        const fetchMembers = async () => {
-            const res = await fetch('/api/council/members/', {
-                headers: { 'X-CSRFToken': getCookie('csrftoken') || CSRF_TOKEN }
-            });
-            if (res.ok) {
-                setMembers(await res.json());
-            }
-        };
-
         useEffect(() => {
             fetchItems();
-            fetchMembers();
 
             // WebSocket for live vote updates
             const proto = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
@@ -933,7 +988,7 @@
                 </div>
 
                 {/* Council Members */}
-                <CouncilMembersPanel />
+                <CouncilMembersPanel onPresenceChange={setMembers} />
 
                 {/* Reorder hint for chairman */}
                 {CAN_REORDER && !IS_ADMIN && (

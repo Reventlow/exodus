@@ -1,5 +1,11 @@
 # Changelog
 
+## v0.6.11
+- Chairman and superusers can mark agencies as present/absent in the council members panel
+- Quorum is now based on present agencies, not total members — quorum indicator shows present count
+- Absent agencies appear dimmed with a gray dot; present agencies have a green dot
+- Votes auto-resolve when all present members have voted (absent agencies don't block the vote)
+
 ## v0.6.10
 - Council votes now update in real-time via WebSocket — all players see votes as they are cast without refreshing
 - Status changes (call vote, emergency suspend, auto-resolve) also broadcast live to all connected clients

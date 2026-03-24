@@ -40,6 +40,7 @@ class Agency(models.Model):
     # United Interstellar Council membership
     is_council_member = models.BooleanField(default=False)
     is_council_chairman = models.BooleanField(default=False)
+    is_council_present = models.BooleanField(default=False)
 
     # Attributes: {power: {Industry: 3, ...}, finesse: {...}, resistance: {...}}
     attributes = models.JSONField(default=default_agency_attributes)
