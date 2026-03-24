@@ -1,0 +1,273 @@
+{% extends "base.html" %}
+
+{% block title %}WORLD MAP // BLACKLOG.NET{% endblock %}
+
+{% block content %}
+<div id="app-root">
+    <div class="loading-screen">
+        <h1 class="mono-text">LOADING GLOBAL INTELLIGENCE MAP...</h1>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<!-- Leaflet CSS & JS -->
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
+<script>
+    const IS_ADMIN = {{ is_admin|yesno:"true,false" }};
+    const CSRF_TOKEN = '{{ csrf_token }}';
+</script>
+{% verbatim %}
+<script type="text/babel">
+    const { useState, useEffect, useRef } = React;
+
+    // Country name aliases for matching GeoJSON names to agency alliance entries
+    const COUNTRY_ALIASES = {
+        'usa': 'united states of america',
+        'us': 'united states of america',
+        'united states': 'united states of america',
+        'uk': 'united kingdom',
+        'britain': 'united kingdom',
+        'great britain': 'united kingdom',
+        'russia': 'russian federation',
+        'south korea': 'republic of korea',
+        'north korea': "democratic people's republic of korea",
+        'iran': 'islamic republic of iran',
+        'syria': 'syrian arab republic',
+        'vietnam': 'viet nam',
+        'laos': "lao people's democratic republic",
+        'bolivia': 'plurinational state of bolivia',
+        'venezuela': 'bolivarian republic of venezuela',
+        'tanzania': 'united republic of tanzania',
+        'czech republic': 'czechia',
+        'ivory coast': "cote d'ivoire",
+        'cape verde': 'cabo verde',
+        'swaziland': 'eswatini',
+        'macedonia': 'north macedonia',
+        'congo': 'republic of the congo',
+        'dr congo': 'democratic republic of the congo',
+        'drc': 'democratic republic of the congo',
+    };
+
+    const normalizeCountryName = (name) => {
+        const lower = (name || '').toLowerCase().trim();
+        return COUNTRY_ALIASES[lower] || lower;
+    };
+
+    const WorldMap = () => {
+        const mapRef = useRef(null);
+        const mapInstance = useRef(null);
+        const geoLayer = useRef(null);
+        const [agencies, setAgencies] = useState([]);
+        const [loading, setLoading] = useState(true);
+        const [geoJson, setGeoJson] = useState(null);
+        const [error, setError] = useState(null);
+
+        // Fetch map data and GeoJSON in parallel
+        useEffect(() => {
+            const loadData = async () => {
+                try {
+                    const [mapRes, geoRes] = await Promise.all([
+                        fetch('/api/map-data/'),
+                        fetch('https://r2.datahub.io/clvyjaryy0000la0cxieg4o8o/main/raw/data/countries.geojson'),
+                    ]);
+                    if (mapRes.ok) setAgencies(await mapRes.json());
+                    if (geoRes.ok) setGeoJson(await geoRes.json());
+                    else setError('Failed to load country boundaries.');
+                } catch (err) {
+                    console.error('Map load error:', err);
+                    setError('Failed to load map data.');
+                } finally {
+                    setLoading(false);
+                }
+            };
+            loadData();
+        }, []);
+
+        // Initialize Leaflet map
+        useEffect(() => {
+            if (!mapRef.current || mapInstance.current) return;
+            const map = L.map(mapRef.current, {
+                center: [20, 0],
+                zoom: 3,
+                minZoom: 2,
+                maxZoom: 10,
+                zoomControl: true,
+                attributionControl: false,
+            });
+            // Dark tile layer
+            L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
+                subdomains: 'abcd',
+                maxZoom: 19,
+            }).addTo(map);
+            L.control.attribution({ position: 'bottomright', prefix: false })
+                .addAttribution('&copy; <a href="https://carto.com/">CARTO</a>')
+                .addTo(map);
+            mapInstance.current = map;
+            return () => { map.remove(); mapInstance.current = null; };
+        }, [loading]);
+
+        // Render GeoJSON + base markers when data is ready
+        useEffect(() => {
+            if (!mapInstance.current || !geoJson || agencies.length === 0) return;
+            const map = mapInstance.current;
+
+            // Build country -> agency lookup
+            const countryMap = {};
+            agencies.forEach(agency => {
+                (agency.countries || []).forEach(c => {
+                    countryMap[normalizeCountryName(c)] = agency;
+                });
+            });
+
+            // Remove old layer
+            if (geoLayer.current) {
+                map.removeLayer(geoLayer.current);
+            }
+
+            // Add country polygons
+            geoLayer.current = L.geoJSON(geoJson, {
+                style: (feature) => {
+                    const name = normalizeCountryName(feature.properties.ADMIN || feature.properties.name);
+                    const agency = countryMap[name];
+                    if (agency) {
+                        return {
+                            fillColor: agency.color,
+                            fillOpacity: 0.35,
+                            color: agency.color,
+                            weight: 1,
+                            opacity: 0.7,
+                        };
+                    }
+                    return {
+                        fillColor: 'transparent',
+                        fillOpacity: 0,
+                        color: '#333',
+                        weight: 0.5,
+                        opacity: 0.3,
+                    };
+                },
+                onEachFeature: (feature, layer) => {
+                    const name = normalizeCountryName(feature.properties.ADMIN || feature.properties.name);
+                    const agency = countryMap[name];
+                    if (agency) {
+                        layer.bindTooltip(
+                            `<strong>${feature.properties.ADMIN || feature.properties.name}</strong><br/>${agency.name}`,
+                            { sticky: true, className: 'map-tooltip' }
+                        );
+                    }
+                },
+            }).addTo(map);
+
+            // Add base markers
+            agencies.forEach(agency => {
+                (agency.bases || []).forEach(base => {
+                    if (base.lat == null || base.lng == null) return;
+                    const marker = L.circleMarker([base.lat, base.lng], {
+                        radius: 6,
+                        fillColor: agency.color,
+                        fillOpacity: 0.9,
+                        color: '#fff',
+                        weight: 1.5,
+                    });
+                    marker.bindTooltip(
+                        `<strong>${base.name}</strong><br/>${agency.name}`,
+                        { className: 'map-tooltip' }
+                    );
+                    marker.addTo(map);
+                });
+            });
+        }, [geoJson, agencies]);
+
+        if (loading) {
+            return (
+                <div style={{ textAlign: 'center', padding: '4rem' }}>
+                    <h2 className="mono-text text-accent" style={{ animation: 'pulse 1.5s infinite' }}>
+                        LOADING GLOBAL INTELLIGENCE MAP...
+                    </h2>
+                </div>
+            );
+        }
+
+        if (error) {
+            return (
+                <div style={{ textAlign: 'center', padding: '4rem' }}>
+                    <h2 className="mono-text text-danger">{error}</h2>
+                </div>
+            );
+        }
+
+        // Agencies that have at least one country or one base with coords
+        const activeAgencies = agencies.filter(a =>
+            (a.countries && a.countries.length > 0) ||
+            (a.bases && a.bases.length > 0)
+        );
+
+        return (
+            <div className="fade-in">
+                <div style={{
+                    display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+                    marginBottom: '0.75rem', flexWrap: 'wrap', gap: '0.5rem'
+                }}>
+                    <h2 className="mono-text text-accent" style={{ fontSize: '1.2rem' }}>
+                        GLOBAL INTELLIGENCE MAP
+                    </h2>
+                </div>
+
+                {/* Map container */}
+                <div ref={mapRef} style={{
+                    width: '100%', height: 'calc(100vh - 200px)', minHeight: '400px',
+                    borderRadius: 'var(--radius-sm)',
+                    border: '1px solid var(--border-color)',
+                }} />
+
+                {/* Legend */}
+                {activeAgencies.length > 0 && (
+                    <div className="glass-panel" style={{
+                        padding: '1rem', marginTop: '0.75rem',
+                        display: 'flex', flexWrap: 'wrap', gap: '1rem', alignItems: 'center',
+                    }}>
+                        <span className="mono-text text-muted" style={{ fontSize: '0.8rem' }}>LEGEND:</span>
+                        {activeAgencies.map(a => (
+                            <div key={a.id} style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                                <div style={{
+                                    width: '14px', height: '14px', borderRadius: '2px',
+                                    background: a.color, opacity: 0.8, border: '1px solid rgba(255,255,255,0.2)',
+                                }} />
+                                <span className="mono-text" style={{ fontSize: '0.8rem', color: a.color }}>
+                                    {a.name}
+                                </span>
+                            </div>
+                        ))}
+                    </div>
+                )}
+            </div>
+        );
+    };
+
+    const root = ReactDOM.createRoot(document.getElementById('app-root'));
+    root.render(<WorldMap />);
+</script>
+
+<style>
+    .map-tooltip {
+        background: var(--bg-panel, #1a1a2e) !important;
+        color: var(--text-primary, #e0e0e0) !important;
+        border: 1px solid var(--border-color, #333) !important;
+        font-family: var(--font-mono, monospace) !important;
+        font-size: 0.8rem !important;
+        padding: 0.4rem 0.6rem !important;
+        border-radius: 2px !important;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.5) !important;
+    }
+    .map-tooltip::before {
+        border-top-color: var(--border-color, #333) !important;
+    }
+    .leaflet-container {
+        background: #0a0a1a !important;
+    }
+</style>
+{% endverbatim %}
+{% endblock %}

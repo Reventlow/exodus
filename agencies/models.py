@@ -62,6 +62,10 @@ class Agency(models.Model):
         default=False,
         help_text="Hidden agencies are only visible to superusers.",
     )
+    map_color = models.CharField(
+        max_length=7, blank=True, default="",
+        help_text="Hex color for the world map (e.g. #ff0000).",
+    )
 
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
@@ -560,6 +564,8 @@ class Base(models.Model):
         default=list,
         help_text="List of section keys hidden from non-superusers (e.g. facilities, equipment).",
     )
+    latitude = models.FloatField(null=True, blank=True)
+    longitude = models.FloatField(null=True, blank=True)
 
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)

@@ -1,5 +1,13 @@
 # Changelog
 
+## v0.7.0
+- Interactive world map showing agency territories and base locations
+- Agency territories defined by alliance countries — colored polygons on the map
+- Bases can have latitude/longitude coordinates — shown as markers on the map
+- Agencies have a configurable map color (color picker in the header, admin only)
+- Dark-themed Leaflet map with CARTO tiles, tooltips, and agency legend
+- MAP link added to navigation bar
+
 ## v0.6.17
 - Agencies can be marked as hidden — hidden agencies are only visible to superusers
 - Hidden agencies are filtered from agency list, council page, and API

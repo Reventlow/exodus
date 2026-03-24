@@ -51,6 +51,48 @@ def agency_list_page(request):
 
 
 @login_required
+def world_map_page(request):
+    """Interactive world map showing agency territories and base locations."""
+    return render(request, "agencies/world_map.html", {
+        "is_admin": request.user.is_superuser,
+    })
+
+
+@login_required
+@require_http_methods(["GET"])
+def api_map_data(request):
+    """Return map data: agency territories (countries) and base markers."""
+    is_admin = request.user.is_superuser
+    agencies = Agency.objects.all()
+    if not is_admin:
+        agencies = agencies.filter(is_hidden=False)
+
+    data = []
+    for agency in agencies:
+        countries = (agency.alliance or {}).get("countries", [])
+        bases_qs = agency.bases.all() if is_admin else agency.bases.filter(is_hidden=False)
+        bases = [
+            {
+                "id": b.id,
+                "name": b.name,
+                "lat": b.latitude,
+                "lng": b.longitude,
+            }
+            for b in bases_qs
+            if b.latitude is not None and b.longitude is not None
+        ]
+        data.append({
+            "id": agency.id,
+            "name": agency.name,
+            "color": agency.map_color or ("#00ff88" if agency.is_player_agency else "#666666"),
+            "isPlayerAgency": agency.is_player_agency,
+            "countries": countries,
+            "bases": bases,
+        })
+    return JsonResponse(data, safe=False)
+
+
+@login_required
 def agency_sheet_page(request, pk):
     """Agency sheet page. Shows full agency with React frontend."""
     agency = get_object_or_404(Agency, pk=pk)
@@ -245,6 +287,8 @@ def api_agency_detail(request, pk):
             agency.history = data["history"]
         if "isHidden" in data:
             agency.is_hidden = bool(data["isHidden"])
+        if "mapColor" in data:
+            agency.map_color = data["mapColor"]
 
         agency.save()
         return JsonResponse(serialize_agency(agency, request.user))
@@ -1171,6 +1215,10 @@ def api_agency_base_detail(request, pk, base_id):
         base.is_hidden = bool(data["isHidden"])
     if "hiddenSections" in data:
         base.hidden_sections = data["hiddenSections"]
+    if "latitude" in data:
+        base.latitude = data["latitude"] if data["latitude"] is not None else None
+    if "longitude" in data:
+        base.longitude = data["longitude"] if data["longitude"] is not None else None
 
     base.save()
     return JsonResponse(serialize_base(base))

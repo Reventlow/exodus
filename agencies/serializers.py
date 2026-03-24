@@ -71,6 +71,7 @@ def serialize_agency(agency, user):
         "isCouncilMember": agency.is_council_member,
         "isCouncilChairman": agency.is_council_chairman,
         "isHidden": agency.is_hidden,
+        "mapColor": agency.map_color,
         "attributes": vis_attributes(agency.attributes),
         "specializations": vis("specializations", agency.specializations),
         "merits": vis("merits", agency.merits),
@@ -408,6 +409,8 @@ def serialize_base(base, is_admin=True):
         "notes": base.notes if (is_admin or "notes" not in hidden) else "",
         "isHidden": base.is_hidden,
         "hiddenSections": (base.hidden_sections or []) if is_admin else [],
+        "latitude": base.latitude,
+        "longitude": base.longitude,
     }
 
     # Add classified markers for redacted sections

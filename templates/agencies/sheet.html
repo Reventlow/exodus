@@ -340,6 +340,21 @@
                         }} />
                 )}
             </div>
+            {IS_ADMIN && (
+                <div>
+                    <label className="text-secondary mono-text" style={{ fontSize: '0.8rem' }}>MAP COLOR</label>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                        <input type="color"
+                            defaultValue={agency.mapColor || '#00ff88'}
+                            onChange={e => onSave({ mapColor: e.target.value })}
+                            style={{ width: '40px', height: '30px', border: 'none', cursor: 'pointer', background: 'transparent' }}
+                        />
+                        <span className="mono-text text-muted" style={{ fontSize: '0.8rem' }}>
+                            {agency.mapColor || '#00ff88'}
+                        </span>
+                    </div>
+                </div>
+            )}
         </div>
     );
 
@@ -2181,6 +2196,41 @@
                                         resize: 'vertical', borderRadius: 'var(--radius-sm)',
                                     }} />
                             </div>
+
+                            {/* Coordinates for world map */}
+                            {IS_ADMIN && (
+                                <div style={{ marginBottom: '0.5rem' }}>
+                                    <label className="text-muted mono-text" style={{ fontSize: '0.7rem', display: 'block', marginBottom: '0.25rem' }}>MAP COORDINATES</label>
+                                    <div style={{ display: 'flex', gap: '0.75rem' }}>
+                                        <div style={{ flex: 1 }}>
+                                            <label className="text-muted mono-text" style={{ fontSize: '0.6rem' }}>LAT</label>
+                                            <AutoSaveInput type="number" step="any"
+                                                defaultValue={base.latitude != null ? base.latitude : ''}
+                                                onSave={val => updateBaseField(base.id, 'latitude', val ? parseFloat(val) : null)}
+                                                placeholder="e.g. 55.67"
+                                                style={{
+                                                    background: 'rgba(0,0,0,0.2)', border: '1px solid var(--border-color)',
+                                                    color: 'var(--text-primary)', width: '100%',
+                                                    fontSize: '0.85rem', fontFamily: 'var(--font-mono)', padding: '0.3rem 0.5rem',
+                                                    borderRadius: 'var(--radius-sm)',
+                                                }} />
+                                        </div>
+                                        <div style={{ flex: 1 }}>
+                                            <label className="text-muted mono-text" style={{ fontSize: '0.6rem' }}>LNG</label>
+                                            <AutoSaveInput type="number" step="any"
+                                                defaultValue={base.longitude != null ? base.longitude : ''}
+                                                onSave={val => updateBaseField(base.id, 'longitude', val ? parseFloat(val) : null)}
+                                                placeholder="e.g. 12.56"
+                                                style={{
+                                                    background: 'rgba(0,0,0,0.2)', border: '1px solid var(--border-color)',
+                                                    color: 'var(--text-primary)', width: '100%',
+                                                    fontSize: '0.85rem', fontFamily: 'var(--font-mono)', padding: '0.3rem 0.5rem',
+                                                    borderRadius: 'var(--radius-sm)',
+                                                }} />
+                                        </div>
+                                    </div>
+                                </div>
+                            )}
 
                             {/* Delete button */}
                             {IS_ADMIN && (

@@ -4,6 +4,7 @@ from . import views
 urlpatterns = [
     # Pages
     path("agencies/", views.agency_list_page, name="agency_list"),
+    path("agencies/map/", views.world_map_page, name="world_map"),
     path("agencies/global-flaws/", views.global_flaws_page, name="global_flaws"),
     path("agencies/ftl-projects/", views.ftl_projects_page, name="ftl_projects"),
     path("agencies/council/", views.council_page, name="council"),
@@ -87,6 +88,8 @@ urlpatterns = [
     ),
     # Pages — base config
     path("agencies/base-config/", views.base_config_page, name="base_config"),
+    # API — world map
+    path("api/map-data/", views.api_map_data, name="api_map_data"),
     # API — base config (singleton)
     path("api/base-config/", views.api_base_config, name="api_base_config"),
     # API — agency bases
