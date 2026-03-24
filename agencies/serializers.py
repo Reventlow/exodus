@@ -91,7 +91,7 @@ def serialize_agency(agency, user):
     # Hidden bases are only visible to superusers
     bases_qs = agency.bases.all() if is_admin else agency.bases.filter(is_hidden=False)
     if show_all:
-        data["bases"] = [serialize_base(b) for b in bases_qs]
+        data["bases"] = [serialize_base(b, is_admin=is_admin) for b in bases_qs]
     elif is_field_visible(agency, "bases"):
         serialized_bases = []
         for b in bases_qs:
@@ -99,7 +99,7 @@ def serialize_agency(agency, user):
             if not is_field_visible(agency, base_path):
                 serialized_bases.append({"id": b.id, "name": b.name, "classified": True})
             else:
-                sb = serialize_base(b)
+                sb = serialize_base(b, is_admin=is_admin)
                 if not is_field_visible(agency, f"{base_path}.facilities"):
                     sb["facilities"] = []
                     sb["classifiedFacilities"] = True
@@ -360,19 +360,59 @@ def _resolve_workspace_names(workspaces):
     return result
 
 
-def serialize_base(base):
-    """Serialize a Base model instance."""
-    return {
+def _filter_equipment_by_hidden(equipment, hidden_sections):
+    """Remove equipment items whose category is hidden.
+
+    Maps hidden section keys to equipment category names and filters out
+    matching equipment keys using BaseConfig.
+    """
+    cat_key_map = {"aviationUnits": "Aviation Units", "baseDefenses": "Base Defenses"}
+    hidden_cats = {cat_key_map[k] for k in hidden_sections if k in cat_key_map}
+    if not hidden_cats:
+        return equipment
+
+    config = BaseConfig.load()
+    hidden_eq_keys = {
+        eq["key"]
+        for eq in (config.equipment_types or [])
+        if (eq.get("category") or "Other") in hidden_cats
+    }
+    return [k for k in equipment if k not in hidden_eq_keys]
+
+
+def serialize_base(base, is_admin=True):
+    """Serialize a Base model instance.
+
+    When is_admin is False, sections listed in hidden_sections are redacted.
+    """
+    hidden = set(base.hidden_sections or [])
+
+    # Filter equipment by category-level hidden sections for non-admins
+    if is_admin:
+        equipment = base.equipment
+    else:
+        equipment = _filter_equipment_by_hidden(base.equipment or [], hidden)
+
+    data = {
         "id": base.id,
         "name": base.name,
-        "locationType": base.location_type,
-        "merits": base.merits,
-        "facilities": base.facilities,
-        "workspaces": _resolve_workspace_names(base.workspaces or []),
-        "equipment": base.equipment,
-        "notes": base.notes,
+        "locationType": base.location_type if (is_admin or "locationType" not in hidden) else "",
+        "merits": base.merits if (is_admin or "merits" not in hidden) else [],
+        "facilities": base.facilities if (is_admin or "facilities" not in hidden) else [],
+        "workspaces": _resolve_workspace_names(base.workspaces or []) if (is_admin or "workspaces" not in hidden) else [],
+        "equipment": equipment,
+        "notes": base.notes if (is_admin or "notes" not in hidden) else "",
         "isHidden": base.is_hidden,
+        "hiddenSections": (base.hidden_sections or []) if is_admin else [],
     }
+
+    # Add classified markers for redacted sections
+    if not is_admin:
+        for section in hidden:
+            key = section[0].upper() + section[1:]
+            data[f"classified{key}"] = True
+
+    return data
 
 
 def serialize_base_config(config):

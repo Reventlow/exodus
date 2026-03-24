@@ -1092,7 +1092,7 @@ def api_agency_base_list(request, pk):
 
     if request.method == "GET":
         bases = agency.bases.all() if request.user.is_superuser else agency.bases.filter(is_hidden=False)
-        data = [serialize_base(b) for b in bases]
+        data = [serialize_base(b, is_admin=request.user.is_superuser) for b in bases]
         return JsonResponse(data, safe=False)
 
     # POST — admin only
@@ -1110,7 +1110,7 @@ def api_agency_base_list(request, pk):
         agency=agency,
         name=body.get("name", "NEW BASE"),
     )
-    return JsonResponse(serialize_base(base), status=201)
+    return JsonResponse(serialize_base(base, is_admin=True), status=201)
 
 
 @login_required
@@ -1124,7 +1124,7 @@ def api_agency_base_detail(request, pk, base_id):
             return JsonResponse(
                 {"error": "ACCESS DENIED. Base record not found."}, status=404
             )
-        return JsonResponse(serialize_base(base))
+        return JsonResponse(serialize_base(base, is_admin=request.user.is_superuser))
 
     if not request.user.is_superuser:
         return JsonResponse(
@@ -1157,6 +1157,8 @@ def api_agency_base_detail(request, pk, base_id):
         base.notes = data["notes"]
     if "isHidden" in data:
         base.is_hidden = bool(data["isHidden"])
+    if "hiddenSections" in data:
+        base.hidden_sections = data["hiddenSections"]
 
     base.save()
     return JsonResponse(serialize_base(base))

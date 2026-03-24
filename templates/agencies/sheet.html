@@ -1703,6 +1703,34 @@
             updateBaseField(baseId, 'equipment', newEquip);
         };
 
+        const toggleHiddenSection = (baseId, sectionKey) => {
+            const base = bases.find(b => b.id === baseId);
+            if (!base) return;
+            const current = base.hiddenSections || [];
+            const newSections = current.includes(sectionKey)
+                ? current.filter(k => k !== sectionKey)
+                : [...current, sectionKey];
+            updateBaseField(baseId, 'hiddenSections', newSections);
+        };
+
+        const SectionHideToggle = ({ baseId, sectionKey, hiddenSections }) => {
+            if (!IS_ADMIN) return null;
+            const isHidden = (hiddenSections || []).includes(sectionKey);
+            return (
+                <button
+                    onClick={e => { e.stopPropagation(); toggleHiddenSection(baseId, sectionKey); }}
+                    title={isHidden ? 'Hidden from players — click to reveal' : 'Visible to players — click to hide'}
+                    style={{
+                        background: 'transparent', border: 'none', cursor: 'pointer',
+                        padding: '0 0.3rem', fontSize: '0.7rem', marginLeft: '0.3rem',
+                        color: isHidden ? 'var(--accent-danger)' : 'var(--text-muted)',
+                        opacity: isHidden ? 1 : 0.4,
+                    }}>
+                    {isHidden ? '🔒' : '👁'}
+                </button>
+            );
+        };
+
         const BaseCard = ({ base }) => {
             // Classified base — non-admin sees just the name
             if (base.classified && !IS_ADMIN) {
@@ -1723,6 +1751,8 @@
             const loc = getLocationType(base.locationType);
             const spacePercent = costs.totalSpace > 0 ? Math.min(100, (costs.usedSpace / costs.totalSpace) * 100) : 0;
             const basePath = `bases.${base.id}`;
+            const hidden = new Set(base.hiddenSections || []);
+            const isSectionHidden = (key) => !IS_ADMIN && hidden.has(key);
 
             return (
                 <div className="glass-panel" style={{ padding: '1rem', marginBottom: '0.75rem', borderLeft: `3px solid ${BASE_ACCENT}` }}>
@@ -1741,17 +1771,26 @@
                                 </span>
                             )}
                             <VisibilityToggle field={basePath} visibility={visibility} onToggle={onToggleVis} />
+                            {base.isHidden && (
+                                <span className="mono-text" style={{
+                                    fontSize: '0.65rem', color: 'var(--accent-danger)',
+                                    border: '1px solid var(--accent-danger)',
+                                    padding: '0.1rem 0.4rem', borderRadius: 'var(--radius-sm)',
+                                }}>HIDDEN</span>
+                            )}
                         </div>
                         <div style={{ display: 'flex', gap: '1rem', alignItems: 'center' }}>
                             <span className="mono-text" style={{ fontSize: '0.75rem', color: '#f59e0b' }}>
                                 EXP: {costs.totalExp}
                             </span>
-                            <span className="mono-text" style={{
-                                fontSize: '0.75rem',
-                                color: costs.freeSpace < 0 ? 'var(--accent-danger)' : BASE_ACCENT
-                            }}>
-                                SPACE: {costs.usedSpace}/{costs.totalSpace}
-                            </span>
+                            {!isSectionHidden('space') && (
+                                <span className="mono-text" style={{
+                                    fontSize: '0.75rem',
+                                    color: costs.freeSpace < 0 ? 'var(--accent-danger)' : BASE_ACCENT
+                                }}>
+                                    SPACE: {costs.usedSpace}/{costs.totalSpace}
+                                </span>
+                            )}
                         </div>
                     </div>
 
@@ -1771,83 +1810,117 @@
                                     }} />
                             </div>
 
+                            {/* Hidden toggle — admin only */}
+                            {IS_ADMIN && (
+                                <div style={{ marginBottom: '1rem' }}>
+                                    <label style={{
+                                        display: 'flex', alignItems: 'center', gap: '0.5rem',
+                                        cursor: 'pointer', fontFamily: 'var(--font-mono)',
+                                        fontSize: '0.8rem', color: base.isHidden ? 'var(--accent-danger)' : 'var(--text-secondary)',
+                                    }}>
+                                        <input
+                                            type="checkbox"
+                                            checked={base.isHidden || false}
+                                            onChange={e => updateBaseField(base.id, 'isHidden', e.target.checked)}
+                                            style={{ accentColor: 'var(--accent-danger)' }}
+                                        />
+                                        HIDDEN (only visible to admins)
+                                    </label>
+                                </div>
+                            )}
+
                             {/* Location Type */}
                             <div style={{ marginBottom: '1rem' }}>
-                                <label className="text-muted mono-text" style={{ fontSize: '0.7rem', display: 'block', marginBottom: '0.5rem' }}>LOCATION TYPE</label>
-                                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem' }}>
-                                    {(baseConfig.locationTypes || []).map(lt => {
-                                        const selected = base.locationType === lt.key;
-                                        return (
-                                            <button key={lt.key}
-                                                onClick={() => IS_ADMIN && updateBaseField(base.id, 'locationType', selected ? '' : lt.key)}
-                                                disabled={!IS_ADMIN}
-                                                title={`${lt.description}${lt.included ? '\n' + lt.included : ''}`}
-                                                style={{
-                                                    background: selected ? `${BASE_ACCENT}22` : 'rgba(0,0,0,0.2)',
-                                                    border: `1px solid ${selected ? BASE_ACCENT : 'var(--border-color)'}`,
-                                                    color: selected ? BASE_ACCENT : 'var(--text-muted)',
-                                                    padding: '0.4rem 0.75rem', cursor: IS_ADMIN ? 'pointer' : 'default',
-                                                    fontFamily: 'var(--font-mono)', fontSize: '0.8rem',
-                                                    borderRadius: 'var(--radius-sm)',
-                                                }}>
-                                                {lt.name}
-                                                <span style={{ fontSize: '0.65rem', marginLeft: '0.5rem', opacity: 0.7 }}>
-                                                    E:{lt.exp} S:{lt.space}
-                                                </span>
-                                            </button>
-                                        );
-                                    })}
-                                </div>
-                                {loc && loc.included && (
-                                    <p className="text-muted" style={{ fontSize: '0.75rem', marginTop: '0.5rem', fontStyle: 'italic' }}>
-                                        {loc.included}
-                                    </p>
+                                <label className="text-muted mono-text" style={{ fontSize: '0.7rem', display: 'block', marginBottom: '0.5rem' }}>
+                                    LOCATION TYPE
+                                    <SectionHideToggle baseId={base.id} sectionKey="locationType" hiddenSections={base.hiddenSections} />
+                                </label>
+                                {isSectionHidden('locationType') ? <Classified /> : (
+                                    <React.Fragment>
+                                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem' }}>
+                                            {(baseConfig.locationTypes || []).map(lt => {
+                                                const selected = base.locationType === lt.key;
+                                                return (
+                                                    <button key={lt.key}
+                                                        onClick={() => IS_ADMIN && updateBaseField(base.id, 'locationType', selected ? '' : lt.key)}
+                                                        disabled={!IS_ADMIN}
+                                                        title={`${lt.description}${lt.included ? '\n' + lt.included : ''}`}
+                                                        style={{
+                                                            background: selected ? `${BASE_ACCENT}22` : 'rgba(0,0,0,0.2)',
+                                                            border: `1px solid ${selected ? BASE_ACCENT : 'var(--border-color)'}`,
+                                                            color: selected ? BASE_ACCENT : 'var(--text-muted)',
+                                                            padding: '0.4rem 0.75rem', cursor: IS_ADMIN ? 'pointer' : 'default',
+                                                            fontFamily: 'var(--font-mono)', fontSize: '0.8rem',
+                                                            borderRadius: 'var(--radius-sm)',
+                                                        }}>
+                                                        {lt.name}
+                                                        <span style={{ fontSize: '0.65rem', marginLeft: '0.5rem', opacity: 0.7 }}>
+                                                            E:{lt.exp} S:{lt.space}
+                                                        </span>
+                                                    </button>
+                                                );
+                                            })}
+                                        </div>
+                                        {loc && loc.included && (
+                                            <p className="text-muted" style={{ fontSize: '0.75rem', marginTop: '0.5rem', fontStyle: 'italic' }}>
+                                                {loc.included}
+                                            </p>
+                                        )}
+                                    </React.Fragment>
                                 )}
                             </div>
 
                             {/* Location Merits */}
                             <div style={{ marginBottom: '1rem' }}>
-                                <label className="text-muted mono-text" style={{ fontSize: '0.7rem', display: 'block', marginBottom: '0.5rem' }}>LOCATION MERITS</label>
-                                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem' }}>
-                                    {(baseConfig.locationMerits || []).map(m => {
-                                        const selected = (base.merits || []).includes(m.key);
-                                        return (
-                                            <button key={m.key}
-                                                onClick={() => IS_ADMIN && toggleMerit(base.id, m.key)}
-                                                disabled={!IS_ADMIN}
-                                                title={m.description}
-                                                style={{
-                                                    background: selected ? '#3b82f622' : 'rgba(0,0,0,0.2)',
-                                                    border: `1px solid ${selected ? '#3b82f6' : 'var(--border-color)'}`,
-                                                    color: selected ? '#3b82f6' : 'var(--text-muted)',
-                                                    padding: '0.4rem 0.75rem', cursor: IS_ADMIN ? 'pointer' : 'default',
-                                                    fontFamily: 'var(--font-mono)', fontSize: '0.8rem',
-                                                    borderRadius: 'var(--radius-sm)',
-                                                }}>
-                                                {m.name}
-                                                <span style={{ fontSize: '0.65rem', marginLeft: '0.5rem', opacity: 0.7 }}>
-                                                    E:+{m.exp}{m.extraSpace > 0 ? ` S:+${m.extraSpace}` : ''}
-                                                </span>
-                                            </button>
-                                        );
-                                    })}
-                                </div>
+                                <label className="text-muted mono-text" style={{ fontSize: '0.7rem', display: 'block', marginBottom: '0.5rem' }}>
+                                    LOCATION MERITS
+                                    <SectionHideToggle baseId={base.id} sectionKey="merits" hiddenSections={base.hiddenSections} />
+                                </label>
+                                {isSectionHidden('merits') ? <Classified /> : (
+                                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem' }}>
+                                        {(baseConfig.locationMerits || []).map(m => {
+                                            const selected = (base.merits || []).includes(m.key);
+                                            return (
+                                                <button key={m.key}
+                                                    onClick={() => IS_ADMIN && toggleMerit(base.id, m.key)}
+                                                    disabled={!IS_ADMIN}
+                                                    title={m.description}
+                                                    style={{
+                                                        background: selected ? '#3b82f622' : 'rgba(0,0,0,0.2)',
+                                                        border: `1px solid ${selected ? '#3b82f6' : 'var(--border-color)'}`,
+                                                        color: selected ? '#3b82f6' : 'var(--text-muted)',
+                                                        padding: '0.4rem 0.75rem', cursor: IS_ADMIN ? 'pointer' : 'default',
+                                                        fontFamily: 'var(--font-mono)', fontSize: '0.8rem',
+                                                        borderRadius: 'var(--radius-sm)',
+                                                    }}>
+                                                    {m.name}
+                                                    <span style={{ fontSize: '0.65rem', marginLeft: '0.5rem', opacity: 0.7 }}>
+                                                        E:+{m.exp}{m.extraSpace > 0 ? ` S:+${m.extraSpace}` : ''}
+                                                    </span>
+                                                </button>
+                                            );
+                                        })}
+                                    </div>
+                                )}
                             </div>
 
                             {/* Space Usage Bar */}
                             {costs.totalSpace > 0 && (
                                 <div style={{ marginBottom: '1rem' }}>
                                     <label className="text-muted mono-text" style={{ fontSize: '0.7rem', display: 'block', marginBottom: '0.25rem' }}>
-                                        SPACE USAGE: {costs.usedSpace} / {costs.totalSpace}
-                                        {costs.freeSpace < 0 && <span style={{ color: 'var(--accent-danger)', marginLeft: '0.5rem' }}>OVER CAPACITY!</span>}
+                                        SPACE USAGE{!isSectionHidden('space') && `: ${costs.usedSpace} / ${costs.totalSpace}`}
+                                        {!isSectionHidden('space') && costs.freeSpace < 0 && <span style={{ color: 'var(--accent-danger)', marginLeft: '0.5rem' }}>OVER CAPACITY!</span>}
+                                        <SectionHideToggle baseId={base.id} sectionKey="space" hiddenSections={base.hiddenSections} />
                                     </label>
-                                    <div style={{ background: 'rgba(0,0,0,0.3)', height: '8px', borderRadius: '4px', overflow: 'hidden' }}>
-                                        <div style={{
-                                            width: `${spacePercent}%`, height: '100%',
-                                            background: costs.freeSpace < 0 ? 'var(--accent-danger)' : BASE_ACCENT,
-                                            transition: 'width 0.3s',
-                                        }} />
-                                    </div>
+                                    {isSectionHidden('space') ? <Classified /> : (
+                                        <div style={{ background: 'rgba(0,0,0,0.3)', height: '8px', borderRadius: '4px', overflow: 'hidden' }}>
+                                            <div style={{
+                                                width: `${spacePercent}%`, height: '100%',
+                                                background: costs.freeSpace < 0 ? 'var(--accent-danger)' : BASE_ACCENT,
+                                                transition: 'width 0.3s',
+                                            }} />
+                                        </div>
+                                    )}
                                 </div>
                             )}
 
@@ -1855,9 +1928,10 @@
                             <div style={{ marginBottom: '1rem' }}>
                                 <label className="text-muted mono-text" style={{ fontSize: '0.7rem', display: 'block', marginBottom: '0.5rem' }}>
                                     FACILITIES
+                                    <SectionHideToggle baseId={base.id} sectionKey="facilities" hiddenSections={base.hiddenSections} />
                                     <VisibilityToggle field={`${basePath}.facilities`} visibility={visibility} onToggle={onToggleVis} />
                                 </label>
-                                {base.classifiedFacilities && !IS_ADMIN ? <Classified /> : (baseConfig.facilityTypes || []).filter(ft => ft.key !== 'workspace').map(ft => {
+                                {(isSectionHidden('facilities') || (base.classifiedFacilities && !IS_ADMIN)) ? <Classified /> : (baseConfig.facilityTypes || []).filter(ft => ft.key !== 'workspace').map(ft => {
                                     const selectedLevels = (base.facilities || []).filter(f => f.key === ft.key).map(f => f.level);
                                     const hasAny = selectedLevels.length > 0;
                                     return (
@@ -1905,9 +1979,12 @@
                             {(() => {
                                 const wsConfig = getWorkspaceConfig(baseConfig);
                                 if (!wsConfig) return null;
-                                if (base.classifiedWorkspaces && !IS_ADMIN) return (
+                                if ((isSectionHidden('workspaces') || (base.classifiedWorkspaces && !IS_ADMIN))) return (
                                     <div style={{ marginBottom: '1rem' }}>
-                                        <label className="text-muted mono-text" style={{ fontSize: '0.7rem', marginBottom: '0.5rem' }}>WORKSPACES</label>
+                                        <label className="text-muted mono-text" style={{ fontSize: '0.7rem', marginBottom: '0.5rem' }}>
+                                            WORKSPACES
+                                            <SectionHideToggle baseId={base.id} sectionKey="workspaces" hiddenSections={base.hiddenSections} />
+                                        </label>
                                         <Classified />
                                     </div>
                                 );
@@ -1920,6 +1997,7 @@
                                         }}>
                                             <span>
                                                 WORKSPACES ({workspaces.length})
+                                                <SectionHideToggle baseId={base.id} sectionKey="workspaces" hiddenSections={base.hiddenSections} />
                                                 <VisibilityToggle field={`${basePath}.workspaces`} visibility={visibility} onToggle={onToggleVis} />
                                             </span>
                                             {IS_ADMIN && (
@@ -2025,11 +2103,18 @@
                                         if (!categories[cat]) categories[cat] = [];
                                         categories[cat].push(eq);
                                     });
-                                    return Object.entries(categories).map(([cat, items]) => (
+                                    // Map category names to hiddenSections keys
+                                    const catKeyMap = { 'Aviation Units': 'aviationUnits', 'Base Defenses': 'baseDefenses' };
+                                    return Object.entries(categories).map(([cat, items]) => {
+                                        const catKey = catKeyMap[cat];
+                                        const catHidden = catKey && isSectionHidden(catKey);
+                                        return (
                                         <div key={cat} style={{ marginBottom: '0.5rem' }}>
                                             <span className="mono-text text-muted" style={{ fontSize: '0.7rem', display: 'block', marginBottom: '0.25rem', borderBottom: '1px solid var(--border-color)', paddingBottom: '0.15rem' }}>
                                                 {cat}
+                                                {catKey && <SectionHideToggle baseId={base.id} sectionKey={catKey} hiddenSections={base.hiddenSections} />}
                                             </span>
+                                            {catHidden ? <Classified /> : (
                                             <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.4rem' }}>
                                                 {items.map(eq => {
                                                     const selected = (base.equipment || []).includes(eq.key);
@@ -2052,8 +2137,10 @@
                                                     );
                                                 })}
                                             </div>
+                                            )}
                                         </div>
-                                    ));
+                                        );
+                                    });
                                 })()}
                             </div>
 

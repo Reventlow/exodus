@@ -551,6 +551,10 @@ class Base(models.Model):
         default=False,
         help_text="Hidden bases are only visible to superusers.",
     )
+    hidden_sections = models.JSONField(
+        default=list,
+        help_text="List of section keys hidden from non-superusers (e.g. facilities, equipment).",
+    )
 
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
