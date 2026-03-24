@@ -181,7 +181,31 @@
                 },
             }).addTo(map);
 
-            // Add country name labels at polygon centers
+            // Compute centroid of the largest ring in a GeoJSON geometry.
+            // This avoids overseas territories pulling the label off the mainland.
+            const getMainlandCentroid = (geometry) => {
+                let rings = [];
+                if (geometry.type === 'Polygon') {
+                    rings = [geometry.coordinates[0]];
+                } else if (geometry.type === 'MultiPolygon') {
+                    rings = geometry.coordinates.map(poly => poly[0]);
+                }
+                if (rings.length === 0) return null;
+                // Pick the ring with the most points (largest landmass)
+                let largest = rings[0];
+                for (let i = 1; i < rings.length; i++) {
+                    if (rings[i].length > largest.length) largest = rings[i];
+                }
+                // Average of coordinates
+                let sumLat = 0, sumLng = 0;
+                for (const [lng, lat] of largest) {
+                    sumLat += lat;
+                    sumLng += lng;
+                }
+                return L.latLng(sumLat / largest.length, sumLng / largest.length);
+            };
+
+            // Add country name labels at mainland centroid
             labelsLayer.current = L.layerGroup().addTo(map);
             geoLayer.current.eachLayer((layer) => {
                 const feature = layer.feature;
@@ -189,9 +213,8 @@
                 const entries = countryMap[name];
                 if (!entries || entries.length === 0) return;
 
-                // Get center of the polygon bounds
-                const bounds = layer.getBounds();
-                const center = bounds.getCenter();
+                const center = getMainlandCentroid(feature.geometry);
+                if (!center) return;
 
                 // Use original names (e.g. "Nova Judea" instead of "Iran")
                 const labelText = entries.map(e => e.originalName).join(' / ');

@@ -1,5 +1,8 @@
 # Changelog
 
+## v0.7.4
+- Fix: country labels now placed at the mainland centroid instead of bounding box center — fixes France, Norway, etc. being labeled in Africa due to overseas territories
+
 ## v0.7.3
 - Map now uses label-free tiles — no more real-world country names (Iran, Venezuela, etc.) on the map
 - Tooltips show in-game names only (e.g. "Nova Judea / New Texas" instead of "Iran")
