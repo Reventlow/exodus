@@ -2200,7 +2200,10 @@
                             {/* Coordinates for world map */}
                             {IS_ADMIN && (
                                 <div style={{ marginBottom: '0.5rem' }}>
-                                    <label className="text-muted mono-text" style={{ fontSize: '0.7rem', display: 'block', marginBottom: '0.25rem' }}>MAP COORDINATES</label>
+                                    <label className="text-muted mono-text" style={{ fontSize: '0.7rem', display: 'block', marginBottom: '0.25rem' }}>
+                                        MAP COORDINATES
+                                        <SectionHideToggle baseId={base.id} sectionKey="coordinates" hiddenSections={base.hiddenSections} />
+                                    </label>
                                     <div style={{ display: 'flex', gap: '0.75rem' }}>
                                         <div style={{ flex: 1 }}>
                                             <label className="text-muted mono-text" style={{ fontSize: '0.6rem' }}>LAT</label>

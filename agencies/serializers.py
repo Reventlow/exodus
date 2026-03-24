@@ -409,8 +409,8 @@ def serialize_base(base, is_admin=True):
         "notes": base.notes if (is_admin or "notes" not in hidden) else "",
         "isHidden": base.is_hidden,
         "hiddenSections": (base.hidden_sections or []) if is_admin else [],
-        "latitude": base.latitude,
-        "longitude": base.longitude,
+        "latitude": base.latitude if (is_admin or "coordinates" not in hidden) else None,
+        "longitude": base.longitude if (is_admin or "coordinates" not in hidden) else None,
     }
 
     # Add classified markers for redacted sections

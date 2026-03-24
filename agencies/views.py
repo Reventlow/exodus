@@ -71,16 +71,19 @@ def api_map_data(request):
     for agency in agencies:
         countries = (agency.alliance or {}).get("countries", [])
         bases_qs = agency.bases.all() if is_admin else agency.bases.filter(is_hidden=False)
-        bases = [
-            {
+        bases = []
+        for b in bases_qs:
+            if b.latitude is None or b.longitude is None:
+                continue
+            # Hide coordinates classified via hidden_sections for non-admins
+            if not is_admin and "coordinates" in (b.hidden_sections or []):
+                continue
+            bases.append({
                 "id": b.id,
                 "name": b.name,
                 "lat": b.latitude,
                 "lng": b.longitude,
-            }
-            for b in bases_qs
-            if b.latitude is not None and b.longitude is not None
-        ]
+            })
         data.append({
             "id": agency.id,
             "name": agency.name,
