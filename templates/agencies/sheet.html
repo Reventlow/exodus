@@ -1582,11 +1582,23 @@
 
     const BasesModule = ({ bases: initialBases, baseConfig, agencyId, onBasesChange, assignableCharacters, assignableNpcs, visibility, onToggleVis, classifiedBases }) => {
         const [bases, setBases] = useState(initialBases || []);
-        const [expandedBase, setExpandedBase] = useState(null);
+        const [expandedBase, setExpandedBase] = useState(() => {
+            const params = new URLSearchParams(window.location.search);
+            const baseId = params.get('base');
+            return baseId ? parseInt(baseId) : null;
+        });
         const [creating, setCreating] = useState(false);
         const saveTimers = useRef({});
 
         useEffect(() => { setBases(initialBases || []); }, [initialBases]);
+
+        // Auto-scroll to expanded base from URL param
+        const baseScrollRef = useRef(null);
+        useEffect(() => {
+            if (expandedBase && baseScrollRef.current) {
+                setTimeout(() => baseScrollRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' }), 300);
+            }
+        }, [initialBases]);
 
         // Notify parent whenever bases change so EXP totals stay in sync
         const updateBases = (updater) => {
@@ -1794,7 +1806,8 @@
             const isSectionHidden = (key) => !IS_ADMIN && hidden.has(key);
 
             return (
-                <div className="glass-panel" style={{ padding: '1rem', marginBottom: '0.75rem', borderLeft: `3px solid ${BASE_ACCENT}` }}>
+                <div ref={expandedBase === base.id ? baseScrollRef : null}
+                    className="glass-panel" style={{ padding: '1rem', marginBottom: '0.75rem', borderLeft: `3px solid ${BASE_ACCENT}` }}>
                     {/* Header row */}
                     <div title={loc ? `${loc.description}${loc.included ? '\n' + loc.included : ''}` : ''}
                          style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', cursor: 'pointer' }}

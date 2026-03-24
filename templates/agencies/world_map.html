@@ -245,9 +245,13 @@
                         weight: 1.5,
                     });
                     marker.bindTooltip(
-                        `<strong>${base.name}</strong><br/>${agency.name}`,
+                        `<strong>${base.name}</strong><br/>${agency.name}<br/><span style="opacity:0.6;font-size:0.7rem">Click to open</span>`,
                         { className: 'map-tooltip' }
                     );
+                    marker.on('click', () => {
+                        window.location.href = `/agencies/${agency.id}/?base=${base.id}`;
+                    });
+                    marker.setStyle({ cursor: 'pointer' });
                     marker.addTo(markersLayer.current);
                 });
             });
