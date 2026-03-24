@@ -60,10 +60,12 @@
         const mapRef = useRef(null);
         const mapInstance = useRef(null);
         const geoLayer = useRef(null);
+        const markersLayer = useRef(null);
         const [agencies, setAgencies] = useState([]);
         const [loading, setLoading] = useState(true);
         const [geoJson, setGeoJson] = useState(null);
         const [error, setError] = useState(null);
+        const [selectedIds, setSelectedIds] = useState(null); // null = show all
 
         // Fetch map data and GeoJSON in parallel
         useEffect(() => {
@@ -109,23 +111,27 @@
             return () => { map.remove(); mapInstance.current = null; };
         }, [loading]);
 
-        // Render GeoJSON + base markers when data is ready
+        // Render GeoJSON + base markers when data or selection changes
         useEffect(() => {
             if (!mapInstance.current || !geoJson || agencies.length === 0) return;
             const map = mapInstance.current;
 
-            // Build country -> agency lookup
+            // Determine which agencies to show
+            const visibleAgencies = selectedIds === null
+                ? agencies
+                : agencies.filter(a => selectedIds.has(a.id));
+
+            // Build country -> agency lookup (only for visible agencies)
             const countryMap = {};
-            agencies.forEach(agency => {
+            visibleAgencies.forEach(agency => {
                 (agency.countries || []).forEach(c => {
                     countryMap[normalizeCountryName(c)] = agency;
                 });
             });
 
-            // Remove old layer
-            if (geoLayer.current) {
-                map.removeLayer(geoLayer.current);
-            }
+            // Remove old layers
+            if (geoLayer.current) map.removeLayer(geoLayer.current);
+            if (markersLayer.current) map.removeLayer(markersLayer.current);
 
             // Add country polygons
             geoLayer.current = L.geoJSON(geoJson, {
@@ -162,7 +168,8 @@
             }).addTo(map);
 
             // Add base markers
-            agencies.forEach(agency => {
+            markersLayer.current = L.layerGroup().addTo(map);
+            visibleAgencies.forEach(agency => {
                 (agency.bases || []).forEach(base => {
                     if (base.lat == null || base.lng == null) return;
                     const marker = L.circleMarker([base.lat, base.lng], {
@@ -176,10 +183,10 @@
                         `<strong>${base.name}</strong><br/>${agency.name}`,
                         { className: 'map-tooltip' }
                     );
-                    marker.addTo(map);
+                    marker.addTo(markersLayer.current);
                 });
             });
-        }, [geoJson, agencies]);
+        }, [geoJson, agencies, selectedIds]);
 
         if (loading) {
             return (
@@ -223,24 +230,63 @@
                     border: '1px solid var(--border-color)',
                 }} />
 
-                {/* Legend */}
+                {/* Legend / Agency Filter */}
                 {activeAgencies.length > 0 && (
                     <div className="glass-panel" style={{
                         padding: '1rem', marginTop: '0.75rem',
-                        display: 'flex', flexWrap: 'wrap', gap: '1rem', alignItems: 'center',
+                        display: 'flex', flexWrap: 'wrap', gap: '0.5rem', alignItems: 'center',
                     }}>
-                        <span className="mono-text text-muted" style={{ fontSize: '0.8rem' }}>LEGEND:</span>
-                        {activeAgencies.map(a => (
-                            <div key={a.id} style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
-                                <div style={{
-                                    width: '14px', height: '14px', borderRadius: '2px',
-                                    background: a.color, opacity: 0.8, border: '1px solid rgba(255,255,255,0.2)',
-                                }} />
-                                <span className="mono-text" style={{ fontSize: '0.8rem', color: a.color }}>
+                        <button
+                            onClick={() => setSelectedIds(null)}
+                            className="mono-text"
+                            style={{
+                                background: selectedIds === null ? 'rgba(255,255,255,0.1)' : 'transparent',
+                                border: '1px solid ' + (selectedIds === null ? 'var(--accent-primary)' : 'var(--border-color)'),
+                                color: selectedIds === null ? 'var(--accent-primary)' : 'var(--text-muted)',
+                                padding: '0.3rem 0.7rem', cursor: 'pointer', fontSize: '0.8rem',
+                                borderRadius: 'var(--radius-sm)',
+                            }}>
+                            ALL
+                        </button>
+                        {activeAgencies.map(a => {
+                            const isActive = selectedIds === null || selectedIds.has(a.id);
+                            return (
+                                <button key={a.id}
+                                    onClick={() => {
+                                        if (selectedIds === null) {
+                                            // From "all" -> select only this one
+                                            setSelectedIds(new Set([a.id]));
+                                        } else if (selectedIds.has(a.id) && selectedIds.size === 1) {
+                                            // Deselecting the only one -> back to all
+                                            setSelectedIds(null);
+                                        } else if (selectedIds.has(a.id)) {
+                                            // Remove from selection
+                                            const next = new Set(selectedIds);
+                                            next.delete(a.id);
+                                            setSelectedIds(next);
+                                        } else {
+                                            // Add to selection
+                                            setSelectedIds(new Set([...selectedIds, a.id]));
+                                        }
+                                    }}
+                                    className="mono-text"
+                                    style={{
+                                        background: isActive ? a.color + '22' : 'transparent',
+                                        border: '1px solid ' + (isActive ? a.color : 'var(--border-color)'),
+                                        color: isActive ? a.color : 'var(--text-muted)',
+                                        padding: '0.3rem 0.7rem', cursor: 'pointer', fontSize: '0.8rem',
+                                        borderRadius: 'var(--radius-sm)',
+                                        display: 'flex', alignItems: 'center', gap: '0.4rem',
+                                        opacity: isActive ? 1 : 0.4,
+                                    }}>
+                                    <div style={{
+                                        width: '10px', height: '10px', borderRadius: '2px',
+                                        background: a.color,
+                                    }} />
                                     {a.name}
-                                </span>
-                            </div>
-                        ))}
+                                </button>
+                            );
+                        })}
                     </div>
                 )}
             </div>
