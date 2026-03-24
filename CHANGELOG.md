@@ -1,5 +1,8 @@
 # Changelog
 
+## v0.6.15
+- Tactical dice roller now available on all agency pages
+
 ## v0.6.14
 - Fix: missing database migration for hidden_sections field (caused agency load failure)
 

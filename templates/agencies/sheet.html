@@ -2231,6 +2231,118 @@
         );
     };
 
+    // --- DICE ROLLER ---
+    const DiceRoller = () => {
+        const [pool, setPool] = useState(1);
+        const [again, setAgain] = useState(10);
+        const [results, setResults] = useState(null);
+
+        const roll = () => {
+            const newResults = [];
+            let successes = 0;
+            let diceToRoll = pool;
+
+            if (diceToRoll > 50) diceToRoll = 50;
+            if (diceToRoll < 1) diceToRoll = 1;
+
+            while (diceToRoll > 0) {
+                const die = Math.floor(Math.random() * 10) + 1;
+                let isSuccess = die >= 8;
+                let explode = die >= again;
+
+                newResults.push({ value: die, success: isSuccess, exploded: explode });
+                if (isSuccess) successes++;
+
+                if (explode) {
+                    diceToRoll++;
+                    if (newResults.length > 100) break;
+                }
+                diceToRoll--;
+            }
+            setResults({ rolls: newResults, totalSuccesses: successes });
+        };
+
+        return (
+            <div className="glass-panel" style={{
+                padding: '1.5rem', marginBottom: '1rem',
+                borderTop: '2px solid var(--accent-primary)'
+            }}>
+                <h3 className="mono-text text-accent" style={{ marginBottom: '1rem' }}>
+                    TACTICAL DICE ROLLER
+                </h3>
+
+                <div style={{
+                    display: 'flex', gap: '1rem', alignItems: 'flex-end',
+                    justifyContent: 'center', marginBottom: '1rem',
+                    flexWrap: 'wrap'
+                }}>
+                    <div>
+                        <label className="text-muted mono-text" style={{ fontSize: '0.8rem' }}>POOL SIZE</label>
+                        <input type="number" value={pool}
+                            onChange={e => setPool(parseInt(e.target.value) || 1)}
+                            style={{
+                                display: 'block', width: '80px', height: '50px',
+                                fontSize: '2rem', textAlign: 'center',
+                                background: 'var(--bg-input)', color: 'var(--text-primary)',
+                                border: '1px solid var(--accent-primary)'
+                            }} />
+                    </div>
+                    <div>
+                        <label className="text-muted mono-text" style={{ fontSize: '0.8rem' }}>AGAIN</label>
+                        <select value={again} onChange={e => setAgain(parseInt(e.target.value))}
+                            style={{
+                                display: 'block', height: '50px',
+                                background: 'var(--bg-input)', color: 'var(--text-primary)',
+                                border: '1px solid var(--border-color)'
+                            }}>
+                            <option value={10}>10-Again</option>
+                            <option value={9}>9-Again</option>
+                            <option value={8}>8-Again</option>
+                        </select>
+                    </div>
+                    <button onClick={roll} style={{
+                        height: '50px', padding: '0 2rem',
+                        background: 'var(--accent-primary)', color: 'var(--bg-dark)',
+                        border: 'none', fontWeight: 'bold', cursor: 'pointer', fontSize: '1.2rem'
+                    }}>
+                        EXECUTE
+                    </button>
+                </div>
+
+                {results && (
+                    <div className="tech-border" style={{ padding: '1rem', background: 'rgba(0,0,0,0.3)' }}>
+                        <div style={{ textAlign: 'center', marginBottom: '0.5rem' }}>
+                            <span className="mono-text text-muted">OUTCOME: </span>
+                            <span style={{
+                                fontSize: '1.5rem', fontWeight: 'bold',
+                                color: results.totalSuccesses > 0 ? 'var(--accent-success)' : 'var(--text-secondary)'
+                            }}>
+                                {results.totalSuccesses} SUCCESSES
+                            </span>
+                        </div>
+                        <div style={{
+                            display: 'flex', flexWrap: 'wrap', gap: '4px', justifyContent: 'center'
+                        }}>
+                            {results.rolls.map((r, i) => (
+                                <div key={i} style={{
+                                    width: '24px', height: '24px',
+                                    borderRadius: '2px',
+                                    background: r.success ? 'var(--accent-primary)' : 'var(--bg-panel)',
+                                    color: r.success ? 'var(--bg-dark)' : 'var(--text-secondary)',
+                                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                    fontWeight: 'bold',
+                                    border: r.exploded ? '1px solid var(--accent-warning)' : 'none'
+                                }}>
+                                    {r.value}
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+                )}
+            </div>
+        );
+    };
+
     // --- MAIN APP ---
     const AgencySheet = () => {
         const [agency, setAgency] = useState(null);
@@ -2439,6 +2551,8 @@
                     attributes={agency.attributes}
                     update={attrs => updateAgency({ attributes: attrs })}
                     visibility={vis} onToggleVis={toggleVisibility} />
+
+                <DiceRoller />
 
                 <TableModule
                     title="SPECIALIZATIONS" field="specializations"
