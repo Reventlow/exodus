@@ -7,4 +7,5 @@ urlpatterns = [
     path("api/characters/", views.api_character_list, name="api_character_list"),
     path("api/characters/<int:pk>/", views.api_character_detail, name="api_character_detail"),
     path("api/characters/<int:pk>/image/", views.api_character_image, name="api_character_image"),
+    path("api/characters/<int:pk>/transfer-xp/", views.api_transfer_xp, name="api_transfer_xp"),
 ]

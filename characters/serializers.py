@@ -1,6 +1,17 @@
 """Manual JSON serialization for Character model. No DRF dependency."""
 
 
+def serialize_pulling_string(ps):
+    """Serialize a PullingString catalog entry."""
+    return {
+        "id": ps.id,
+        "name": ps.name,
+        "description": ps.description,
+        "cost": ps.cost,
+        "category": ps.category,
+    }
+
+
 def serialize_character(character):
     """Full character data for API responses."""
     return {
@@ -26,11 +37,17 @@ def serialize_character(character):
         "mentalLoad": character.mental_load,
         "merits": character.merits,
         "flaws": character.flaws,
-        "pullingStrings": character.pulling_strings,
+        "pullingStrings": [
+            serialize_pulling_string(ps)
+            for ps in character.pulling_strings.all()
+        ],
         "inventory": character.inventory,
         "specialisations": character.specialisations,
         "experience": character.experience,
         "experienceUsed": character.experience_used,
+        "pullingStringsCost": sum(
+            ps.cost for ps in character.pulling_strings.all()
+        ),
         "willpower": {"current": character.willpower_current},
     }
 

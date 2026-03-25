@@ -91,7 +91,9 @@ class Character(models.Model):
     # Lists as JSON arrays
     merits = models.JSONField(default=list)
     flaws = models.JSONField(default=list)
-    pulling_strings = models.JSONField(default=list)
+    pulling_strings = models.ManyToManyField(
+        "exodus.PullingString", blank=True, related_name="characters"
+    )
     inventory = models.JSONField(default=list)
     specialisations = models.JSONField(default=list)  # [{skill, name}]
 

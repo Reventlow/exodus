@@ -1,5 +1,16 @@
 # Changelog
 
+## v0.8.3
+- Pulling strings catalog — game-level definitions with name, description, XP cost, and class category
+- Characters select pulling strings from the catalog (filtered by class + general); AI category superuser-only
+- Pulling string XP costs automatically counted in the experience tracker
+- Creation allocation tracking — warns when character creation dots are unspent (attributes 5/4/3, skills 11/7/4, 3 specialisations, 7 merits)
+- Auto XP calculation for attributes, skills, specialisations, and merits above creation baseline
+- XP transfer from character to agency (1 character XP = 10 agency XP)
+- MCP tools: list, create, update, delete pulling strings
+- Pulling string catalog seeded with 12 entries (General, Fixer, Soldier)
+- Django admin registration for PullingString model
+
 ## v0.8.2
 - Class selection on character sheets and NPC dossiers — Fixer, Soldier, Science, Engineer, AI
 - AI class restricted to superusers only

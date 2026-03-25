@@ -4,7 +4,7 @@ from django.contrib import admin
 from django.contrib.auth.admin import UserAdmin
 from django.contrib.auth.models import User
 
-from .models import SiteSettings
+from .models import PullingString, SiteSettings
 
 
 # Customize the User admin list display
@@ -32,3 +32,10 @@ class SiteSettingsAdmin(admin.ModelAdmin):
     def has_delete_permission(self, request, obj=None):
         """Prevent deletion of the singleton."""
         return False
+
+
+@admin.register(PullingString)
+class PullingStringAdmin(admin.ModelAdmin):
+    list_display = ("name", "category", "cost")
+    list_filter = ("category",)
+    search_fields = ("name",)

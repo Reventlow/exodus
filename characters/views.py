@@ -6,8 +6,12 @@ from django.shortcuts import render, get_object_or_404
 from django.contrib.auth.decorators import login_required
 from django.views.decorators.http import require_http_methods
 
+from django.db import transaction
+
 from .models import Character
 from .serializers import serialize_character, serialize_character_summary
+from agencies.models import Agency
+from exodus.models import PullingString
 
 
 # ---------------------------------------------------------------------------
@@ -112,8 +116,10 @@ def api_character_detail(request, pk):
             character.merits = data["merits"]
         if "flaws" in data:
             character.flaws = data["flaws"]
-        if "pullingStrings" in data:
-            character.pulling_strings = data["pullingStrings"]
+        if "pullingStringIds" in data:
+            ps_ids = data["pullingStringIds"]
+            valid_ps = PullingString.objects.filter(id__in=ps_ids)
+            character.pulling_strings.set(valid_ps)
         if "inventory" in data:
             character.inventory = data["inventory"]
         if "specialisations" in data:
@@ -186,3 +192,46 @@ def api_character_image(request, pk):
     character.profile_picture = image
     character.save()
     return JsonResponse({"profilePicture": character.profile_picture.url})
+
+
+@login_required
+@require_http_methods(["POST"])
+def api_transfer_xp(request, pk):
+    """Transfer XP from character to agency. 1 character XP = 10 agency XP."""
+    character = get_object_or_404(Character, pk=pk)
+
+    if request.user != character.owner and not request.user.is_superuser:
+        return JsonResponse({"error": "ACCESS DENIED."}, status=403)
+
+    try:
+        data = json.loads(request.body)
+    except json.JSONDecodeError:
+        return JsonResponse({"error": "Invalid data stream."}, status=400)
+
+    amount = data.get("amount", 0)
+    agency_id = data.get("agencyId")
+
+    if not isinstance(amount, int) or amount < 1:
+        return JsonResponse({"error": "Amount must be a positive integer."}, status=400)
+
+    if amount > character.experience:
+        return JsonResponse(
+            {"error": f"Insufficient XP. Character has {character.experience}."},
+            status=400,
+        )
+
+    agency = get_object_or_404(Agency, pk=agency_id, is_player_agency=True)
+
+    with transaction.atomic():
+        character.experience -= amount
+        character.save()
+        agency.experience += amount * 10
+        agency.save()
+
+    return JsonResponse({
+        "status": "Transfer complete.",
+        "characterXp": character.experience,
+        "agencyXp": agency.experience,
+        "transferred": amount,
+        "agencyReceived": amount * 10,
+    })

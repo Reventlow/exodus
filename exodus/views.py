@@ -1,5 +1,6 @@
 """Core views for Exodus site settings."""
 
+import json
 from pathlib import Path
 
 from django.contrib import messages
@@ -7,9 +8,9 @@ from django.contrib.admin.views.decorators import staff_member_required
 from django.contrib.auth.decorators import login_required
 from django.http import JsonResponse
 from django.shortcuts import redirect, render
-from django.views.decorators.http import require_GET
+from django.views.decorators.http import require_GET, require_http_methods
 
-from .models import SiteSettings
+from .models import PullingString, SiteSettings
 
 
 @staff_member_required
@@ -58,5 +59,98 @@ def api_status(request):
             "globalFlaws": GlobalFlaw.objects.count(),
             "ftlProjects": FTLProject.objects.count(),
             "threads": Thread.objects.count(),
+            "pullingStrings": PullingString.objects.count(),
         },
     })
+
+
+# ---------------------------------------------------------------------------
+# Pulling Strings catalog API
+# ---------------------------------------------------------------------------
+
+def _serialize_ps(ps):
+    """Serialize a PullingString catalog entry."""
+    return {
+        "id": ps.id,
+        "name": ps.name,
+        "description": ps.description,
+        "cost": ps.cost,
+        "category": ps.category,
+    }
+
+
+@login_required
+@require_http_methods(["GET", "POST"])
+def api_pulling_strings(request):
+    """GET: list all pulling strings. POST: create (admin only)."""
+    if request.method == "GET":
+        qs = PullingString.objects.all()
+        # Non-superusers cannot see AI-category pulling strings
+        if not request.user.is_superuser:
+            qs = qs.exclude(category="ai")
+        return JsonResponse([_serialize_ps(ps) for ps in qs], safe=False)
+
+    if not request.user.is_superuser:
+        return JsonResponse(
+            {"error": "ACCESS DENIED. Administrator clearance required."},
+            status=403,
+        )
+
+    try:
+        data = json.loads(request.body)
+    except json.JSONDecodeError:
+        return JsonResponse({"error": "Invalid data stream."}, status=400)
+
+    valid_categories = [c[0] for c in PullingString.CATEGORY_CHOICES]
+    category = data.get("category", "general")
+    if category not in valid_categories:
+        return JsonResponse({"error": f"Invalid category. Use: {valid_categories}"}, status=400)
+
+    ps = PullingString.objects.create(
+        name=data.get("name", ""),
+        description=data.get("description", ""),
+        cost=data.get("cost", 0),
+        category=category,
+    )
+    return JsonResponse(_serialize_ps(ps), status=201)
+
+
+@login_required
+@require_http_methods(["GET", "PUT", "DELETE"])
+def api_pulling_string_detail(request, pk):
+    """GET: single pulling string. PUT/DELETE: admin only."""
+    from django.shortcuts import get_object_or_404
+    ps = get_object_or_404(PullingString, pk=pk)
+
+    if request.method == "GET":
+        if ps.category == "ai" and not request.user.is_superuser:
+            return JsonResponse({"error": "ACCESS DENIED."}, status=403)
+        return JsonResponse(_serialize_ps(ps))
+
+    if not request.user.is_superuser:
+        return JsonResponse(
+            {"error": "ACCESS DENIED. Administrator clearance required."},
+            status=403,
+        )
+
+    if request.method == "PUT":
+        try:
+            data = json.loads(request.body)
+        except json.JSONDecodeError:
+            return JsonResponse({"error": "Invalid data stream."}, status=400)
+
+        for field in ("name", "description"):
+            if field in data:
+                setattr(ps, field, data[field])
+        if "cost" in data:
+            ps.cost = data["cost"]
+        if "category" in data:
+            valid_categories = [c[0] for c in PullingString.CATEGORY_CHOICES]
+            if data["category"] in valid_categories:
+                ps.category = data["category"]
+        ps.save()
+        return JsonResponse(_serialize_ps(ps))
+
+    if request.method == "DELETE":
+        ps.delete()
+        return JsonResponse({"status": "Record terminated."})

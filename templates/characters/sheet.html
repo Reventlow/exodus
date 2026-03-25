@@ -77,6 +77,7 @@
         mentalLoad: 0,
         experience: 0,
         experienceUsed: 0,
+        pullingStringsCost: 0,
         dossier: "",
         profilePicture: null
     };
@@ -625,23 +626,298 @@
         );
     };
 
+    // --- PULLING STRINGS MODULE (catalog-based) ---
+    const PullingStringsModule = ({ pullingStrings, catalog, characterClass, onAdd, onRemove }) => {
+        const [showPicker, setShowPicker] = useState(false);
+        const ownedIds = pullingStrings.map(ps => ps.id);
+
+        // Filter catalog: general + character's class
+        const available = catalog.filter(ps =>
+            !ownedIds.includes(ps.id) &&
+            (ps.category === 'general' || ps.category === characterClass)
+        );
+
+        // Group owned by category
+        const categories = {};
+        pullingStrings.forEach(ps => {
+            const cat = ps.category || 'general';
+            if (!categories[cat]) categories[cat] = [];
+            categories[cat].push(ps);
+        });
+
+        const catOrder = ['general', 'fixer', 'soldier', 'science', 'engineer', 'ai'];
+        const catLabel = c => c.charAt(0).toUpperCase() + c.slice(1);
+
+        return (
+            <div className="glass-panel" style={{ padding: '1.5rem', marginBottom: '1rem' }}>
+                <h3 className="mono-text text-accent" style={{
+                    borderBottom: '1px solid var(--border-color)',
+                    paddingBottom: '0.5rem', marginBottom: '1rem',
+                    display: 'flex', justifyContent: 'space-between', alignItems: 'center'
+                }}>
+                    PULLING STRINGS
+                    {IS_OWNER && (
+                        <button onClick={() => setShowPicker(!showPicker)} title={showPicker ? "Close" : "Add Pulling String"} style={{
+                            background: 'transparent', border: '1px solid var(--accent-primary)',
+                            color: 'var(--accent-primary)', width: '24px', height: '24px',
+                            borderRadius: '4px', cursor: 'pointer',
+                            display: 'flex', alignItems: 'center', justifyContent: 'center'
+                        }}>
+                            <Icon name={showPicker ? "x" : "plus"} size={14} />
+                        </button>
+                    )}
+                </h3>
+
+                {/* Picker: available pulling strings */}
+                {showPicker && (
+                    <div style={{
+                        border: '1px solid var(--accent-primary)',
+                        borderRadius: '4px', padding: '0.75rem', marginBottom: '1rem',
+                        background: 'rgba(0,0,0,0.3)', maxHeight: '300px', overflowY: 'auto'
+                    }}>
+                        <div className="text-secondary mono-text" style={{ fontSize: '0.75rem', marginBottom: '0.5rem' }}>
+                            AVAILABLE {characterClass ? `(${catLabel(characterClass)} + General)` : '(General)'}
+                        </div>
+                        {available.length === 0 && (
+                            <p className="text-muted" style={{ fontSize: '0.8rem', fontStyle: 'italic' }}>
+                                No additional pulling strings available.
+                            </p>
+                        )}
+                        {available.map(ps => (
+                            <div key={ps.id} style={{
+                                display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+                                padding: '0.4rem 0.5rem', marginBottom: '0.25rem',
+                                background: 'rgba(0,0,0,0.2)', borderRadius: '3px',
+                                cursor: 'pointer'
+                            }} onClick={() => { onAdd(ps.id); setShowPicker(false); }}>
+                                <div style={{ flex: 1 }}>
+                                    <span className="mono-text" style={{ color: 'var(--text-primary)', fontSize: '0.85rem' }}>
+                                        {ps.name}
+                                    </span>
+                                    <span className="text-muted" style={{ fontSize: '0.7rem', marginLeft: '0.5rem' }}>
+                                        [{catLabel(ps.category)}]
+                                    </span>
+                                </div>
+                                <span className="mono-text text-accent" style={{ fontSize: '0.8rem', whiteSpace: 'nowrap' }}>
+                                    {ps.cost} XP
+                                </span>
+                            </div>
+                        ))}
+                    </div>
+                )}
+
+                {/* Owned pulling strings */}
+                {catOrder.filter(c => categories[c]).map(cat => (
+                    <div key={cat}>
+                        <div className="text-muted mono-text" style={{
+                            fontSize: '0.7rem', marginBottom: '0.25rem', marginTop: '0.5rem'
+                        }}>{catLabel(cat).toUpperCase()}</div>
+                        {categories[cat].map(ps => (
+                            <div key={ps.id} className="tech-border" style={{
+                                padding: '0.5rem', marginBottom: '0.5rem', background: 'rgba(0,0,0,0.2)'
+                            }}>
+                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                    <span className="mono-text" style={{ color: 'var(--text-primary)' }}>
+                                        {ps.name}
+                                    </span>
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                                        <span className="mono-text text-accent" style={{ fontSize: '0.8rem' }}>
+                                            {ps.cost} XP
+                                        </span>
+                                        {IS_OWNER && (
+                                            <button onClick={() => onRemove(ps.id)} style={{
+                                                background: 'transparent', border: 'none',
+                                                color: 'var(--accent-danger)', cursor: 'pointer'
+                                            }}>
+                                                <Icon name="x" size={14} />
+                                            </button>
+                                        )}
+                                    </div>
+                                </div>
+                                {ps.description && (
+                                    <p className="text-secondary" style={{
+                                        fontSize: '0.8rem', margin: '0.25rem 0 0 0'
+                                    }}>{ps.description}</p>
+                                )}
+                            </div>
+                        ))}
+                    </div>
+                ))}
+
+                {pullingStrings.length === 0 && !showPicker && (
+                    <p className="text-muted text-center" style={{ fontSize: '0.8rem', fontStyle: 'italic' }}>
+                        No pulling strings acquired.
+                    </p>
+                )}
+            </div>
+        );
+    };
+
+    // --- CREATION ALLOCATION & XP COMPUTATION ---
+    // WoD 2.0 creation: attributes 5/4/3, skills 11/7/4, 3 specialisations, 7 merit dots.
+    // Dots beyond creation cost XP. Free dots assumed placed optimally (cheapest first).
+    const computeCreation = (char) => {
+        const cats = ['mental', 'physical', 'social'];
+
+        // Attribute dots per category (each attr starts at 1)
+        const attrDots = {};
+        cats.forEach(c => {
+            attrDots[c] = (char.attributes.power[c] - 1)
+                        + (char.attributes.finesse[c] - 1)
+                        + (char.attributes.resistance[c] - 1);
+        });
+
+        // Skill dots per category (each starts at 0)
+        const skillDots = {};
+        cats.forEach(c => {
+            skillDots[c] = Object.values(char.skills[c]).reduce((a, b) => a + b, 0);
+        });
+
+        // Optimally assign allocations: sort categories by dots descending, match with sorted allocs
+        const assign = (dots, allocs) => {
+            const sorted = [...cats].sort((a, b) => dots[b] - dots[a]);
+            const sortedA = [...allocs].sort((a, b) => b - a);
+            const r = {};
+            sorted.forEach((c, i) => { r[c] = { dots: dots[c], alloc: sortedA[i] }; });
+            return r;
+        };
+
+        const attrAssign = assign(attrDots, [5, 4, 3]);
+        const skillAssign = assign(skillDots, [11, 7, 4]);
+
+        // XP cost for excess dots in a category.
+        // Collect per-dot costs, sort ascending. Free dots cover cheapest, excess = most expensive.
+        const calcCategoryXp = (catAssign, getValues, costPerDot) => {
+            let xp = 0;
+            cats.forEach(c => {
+                const { dots, alloc } = catAssign[c];
+                if (dots <= alloc) return;
+                const values = getValues(c);
+                const dotCosts = [];
+                values.forEach(val => {
+                    const base = costPerDot === 5 ? 2 : 1; // attrs start counting from 2, skills from 1
+                    for (let i = base; i <= val; i++) dotCosts.push(i * costPerDot);
+                });
+                dotCosts.sort((a, b) => a - b);
+                const excess = dots - alloc;
+                dotCosts.slice(-excess).forEach(c => { xp += c; });
+            });
+            return xp;
+        };
+
+        const attrXp = calcCategoryXp(attrAssign,
+            c => [char.attributes.power[c], char.attributes.finesse[c], char.attributes.resistance[c]], 5);
+        const skillXp = calcCategoryXp(skillAssign,
+            c => Object.values(char.skills[c]), 3);
+
+        // Specialisations: 3 free, each extra = 3 XP
+        const specCount = (char.specialisations || []).length;
+        const specXp = Math.max(0, specCount - 3) * 3;
+
+        // Merits: 7 free dots, excess costs new_rating × 2
+        const meritDots = (char.merits || []).reduce((s, m) => s + (m.rating || 0), 0);
+        let meritXp = 0;
+        if (meritDots > 7) {
+            const meritCosts = [];
+            (char.merits || []).forEach(m => {
+                for (let i = 1; i <= (m.rating || 0); i++) meritCosts.push(i * 2);
+            });
+            meritCosts.sort((a, b) => a - b);
+            meritCosts.slice(-(meritDots - 7)).forEach(c => { meritXp += c; });
+        }
+
+        // Unspent creation messages
+        const msgs = [];
+        cats.forEach(c => {
+            const u = Math.max(0, attrAssign[c].alloc - attrAssign[c].dots);
+            if (u) msgs.push(`${u} attribute dot${u > 1 ? 's' : ''} (${c})`);
+        });
+        cats.forEach(c => {
+            const u = Math.max(0, skillAssign[c].alloc - skillAssign[c].dots);
+            if (u) msgs.push(`${u} skill dot${u > 1 ? 's' : ''} (${c})`);
+        });
+        const specU = Math.max(0, 3 - specCount);
+        if (specU) msgs.push(`${specU} specialisation${specU > 1 ? 's' : ''}`);
+        const meritU = Math.max(0, 7 - meritDots);
+        if (meritU) msgs.push(`${meritU} merit dot${meritU > 1 ? 's' : ''}`);
+
+        return {
+            totalXp: attrXp + skillXp + specXp + meritXp,
+            attrXp, skillXp, specXp, meritXp,
+            messages: msgs,
+        };
+    };
+
     // --- EXPERIENCE MODULE ---
-    const ExperienceModule = ({ experience, experienceUsed, update }) => {
-        const remaining = experience - experienceUsed;
+    const ExperienceModule = ({ char, update, agencies, onTransferDone }) => {
+        const creation = useMemo(() => computeCreation(char), [
+            char.attributes, char.skills, char.specialisations, char.merits
+        ]);
+        const psCost = char.pullingStringsCost || 0;
+        const autoXp = psCost + creation.totalXp;
+        const totalUsed = (char.experienceUsed || 0) + autoXp;
+        const remaining = (char.experience || 0) - totalUsed;
+
+        const [transferAmount, setTransferAmount] = useState(1);
+        const [transferAgency, setTransferAgency] = useState('');
+        const [transferStatus, setTransferStatus] = useState(null);
+
+        const doTransfer = async () => {
+            if (!transferAgency || transferAmount < 1) return;
+            if (transferAmount > (char.experience || 0)) {
+                setTransferStatus('Insufficient XP.');
+                return;
+            }
+            setTransferStatus('Transferring...');
+            try {
+                const resp = await fetch(`/api/characters/${char.id}/transfer-xp/`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-CSRFToken': getCookie('csrftoken') || CSRF_TOKEN,
+                    },
+                    body: JSON.stringify({ amount: transferAmount, agencyId: parseInt(transferAgency) }),
+                });
+                const data = await resp.json();
+                if (resp.ok) {
+                    setTransferStatus(`Transferred ${data.transferred} XP → ${data.agencyReceived} agency XP`);
+                    if (onTransferDone) onTransferDone();
+                } else {
+                    setTransferStatus(data.error || 'Transfer failed.');
+                }
+            } catch (err) {
+                setTransferStatus('Transfer failed.');
+            }
+        };
+
         return (
             <div className="glass-panel" style={{ padding: '1.5rem', marginBottom: '1rem' }}>
                 <h3 className="mono-text text-accent" style={{
                     borderBottom: '1px solid var(--border-color)',
                     paddingBottom: '0.5rem', marginBottom: '1rem'
                 }}>EXPERIENCE</h3>
+
+                {creation.messages.length > 0 && (
+                    <div style={{
+                        background: 'rgba(255,200,0,0.1)', border: '1px solid var(--accent-warning)',
+                        borderRadius: '4px', padding: '0.75rem', marginBottom: '1rem',
+                        fontSize: '0.8rem', color: 'var(--accent-warning)'
+                    }}>
+                        <strong className="mono-text">CREATION INCOMPLETE</strong>
+                        <span style={{ marginLeft: '0.5rem' }}>
+                            You still need to set: {creation.messages.join(', ')}
+                        </span>
+                    </div>
+                )}
+
                 <div style={{
                     display: 'grid',
-                    gridTemplateColumns: 'repeat(3, 1fr)',
+                    gridTemplateColumns: 'repeat(4, 1fr)',
                     gap: '1rem'
                 }}>
                     <div className="tech-border text-center" style={{ padding: '0.5rem' }}>
                         <div className="text-secondary mono-text" style={{ fontSize: '0.8rem' }}>TOTAL</div>
-                        <input type="number" value={experience}
+                        <input type="number" value={char.experience || 0}
                             onChange={e => update({ experience: parseInt(e.target.value) || 0 })}
                             disabled={!IS_OWNER}
                             style={{
@@ -651,8 +927,8 @@
                             }} />
                     </div>
                     <div className="tech-border text-center" style={{ padding: '0.5rem' }}>
-                        <div className="text-secondary mono-text" style={{ fontSize: '0.8rem' }}>USED</div>
-                        <input type="number" value={experienceUsed}
+                        <div className="text-secondary mono-text" style={{ fontSize: '0.8rem' }}>MANUAL</div>
+                        <input type="number" value={char.experienceUsed || 0}
                             onChange={e => update({ experienceUsed: parseInt(e.target.value) || 0 })}
                             disabled={!IS_OWNER}
                             style={{
@@ -662,13 +938,90 @@
                             }} />
                     </div>
                     <div className="tech-border text-center" style={{ padding: '0.5rem' }}>
+                        <div className="text-secondary mono-text" style={{ fontSize: '0.8rem' }}>AUTO</div>
+                        <div style={{ fontSize: '1.5rem', color: 'var(--text-primary)' }}>
+                            {autoXp}
+                        </div>
+                        <div style={{ fontSize: '0.6rem', color: 'var(--text-muted)', lineHeight: 1.3 }}>
+                            {[
+                                creation.attrXp > 0 && `Attr ${creation.attrXp}`,
+                                creation.skillXp > 0 && `Skill ${creation.skillXp}`,
+                                creation.specXp > 0 && `Spec ${creation.specXp}`,
+                                creation.meritXp > 0 && `Merit ${creation.meritXp}`,
+                                psCost > 0 && `PS ${psCost}`,
+                            ].filter(Boolean).join(' · ') || 'None'}
+                        </div>
+                    </div>
+                    <div className="tech-border text-center" style={{ padding: '0.5rem' }}>
                         <div className="text-secondary mono-text" style={{ fontSize: '0.8rem' }}>REMAINING</div>
                         <div style={{
                             fontSize: '1.5rem',
                             color: remaining < 0 ? 'var(--accent-danger)' : 'var(--text-accent)'
                         }}>{remaining}</div>
+                        <div style={{ fontSize: '0.65rem', color: 'var(--text-muted)' }}>
+                            {totalUsed} used
+                        </div>
                     </div>
                 </div>
+
+                {/* XP Transfer to Agency */}
+                {IS_OWNER && agencies.length > 0 && (
+                    <div style={{
+                        marginTop: '1rem', paddingTop: '1rem',
+                        borderTop: '1px solid var(--border-color)'
+                    }}>
+                        <div className="text-secondary mono-text" style={{ fontSize: '0.8rem', marginBottom: '0.5rem' }}>
+                            TRANSFER TO AGENCY <span className="text-muted">(1 XP → 10 agency XP)</span>
+                        </div>
+                        <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', flexWrap: 'wrap' }}>
+                            <input type="number" min="1" value={transferAmount}
+                                onChange={e => setTransferAmount(Math.max(1, parseInt(e.target.value) || 1))}
+                                style={{
+                                    background: 'transparent', border: '1px solid var(--border-color)',
+                                    color: 'var(--text-primary)', width: '60px', padding: '0.25rem 0.5rem',
+                                    textAlign: 'center', fontFamily: 'var(--font-mono)', borderRadius: '3px'
+                                }} />
+                            <span className="text-muted">XP →</span>
+                            <select value={transferAgency}
+                                onChange={e => setTransferAgency(e.target.value)}
+                                style={{
+                                    background: 'transparent', border: '1px solid var(--border-color)',
+                                    color: 'var(--text-primary)', padding: '0.25rem 0.5rem',
+                                    fontFamily: 'var(--font-mono)', cursor: 'pointer', borderRadius: '3px'
+                                }}>
+                                <option value="" style={{ background: 'var(--bg-dark)' }}>Select agency...</option>
+                                {agencies.map(a => (
+                                    <option key={a.id} value={a.id} style={{ background: 'var(--bg-dark)' }}>
+                                        {a.name}
+                                    </option>
+                                ))}
+                            </select>
+                            <span className="mono-text text-accent" style={{ fontSize: '0.85rem' }}>
+                                = {transferAmount * 10} agency XP
+                            </span>
+                            <button onClick={doTransfer}
+                                disabled={!transferAgency}
+                                style={{
+                                    background: transferAgency ? 'var(--accent-primary)' : 'transparent',
+                                    border: '1px solid var(--accent-primary)',
+                                    color: transferAgency ? 'var(--bg-dark)' : 'var(--text-muted)',
+                                    padding: '0.25rem 0.75rem', borderRadius: '3px',
+                                    cursor: transferAgency ? 'pointer' : 'default',
+                                    fontFamily: 'var(--font-mono)', fontSize: '0.8rem'
+                                }}>
+                                TRANSFER
+                            </button>
+                        </div>
+                        {transferStatus && (
+                            <div className="mono-text" style={{
+                                fontSize: '0.75rem', marginTop: '0.5rem',
+                                color: transferStatus.includes('Transferred') ? 'var(--text-accent)' : 'var(--accent-danger)'
+                            }}>
+                                {transferStatus}
+                            </div>
+                        )}
+                    </div>
+                )}
             </div>
         );
     };
@@ -1173,12 +1526,22 @@
         const [char, setChar] = useState(null);
         const [loading, setLoading] = useState(true);
         const [saveStatus, setSaveStatus] = useState('saved');
+        const [psCatalog, setPsCatalog] = useState([]);
+        const [agencies, setAgencies] = useState([]);
         const saveTimerRef = useRef(null);
         const charRef = useRef(null);
 
-        // Load character data on mount
+        // Load character data, pulling string catalog, and agencies on mount
         useEffect(() => {
             fetchCharacter();
+            fetch('/api/pulling-strings/')
+                .then(r => r.json())
+                .then(data => setPsCatalog(data))
+                .catch(err => console.error('Failed to load pulling strings catalog:', err));
+            fetch('/api/agencies/')
+                .then(r => r.json())
+                .then(data => setAgencies(data.filter(a => a.isPlayerAgency)))
+                .catch(err => console.error('Failed to load agencies:', err));
         }, []);
 
         const fetchCharacter = async () => {
@@ -1364,10 +1727,8 @@
 
                 <DerivedTraitsModule char={char} update={updateCharacter} />
 
-                <ExperienceModule
-                    experience={char.experience || 0}
-                    experienceUsed={char.experienceUsed || 0}
-                    update={updateCharacter} />
+                <ExperienceModule char={char} update={updateCharacter}
+                    agencies={agencies} onTransferDone={fetchCharacter} />
 
                 <InventoryModule
                     inventory={char.inventory || []}
@@ -1392,29 +1753,31 @@
                     gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))',
                     gap: '1rem'
                 }}>
-                    <ExpandableListModule
-                        title="PULLING STRINGS" itemLabel="Asset Name"
-                        items={char.pullingStrings || []}
-                        onAdd={() => {
-                            document.activeElement?.blur();
-                            const fresh = charRef.current.pullingStrings || [];
-                            updateCharacter({
-                                pullingStrings: [...fresh, { name: "", rating: 1, description: "" }]
-                            });
+                    <PullingStringsModule
+                        pullingStrings={char.pullingStrings || []}
+                        catalog={psCatalog}
+                        characterClass={char.characterClass || ""}
+                        onAdd={psId => {
+                            const current = charRef.current.pullingStrings || [];
+                            const newIds = [...current.map(ps => ps.id), psId];
+                            const added = psCatalog.find(ps => ps.id === psId);
+                            if (added) {
+                                const updated = [...current, added];
+                                const newCost = updated.reduce((sum, ps) => sum + (ps.cost || 0), 0);
+                                setChar(prev => ({ ...prev, pullingStrings: updated, pullingStringsCost: newCost }));
+                                charRef.current = { ...charRef.current, pullingStrings: updated, pullingStringsCost: newCost };
+                            }
+                            saveCharacter({ pullingStringIds: newIds });
                         }}
-                        onRemove={idx => {
-                            document.activeElement?.blur();
-                            const fresh = charRef.current.pullingStrings || [];
-                            updateCharacter({
-                                pullingStrings: fresh.filter((_, i) => i !== idx)
-                            });
+                        onRemove={psId => {
+                            const current = charRef.current.pullingStrings || [];
+                            const updated = current.filter(ps => ps.id !== psId);
+                            const newIds = updated.map(ps => ps.id);
+                            const newCost = updated.reduce((sum, ps) => sum + (ps.cost || 0), 0);
+                            setChar(prev => ({ ...prev, pullingStrings: updated, pullingStringsCost: newCost }));
+                            charRef.current = { ...charRef.current, pullingStrings: updated, pullingStringsCost: newCost };
+                            saveCharacter({ pullingStringIds: newIds });
                         }}
-                        onUpdate={(idx, val) => updateCharacter({
-                            pullingStrings: char.pullingStrings.map((item, i) => i === idx ? val : item)
-                        })}
-                        onQuietSave={(idx, val) => saveCharacterQuiet({
-                            pullingStrings: charRef.current.pullingStrings.map((item, i) => i === idx ? val : item)
-                        })}
                     />
                     <ExpandableListModule
                         title="MERITS" itemLabel="Merit Name"
