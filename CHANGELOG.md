@@ -1,5 +1,8 @@
 # Changelog
 
+## v0.8.14
+- Bigger XP protester (160x150px) with wider sign that fits all message text
+
 ## v0.8.13
 - XP transfer log — shows history of transfers with amount, agency, agency XP received, and date
 
