@@ -61,6 +61,20 @@ class MeritDefinition(models.Model):
         max_length=200, blank=True, default="",
         help_text="Human-readable prerequisites (e.g. 'Stamina 4+').",
     )
+    CLASS_RESTRICTION_CHOICES = [
+        ("", "All Classes"),
+        ("fixer", "Fixer"),
+        ("soldier", "Soldier"),
+        ("science", "Science"),
+        ("engineer", "Engineer"),
+        ("ai", "AI"),
+    ]
+
+    class_restriction = models.CharField(
+        max_length=20, choices=CLASS_RESTRICTION_CHOICES, blank=True, default="",
+        help_text="If set, only characters of this class can take this merit. Blank = available to all.",
+    )
+
     effects = models.JSONField(
         default=dict, blank=True,
         help_text=(

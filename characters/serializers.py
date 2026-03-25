@@ -33,6 +33,7 @@ def serialize_character_merit(cm):
         "name": m.name,
         "description": m.description,
         "category": m.category,
+        "classRestriction": m.class_restriction,
         "rating": cm.rating,
         "maxRating": m.cost,
         "minRating": m.min_cost,

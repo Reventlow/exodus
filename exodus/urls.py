@@ -15,6 +15,7 @@ urlpatterns = [
     path("api/pulling-strings/<int:pk>/", views.api_pulling_string_detail, name="api-pulling-string-detail"),
     path("api/merits/", views.api_merits, name="api-merits"),
     path("api/merits/<int:pk>/", views.api_merit_detail, name="api-merit-detail"),
+    path("merits/", views.merits_page, name="merits-page"),
     path("accounts/", include("accounts.urls")),
     path("", include("comms.urls")),
     path("", include("characters.urls")),

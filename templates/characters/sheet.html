@@ -826,10 +826,13 @@
     };
 
     // --- MERITS MODULE (catalog-based) ---
-    const MeritsModule = ({ merits, catalog, onAdd, onRemove, onUpdateRating }) => {
+    const MeritsModule = ({ merits, catalog, characterClass, onAdd, onRemove, onUpdateRating }) => {
         const [showPicker, setShowPicker] = useState(false);
         const ownedMeritIds = merits.map(m => m.meritId);
-        const available = catalog.filter(m => !ownedMeritIds.includes(m.id));
+        const available = catalog.filter(m =>
+            !ownedMeritIds.includes(m.id) &&
+            (!m.classRestriction || m.classRestriction === characterClass)
+        );
 
         const catOrder = ['physical', 'mental', 'social', 'supernatural'];
         const catLabel = c => c.charAt(0).toUpperCase() + c.slice(1);
@@ -2013,6 +2016,7 @@
                     <MeritsModule
                         merits={char.merits || []}
                         catalog={meritCatalog}
+                        characterClass={char.characterClass || ""}
                         onAdd={(meritId, maxRating) => {
                             saveCharacter({ addMerit: { meritId, rating: maxRating } });
                             setTimeout(fetchCharacter, 300);

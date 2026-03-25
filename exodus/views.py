@@ -29,6 +29,12 @@ def site_settings(request):
     return render(request, "site_settings.html", {"settings_obj": settings_obj})
 
 
+@staff_member_required
+def merits_page(request):
+    """Merit catalog management page. Superuser only."""
+    return render(request, "merits_manage.html")
+
+
 @login_required
 @require_GET
 def api_status(request):
@@ -173,6 +179,7 @@ def _serialize_merit(m):
         "cost": m.cost,
         "minCost": m.min_cost,
         "category": m.category,
+        "classRestriction": m.class_restriction,
         "prerequisites": m.prerequisites,
         "effects": m.effects,
     }
@@ -215,6 +222,7 @@ def api_merits(request):
         cost=cost,
         min_cost=min_cost,
         category=category,
+        class_restriction=data.get("classRestriction", ""),
         prerequisites=data.get("prerequisites", ""),
         effects=data.get("effects", {}),
     )
@@ -255,6 +263,8 @@ def api_merit_detail(request, pk):
             valid_categories = [c[0] for c in MeritDefinition.CATEGORY_CHOICES]
             if data["category"] in valid_categories:
                 m.category = data["category"]
+        if "classRestriction" in data:
+            m.class_restriction = data["classRestriction"]
         if "effects" in data:
             m.effects = data["effects"]
         m.save()

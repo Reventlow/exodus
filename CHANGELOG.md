@@ -1,5 +1,12 @@
 # Changelog
 
+## v0.8.8
+- Class restriction on merits — merits can be restricted to specific operative classes (Fixer, Soldier, etc.)
+- Merit management page at /merits/ — staff can add, edit, and delete merits with inline editing, category filtering
+- MERITS link added to navigation bar for staff
+- Class-specific merits: Gun Fu (Soldier), Mechanical Aptitude (Engineer), I Know Someone (Fixer)
+- 67 merits seeded in catalog (Physical, Mental, Social, Supernatural)
+
 ## v0.8.7
 - Merit catalog system — game-level definitions with name, description, dot cost (fixed or variable), category, prerequisites, and mechanical effects
 - Merits selectable from catalog on character sheet with dot rating picker

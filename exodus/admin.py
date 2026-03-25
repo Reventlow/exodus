@@ -43,6 +43,6 @@ class PullingStringAdmin(admin.ModelAdmin):
 
 @admin.register(MeritDefinition)
 class MeritDefinitionAdmin(admin.ModelAdmin):
-    list_display = ("name", "category", "min_cost", "cost", "prerequisites")
-    list_filter = ("category",)
+    list_display = ("name", "category", "class_restriction", "min_cost", "cost", "prerequisites")
+    list_filter = ("category", "class_restriction")
     search_fields = ("name",)

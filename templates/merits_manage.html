@@ -1,0 +1,302 @@
+{% extends "base.html" %}
+
+{% block title %}MERIT CATALOG // BLACKLOG.NET{% endblock %}
+
+{% block content %}
+<div id="app-root">
+    <div class="loading-screen">
+        <h1 class="mono-text">LOADING MERIT CATALOG...</h1>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    const CSRF_TOKEN = '{{ csrf_token }}';
+</script>
+{% verbatim %}
+<script type="text/babel">
+    const { useState, useEffect, useRef } = React;
+
+    function getCookie(name) {
+        let cookieValue = null;
+        if (document.cookie && document.cookie !== '') {
+            const cookies = document.cookie.split(';');
+            for (let i = 0; i < cookies.length; i++) {
+                const cookie = cookies[i].trim();
+                if (cookie.substring(0, name.length + 1) === (name + '='))
+                    cookieValue = decodeURIComponent(cookie.substring(name.length + 1));
+            }
+        }
+        return cookieValue;
+    }
+
+    const CATEGORIES = ['physical', 'mental', 'social', 'supernatural'];
+    const CLASSES = ['', 'fixer', 'soldier', 'science', 'engineer', 'ai'];
+    const catLabel = c => c ? c.charAt(0).toUpperCase() + c.slice(1) : 'All Classes';
+
+    const MeritRow = ({ merit, onSave, onDelete }) => {
+        const [editing, setEditing] = useState(false);
+        const [form, setForm] = useState({ ...merit });
+
+        const save = async () => {
+            const resp = await fetch(`/api/merits/${merit.id}/`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json', 'X-CSRFToken': getCookie('csrftoken') || CSRF_TOKEN },
+                body: JSON.stringify({
+                    name: form.name,
+                    description: form.description,
+                    cost: form.cost,
+                    minCost: form.minCost,
+                    category: form.category,
+                    classRestriction: form.classRestriction,
+                    prerequisites: form.prerequisites,
+                    effects: form.effects,
+                }),
+            });
+            if (resp.ok) {
+                onSave(await resp.json());
+                setEditing(false);
+            }
+        };
+
+        const del = async () => {
+            if (!confirm(`Delete "${merit.name}"?`)) return;
+            const resp = await fetch(`/api/merits/${merit.id}/`, {
+                method: 'DELETE',
+                headers: { 'X-CSRFToken': getCookie('csrftoken') || CSRF_TOKEN },
+            });
+            if (resp.ok) onDelete(merit.id);
+        };
+
+        if (!editing) {
+            return (
+                <tr style={{ borderBottom: '1px solid var(--border-color)' }}>
+                    <td style={{ padding: '0.5rem' }} className="mono-text">{merit.name}</td>
+                    <td style={{ padding: '0.5rem', textAlign: 'center' }}>
+                        {merit.minCost === merit.cost ? merit.cost : `${merit.minCost}-${merit.cost}`}
+                    </td>
+                    <td style={{ padding: '0.5rem' }}>{catLabel(merit.category)}</td>
+                    <td style={{ padding: '0.5rem' }}>{merit.classRestriction ? catLabel(merit.classRestriction) : '—'}</td>
+                    <td style={{ padding: '0.5rem', fontSize: '0.8rem', maxWidth: '300px' }}>{merit.description}</td>
+                    <td style={{ padding: '0.5rem', fontSize: '0.75rem' }}>{merit.prerequisites || '—'}</td>
+                    <td style={{ padding: '0.5rem' }}>
+                        <button onClick={() => setEditing(true)} style={{
+                            background: 'transparent', border: '1px solid var(--accent-primary)',
+                            color: 'var(--accent-primary)', padding: '0.2rem 0.5rem', cursor: 'pointer',
+                            borderRadius: '3px', marginRight: '0.25rem', fontFamily: 'var(--font-mono)', fontSize: '0.75rem'
+                        }}>EDIT</button>
+                        <button onClick={del} style={{
+                            background: 'transparent', border: '1px solid var(--accent-danger)',
+                            color: 'var(--accent-danger)', padding: '0.2rem 0.5rem', cursor: 'pointer',
+                            borderRadius: '3px', fontFamily: 'var(--font-mono)', fontSize: '0.75rem'
+                        }}>DEL</button>
+                    </td>
+                </tr>
+            );
+        }
+
+        const inputStyle = {
+            background: 'transparent', border: '1px solid var(--border-color)',
+            color: 'var(--text-primary)', padding: '0.25rem', width: '100%',
+            fontFamily: 'var(--font-mono)', fontSize: '0.8rem', borderRadius: '3px',
+        };
+        const selectStyle = { ...inputStyle, cursor: 'pointer' };
+
+        return (
+            <tr style={{ borderBottom: '1px solid var(--accent-primary)', background: 'rgba(0,255,136,0.05)' }}>
+                <td style={{ padding: '0.5rem' }}>
+                    <input value={form.name} onChange={e => setForm({ ...form, name: e.target.value })} style={inputStyle} />
+                </td>
+                <td style={{ padding: '0.5rem' }}>
+                    <div style={{ display: 'flex', gap: '0.25rem' }}>
+                        <input type="number" value={form.minCost} onChange={e => setForm({ ...form, minCost: parseInt(e.target.value) || 1 })}
+                            style={{ ...inputStyle, width: '40px', textAlign: 'center' }} />
+                        <span className="text-muted">-</span>
+                        <input type="number" value={form.cost} onChange={e => setForm({ ...form, cost: parseInt(e.target.value) || 1 })}
+                            style={{ ...inputStyle, width: '40px', textAlign: 'center' }} />
+                    </div>
+                </td>
+                <td style={{ padding: '0.5rem' }}>
+                    <select value={form.category} onChange={e => setForm({ ...form, category: e.target.value })} style={selectStyle}>
+                        {CATEGORIES.map(c => <option key={c} value={c} style={{ background: 'var(--bg-dark)' }}>{catLabel(c)}</option>)}
+                    </select>
+                </td>
+                <td style={{ padding: '0.5rem' }}>
+                    <select value={form.classRestriction || ''} onChange={e => setForm({ ...form, classRestriction: e.target.value })} style={selectStyle}>
+                        {CLASSES.map(c => <option key={c} value={c} style={{ background: 'var(--bg-dark)' }}>{catLabel(c)}</option>)}
+                    </select>
+                </td>
+                <td style={{ padding: '0.5rem' }}>
+                    <textarea value={form.description} onChange={e => setForm({ ...form, description: e.target.value })}
+                        style={{ ...inputStyle, minHeight: '50px', resize: 'vertical' }} />
+                </td>
+                <td style={{ padding: '0.5rem' }}>
+                    <input value={form.prerequisites} onChange={e => setForm({ ...form, prerequisites: e.target.value })} style={inputStyle} />
+                </td>
+                <td style={{ padding: '0.5rem' }}>
+                    <button onClick={save} style={{
+                        background: 'var(--accent-primary)', border: 'none',
+                        color: 'var(--bg-dark)', padding: '0.2rem 0.5rem', cursor: 'pointer',
+                        borderRadius: '3px', marginRight: '0.25rem', fontFamily: 'var(--font-mono)', fontSize: '0.75rem'
+                    }}>SAVE</button>
+                    <button onClick={() => { setForm({ ...merit }); setEditing(false); }} style={{
+                        background: 'transparent', border: '1px solid var(--text-muted)',
+                        color: 'var(--text-muted)', padding: '0.2rem 0.5rem', cursor: 'pointer',
+                        borderRadius: '3px', fontFamily: 'var(--font-mono)', fontSize: '0.75rem'
+                    }}>CANCEL</button>
+                </td>
+            </tr>
+        );
+    };
+
+    const MeritsManager = () => {
+        const [merits, setMerits] = useState([]);
+        const [loading, setLoading] = useState(true);
+        const [filter, setFilter] = useState('all');
+        const [showAdd, setShowAdd] = useState(false);
+        const [newMerit, setNewMerit] = useState({
+            name: '', description: '', cost: 1, minCost: 1,
+            category: 'physical', classRestriction: '', prerequisites: '',
+        });
+
+        useEffect(() => {
+            fetch('/api/merits/')
+                .then(r => r.json())
+                .then(data => { setMerits(data); setLoading(false); })
+                .catch(() => setLoading(false));
+        }, []);
+
+        const addMerit = async () => {
+            const resp = await fetch('/api/merits/', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'X-CSRFToken': getCookie('csrftoken') || CSRF_TOKEN },
+                body: JSON.stringify(newMerit),
+            });
+            if (resp.ok) {
+                const created = await resp.json();
+                setMerits([...merits, created]);
+                setNewMerit({ name: '', description: '', cost: 1, minCost: 1, category: 'physical', classRestriction: '', prerequisites: '' });
+                setShowAdd(false);
+            }
+        };
+
+        const filtered = filter === 'all' ? merits : merits.filter(m => m.category === filter);
+
+        if (loading) return <div className="loading-screen"><h1 className="mono-text">LOADING...</h1></div>;
+
+        const inputStyle = {
+            background: 'transparent', border: '1px solid var(--border-color)',
+            color: 'var(--text-primary)', padding: '0.4rem', width: '100%',
+            fontFamily: 'var(--font-mono)', fontSize: '0.85rem', borderRadius: '3px',
+        };
+
+        return (
+            <div className="glass-panel" style={{ padding: '1.5rem', maxWidth: '1400px', margin: '0 auto' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
+                    <h2 className="mono-text text-accent" style={{ margin: 0 }}>MERIT CATALOG ({merits.length})</h2>
+                    <div style={{ display: 'flex', gap: '0.5rem' }}>
+                        {['all', ...CATEGORIES].map(c => (
+                            <button key={c} onClick={() => setFilter(c)} style={{
+                                background: filter === c ? 'var(--accent-primary)' : 'transparent',
+                                border: '1px solid var(--accent-primary)',
+                                color: filter === c ? 'var(--bg-dark)' : 'var(--accent-primary)',
+                                padding: '0.25rem 0.75rem', borderRadius: '3px', cursor: 'pointer',
+                                fontFamily: 'var(--font-mono)', fontSize: '0.75rem',
+                            }}>{c === 'all' ? 'ALL' : c.toUpperCase()}</button>
+                        ))}
+                        <button onClick={() => setShowAdd(!showAdd)} style={{
+                            background: showAdd ? 'var(--accent-danger)' : 'var(--accent-primary)',
+                            border: 'none', color: 'var(--bg-dark)',
+                            padding: '0.25rem 0.75rem', borderRadius: '3px', cursor: 'pointer',
+                            fontFamily: 'var(--font-mono)', fontSize: '0.75rem',
+                        }}>{showAdd ? 'CANCEL' : '+ ADD'}</button>
+                    </div>
+                </div>
+
+                {showAdd && (
+                    <div className="tech-border" style={{ padding: '1rem', marginBottom: '1rem', background: 'rgba(0,255,136,0.05)' }}>
+                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '0.75rem' }}>
+                            <div>
+                                <label className="text-secondary mono-text" style={{ fontSize: '0.7rem' }}>NAME</label>
+                                <input value={newMerit.name} onChange={e => setNewMerit({ ...newMerit, name: e.target.value })} style={inputStyle} />
+                            </div>
+                            <div>
+                                <label className="text-secondary mono-text" style={{ fontSize: '0.7rem' }}>CATEGORY</label>
+                                <select value={newMerit.category} onChange={e => setNewMerit({ ...newMerit, category: e.target.value })} style={{ ...inputStyle, cursor: 'pointer' }}>
+                                    {CATEGORIES.map(c => <option key={c} value={c} style={{ background: 'var(--bg-dark)' }}>{catLabel(c)}</option>)}
+                                </select>
+                            </div>
+                            <div>
+                                <label className="text-secondary mono-text" style={{ fontSize: '0.7rem' }}>CLASS RESTRICTION</label>
+                                <select value={newMerit.classRestriction} onChange={e => setNewMerit({ ...newMerit, classRestriction: e.target.value })} style={{ ...inputStyle, cursor: 'pointer' }}>
+                                    {CLASSES.map(c => <option key={c} value={c} style={{ background: 'var(--bg-dark)' }}>{catLabel(c)}</option>)}
+                                </select>
+                            </div>
+                            <div style={{ display: 'flex', gap: '0.5rem' }}>
+                                <div>
+                                    <label className="text-secondary mono-text" style={{ fontSize: '0.7rem' }}>MIN</label>
+                                    <input type="number" value={newMerit.minCost} onChange={e => setNewMerit({ ...newMerit, minCost: parseInt(e.target.value) || 1 })} style={{ ...inputStyle, textAlign: 'center' }} />
+                                </div>
+                                <div>
+                                    <label className="text-secondary mono-text" style={{ fontSize: '0.7rem' }}>MAX</label>
+                                    <input type="number" value={newMerit.cost} onChange={e => setNewMerit({ ...newMerit, cost: parseInt(e.target.value) || 1 })} style={{ ...inputStyle, textAlign: 'center' }} />
+                                </div>
+                            </div>
+                            <div>
+                                <label className="text-secondary mono-text" style={{ fontSize: '0.7rem' }}>PREREQUISITES</label>
+                                <input value={newMerit.prerequisites} onChange={e => setNewMerit({ ...newMerit, prerequisites: e.target.value })} style={inputStyle} />
+                            </div>
+                            <div style={{ gridColumn: '1 / -1' }}>
+                                <label className="text-secondary mono-text" style={{ fontSize: '0.7rem' }}>DESCRIPTION</label>
+                                <textarea value={newMerit.description} onChange={e => setNewMerit({ ...newMerit, description: e.target.value })}
+                                    style={{ ...inputStyle, minHeight: '60px', resize: 'vertical' }} />
+                            </div>
+                        </div>
+                        <button onClick={addMerit} disabled={!newMerit.name} style={{
+                            background: newMerit.name ? 'var(--accent-primary)' : 'transparent',
+                            border: '1px solid var(--accent-primary)',
+                            color: newMerit.name ? 'var(--bg-dark)' : 'var(--text-muted)',
+                            padding: '0.4rem 1rem', borderRadius: '3px', cursor: newMerit.name ? 'pointer' : 'default',
+                            fontFamily: 'var(--font-mono)', fontSize: '0.85rem', marginTop: '0.75rem',
+                        }}>CREATE MERIT</button>
+                    </div>
+                )}
+
+                <div style={{ overflowX: 'auto' }}>
+                    <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                        <thead>
+                            <tr style={{ borderBottom: '2px solid var(--accent-primary)' }}>
+                                <th className="mono-text text-accent" style={{ padding: '0.5rem', textAlign: 'left', fontSize: '0.75rem' }}>NAME</th>
+                                <th className="mono-text text-accent" style={{ padding: '0.5rem', textAlign: 'center', fontSize: '0.75rem' }}>DOTS</th>
+                                <th className="mono-text text-accent" style={{ padding: '0.5rem', textAlign: 'left', fontSize: '0.75rem' }}>TYPE</th>
+                                <th className="mono-text text-accent" style={{ padding: '0.5rem', textAlign: 'left', fontSize: '0.75rem' }}>CLASS</th>
+                                <th className="mono-text text-accent" style={{ padding: '0.5rem', textAlign: 'left', fontSize: '0.75rem' }}>DESCRIPTION</th>
+                                <th className="mono-text text-accent" style={{ padding: '0.5rem', textAlign: 'left', fontSize: '0.75rem' }}>PREREQ</th>
+                                <th className="mono-text text-accent" style={{ padding: '0.5rem', textAlign: 'left', fontSize: '0.75rem' }}>ACTIONS</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {filtered.map(m => (
+                                <MeritRow key={m.id} merit={m}
+                                    onSave={updated => setMerits(merits.map(x => x.id === updated.id ? updated : x))}
+                                    onDelete={id => setMerits(merits.filter(x => x.id !== id))} />
+                            ))}
+                        </tbody>
+                    </table>
+                </div>
+
+                {filtered.length === 0 && (
+                    <p className="text-muted text-center mono-text" style={{ padding: '2rem' }}>
+                        No merits in this category.
+                    </p>
+                )}
+            </div>
+        );
+    };
+
+    const root = ReactDOM.createRoot(document.getElementById('app-root'));
+    root.render(<MeritsManager />);
+</script>
+{% endverbatim %}
+{% endblock %}
