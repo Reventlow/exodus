@@ -974,19 +974,25 @@
                                 textAlign: 'center', fontSize: '1.5rem'
                             }} />
                     </div>
-                    <div className="tech-border text-center" style={{ padding: '0.5rem' }}>
+                    <div className="tech-border text-center" style={{
+                        padding: '0.5rem', position: 'relative', cursor: 'default'
+                    }}
+                        title={[
+                            `Attributes: ${creation.attrXp} XP (above 5/4/3 creation)`,
+                            `Skills: ${creation.skillXp} XP (above 11/7/4 creation)`,
+                            `Specialisations: ${creation.specXp} XP (above 3 free)`,
+                            `Merits: ${creation.meritXp} XP (above 7 free dots)`,
+                            `Pulling Strings: ${psCost} XP`,
+                            `─────────`,
+                            `Total Auto: ${autoXp} XP`,
+                        ].join('\n')}
+                    >
                         <div className="text-secondary mono-text" style={{ fontSize: '0.8rem' }}>AUTO</div>
                         <div style={{ fontSize: '1.5rem', color: 'var(--text-primary)' }}>
                             {autoXp}
                         </div>
-                        <div style={{ fontSize: '0.6rem', color: 'var(--text-muted)', lineHeight: 1.3 }}>
-                            {[
-                                creation.attrXp > 0 && `Attr ${creation.attrXp}`,
-                                creation.skillXp > 0 && `Skill ${creation.skillXp}`,
-                                creation.specXp > 0 && `Spec ${creation.specXp}`,
-                                creation.meritXp > 0 && `Merit ${creation.meritXp}`,
-                                psCost > 0 && `PS ${psCost}`,
-                            ].filter(Boolean).join(' · ') || 'None'}
+                        <div style={{ fontSize: '0.65rem', color: 'var(--text-muted)' }}>
+                            Hover for details
                         </div>
                     </div>
                     <div className="tech-border text-center" style={{ padding: '0.5rem' }}>

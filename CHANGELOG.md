@@ -1,5 +1,8 @@
 # Changelog
 
+## v0.8.5
+- Hover tooltip on AUTO XP showing full calculation breakdown (attributes, skills, specialisations, merits, pulling strings)
+
 ## v0.8.4
 - Personal NPC pulling string can now be linked to an NPC dossier (3 XP cost)
 - Linkable pulling strings support — can be taken multiple times, each linked to a different NPC
