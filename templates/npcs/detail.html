@@ -291,6 +291,18 @@
                         }}>{npc.name || 'UNKNOWN'}</div>
                     </div>
                     <div>
+                        <label className="text-secondary mono-text" style={{ fontSize: '0.8rem' }}>CLASS</label>
+                        <div style={{
+                            color: npc.characterClass === 'classified'
+                                ? 'var(--accent-danger)' : 'var(--text-primary)',
+                            fontStyle: npc.characterClass === 'classified' ? 'italic' : 'normal'
+                        }}>
+                            {npc.characterClass === 'classified' ? 'CLASSIFIED'
+                                : npc.characterClass ? npc.characterClass.charAt(0).toUpperCase() + npc.characterClass.slice(1)
+                                : '-'}
+                        </div>
+                    </div>
+                    <div>
                         <label className="text-secondary mono-text" style={{ fontSize: '0.8rem' }}>AGE</label>
                         <div style={{ color: 'var(--text-primary)' }}>{npc.age || '-'}</div>
                     </div>
@@ -331,6 +343,38 @@
                             color: 'var(--text-primary)', width: '100%',
                             fontSize: '1.2rem', fontFamily: 'var(--font-mono)'
                         }} />
+                </div>
+                <div>
+                    <label className="text-secondary mono-text" style={{ fontSize: '0.8rem' }}>CLASS</label>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                        <select value={npc.characterClass || ""}
+                            onChange={e => onSave({ characterClass: e.target.value })}
+                            style={{
+                                background: 'transparent', border: 'none',
+                                borderBottom: '1px solid var(--border-color)',
+                                color: 'var(--text-primary)', flex: 1,
+                                fontFamily: 'var(--font-mono)', cursor: 'pointer'
+                            }}>
+                            <option value="" style={{ background: 'var(--bg-dark)' }}>— SELECT —</option>
+                            <option value="fixer" style={{ background: 'var(--bg-dark)' }}>Fixer</option>
+                            <option value="soldier" style={{ background: 'var(--bg-dark)' }}>Soldier</option>
+                            <option value="science" style={{ background: 'var(--bg-dark)' }}>Science</option>
+                            <option value="engineer" style={{ background: 'var(--bg-dark)' }}>Engineer</option>
+                            {IS_ADMIN && <option value="ai" style={{ background: 'var(--bg-dark)' }}>AI</option>}
+                        </select>
+                        {IS_ADMIN && IS_NPC_DOSSIER && (
+                            <label style={{
+                                display: 'flex', alignItems: 'center', gap: '0.25rem',
+                                fontSize: '0.7rem', color: npc.classClassified ? 'var(--accent-danger)' : 'var(--text-muted)',
+                                cursor: 'pointer', whiteSpace: 'nowrap'
+                            }} title="Mark class as classified for non-admins">
+                                <input type="checkbox" checked={npc.classClassified || false}
+                                    onChange={e => onSave({ classClassified: e.target.checked })}
+                                    style={{ accentColor: 'var(--accent-danger)' }} />
+                                CLASSIFIED
+                            </label>
+                        )}
+                    </div>
                 </div>
                 <div>
                     <label className="text-secondary mono-text" style={{ fontSize: '0.8rem' }}>AGE</label>

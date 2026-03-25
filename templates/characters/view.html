@@ -25,6 +25,7 @@
     const DEFAULT_CHARACTER = {
         id: null,
         name: "UNKNOWN AGENT",
+        characterClass: "",
         concept: "",
         chronicle: "",
         virtue: "",
@@ -140,6 +141,18 @@
                     paddingBottom: '0.25rem'
                 }}>
                     {char.name}
+                </div>
+            </div>
+            <div>
+                <label className="text-secondary mono-text" style={{ fontSize: '0.8rem' }}>CLASS</label>
+                <div style={{
+                    borderBottom: '1px solid var(--border-color)',
+                    color: 'var(--text-primary)', width: '100%',
+                    paddingBottom: '0.25rem'
+                }}>
+                    {char.characterClass
+                        ? char.characterClass.charAt(0).toUpperCase() + char.characterClass.slice(1)
+                        : <span className="text-muted">—</span>}
                 </div>
             </div>
             <div>

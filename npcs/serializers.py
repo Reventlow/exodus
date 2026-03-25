@@ -18,9 +18,17 @@ def serialize_npc(npc, is_admin=False):
 
     Stats (attributes, skills, health, etc.) are only included for superusers.
     """
+    # Class visibility: show as CLASSIFIED for non-admins when flagged
+    if is_admin or not npc.class_classified:
+        char_class = npc.character_class
+    else:
+        char_class = "classified"
+
     data = {
         "id": npc.id,
         "name": npc.name,
+        "characterClass": char_class,
+        "classClassified": npc.class_classified if is_admin else None,
         "image": npc.image.url if npc.image else None,
         "age": npc.age,
         "sex": npc.sex,
@@ -65,11 +73,17 @@ def serialize_npc(npc, is_admin=False):
     return data
 
 
-def serialize_npc_summary(npc):
+def serialize_npc_summary(npc, is_admin=False):
     """Brief NPC data for list views."""
+    if is_admin or not npc.class_classified:
+        char_class = npc.character_class
+    else:
+        char_class = "classified"
+
     return {
         "id": npc.id,
         "name": npc.name,
+        "characterClass": char_class,
         "image": npc.image.url if npc.image else None,
         "nationality": npc.nationality,
         "occupation": npc.occupation,

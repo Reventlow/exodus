@@ -59,7 +59,7 @@ def api_npc_list(request):
         npcs = NPC.objects.select_related("assigned_to", "agency").all()
         if not request.user.is_superuser:
             npcs = npcs.filter(is_hidden=False)
-        data = [serialize_npc_summary(n) for n in npcs]
+        data = [serialize_npc_summary(n, is_admin=request.user.is_superuser) for n in npcs]
         return JsonResponse(data, safe=False)
 
     # POST - create new NPC
@@ -145,6 +145,22 @@ def api_npc_detail(request, pk):
             valid_states = [s[0] for s in NPC.STATE_CHOICES]
             if data["state"] in valid_states:
                 npc.state = data["state"]
+
+        # Update class — superuser can set any class; others cannot set AI
+        if "characterClass" in data:
+            valid_classes = [c[0] for c in NPC.CLASS_CHOICES]
+            new_class = data["characterClass"]
+            if new_class in valid_classes:
+                if new_class == "ai" and not request.user.is_superuser:
+                    pass  # Non-admins cannot set AI class
+                else:
+                    npc.character_class = new_class
+            elif new_class == "":
+                npc.character_class = ""
+
+        # Classified toggle — superuser only
+        if "classClassified" in data and request.user.is_superuser:
+            npc.class_classified = bool(data["classClassified"])
 
         # Admin can reassign (player contacts)
         if "assignedToId" in data and request.user.is_superuser:

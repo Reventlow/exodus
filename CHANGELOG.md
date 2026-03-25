@@ -1,5 +1,10 @@
 # Changelog
 
+## v0.8.2
+- Class selection on character sheets and NPC dossiers — Fixer, Soldier, Science, Engineer, AI
+- AI class restricted to superusers only
+- Superusers can mark NPC dossier class as CLASSIFIED (hidden from players)
+
 ## v0.8.1
 - Experience points tracking on character sheet — total XP, used XP, and auto-calculated remaining XP
 

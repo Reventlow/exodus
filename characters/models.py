@@ -48,12 +48,23 @@ def default_skills():
 
 
 class Character(models.Model):
+    CLASS_CHOICES = [
+        ("fixer", "Fixer"),
+        ("soldier", "Soldier"),
+        ("science", "Science"),
+        ("engineer", "Engineer"),
+        ("ai", "AI"),
+    ]
+
     owner = models.ForeignKey(
         User, on_delete=models.CASCADE, related_name="characters"
     )
 
     # Info
     name = models.CharField(max_length=200, default="UNKNOWN AGENT")
+    character_class = models.CharField(
+        max_length=20, choices=CLASS_CHOICES, blank=True, default=""
+    )
     concept = models.CharField(max_length=200, blank=True, default="")
     chronicle = models.CharField(max_length=200, blank=True, default="")
     virtue = models.CharField(max_length=100, blank=True, default="")

@@ -29,6 +29,7 @@ def character_sheet_page(request, pk):
     return render(request, template, {
         "character_id": character.id,
         "is_owner": is_owner,
+        "is_superuser": request.user.is_superuser,
     })
 
 
@@ -89,6 +90,18 @@ def api_character_detail(request, pk):
         for field in ("name", "concept", "chronicle", "virtue", "vice", "dossier"):
             if field in data:
                 setattr(character, field, data[field])
+
+        # Update class — non-superusers cannot set AI
+        if "characterClass" in data:
+            valid_classes = [c[0] for c in Character.CLASS_CHOICES]
+            new_class = data["characterClass"]
+            if new_class in valid_classes:
+                if new_class == "ai" and not request.user.is_superuser:
+                    pass  # Non-admins cannot set AI class
+                else:
+                    character.character_class = new_class
+            elif new_class == "":
+                character.character_class = ""
 
         # Update JSON fields
         if "attributes" in data:

@@ -12,7 +12,22 @@ class NPC(models.Model):
         ("deceased", "Deceased"),
     ]
 
+    CLASS_CHOICES = [
+        ("fixer", "Fixer"),
+        ("soldier", "Soldier"),
+        ("science", "Science"),
+        ("engineer", "Engineer"),
+        ("ai", "AI"),
+    ]
+
     name = models.CharField(max_length=200)
+    character_class = models.CharField(
+        max_length=20, choices=CLASS_CHOICES, blank=True, default=""
+    )
+    class_classified = models.BooleanField(
+        default=False,
+        help_text="If true, the class is shown as CLASSIFIED to non-superusers.",
+    )
     image = models.ImageField(upload_to="npc_portraits/", blank=True, null=True)
     age = models.IntegerField(blank=True, null=True)
     sex = models.CharField(max_length=50, blank=True, default="")

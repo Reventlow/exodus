@@ -15,6 +15,7 @@
     // Django context variables — outside verbatim block
     const CHARACTER_ID = {{ character_id }};
     const IS_OWNER = {{ is_owner|yesno:"true,false" }};
+    const IS_SUPERUSER = {{ is_superuser|yesno:"true,false" }};
     const CSRF_TOKEN = '{{ csrf_token }}';
 </script>
 {% verbatim %}
@@ -41,6 +42,7 @@
     const DEFAULT_CHARACTER = {
         id: null,
         name: "UNKNOWN AGENT",
+        characterClass: "",
         concept: "",
         chronicle: "",
         virtue: "",
@@ -283,6 +285,25 @@
                         color: 'var(--text-primary)', width: '100%',
                         fontSize: '1.2rem', fontFamily: 'var(--font-mono)'
                     }} />
+            </div>
+            <div>
+                <label className="text-secondary mono-text" style={{ fontSize: '0.8rem' }}>CLASS</label>
+                <select value={char.characterClass || ""}
+                    onChange={e => onSave({ characterClass: e.target.value })}
+                    disabled={!IS_OWNER}
+                    style={{
+                        background: 'transparent', border: 'none',
+                        borderBottom: '1px solid var(--border-color)',
+                        color: 'var(--text-primary)', width: '100%',
+                        fontFamily: 'var(--font-mono)', cursor: 'pointer'
+                    }}>
+                    <option value="" style={{ background: 'var(--bg-dark)' }}>— SELECT —</option>
+                    <option value="fixer" style={{ background: 'var(--bg-dark)' }}>Fixer</option>
+                    <option value="soldier" style={{ background: 'var(--bg-dark)' }}>Soldier</option>
+                    <option value="science" style={{ background: 'var(--bg-dark)' }}>Science</option>
+                    <option value="engineer" style={{ background: 'var(--bg-dark)' }}>Engineer</option>
+                    {IS_SUPERUSER && <option value="ai" style={{ background: 'var(--bg-dark)' }}>AI</option>}
+                </select>
             </div>
             <div>
                 <label className="text-secondary mono-text" style={{ fontSize: '0.8rem' }}>CONCEPT</label>

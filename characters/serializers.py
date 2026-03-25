@@ -8,6 +8,7 @@ def serialize_character(character):
         "owner": character.owner.username,
         "owner_id": character.owner.id,
         "name": character.name,
+        "characterClass": character.character_class,
         "concept": character.concept,
         "chronicle": character.chronicle,
         "virtue": character.virtue,
