@@ -161,3 +161,23 @@ class CharacterMerit(models.Model):
 
     def __str__(self):
         return f"{self.character.name}: {self.merit.name} ({self.rating})"
+
+
+class XpTransferLog(models.Model):
+    """Log of XP transfers from character to agency."""
+
+    character = models.ForeignKey(
+        Character, on_delete=models.CASCADE, related_name="xp_transfers"
+    )
+    agency = models.ForeignKey(
+        "agencies.Agency", on_delete=models.CASCADE, related_name="xp_transfers"
+    )
+    amount = models.IntegerField(help_text="Character XP spent.")
+    agency_received = models.IntegerField(help_text="Agency XP gained.")
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+
+    def __str__(self):
+        return f"{self.character.name} → {self.agency.name}: {self.amount} XP ({self.created_at:%Y-%m-%d})"

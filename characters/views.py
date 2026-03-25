@@ -8,7 +8,7 @@ from django.views.decorators.http import require_http_methods
 
 from django.db import transaction
 
-from .models import Character, CharacterPullingString, CharacterMerit
+from .models import Character, CharacterPullingString, CharacterMerit, XpTransferLog
 from .serializers import serialize_character, serialize_character_summary
 from agencies.models import Agency
 from exodus.models import MeritDefinition, PullingString
@@ -302,6 +302,12 @@ def api_transfer_xp(request, pk):
         character.save()
         agency.experience += amount * 10
         agency.save()
+        XpTransferLog.objects.create(
+            character=character,
+            agency=agency,
+            amount=amount,
+            agency_received=amount * 10,
+        )
 
     return JsonResponse({
         "status": "Transfer complete.",

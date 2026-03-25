@@ -1,5 +1,8 @@
 # Changelog
 
+## v0.8.13
+- XP transfer log — shows history of transfers with amount, agency, agency XP received, and date
+
 ## v0.8.12
 - XP protester now twice as tall (120px), walks slowly (12s cycle), and gets its own dedicated zone above the EXPERIENCE header
 

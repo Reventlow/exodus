@@ -83,6 +83,15 @@ def serialize_character(character):
         "experienceUsed": character.experience_used,
         "pullingStringsCost": sum(cps.pulling_string.cost for cps in cps_entries),
         "willpower": {"current": character.willpower_current},
+        "xpTransfers": [
+            {
+                "amount": t.amount,
+                "agencyReceived": t.agency_received,
+                "agencyName": t.agency.name,
+                "date": t.created_at.isoformat(),
+            }
+            for t in character.xp_transfers.select_related("agency").all()[:20]
+        ],
     }
 
 
