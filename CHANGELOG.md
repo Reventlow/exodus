@@ -1,5 +1,9 @@
 # Changelog
 
+## v0.8.20
+- Click-to-enlarge lightbox on character portrait images (edit and read-only views)
+- Owners: click image to enlarge, click CHANGE bar to upload; non-owners: click to enlarge
+
 ## v0.8.19
 - Explainer text above mental load boxes showing formula breakdown and penalty escalation
 

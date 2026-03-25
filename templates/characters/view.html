@@ -90,22 +90,51 @@
         );
     };
 
-    // --- PROFILE PICTURE (read-only) ---
-    const ProfilePictureReadOnly = ({ profilePicture }) => (
-        <div style={{ display: 'flex', justifyContent: 'center', marginBottom: '1rem' }}>
-            <div style={{
-                width: '150px', height: '150px', borderRadius: '50%',
-                border: '2px solid var(--accent-primary)',
-                overflow: 'hidden',
-                background: profilePicture ? `url(${profilePicture}) center/cover` : 'var(--bg-panel)',
-                display: 'flex', alignItems: 'center', justifyContent: 'center',
+    // Image lightbox modal
+    const ImageLightbox = ({ src, alt, onClose }) => {
+        if (!src) return null;
+        return ReactDOM.createPortal(
+            <div onClick={onClose} style={{
+                position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
+                background: 'rgba(0,0,0,0.85)', display: 'flex',
+                alignItems: 'center', justifyContent: 'center', zIndex: 2000, cursor: 'pointer',
             }}>
-                {!profilePicture && (
-                    <Icon name="user" size={48} className="text-muted" />
+                <img src={src} alt={alt || 'Image'} onClick={e => e.stopPropagation()} style={{
+                    maxWidth: '90vw', maxHeight: '90vh', objectFit: 'contain',
+                    border: '2px solid var(--border-color)', borderRadius: '4px', cursor: 'default',
+                }} />
+            </div>,
+            document.body
+        );
+    };
+
+    // --- PROFILE PICTURE (read-only with lightbox) ---
+    const ProfilePictureReadOnly = ({ profilePicture }) => {
+        const [showLightbox, setShowLightbox] = useState(false);
+        return (
+            <div style={{ display: 'flex', justifyContent: 'center', marginBottom: '1rem' }}>
+                <div
+                    onClick={() => profilePicture && setShowLightbox(true)}
+                    style={{
+                        width: '150px', height: '150px', borderRadius: '50%',
+                        border: '2px solid var(--accent-primary)',
+                        overflow: 'hidden', cursor: profilePicture ? 'pointer' : 'default',
+                        background: profilePicture ? `url(${profilePicture}) center/cover` : 'var(--bg-panel)',
+                        display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    }}
+                    title={profilePicture ? 'Click to enlarge' : ''}
+                >
+                    {!profilePicture && (
+                        <Icon name="user" size={48} className="text-muted" />
+                    )}
+                </div>
+                {showLightbox && (
+                    <ImageLightbox src={profilePicture} alt="Portrait"
+                        onClose={() => setShowLightbox(false)} />
                 )}
             </div>
-        </div>
-    );
+        );
+    };
 
     // --- DOSSIER MODULE (read-only) ---
     const DossierReadOnly = ({ dossier }) => {
