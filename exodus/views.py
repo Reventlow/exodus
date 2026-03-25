@@ -10,7 +10,7 @@ from django.http import JsonResponse
 from django.shortcuts import redirect, render
 from django.views.decorators.http import require_GET, require_http_methods
 
-from .models import PullingString, SiteSettings
+from .models import MeritDefinition, PullingString, SiteSettings
 
 
 @staff_member_required
@@ -157,4 +157,109 @@ def api_pulling_string_detail(request, pk):
 
     if request.method == "DELETE":
         ps.delete()
+        return JsonResponse({"status": "Record terminated."})
+
+
+# ---------------------------------------------------------------------------
+# Merits catalog API
+# ---------------------------------------------------------------------------
+
+def _serialize_merit(m):
+    """Serialize a MeritDefinition catalog entry."""
+    return {
+        "id": m.id,
+        "name": m.name,
+        "description": m.description,
+        "cost": m.cost,
+        "minCost": m.min_cost,
+        "category": m.category,
+        "prerequisites": m.prerequisites,
+        "effects": m.effects,
+    }
+
+
+@login_required
+@require_http_methods(["GET", "POST"])
+def api_merits(request):
+    """GET: list all merit definitions. POST: create (admin only)."""
+    if request.method == "GET":
+        return JsonResponse(
+            [_serialize_merit(m) for m in MeritDefinition.objects.all()],
+            safe=False,
+        )
+
+    if not request.user.is_superuser:
+        return JsonResponse(
+            {"error": "ACCESS DENIED. Administrator clearance required."},
+            status=403,
+        )
+
+    try:
+        data = json.loads(request.body)
+    except json.JSONDecodeError:
+        return JsonResponse({"error": "Invalid data stream."}, status=400)
+
+    valid_categories = [c[0] for c in MeritDefinition.CATEGORY_CHOICES]
+    category = data.get("category", "physical")
+    if category not in valid_categories:
+        return JsonResponse(
+            {"error": f"Invalid category. Use: {valid_categories}"}, status=400
+        )
+
+    cost = data.get("cost", 1)
+    min_cost = data.get("minCost", cost)
+
+    m = MeritDefinition.objects.create(
+        name=data.get("name", ""),
+        description=data.get("description", ""),
+        cost=cost,
+        min_cost=min_cost,
+        category=category,
+        prerequisites=data.get("prerequisites", ""),
+        effects=data.get("effects", {}),
+    )
+    return JsonResponse(_serialize_merit(m), status=201)
+
+
+@login_required
+@require_http_methods(["GET", "PUT", "DELETE"])
+def api_merit_detail(request, pk):
+    """GET: single merit. PUT/DELETE: admin only."""
+    from django.shortcuts import get_object_or_404
+
+    m = get_object_or_404(MeritDefinition, pk=pk)
+
+    if request.method == "GET":
+        return JsonResponse(_serialize_merit(m))
+
+    if not request.user.is_superuser:
+        return JsonResponse(
+            {"error": "ACCESS DENIED. Administrator clearance required."},
+            status=403,
+        )
+
+    if request.method == "PUT":
+        try:
+            data = json.loads(request.body)
+        except json.JSONDecodeError:
+            return JsonResponse({"error": "Invalid data stream."}, status=400)
+
+        for field in ("name", "description", "prerequisites"):
+            if field in data:
+                setattr(m, field, data[field])
+        if "cost" in data:
+            m.cost = data["cost"]
+        if "minCost" in data:
+            m.min_cost = data["minCost"]
+        if "category" in data:
+            valid_categories = [c[0] for c in MeritDefinition.CATEGORY_CHOICES]
+            if data["category"] in valid_categories:
+                m.category = data["category"]
+        if "effects" in data:
+            m.effects = data["effects"]
+        m.save()
+        return JsonResponse(_serialize_merit(m))
+
+    if request.method == "DELETE":
+        m.delete()
         return JsonResponse({"status": "Record terminated."})

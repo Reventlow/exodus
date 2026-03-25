@@ -6,7 +6,7 @@ from django.db import migrations
 def set_personal_npc(apps, schema_editor):
     PullingString = apps.get_model("exodus", "PullingString")
     PullingString.objects.filter(name="Personal NPC").update(
-        is_linkable=True, cost=3,
+        is_linkable=True, cost=2,
     )
 
 

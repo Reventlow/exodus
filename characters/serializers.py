@@ -24,11 +24,30 @@ def serialize_character_pulling_string(cps):
     return data
 
 
+def serialize_character_merit(cm):
+    """Serialize a through-table entry (merit + chosen rating)."""
+    m = cm.merit
+    return {
+        "id": cm.id,
+        "meritId": m.id,
+        "name": m.name,
+        "description": m.description,
+        "category": m.category,
+        "rating": cm.rating,
+        "maxRating": m.cost,
+        "minRating": m.min_cost,
+        "prerequisites": m.prerequisites,
+        "effects": m.effects,
+    }
+
+
 def serialize_character(character):
     """Full character data for API responses."""
     cps_entries = character.character_pulling_strings.select_related(
         "pulling_string", "linked_npc"
     ).all()
+
+    cm_entries = character.character_merits.select_related("merit").all()
 
     return {
         "id": character.id,
@@ -51,7 +70,7 @@ def serialize_character(character):
         },
         "size": character.size,
         "mentalLoad": character.mental_load,
-        "merits": character.merits,
+        "merits": [serialize_character_merit(cm) for cm in cm_entries],
         "flaws": character.flaws,
         "pullingStrings": [
             serialize_character_pulling_string(cps)

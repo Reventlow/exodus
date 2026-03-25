@@ -8,10 +8,10 @@ from django.views.decorators.http import require_http_methods
 
 from django.db import transaction
 
-from .models import Character, CharacterPullingString
+from .models import Character, CharacterPullingString, CharacterMerit
 from .serializers import serialize_character, serialize_character_summary
 from agencies.models import Agency
-from exodus.models import PullingString
+from exodus.models import MeritDefinition, PullingString
 
 
 # ---------------------------------------------------------------------------
@@ -112,8 +112,40 @@ def api_character_detail(request, pk):
             character.attributes = data["attributes"]
         if "skills" in data:
             character.skills = data["skills"]
-        if "merits" in data:
-            character.merits = data["merits"]
+        # Add a merit (creates through-table entry)
+        if "addMerit" in data:
+            merit_id = data["addMerit"].get("meritId")
+            rating = data["addMerit"].get("rating", 1)
+            try:
+                merit = MeritDefinition.objects.get(pk=merit_id)
+                rating = max(merit.min_cost, min(merit.cost, rating))
+                if not CharacterMerit.objects.filter(
+                    character=character, merit=merit
+                ).exists():
+                    CharacterMerit.objects.create(
+                        character=character, merit=merit, rating=rating
+                    )
+            except MeritDefinition.DoesNotExist:
+                pass
+
+        # Remove a merit (by through-table ID)
+        if "removeMerit" in data:
+            CharacterMerit.objects.filter(
+                pk=data["removeMerit"], character=character
+            ).delete()
+
+        # Update merit rating
+        if "updateMeritRating" in data:
+            cm_id = data["updateMeritRating"].get("id")
+            new_rating = data["updateMeritRating"].get("rating", 1)
+            try:
+                cm = CharacterMerit.objects.select_related("merit").get(
+                    pk=cm_id, character=character
+                )
+                cm.rating = max(cm.merit.min_cost, min(cm.merit.cost, new_rating))
+                cm.save()
+            except CharacterMerit.DoesNotExist:
+                pass
         if "flaws" in data:
             character.flaws = data["flaws"]
         # Add a pulling string (creates through-table entry)

@@ -1,5 +1,14 @@
 # Changelog
 
+## v0.8.7
+- Merit catalog system — game-level definitions with name, description, dot cost (fixed or variable), category, prerequisites, and mechanical effects
+- Merits selectable from catalog on character sheet with dot rating picker
+- Merit effects engine — merits can modify health, size, speed, willpower, and provide stat/skill bonuses and difficulty modifiers
+- Derived traits (health, willpower, speed) automatically updated by merit effects
+- MCP tools: list_merits, create_merit, update_merit, delete_merit
+- API endpoints: GET/POST /api/merits/, GET/PUT/DELETE /api/merits/<id>/
+- Django admin registration for MeritDefinition model
+
 ## v0.8.6
 - Personal NPC pulling string picker now only shows NPCs assigned to the current player
 

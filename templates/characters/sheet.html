@@ -568,11 +568,13 @@
 
     // --- DERIVED TRAITS MODULE ---
     const DerivedTraitsModule = ({ char, update }) => {
-        const speed = 5 + char.attributes.power.physical + char.attributes.finesse.physical + (char.size || 5);
+        const me = useMemo(() => computeMeritEffects(char.merits), [char.merits]);
+        const effectiveSize = (char.size || 5) + me.sizeMod;
+        const speed = 5 + char.attributes.power.physical + char.attributes.finesse.physical + effectiveSize + me.speedMod;
         const initMod = char.attributes.finesse.physical + char.attributes.resistance.social;
         const defense = Math.min(char.attributes.finesse.physical, char.attributes.finesse.mental);
-        const willpowerMax = char.attributes.resistance.mental + char.attributes.resistance.social;
-        const healthMax = char.attributes.resistance.physical + (char.size || 5);
+        const willpowerMax = char.attributes.resistance.mental + char.attributes.resistance.social + me.willpowerMod;
+        const healthMax = char.attributes.resistance.physical + effectiveSize + me.extraHealth;
 
         return (
             <div className="glass-panel" style={{ padding: '1.5rem', marginBottom: '1rem' }}>
@@ -784,6 +786,182 @@
                 {pullingStrings.length === 0 && !showPicker && (
                     <p className="text-muted text-center" style={{ fontSize: '0.8rem', fontStyle: 'italic' }}>
                         No pulling strings acquired.
+                    </p>
+                )}
+            </div>
+        );
+    };
+
+    // --- MERIT EFFECTS COMPUTATION ---
+    // Aggregates all mechanical effects from a character's merits.
+    const computeMeritEffects = (merits) => {
+        const effects = {
+            extraHealth: 0, sizeMod: 0, speedMod: 0, willpowerMod: 0,
+            statBonuses: {}, skillBonuses: {}, difficultyMods: {}, customs: [],
+        };
+        (merits || []).forEach(m => {
+            const e = m.effects || {};
+            if (e.extra_health) effects.extraHealth += e.extra_health;
+            if (e.size_mod) effects.sizeMod += e.size_mod;
+            if (e.speed_mod) effects.speedMod += e.speed_mod;
+            if (e.willpower_mod) effects.willpowerMod += e.willpower_mod;
+            if (e.stat_bonus) {
+                Object.entries(e.stat_bonus).forEach(([k, v]) => {
+                    effects.statBonuses[k] = (effects.statBonuses[k] || 0) + v;
+                });
+            }
+            if (e.skill_bonus) {
+                Object.entries(e.skill_bonus).forEach(([k, v]) => {
+                    effects.skillBonuses[k] = (effects.skillBonuses[k] || 0) + v;
+                });
+            }
+            if (e.difficulty_mod) {
+                Object.entries(e.difficulty_mod).forEach(([k, v]) => {
+                    effects.difficultyMods[k] = (effects.difficultyMods[k] || 0) + v;
+                });
+            }
+            if (e.custom) effects.customs.push(`${m.name}: ${e.custom}`);
+        });
+        return effects;
+    };
+
+    // --- MERITS MODULE (catalog-based) ---
+    const MeritsModule = ({ merits, catalog, onAdd, onRemove, onUpdateRating }) => {
+        const [showPicker, setShowPicker] = useState(false);
+        const ownedMeritIds = merits.map(m => m.meritId);
+        const available = catalog.filter(m => !ownedMeritIds.includes(m.id));
+
+        const catOrder = ['physical', 'mental', 'social', 'supernatural'];
+        const catLabel = c => c.charAt(0).toUpperCase() + c.slice(1);
+
+        // Group by category
+        const categories = {};
+        merits.forEach(m => {
+            const cat = m.category || 'physical';
+            if (!categories[cat]) categories[cat] = [];
+            categories[cat].push(m);
+        });
+
+        return (
+            <div className="glass-panel" style={{ padding: '1.5rem', marginBottom: '1rem' }}>
+                <h3 className="mono-text text-accent" style={{
+                    borderBottom: '1px solid var(--border-color)',
+                    paddingBottom: '0.5rem', marginBottom: '1rem',
+                    display: 'flex', justifyContent: 'space-between', alignItems: 'center'
+                }}>
+                    MERITS
+                    {IS_OWNER && (
+                        <button onClick={() => setShowPicker(!showPicker)} title={showPicker ? "Close" : "Add Merit"} style={{
+                            background: 'transparent', border: '1px solid var(--accent-primary)',
+                            color: 'var(--accent-primary)', width: '24px', height: '24px',
+                            borderRadius: '4px', cursor: 'pointer',
+                            display: 'flex', alignItems: 'center', justifyContent: 'center'
+                        }}>
+                            <Icon name={showPicker ? "x" : "plus"} size={14} />
+                        </button>
+                    )}
+                </h3>
+
+                {showPicker && (
+                    <div style={{
+                        border: '1px solid var(--accent-primary)',
+                        borderRadius: '4px', padding: '0.75rem', marginBottom: '1rem',
+                        background: 'rgba(0,0,0,0.3)', maxHeight: '300px', overflowY: 'auto'
+                    }}>
+                        <div className="text-secondary mono-text" style={{ fontSize: '0.75rem', marginBottom: '0.5rem' }}>
+                            AVAILABLE MERITS
+                        </div>
+                        {available.length === 0 && (
+                            <p className="text-muted" style={{ fontSize: '0.8rem', fontStyle: 'italic' }}>
+                                No additional merits available.
+                            </p>
+                        )}
+                        {catOrder.map(cat => {
+                            const catMerits = available.filter(m => m.category === cat);
+                            if (!catMerits.length) return null;
+                            return (
+                                <div key={cat}>
+                                    <div className="text-muted mono-text" style={{ fontSize: '0.65rem', marginTop: '0.25rem' }}>
+                                        {catLabel(cat).toUpperCase()}
+                                    </div>
+                                    {catMerits.map(m => (
+                                        <div key={m.id} style={{
+                                            display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+                                            padding: '0.4rem 0.5rem', marginBottom: '0.25rem',
+                                            background: 'rgba(0,0,0,0.2)', borderRadius: '3px', cursor: 'pointer'
+                                        }} onClick={() => { onAdd(m.id, m.cost); setShowPicker(false); }}>
+                                            <div style={{ flex: 1 }}>
+                                                <span className="mono-text" style={{ color: 'var(--text-primary)', fontSize: '0.85rem' }}>
+                                                    {m.name}
+                                                </span>
+                                                {m.prerequisites && (
+                                                    <span className="text-muted" style={{ fontSize: '0.65rem', marginLeft: '0.5rem' }}>
+                                                        req: {m.prerequisites}
+                                                    </span>
+                                                )}
+                                            </div>
+                                            <span className="mono-text text-accent" style={{ fontSize: '0.8rem', whiteSpace: 'nowrap' }}>
+                                                {m.minCost === m.cost ? `${m.cost}` : `${m.minCost}-${m.cost}`} dots
+                                            </span>
+                                        </div>
+                                    ))}
+                                </div>
+                            );
+                        })}
+                    </div>
+                )}
+
+                {catOrder.filter(c => categories[c]).map(cat => (
+                    <div key={cat}>
+                        <div className="text-muted mono-text" style={{
+                            fontSize: '0.7rem', marginBottom: '0.25rem', marginTop: '0.5rem'
+                        }}>{catLabel(cat).toUpperCase()}</div>
+                        {categories[cat].map(m => (
+                            <div key={m.id} className="tech-border" style={{
+                                padding: '0.5rem', marginBottom: '0.5rem', background: 'rgba(0,0,0,0.2)'
+                            }}>
+                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                    <span className="mono-text" style={{ color: 'var(--text-primary)' }}>
+                                        {m.name}
+                                    </span>
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                                        <StatDots value={m.rating} max={m.maxRating}
+                                            onChange={v => {
+                                                const clamped = Math.max(m.minRating, Math.min(m.maxRating, v));
+                                                onUpdateRating(m.id, clamped);
+                                            }}
+                                            editable={IS_OWNER && m.minRating !== m.maxRating} />
+                                        {IS_OWNER && (
+                                            <button onClick={() => onRemove(m.id)} style={{
+                                                background: 'transparent', border: 'none',
+                                                color: 'var(--accent-danger)', cursor: 'pointer'
+                                            }}>
+                                                <Icon name="x" size={14} />
+                                            </button>
+                                        )}
+                                    </div>
+                                </div>
+                                {m.description && (
+                                    <p className="text-secondary" style={{
+                                        fontSize: '0.8rem', margin: '0.25rem 0 0 0'
+                                    }}>{m.description}</p>
+                                )}
+                                {m.effects && Object.keys(m.effects).length > 0 && (
+                                    <div style={{ fontSize: '0.7rem', color: 'var(--text-accent)', marginTop: '0.25rem' }}>
+                                        {m.effects.extra_health && `+${m.effects.extra_health} health `}
+                                        {m.effects.size_mod && `Size ${m.effects.size_mod > 0 ? '+' : ''}${m.effects.size_mod} `}
+                                        {m.effects.speed_mod && `Speed ${m.effects.speed_mod > 0 ? '+' : ''}${m.effects.speed_mod} `}
+                                        {m.effects.custom && m.effects.custom}
+                                    </div>
+                                )}
+                            </div>
+                        ))}
+                    </div>
+                ))}
+
+                {merits.length === 0 && !showPicker && (
+                    <p className="text-muted text-center" style={{ fontSize: '0.8rem', fontStyle: 'italic' }}>
+                        No merits acquired.
                     </p>
                 )}
             </div>
@@ -1572,16 +1750,21 @@
         const [psCatalog, setPsCatalog] = useState([]);
         const [agencies, setAgencies] = useState([]);
         const [npcList, setNpcList] = useState([]);
+        const [meritCatalog, setMeritCatalog] = useState([]);
         const saveTimerRef = useRef(null);
         const charRef = useRef(null);
 
-        // Load character data, pulling string catalog, agencies, and NPCs on mount
+        // Load character data, catalogs, agencies, and NPCs on mount
         useEffect(() => {
             fetchCharacter();
             fetch('/api/pulling-strings/')
                 .then(r => r.json())
                 .then(data => setPsCatalog(data))
                 .catch(err => console.error('Failed to load pulling strings catalog:', err));
+            fetch('/api/merits/')
+                .then(r => r.json())
+                .then(data => setMeritCatalog(data))
+                .catch(err => console.error('Failed to load merits catalog:', err));
             fetch('/api/agencies/')
                 .then(r => r.json())
                 .then(data => setAgencies(data.filter(a => a.isPlayerAgency)))
@@ -1787,7 +1970,10 @@
 
                 <HealthModule
                     health={char.health}
-                    max={char.attributes.resistance.physical + (char.size || 5)}
+                    max={(() => {
+                        const me = computeMeritEffects(char.merits);
+                        return char.attributes.resistance.physical + (char.size || 5) + me.sizeMod + me.extraHealth;
+                    })()}
                     mentalLoad={char.mentalLoad || 0}
                     update={h => updateCharacter({ health: h })}
                     onMentalLoadChange={v => updateCharacter({ mentalLoad: v })} />
@@ -1824,29 +2010,23 @@
                             setTimeout(fetchCharacter, 300);
                         }}
                     />
-                    <ExpandableListModule
-                        title="MERITS" itemLabel="Merit Name"
-                        items={char.merits || []}
-                        onAdd={() => {
-                            document.activeElement?.blur();
-                            const fresh = charRef.current.merits || [];
-                            updateCharacter({
-                                merits: [...fresh, { name: "", rating: 1, description: "" }]
-                            });
+                    <MeritsModule
+                        merits={char.merits || []}
+                        catalog={meritCatalog}
+                        onAdd={(meritId, maxRating) => {
+                            saveCharacter({ addMerit: { meritId, rating: maxRating } });
+                            setTimeout(fetchCharacter, 300);
                         }}
-                        onRemove={idx => {
-                            document.activeElement?.blur();
-                            const fresh = charRef.current.merits || [];
-                            updateCharacter({
-                                merits: fresh.filter((_, i) => i !== idx)
-                            });
+                        onRemove={cmId => {
+                            const updated = (charRef.current.merits || []).filter(m => m.id !== cmId);
+                            setChar(prev => ({ ...prev, merits: updated }));
+                            charRef.current = { ...charRef.current, merits: updated };
+                            saveCharacter({ removeMerit: cmId });
                         }}
-                        onUpdate={(idx, val) => updateCharacter({
-                            merits: char.merits.map((item, i) => i === idx ? val : item)
-                        })}
-                        onQuietSave={(idx, val) => saveCharacterQuiet({
-                            merits: charRef.current.merits.map((item, i) => i === idx ? val : item)
-                        })}
+                        onUpdateRating={(cmId, rating) => {
+                            saveCharacter({ updateMeritRating: { id: cmId, rating } });
+                            setTimeout(fetchCharacter, 300);
+                        }}
                     />
                 </div>
             </div>

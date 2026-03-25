@@ -89,7 +89,10 @@ class Character(models.Model):
     size = models.IntegerField(default=5)
 
     # Lists as JSON arrays
-    merits = models.JSONField(default=list)
+    merits_old = models.JSONField(default=list, db_column="merits")
+    merit_entries = models.ManyToManyField(
+        "exodus.MeritDefinition", through="CharacterMerit", blank=True,
+    )
     flaws = models.JSONField(default=list)
     pulling_strings = models.ManyToManyField(
         "exodus.PullingString", through="CharacterPullingString", blank=True,
@@ -137,3 +140,24 @@ class CharacterPullingString(models.Model):
     def __str__(self):
         npc = f" → {self.linked_npc.name}" if self.linked_npc else ""
         return f"{self.character.name}: {self.pulling_string.name}{npc}"
+
+
+class CharacterMerit(models.Model):
+    """Through table for character ↔ merit definition, with chosen rating."""
+
+    character = models.ForeignKey(
+        Character, on_delete=models.CASCADE, related_name="character_merits"
+    )
+    merit = models.ForeignKey(
+        "exodus.MeritDefinition", on_delete=models.CASCADE
+    )
+    rating = models.IntegerField(
+        default=1,
+        help_text="Chosen dot rating (between merit's min_cost and cost).",
+    )
+
+    class Meta:
+        ordering = ["merit__category", "merit__name"]
+
+    def __str__(self):
+        return f"{self.character.name}: {self.merit.name} ({self.rating})"

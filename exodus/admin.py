@@ -4,7 +4,7 @@ from django.contrib import admin
 from django.contrib.auth.admin import UserAdmin
 from django.contrib.auth.models import User
 
-from .models import PullingString, SiteSettings
+from .models import MeritDefinition, PullingString, SiteSettings
 
 
 # Customize the User admin list display
@@ -37,5 +37,12 @@ class SiteSettingsAdmin(admin.ModelAdmin):
 @admin.register(PullingString)
 class PullingStringAdmin(admin.ModelAdmin):
     list_display = ("name", "category", "cost")
+    list_filter = ("category",)
+    search_fields = ("name",)
+
+
+@admin.register(MeritDefinition)
+class MeritDefinitionAdmin(admin.ModelAdmin):
+    list_display = ("name", "category", "min_cost", "cost", "prerequisites")
     list_filter = ("category",)
     search_fields = ("name",)
