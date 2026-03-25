@@ -74,6 +74,7 @@
         size: 5,
         mentalLoad: 0,
         experience: 0,
+        experienceUsed: 0,
         dossier: "",
         profilePicture: null
     };
@@ -597,6 +598,54 @@
                                 color: 'var(--text-primary)', width: '100%',
                                 textAlign: 'center', fontSize: '1.5rem'
                             }} />
+                    </div>
+                </div>
+            </div>
+        );
+    };
+
+    // --- EXPERIENCE MODULE ---
+    const ExperienceModule = ({ experience, experienceUsed, update }) => {
+        const remaining = experience - experienceUsed;
+        return (
+            <div className="glass-panel" style={{ padding: '1.5rem', marginBottom: '1rem' }}>
+                <h3 className="mono-text text-accent" style={{
+                    borderBottom: '1px solid var(--border-color)',
+                    paddingBottom: '0.5rem', marginBottom: '1rem'
+                }}>EXPERIENCE</h3>
+                <div style={{
+                    display: 'grid',
+                    gridTemplateColumns: 'repeat(3, 1fr)',
+                    gap: '1rem'
+                }}>
+                    <div className="tech-border text-center" style={{ padding: '0.5rem' }}>
+                        <div className="text-secondary mono-text" style={{ fontSize: '0.8rem' }}>TOTAL</div>
+                        <input type="number" value={experience}
+                            onChange={e => update({ experience: parseInt(e.target.value) || 0 })}
+                            disabled={!IS_OWNER}
+                            style={{
+                                background: 'transparent', border: 'none',
+                                color: 'var(--text-accent)', width: '100%',
+                                textAlign: 'center', fontSize: '1.5rem'
+                            }} />
+                    </div>
+                    <div className="tech-border text-center" style={{ padding: '0.5rem' }}>
+                        <div className="text-secondary mono-text" style={{ fontSize: '0.8rem' }}>USED</div>
+                        <input type="number" value={experienceUsed}
+                            onChange={e => update({ experienceUsed: parseInt(e.target.value) || 0 })}
+                            disabled={!IS_OWNER}
+                            style={{
+                                background: 'transparent', border: 'none',
+                                color: 'var(--text-primary)', width: '100%',
+                                textAlign: 'center', fontSize: '1.5rem'
+                            }} />
+                    </div>
+                    <div className="tech-border text-center" style={{ padding: '0.5rem' }}>
+                        <div className="text-secondary mono-text" style={{ fontSize: '0.8rem' }}>REMAINING</div>
+                        <div style={{
+                            fontSize: '1.5rem',
+                            color: remaining < 0 ? 'var(--accent-danger)' : 'var(--text-accent)'
+                        }}>{remaining}</div>
                     </div>
                 </div>
             </div>
@@ -1293,6 +1342,11 @@
                 />
 
                 <DerivedTraitsModule char={char} update={updateCharacter} />
+
+                <ExperienceModule
+                    experience={char.experience || 0}
+                    experienceUsed={char.experienceUsed || 0}
+                    update={updateCharacter} />
 
                 <InventoryModule
                     inventory={char.inventory || []}

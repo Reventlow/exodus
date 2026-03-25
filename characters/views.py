@@ -120,6 +120,8 @@ def api_character_detail(request, pk):
             character.mental_load = max(0, min(6, data["mentalLoad"]))
         if "experience" in data:
             character.experience = data["experience"]
+        if "experienceUsed" in data:
+            character.experience_used = data["experienceUsed"]
         if "willpower" in data:
             character.willpower_current = data["willpower"].get(
                 "current", character.willpower_current

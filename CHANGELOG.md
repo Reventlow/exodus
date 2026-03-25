@@ -1,5 +1,8 @@
 # Changelog
 
+## v0.8.1
+- Experience points tracking on character sheet — total XP, used XP, and auto-calculated remaining XP
+
 ## v0.8.0
 - MCP API access — Bearer token authentication middleware for external tool integration (Claude Code, etc.)
 - New `/api/status/` endpoint returning game state overview (version, game date, entity counts)

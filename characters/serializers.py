@@ -29,6 +29,7 @@ def serialize_character(character):
         "inventory": character.inventory,
         "specialisations": character.specialisations,
         "experience": character.experience,
+        "experienceUsed": character.experience_used,
         "willpower": {"current": character.willpower_current},
     }
 
