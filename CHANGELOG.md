@@ -1,5 +1,11 @@
 # Changelog
 
+## v0.8.4
+- Personal NPC pulling string can now be linked to an NPC dossier (3 XP cost)
+- Linkable pulling strings support — can be taken multiple times, each linked to a different NPC
+- NPC dossier picker on linkable pulling strings in the character sheet
+- Linked NPC name shown as clickable link on read-only character views
+
 ## v0.8.3
 - Pulling strings catalog — game-level definitions with name, description, XP cost, and class category
 - Characters select pulling strings from the catalog (filtered by class + general); AI category superuser-only

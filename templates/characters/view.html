@@ -504,6 +504,14 @@
                                         {ps.description}
                                     </p>
                                 )}
+                                {ps.linkedNpc && (
+                                    <div style={{ marginTop: '0.25rem', fontSize: '0.8rem' }}>
+                                        <span className="text-muted">Linked: </span>
+                                        <a href={`/npcs/${ps.linkedNpc.id}/`} style={{ color: 'var(--text-accent)' }}>
+                                            {ps.linkedNpc.name}
+                                        </a>
+                                    </div>
+                                )}
                             </div>
                         ))}
                     </div>

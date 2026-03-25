@@ -92,7 +92,7 @@ class Character(models.Model):
     merits = models.JSONField(default=list)
     flaws = models.JSONField(default=list)
     pulling_strings = models.ManyToManyField(
-        "exodus.PullingString", blank=True, related_name="characters"
+        "exodus.PullingString", through="CharacterPullingString", blank=True,
     )
     inventory = models.JSONField(default=list)
     specialisations = models.JSONField(default=list)  # [{skill, name}]
@@ -115,3 +115,25 @@ class Character(models.Model):
 
     def __str__(self):
         return f"{self.name} ({self.owner.username})"
+
+
+class CharacterPullingString(models.Model):
+    """Through table for character ↔ pulling string, with optional NPC link."""
+
+    character = models.ForeignKey(
+        Character, on_delete=models.CASCADE, related_name="character_pulling_strings"
+    )
+    pulling_string = models.ForeignKey(
+        "exodus.PullingString", on_delete=models.CASCADE
+    )
+    linked_npc = models.ForeignKey(
+        "npcs.NPC", on_delete=models.SET_NULL, null=True, blank=True,
+        help_text="Linked NPC dossier (for linkable pulling strings like Personal NPC).",
+    )
+
+    class Meta:
+        ordering = ["pulling_string__category", "pulling_string__name"]
+
+    def __str__(self):
+        npc = f" → {self.linked_npc.name}" if self.linked_npc else ""
+        return f"{self.character.name}: {self.pulling_string.name}{npc}"

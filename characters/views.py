@@ -8,7 +8,7 @@ from django.views.decorators.http import require_http_methods
 
 from django.db import transaction
 
-from .models import Character
+from .models import Character, CharacterPullingString
 from .serializers import serialize_character, serialize_character_summary
 from agencies.models import Agency
 from exodus.models import PullingString
@@ -116,10 +116,53 @@ def api_character_detail(request, pk):
             character.merits = data["merits"]
         if "flaws" in data:
             character.flaws = data["flaws"]
-        if "pullingStringIds" in data:
-            ps_ids = data["pullingStringIds"]
-            valid_ps = PullingString.objects.filter(id__in=ps_ids)
-            character.pulling_strings.set(valid_ps)
+        # Add a pulling string (creates through-table entry)
+        if "addPullingString" in data:
+            ps_id = data["addPullingString"].get("pullingStringId")
+            npc_id = data["addPullingString"].get("linkedNpcId")
+            try:
+                ps = PullingString.objects.get(pk=ps_id)
+                # Non-linkable: only one instance per character
+                if not ps.is_linkable:
+                    if not CharacterPullingString.objects.filter(
+                        character=character, pulling_string=ps
+                    ).exists():
+                        cps = CharacterPullingString(character=character, pulling_string=ps)
+                        if npc_id:
+                            from npcs.models import NPC
+                            cps.linked_npc = NPC.objects.filter(pk=npc_id).first()
+                        cps.save()
+                else:
+                    # Linkable: can have multiple (each linked to a different NPC)
+                    cps = CharacterPullingString(character=character, pulling_string=ps)
+                    if npc_id:
+                        from npcs.models import NPC
+                        cps.linked_npc = NPC.objects.filter(pk=npc_id).first()
+                    cps.save()
+            except PullingString.DoesNotExist:
+                pass
+
+        # Remove a pulling string (by through-table ID)
+        if "removePullingString" in data:
+            cps_id = data["removePullingString"]
+            CharacterPullingString.objects.filter(
+                pk=cps_id, character=character
+            ).delete()
+
+        # Link/unlink NPC on an existing pulling string entry
+        if "linkNpc" in data:
+            cps_id = data["linkNpc"].get("id")
+            npc_id = data["linkNpc"].get("npcId")
+            try:
+                cps = CharacterPullingString.objects.get(pk=cps_id, character=character)
+                if npc_id:
+                    from npcs.models import NPC
+                    cps.linked_npc = NPC.objects.filter(pk=npc_id).first()
+                else:
+                    cps.linked_npc = None
+                cps.save()
+            except CharacterPullingString.DoesNotExist:
+                pass
         if "inventory" in data:
             character.inventory = data["inventory"]
         if "specialisations" in data:

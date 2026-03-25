@@ -22,6 +22,11 @@ class PullingString(models.Model):
         max_length=20, choices=CATEGORY_CHOICES, default="general"
     )
 
+    is_linkable = models.BooleanField(
+        default=False,
+        help_text="If true, each instance can be linked to an NPC dossier. Can be taken multiple times.",
+    )
+
     class Meta:
         ordering = ["category", "name"]
 

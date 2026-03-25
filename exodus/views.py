@@ -76,6 +76,7 @@ def _serialize_ps(ps):
         "description": ps.description,
         "cost": ps.cost,
         "category": ps.category,
+        "isLinkable": ps.is_linkable,
     }
 
 
@@ -111,6 +112,7 @@ def api_pulling_strings(request):
         description=data.get("description", ""),
         cost=data.get("cost", 0),
         category=category,
+        is_linkable=bool(data.get("isLinkable", False)),
     )
     return JsonResponse(_serialize_ps(ps), status=201)
 
@@ -148,6 +150,8 @@ def api_pulling_string_detail(request, pk):
             valid_categories = [c[0] for c in PullingString.CATEGORY_CHOICES]
             if data["category"] in valid_categories:
                 ps.category = data["category"]
+        if "isLinkable" in data:
+            ps.is_linkable = bool(data["isLinkable"])
         ps.save()
         return JsonResponse(_serialize_ps(ps))
 
