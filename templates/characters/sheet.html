@@ -526,6 +526,13 @@
             }}>
                 SPECIALISATIONS
                 {IS_OWNER && (
+                    <span className="text-muted" style={{
+                        fontSize: '0.65rem', fontWeight: 'normal', flex: 1, marginLeft: '0.75rem',
+                    }} title="When rolling a skill with a matching specialisation, gain +1 die">
+                        +1 die when a skill roll matches a specialisation
+                    </span>
+                )}
+                {IS_OWNER && (
                     <button onClick={() => {
                         document.activeElement?.blur();
                         const fresh = getFresh ? getFresh() : specialisations;

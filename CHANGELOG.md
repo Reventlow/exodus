@@ -1,5 +1,8 @@
 # Changelog
 
+## v0.8.16
+- Specialisations section now shows rule hint: "+1 die when a skill roll matches a specialisation"
+
 ## v0.8.15
 - XP protester much bigger (240x210px), slower walk (20s cycle), taller zone (210px)
 
