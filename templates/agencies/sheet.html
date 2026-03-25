@@ -20,7 +20,40 @@
 </script>
 {% verbatim %}
 <script type="text/babel">
-    const { useState, useEffect, useRef, useCallback } = React;
+    const { useState, useEffect, useRef, useCallback, useMemo } = React;
+
+    // --- XP PROTESTER (shown when remaining XP < 0) ---
+    const PROTEST_SIGNS = [
+        "NEED MORE XP!", "UNFAIR ALLOCATION!", "WILL WORK FOR XP",
+        "ON STRIKE!", "BUDGET DEFICIT!", "XP OR RIOT!",
+        "MANAGEMENT FAILED US", "THIS IS EXPLOITATION",
+        "WE DEMAND RAISES", "RUNNING ON FUMES",
+    ];
+    const XpProtester = () => {
+        const sign = useMemo(() => PROTEST_SIGNS[Math.floor(Math.random() * PROTEST_SIGNS.length)], []);
+        return (
+            <div className="xp-protester" style={{ marginTop: '0.25rem' }}>
+                <div className="xp-protester-body">
+                    <svg width="50" height="52" viewBox="0 0 50 52" fill="none" xmlns="http://www.w3.org/2000/svg">
+                        <g className="xp-protester-sign">
+                            <line x1="25" y1="8" x2="25" y2="20" stroke="var(--accent-danger)" strokeWidth="1.5"/>
+                            <rect x="8" y="0" width="34" height="12" rx="1" fill="var(--accent-danger)" opacity="0.9"/>
+                            <text x="25" y="9" textAnchor="middle" fill="var(--bg-dark)"
+                                style={{ fontSize: '4.5px', fontFamily: 'var(--font-mono)', fontWeight: 'bold' }}>
+                                {sign}
+                            </text>
+                        </g>
+                        <circle cx="25" cy="23" r="4" fill="var(--text-muted)"/>
+                        <line x1="25" y1="27" x2="25" y2="38" stroke="var(--text-muted)" strokeWidth="2" strokeLinecap="round"/>
+                        <line x1="25" y1="30" x2="18" y2="35" stroke="var(--text-muted)" strokeWidth="1.5" strokeLinecap="round"/>
+                        <line x1="25" y1="30" x2="32" y2="35" stroke="var(--text-muted)" strokeWidth="1.5" strokeLinecap="round"/>
+                        <line x1="25" y1="38" x2="19" y2="50" stroke="var(--text-muted)" strokeWidth="1.5" strokeLinecap="round"/>
+                        <line x1="25" y1="38" x2="31" y2="50" stroke="var(--text-muted)" strokeWidth="1.5" strokeLinecap="round"/>
+                    </svg>
+                </div>
+            </div>
+        );
+    };
 
     // --- CSRF ---
     function getCookie(name) {
@@ -454,12 +487,14 @@
                                 }}>
                                     {available}
                                 </div>
-                                <div style={{
-                                    marginTop: '0.25rem', fontFamily: 'var(--font-mono)',
-                                    color: 'var(--text-muted)', fontSize: '0.8rem',
-                                }}>
-                                    {basesExp} used / {expPool} total
-                                </div>
+                                {available < 0 ? <XpProtester /> : (
+                                    <div style={{
+                                        marginTop: '0.25rem', fontFamily: 'var(--font-mono)',
+                                        color: 'var(--text-muted)', fontSize: '0.8rem',
+                                    }}>
+                                        {basesExp} used / {expPool} total
+                                    </div>
+                                )}
                                 {IS_ADMIN && (
                                     <button
                                         onClick={() => {

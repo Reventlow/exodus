@@ -1,5 +1,10 @@
 # Changelog
 
+## v0.9.0
+- Animated stick figure protester appears when XP goes negative — marches back and forth holding a random protest sign
+- 10 random sign variants: "NEED MORE XP!", "XP OR RIOT!", "WILL WORK FOR XP", etc.
+- Works on both character sheets and agency sheets
+
 ## v0.8.9
 - Pulling strings management page at /pulling-strings/ — staff can add, edit, and delete pulling strings with inline editing and category filtering
 - PULL STRINGS link added to navigation bar for staff

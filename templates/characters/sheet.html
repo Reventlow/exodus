@@ -95,6 +95,44 @@
         return <i data-lucide={name} width={size} height={size} className={className}></i>;
     };
 
+    // --- XP PROTESTER (shown when remaining XP < 0) ---
+    const PROTEST_SIGNS = [
+        "NEED MORE XP!", "UNFAIR ALLOCATION!", "WILL WORK FOR XP",
+        "ON STRIKE!", "BUDGET DEFICIT!", "XP OR RIOT!",
+        "MANAGEMENT FAILED US", "THIS IS EXPLOITATION",
+        "WE DEMAND RAISES", "RUNNING ON FUMES",
+    ];
+    const XpProtester = () => {
+        const sign = useMemo(() => PROTEST_SIGNS[Math.floor(Math.random() * PROTEST_SIGNS.length)], []);
+        return (
+            <div className="xp-protester" style={{ marginTop: '0.25rem' }}>
+                <div className="xp-protester-body">
+                    <svg width="50" height="52" viewBox="0 0 50 52" fill="none" xmlns="http://www.w3.org/2000/svg">
+                        {/* Sign */}
+                        <g className="xp-protester-sign">
+                            <line x1="25" y1="8" x2="25" y2="20" stroke="var(--accent-danger)" strokeWidth="1.5"/>
+                            <rect x="8" y="0" width="34" height="12" rx="1" fill="var(--accent-danger)" opacity="0.9"/>
+                            <text x="25" y="9" textAnchor="middle" fill="var(--bg-dark)"
+                                style={{ fontSize: '4.5px', fontFamily: 'var(--font-mono)', fontWeight: 'bold' }}>
+                                {sign}
+                            </text>
+                        </g>
+                        {/* Head */}
+                        <circle cx="25" cy="23" r="4" fill="var(--text-muted)"/>
+                        {/* Body */}
+                        <line x1="25" y1="27" x2="25" y2="38" stroke="var(--text-muted)" strokeWidth="2" strokeLinecap="round"/>
+                        {/* Arms */}
+                        <line x1="25" y1="30" x2="18" y2="35" stroke="var(--text-muted)" strokeWidth="1.5" strokeLinecap="round"/>
+                        <line x1="25" y1="30" x2="32" y2="35" stroke="var(--text-muted)" strokeWidth="1.5" strokeLinecap="round"/>
+                        {/* Legs */}
+                        <line x1="25" y1="38" x2="19" y2="50" stroke="var(--text-muted)" strokeWidth="1.5" strokeLinecap="round"/>
+                        <line x1="25" y1="38" x2="31" y2="50" stroke="var(--text-muted)" strokeWidth="1.5" strokeLinecap="round"/>
+                    </svg>
+                </div>
+            </div>
+        );
+    };
+
     // --- AUTO-SAVE INPUT (uncontrolled) ---
     // Uses defaultValue so React never touches the DOM input after mount.
     // The DOM manages typing; we just read values via onChange to update
@@ -1176,15 +1214,17 @@
                             Hover for details
                         </div>
                     </div>
-                    <div className="tech-border text-center" style={{ padding: '0.5rem' }}>
+                    <div className="tech-border text-center" style={{ padding: '0.5rem', overflow: 'hidden' }}>
                         <div className="text-secondary mono-text" style={{ fontSize: '0.8rem' }}>REMAINING</div>
                         <div style={{
                             fontSize: '1.5rem',
                             color: remaining < 0 ? 'var(--accent-danger)' : 'var(--text-accent)'
                         }}>{remaining}</div>
-                        <div style={{ fontSize: '0.65rem', color: 'var(--text-muted)' }}>
-                            {totalUsed} used
-                        </div>
+                        {remaining < 0 ? <XpProtester /> : (
+                            <div style={{ fontSize: '0.65rem', color: 'var(--text-muted)' }}>
+                                {totalUsed} used
+                            </div>
+                        )}
                     </div>
                 </div>
 

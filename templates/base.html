@@ -22,6 +22,37 @@
 
     <!-- Marked.js for Markdown rendering -->
     <script src="https://cdn.jsdelivr.net/npm/marked@14.1.4/marked.min.js"></script>
+
+    <!-- XP Protester animation -->
+    <style>
+        @keyframes protester-march {
+            0%   { transform: translateX(-10px) scaleX(1); }
+            45%  { transform: translateX(10px) scaleX(1); }
+            50%  { transform: translateX(10px) scaleX(-1); }
+            95%  { transform: translateX(-10px) scaleX(-1); }
+            100% { transform: translateX(-10px) scaleX(1); }
+        }
+        @keyframes protester-bob {
+            0%, 100% { transform: translateY(0); }
+            25% { transform: translateY(-2px); }
+            75% { transform: translateY(1px); }
+        }
+        @keyframes sign-wobble {
+            0%, 100% { transform: rotate(-3deg); }
+            50% { transform: rotate(3deg); }
+        }
+        .xp-protester {
+            animation: protester-march 3s ease-in-out infinite;
+            display: inline-block;
+        }
+        .xp-protester-body {
+            animation: protester-bob 0.4s ease-in-out infinite;
+        }
+        .xp-protester-sign {
+            animation: sign-wobble 0.6s ease-in-out infinite;
+            transform-origin: bottom center;
+        }
+    </style>
 </head>
 <body>
     <!-- Navigation Bar -->
