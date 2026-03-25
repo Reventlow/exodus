@@ -1,5 +1,9 @@
 # Changelog
 
+## v0.8.9
+- Pulling strings management page at /pulling-strings/ — staff can add, edit, and delete pulling strings with inline editing and category filtering
+- PULL STRINGS link added to navigation bar for staff
+
 ## v0.8.8
 - Class restriction on merits — merits can be restricted to specific operative classes (Fixer, Soldier, etc.)
 - Merit management page at /merits/ — staff can add, edit, and delete merits with inline editing, category filtering

@@ -30,6 +30,12 @@ def site_settings(request):
 
 
 @staff_member_required
+def pulling_strings_page(request):
+    """Pulling strings catalog management page. Superuser only."""
+    return render(request, "pulling_strings_manage.html")
+
+
+@staff_member_required
 def merits_page(request):
     """Merit catalog management page. Superuser only."""
     return render(request, "merits_manage.html")

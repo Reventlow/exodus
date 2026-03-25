@@ -1,0 +1,262 @@
+{% extends "base.html" %}
+
+{% block title %}PULLING STRINGS CATALOG // BLACKLOG.NET{% endblock %}
+
+{% block content %}
+<div id="app-root">
+    <div class="loading-screen">
+        <h1 class="mono-text">LOADING PULLING STRINGS CATALOG...</h1>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    const CSRF_TOKEN = '{{ csrf_token }}';
+</script>
+{% verbatim %}
+<script type="text/babel">
+    const { useState, useEffect } = React;
+
+    function getCookie(name) {
+        let cookieValue = null;
+        if (document.cookie && document.cookie !== '') {
+            const cookies = document.cookie.split(';');
+            for (let i = 0; i < cookies.length; i++) {
+                const cookie = cookies[i].trim();
+                if (cookie.substring(0, name.length + 1) === (name + '='))
+                    cookieValue = decodeURIComponent(cookie.substring(name.length + 1));
+            }
+        }
+        return cookieValue;
+    }
+
+    const CATEGORIES = ['general', 'fixer', 'soldier', 'science', 'engineer', 'ai'];
+    const catLabel = c => c.charAt(0).toUpperCase() + c.slice(1);
+    const headers = () => ({ 'Content-Type': 'application/json', 'X-CSRFToken': getCookie('csrftoken') || CSRF_TOKEN });
+
+    const PSRow = ({ ps, onSave, onDelete }) => {
+        const [editing, setEditing] = useState(false);
+        const [form, setForm] = useState({ ...ps });
+
+        const save = async () => {
+            const resp = await fetch(`/api/pulling-strings/${ps.id}/`, {
+                method: 'PUT', headers: headers(),
+                body: JSON.stringify({
+                    name: form.name, description: form.description,
+                    cost: form.cost, category: form.category,
+                    isLinkable: form.isLinkable,
+                }),
+            });
+            if (resp.ok) { onSave(await resp.json()); setEditing(false); }
+        };
+
+        const del = async () => {
+            if (!confirm(`Delete "${ps.name}"?`)) return;
+            const resp = await fetch(`/api/pulling-strings/${ps.id}/`, {
+                method: 'DELETE', headers: headers(),
+            });
+            if (resp.ok) onDelete(ps.id);
+        };
+
+        const inputStyle = {
+            background: 'transparent', border: '1px solid var(--border-color)',
+            color: 'var(--text-primary)', padding: '0.25rem', width: '100%',
+            fontFamily: 'var(--font-mono)', fontSize: '0.8rem', borderRadius: '3px',
+        };
+        const btnStyle = (color) => ({
+            background: 'transparent', border: `1px solid var(--${color})`,
+            color: `var(--${color})`, padding: '0.2rem 0.5rem', cursor: 'pointer',
+            borderRadius: '3px', fontFamily: 'var(--font-mono)', fontSize: '0.75rem',
+            marginRight: '0.25rem',
+        });
+
+        if (!editing) {
+            return (
+                <tr style={{ borderBottom: '1px solid var(--border-color)' }}>
+                    <td style={{ padding: '0.5rem' }} className="mono-text">{ps.name}</td>
+                    <td style={{ padding: '0.5rem', textAlign: 'center' }}>{ps.cost}</td>
+                    <td style={{ padding: '0.5rem' }}>{catLabel(ps.category)}</td>
+                    <td style={{ padding: '0.5rem', textAlign: 'center' }}>{ps.isLinkable ? 'Yes' : '—'}</td>
+                    <td style={{ padding: '0.5rem', fontSize: '0.8rem', maxWidth: '350px' }}>{ps.description}</td>
+                    <td style={{ padding: '0.5rem' }}>
+                        <button onClick={() => setEditing(true)} style={btnStyle('accent-primary')}>EDIT</button>
+                        <button onClick={del} style={btnStyle('accent-danger')}>DEL</button>
+                    </td>
+                </tr>
+            );
+        }
+
+        return (
+            <tr style={{ borderBottom: '1px solid var(--accent-primary)', background: 'rgba(0,255,136,0.05)' }}>
+                <td style={{ padding: '0.5rem' }}>
+                    <input value={form.name} onChange={e => setForm({ ...form, name: e.target.value })} style={inputStyle} />
+                </td>
+                <td style={{ padding: '0.5rem' }}>
+                    <input type="number" value={form.cost} onChange={e => setForm({ ...form, cost: parseInt(e.target.value) || 0 })}
+                        style={{ ...inputStyle, width: '50px', textAlign: 'center' }} />
+                </td>
+                <td style={{ padding: '0.5rem' }}>
+                    <select value={form.category} onChange={e => setForm({ ...form, category: e.target.value })}
+                        style={{ ...inputStyle, cursor: 'pointer' }}>
+                        {CATEGORIES.map(c => <option key={c} value={c} style={{ background: 'var(--bg-dark)' }}>{catLabel(c)}</option>)}
+                    </select>
+                </td>
+                <td style={{ padding: '0.5rem', textAlign: 'center' }}>
+                    <input type="checkbox" checked={form.isLinkable || false}
+                        onChange={e => setForm({ ...form, isLinkable: e.target.checked })} />
+                </td>
+                <td style={{ padding: '0.5rem' }}>
+                    <textarea value={form.description} onChange={e => setForm({ ...form, description: e.target.value })}
+                        style={{ ...inputStyle, minHeight: '50px', resize: 'vertical' }} />
+                </td>
+                <td style={{ padding: '0.5rem' }}>
+                    <button onClick={save} style={{
+                        ...btnStyle('accent-primary'),
+                        background: 'var(--accent-primary)', color: 'var(--bg-dark)',
+                    }}>SAVE</button>
+                    <button onClick={() => { setForm({ ...ps }); setEditing(false); }}
+                        style={btnStyle('text-muted')}>CANCEL</button>
+                </td>
+            </tr>
+        );
+    };
+
+    const PSManager = () => {
+        const [items, setItems] = useState([]);
+        const [loading, setLoading] = useState(true);
+        const [filter, setFilter] = useState('all');
+        const [showAdd, setShowAdd] = useState(false);
+        const [form, setForm] = useState({
+            name: '', description: '', cost: 0, category: 'general', isLinkable: false,
+        });
+
+        useEffect(() => {
+            fetch('/api/pulling-strings/')
+                .then(r => r.json())
+                .then(data => { setItems(data); setLoading(false); })
+                .catch(() => setLoading(false));
+        }, []);
+
+        const addItem = async () => {
+            const resp = await fetch('/api/pulling-strings/', {
+                method: 'POST', headers: headers(),
+                body: JSON.stringify(form),
+            });
+            if (resp.ok) {
+                setItems([...items, await resp.json()]);
+                setForm({ name: '', description: '', cost: 0, category: 'general', isLinkable: false });
+                setShowAdd(false);
+            }
+        };
+
+        const filtered = filter === 'all' ? items : items.filter(p => p.category === filter);
+
+        if (loading) return <div className="loading-screen"><h1 className="mono-text">LOADING...</h1></div>;
+
+        const inputStyle = {
+            background: 'transparent', border: '1px solid var(--border-color)',
+            color: 'var(--text-primary)', padding: '0.4rem', width: '100%',
+            fontFamily: 'var(--font-mono)', fontSize: '0.85rem', borderRadius: '3px',
+        };
+
+        return (
+            <div className="glass-panel" style={{ padding: '1.5rem', maxWidth: '1400px', margin: '0 auto' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
+                    <h2 className="mono-text text-accent" style={{ margin: 0 }}>PULLING STRINGS CATALOG ({items.length})</h2>
+                    <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+                        {['all', ...CATEGORIES].map(c => (
+                            <button key={c} onClick={() => setFilter(c)} style={{
+                                background: filter === c ? 'var(--accent-primary)' : 'transparent',
+                                border: '1px solid var(--accent-primary)',
+                                color: filter === c ? 'var(--bg-dark)' : 'var(--accent-primary)',
+                                padding: '0.25rem 0.75rem', borderRadius: '3px', cursor: 'pointer',
+                                fontFamily: 'var(--font-mono)', fontSize: '0.75rem',
+                            }}>{c === 'all' ? 'ALL' : c.toUpperCase()}</button>
+                        ))}
+                        <button onClick={() => setShowAdd(!showAdd)} style={{
+                            background: showAdd ? 'var(--accent-danger)' : 'var(--accent-primary)',
+                            border: 'none', color: 'var(--bg-dark)',
+                            padding: '0.25rem 0.75rem', borderRadius: '3px', cursor: 'pointer',
+                            fontFamily: 'var(--font-mono)', fontSize: '0.75rem',
+                        }}>{showAdd ? 'CANCEL' : '+ ADD'}</button>
+                    </div>
+                </div>
+
+                {showAdd && (
+                    <div className="tech-border" style={{ padding: '1rem', marginBottom: '1rem', background: 'rgba(0,255,136,0.05)' }}>
+                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '0.75rem' }}>
+                            <div>
+                                <label className="text-secondary mono-text" style={{ fontSize: '0.7rem' }}>NAME</label>
+                                <input value={form.name} onChange={e => setForm({ ...form, name: e.target.value })} style={inputStyle} />
+                            </div>
+                            <div>
+                                <label className="text-secondary mono-text" style={{ fontSize: '0.7rem' }}>CATEGORY</label>
+                                <select value={form.category} onChange={e => setForm({ ...form, category: e.target.value })}
+                                    style={{ ...inputStyle, cursor: 'pointer' }}>
+                                    {CATEGORIES.map(c => <option key={c} value={c} style={{ background: 'var(--bg-dark)' }}>{catLabel(c)}</option>)}
+                                </select>
+                            </div>
+                            <div>
+                                <label className="text-secondary mono-text" style={{ fontSize: '0.7rem' }}>XP COST</label>
+                                <input type="number" value={form.cost} onChange={e => setForm({ ...form, cost: parseInt(e.target.value) || 0 })}
+                                    style={{ ...inputStyle, textAlign: 'center' }} />
+                            </div>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', paddingTop: '1.2rem' }}>
+                                <input type="checkbox" checked={form.isLinkable}
+                                    onChange={e => setForm({ ...form, isLinkable: e.target.checked })} />
+                                <label className="text-secondary mono-text" style={{ fontSize: '0.75rem' }}>LINKABLE (NPC)</label>
+                            </div>
+                            <div style={{ gridColumn: '1 / -1' }}>
+                                <label className="text-secondary mono-text" style={{ fontSize: '0.7rem' }}>DESCRIPTION</label>
+                                <textarea value={form.description} onChange={e => setForm({ ...form, description: e.target.value })}
+                                    style={{ ...inputStyle, minHeight: '60px', resize: 'vertical' }} />
+                            </div>
+                        </div>
+                        <button onClick={addItem} disabled={!form.name} style={{
+                            background: form.name ? 'var(--accent-primary)' : 'transparent',
+                            border: '1px solid var(--accent-primary)',
+                            color: form.name ? 'var(--bg-dark)' : 'var(--text-muted)',
+                            padding: '0.4rem 1rem', borderRadius: '3px',
+                            cursor: form.name ? 'pointer' : 'default',
+                            fontFamily: 'var(--font-mono)', fontSize: '0.85rem', marginTop: '0.75rem',
+                        }}>CREATE PULLING STRING</button>
+                    </div>
+                )}
+
+                <div style={{ overflowX: 'auto' }}>
+                    <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                        <thead>
+                            <tr style={{ borderBottom: '2px solid var(--accent-primary)' }}>
+                                <th className="mono-text text-accent" style={{ padding: '0.5rem', textAlign: 'left', fontSize: '0.75rem' }}>NAME</th>
+                                <th className="mono-text text-accent" style={{ padding: '0.5rem', textAlign: 'center', fontSize: '0.75rem' }}>XP</th>
+                                <th className="mono-text text-accent" style={{ padding: '0.5rem', textAlign: 'left', fontSize: '0.75rem' }}>CATEGORY</th>
+                                <th className="mono-text text-accent" style={{ padding: '0.5rem', textAlign: 'center', fontSize: '0.75rem' }}>LINK</th>
+                                <th className="mono-text text-accent" style={{ padding: '0.5rem', textAlign: 'left', fontSize: '0.75rem' }}>DESCRIPTION</th>
+                                <th className="mono-text text-accent" style={{ padding: '0.5rem', textAlign: 'left', fontSize: '0.75rem' }}>ACTIONS</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {filtered.map(p => (
+                                <PSRow key={p.id} ps={p}
+                                    onSave={updated => setItems(items.map(x => x.id === updated.id ? updated : x))}
+                                    onDelete={id => setItems(items.filter(x => x.id !== id))} />
+                            ))}
+                        </tbody>
+                    </table>
+                </div>
+
+                {filtered.length === 0 && (
+                    <p className="text-muted text-center mono-text" style={{ padding: '2rem' }}>
+                        No pulling strings in this category.
+                    </p>
+                )}
+            </div>
+        );
+    };
+
+    const root = ReactDOM.createRoot(document.getElementById('app-root'));
+    root.render(<PSManager />);
+</script>
+{% endverbatim %}
+{% endblock %}

@@ -58,6 +58,7 @@
                 <a href="{% url 'accounts:profile' %}">PROFILE</a>
                 {% if user.is_staff %}
                     <a href="{% url 'site-settings' %}">SETTINGS</a>
+                    <a href="{% url 'pulling-strings-page' %}">PULL STRINGS</a>
                     <a href="{% url 'merits-page' %}">MERITS</a>
                     <a href="{% url 'admin:index' %}">ADMIN</a>
                 {% endif %}
