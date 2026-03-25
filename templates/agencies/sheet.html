@@ -32,13 +32,13 @@
     const XpProtester = () => {
         const sign = useMemo(() => PROTEST_SIGNS[Math.floor(Math.random() * PROTEST_SIGNS.length)], []);
         return (
-            <div className="xp-protester" style={{ marginTop: '0.25rem' }}>
+            <div className="xp-protester">
                 <div className="xp-protester-body">
-                    <svg width="50" height="52" viewBox="0 0 50 52" fill="none" xmlns="http://www.w3.org/2000/svg">
+                    <svg width="80" height="85" viewBox="0 0 50 52" fill="none" xmlns="http://www.w3.org/2000/svg">
                         <g className="xp-protester-sign">
                             <line x1="25" y1="8" x2="25" y2="20" stroke="var(--accent-danger)" strokeWidth="1.5"/>
-                            <rect x="8" y="0" width="34" height="12" rx="1" fill="var(--accent-danger)" opacity="0.9"/>
-                            <text x="25" y="9" textAnchor="middle" fill="var(--bg-dark)"
+                            <rect x="4" y="0" width="42" height="11" rx="1" fill="var(--accent-danger)" opacity="0.9"/>
+                            <text x="25" y="8" textAnchor="middle" fill="var(--bg-dark)"
                                 style={{ fontSize: '4.5px', fontFamily: 'var(--font-mono)', fontWeight: 'bold' }}>
                                 {sign}
                             </text>
@@ -454,8 +454,12 @@
             <div className="glass-panel" style={{ padding: '1.5rem', marginBottom: '1rem' }}>
                 <h3 className="mono-text text-accent" style={{
                     borderBottom: '1px solid var(--border-color)',
-                    paddingBottom: '0.5rem', marginBottom: '1rem'
-                }}>CORE STATS</h3>
+                    paddingBottom: '0.5rem', marginBottom: '1rem',
+                    position: 'relative', overflow: 'visible'
+                }}>
+                    CORE STATS
+                    {available < 0 && <XpProtester />}
+                </h3>
                 <div style={{ display: 'flex', gap: '2rem', justifyContent: 'center', flexWrap: 'wrap' }}>
                     <div className="tech-border text-center" style={{ padding: '1rem', minWidth: '120px' }}>
                         <div className="text-secondary mono-text" style={{ fontSize: '0.8rem' }}>
@@ -487,14 +491,12 @@
                                 }}>
                                     {available}
                                 </div>
-                                {available < 0 ? <XpProtester /> : (
-                                    <div style={{
-                                        marginTop: '0.25rem', fontFamily: 'var(--font-mono)',
-                                        color: 'var(--text-muted)', fontSize: '0.8rem',
-                                    }}>
-                                        {basesExp} used / {expPool} total
-                                    </div>
-                                )}
+                                <div style={{
+                                    marginTop: '0.25rem', fontFamily: 'var(--font-mono)',
+                                    color: 'var(--text-muted)', fontSize: '0.8rem',
+                                }}>
+                                    {basesExp} used / {expPool} total
+                                </div>
                                 {IS_ADMIN && (
                                     <button
                                         onClick={() => {

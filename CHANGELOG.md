@@ -1,5 +1,8 @@
 # Changelog
 
+## v0.8.11
+- XP protester now bigger and walks across the full EXPERIENCE header line instead of the small remaining box
+
 ## v0.8.10
 - Animated stick figure protester appears when XP goes negative — marches back and forth holding a random protest sign
 - 10 random sign variants: "NEED MORE XP!", "XP OR RIOT!", "WILL WORK FOR XP", etc.
