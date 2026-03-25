@@ -1493,6 +1493,14 @@
                             </div>
                         )}
                     </div>
+                    <div className="text-muted" style={{
+                        textAlign: 'center', fontSize: '0.7rem', marginBottom: '0.5rem', fontFamily: 'var(--font-mono)'
+                    }}>
+                        {mlMax - 4} safe boxes (4 + ⌊({attributes.resistance.social} + {attributes.resistance.mental}) / 2⌋ − 4)
+                        {' · '}
+                        <span style={{ color: 'var(--accent-danger)' }}>4 penalty boxes</span>
+                        {' (-2 soc → -2 cog → -1 both → -2 both)'}
+                    </div>
                     <div style={{ display: 'flex', justifyContent: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
                         {[...Array(mlMax)].map((_, i) => {
                             const filled = i < mentalLoad;

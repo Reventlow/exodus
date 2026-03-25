@@ -1,5 +1,8 @@
 # Changelog
 
+## v0.8.19
+- Explainer text above mental load boxes showing formula breakdown and penalty escalation
+
 ## v0.8.18
 - Dynamic mental load boxes — total = 4 + floor((Composure + Resolve) / 2), last 4 boxes give penalties
 - Penalty zone visually distinguished with red borders, safe zone with subtle borders
