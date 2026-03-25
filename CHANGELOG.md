@@ -1,6 +1,6 @@
 # Changelog
 
-## v0.9.0
+## v0.8.10
 - Animated stick figure protester appears when XP goes negative — marches back and forth holding a random protest sign
 - 10 random sign variants: "NEED MORE XP!", "XP OR RIOT!", "WILL WORK FOR XP", etc.
 - Works on both character sheets and agency sheets
