@@ -34,7 +34,7 @@
         return (
             <div className="xp-protester">
                 <div className="xp-protester-body">
-                    <svg width="80" height="85" viewBox="0 0 50 52" fill="none" xmlns="http://www.w3.org/2000/svg">
+                    <svg width="120" height="120" viewBox="0 0 50 52" fill="none" xmlns="http://www.w3.org/2000/svg">
                         <g className="xp-protester-sign">
                             <line x1="25" y1="8" x2="25" y2="20" stroke="var(--accent-danger)" strokeWidth="1.5"/>
                             <rect x="4" y="0" width="42" height="11" rx="1" fill="var(--accent-danger)" opacity="0.9"/>
@@ -452,14 +452,13 @@
 
         return (
             <div className="glass-panel" style={{ padding: '1.5rem', marginBottom: '1rem' }}>
+                {available < 0 && (
+                    <div className="xp-protester-zone"><XpProtester /></div>
+                )}
                 <h3 className="mono-text text-accent" style={{
                     borderBottom: '1px solid var(--border-color)',
-                    paddingBottom: '0.5rem', marginBottom: '1rem',
-                    position: 'relative', overflow: 'visible'
-                }}>
-                    CORE STATS
-                    {available < 0 && <XpProtester />}
-                </h3>
+                    paddingBottom: '0.5rem', marginBottom: '1rem'
+                }}>CORE STATS</h3>
                 <div style={{ display: 'flex', gap: '2rem', justifyContent: 'center', flexWrap: 'wrap' }}>
                     <div className="tech-border text-center" style={{ padding: '1rem', minWidth: '120px' }}>
                         <div className="text-secondary mono-text" style={{ fontSize: '0.8rem' }}>

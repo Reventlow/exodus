@@ -1,5 +1,8 @@
 # Changelog
 
+## v0.8.12
+- XP protester now twice as tall (120px), walks slowly (12s cycle), and gets its own dedicated zone above the EXPERIENCE header
+
 ## v0.8.11
 - XP protester now bigger and walks across the full EXPERIENCE header line instead of the small remaining box
 
