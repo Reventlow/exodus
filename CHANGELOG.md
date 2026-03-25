@@ -1,5 +1,8 @@
 # Changelog
 
+## v0.8.15
+- XP protester much bigger (240x210px), slower walk (20s cycle), taller zone (210px)
+
 ## v0.8.14
 - Bigger XP protester (160x150px) with wider sign that fits all message text
 
