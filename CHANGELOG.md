@@ -1,5 +1,10 @@
 # Changelog
 
+## v0.8.18
+- Dynamic mental load boxes — total = 4 + floor((Composure + Resolve) / 2), last 4 boxes give penalties
+- Penalty zone visually distinguished with red borders, safe zone with subtle borders
+- Shows current/max and formula next to MENTAL LOAD label
+
 ## v0.8.17
 - Fix: XP cost calculation now most efficient for the player — free creation dots cover the most expensive levels, XP only pays for the cheapest excess
 
