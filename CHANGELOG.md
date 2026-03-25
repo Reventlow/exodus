@@ -1,5 +1,8 @@
 # Changelog
 
+## v0.8.6
+- Personal NPC pulling string picker now only shows NPCs assigned to the current player
+
 ## v0.8.5
 - Hover tooltip on AUTO XP showing full calculation breakdown (attributes, skills, specialisations, merits, pulling strings)
 

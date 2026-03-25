@@ -1805,7 +1805,7 @@
                         pullingStrings={char.pullingStrings || []}
                         catalog={psCatalog}
                         characterClass={char.characterClass || ""}
-                        npcs={npcList}
+                        npcs={npcList.filter(n => n.assignedTo === char.owner)}
                         onAdd={psId => {
                             saveCharacter({ addPullingString: { pullingStringId: psId } });
                             // Reload to get accurate through-table IDs
