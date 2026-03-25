@@ -1,5 +1,8 @@
 # Changelog
 
+## v0.8.17
+- Fix: XP cost calculation now most efficient for the player — free creation dots cover the most expensive levels, XP only pays for the cheapest excess
+
 ## v0.8.16
 - Specialisations section now shows rule hint: "+1 die when a skill roll matches a specialisation"
 

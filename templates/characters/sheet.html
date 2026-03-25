@@ -1049,7 +1049,7 @@
         const skillAssign = assign(skillDots, [11, 7, 4]);
 
         // XP cost for excess dots in a category.
-        // Collect per-dot costs, sort ascending. Free dots cover cheapest, excess = most expensive.
+        // Collect per-dot costs, sort ascending. Free dots cover most expensive, XP pays cheapest.
         const calcCategoryXp = (catAssign, getValues, costPerDot) => {
             let xp = 0;
             cats.forEach(c => {
@@ -1063,7 +1063,7 @@
                 });
                 dotCosts.sort((a, b) => a - b);
                 const excess = dots - alloc;
-                dotCosts.slice(-excess).forEach(c => { xp += c; });
+                dotCosts.slice(0, excess).forEach(c => { xp += c; });
             });
             return xp;
         };
@@ -1086,7 +1086,7 @@
                 for (let i = 1; i <= (m.rating || 0); i++) meritCosts.push(i * 2);
             });
             meritCosts.sort((a, b) => a - b);
-            meritCosts.slice(-(meritDots - 7)).forEach(c => { meritXp += c; });
+            meritCosts.slice(0, meritDots - 7).forEach(c => { meritXp += c; });
         }
 
         // Unspent creation messages
