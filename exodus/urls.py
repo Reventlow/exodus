@@ -10,6 +10,7 @@ from . import views
 urlpatterns = [
     path("admin/", admin.site.urls),
     path("settings/", views.site_settings, name="site-settings"),
+    path("api/status/", views.api_status, name="api-status"),
     path("accounts/", include("accounts.urls")),
     path("", include("comms.urls")),
     path("", include("characters.urls")),

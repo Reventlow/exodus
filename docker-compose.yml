@@ -1,6 +1,6 @@
 services:
   web:
-    image: elohite/exodus:0.7.5
+    image: elohite/exodus:0.8.0
     ports:
       - "8000:8000"
     volumes:
@@ -13,6 +13,7 @@ services:
       - DATABASE_DIR=/app/data
       - MEDIA_DIR=/app/media
       - REDIS_URL=redis://redis:6379/0
+      - MCP_API_TOKEN=${MCP_API_TOKEN:-}
     depends_on:
       - redis
     restart: unless-stopped

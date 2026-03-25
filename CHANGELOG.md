@@ -1,5 +1,10 @@
 # Changelog
 
+## v0.8.0
+- MCP API access — Bearer token authentication middleware for external tool integration (Claude Code, etc.)
+- New `/api/status/` endpoint returning game state overview (version, game date, entity counts)
+- MCP_API_TOKEN environment variable for secure API authentication
+
 ## v0.7.5
 - Clickable base markers on the world map — navigates to the agency sheet and auto-expands/scrolls to that base
 - Added 'New Americ' alias for Venezuela map matching
