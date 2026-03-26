@@ -281,7 +281,10 @@ function MemberManager({ thread, users, onClose, onAddMember, onRemoveMember }) 
 
 function MessageInput({ onSend, dossiers }) {
   const [text, setText] = useState("");
-  const [postingAs, setPostingAs] = useState(null); // {type, id, name} or null
+  const [postingAs, setPostingAs] = useState(null);
+  const [pendingImage, setPendingImage] = useState(null);
+  const [imagePreview, setImagePreview] = useState(null);
+  const fileRef = useRef(null);
 
   function handleKeyDown(e) {
     if (e.key === "Enter" && !e.shiftKey) {
@@ -290,11 +293,27 @@ function MessageInput({ onSend, dossiers }) {
     }
   }
 
+  function handleFileSelect(e) {
+    const file = e.target.files[0];
+    if (!file) return;
+    setPendingImage(file);
+    const reader = new FileReader();
+    reader.onload = ev => setImagePreview(ev.target.result);
+    reader.readAsDataURL(file);
+    if (fileRef.current) fileRef.current.value = "";
+  }
+
+  function clearImage() {
+    setPendingImage(null);
+    setImagePreview(null);
+  }
+
   function submit() {
     const trimmed = text.trim();
-    if (!trimmed) return;
-    onSend(trimmed, postingAs);
+    if (!trimmed && !pendingImage) return;
+    onSend(trimmed, postingAs, pendingImage);
     setText("");
+    clearImage();
   }
 
   return (
@@ -321,7 +340,34 @@ function MessageInput({ onSend, dossiers }) {
           </select>
         </div>
       )}
+      {imagePreview && (
+        <div style={{
+          padding: "0.5rem", background: "rgba(0,0,0,0.3)",
+          borderBottom: "1px solid var(--border-color)",
+          display: "flex", alignItems: "center", gap: "0.5rem"
+        }}>
+          <img src={imagePreview} style={{
+            maxHeight: "60px", maxWidth: "100px", borderRadius: "4px",
+            border: "1px solid var(--border-color)"
+          }} />
+          <span className="mono-text text-muted" style={{ fontSize: "0.75rem", flex: 1 }}>
+            {pendingImage?.name}
+          </span>
+          <button onClick={clearImage} style={{
+            background: "transparent", border: "none",
+            color: "var(--accent-danger)", cursor: "pointer",
+            fontFamily: "var(--font-mono)", fontSize: "0.8rem"
+          }}>X</button>
+        </div>
+      )}
       <div style={S.inputBar}>
+        <button onClick={() => fileRef.current?.click()} title="Attach image" style={{
+          background: "transparent", border: "1px solid var(--border-color)",
+          color: "var(--text-muted)", padding: "0.4rem 0.6rem", cursor: "pointer",
+          borderRadius: "4px", fontSize: "1rem", lineHeight: 1,
+        }}>&#128247;</button>
+        <input ref={fileRef} type="file" accept="image/*"
+          onChange={handleFileSelect} style={{ display: "none" }} />
         <textarea
           value={text}
           onChange={e => setText(e.target.value)}
@@ -342,6 +388,7 @@ function MessageInput({ onSend, dossiers }) {
 
 function ThreadView({ thread, onSend, onBack, onOpenMembers, dossiers }) {
   const messagesEndRef = useRef(null);
+  const [lightboxImage, setLightboxImage] = useState(null);
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -394,7 +441,17 @@ function ThreadView({ thread, onSend, onBack, onOpenMembers, dossiers }) {
                     )}
                   </div>
                 )}
-                <div style={S.msgContent}>{msg.content}</div>
+                {msg.content && <div style={S.msgContent}>{msg.content}</div>}
+                {msg.image && (
+                  <img src={msg.image} onClick={e => {
+                    e.stopPropagation();
+                    setLightboxImage(msg.image);
+                  }} style={{
+                    maxWidth: "250px", maxHeight: "200px", borderRadius: "4px",
+                    marginTop: msg.content ? "0.4rem" : 0,
+                    cursor: "pointer", border: "1px solid var(--border-color)",
+                  }} />
+                )}
                 <div className="text-muted" style={isOwn ? S.msgTimeRight : S.msgTimeLeft}>
                   {new Date(msg.createdAt).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" })}
                 </div>
@@ -407,6 +464,21 @@ function ThreadView({ thread, onSend, onBack, onOpenMembers, dossiers }) {
 
       {/* Input */}
       <MessageInput onSend={onSend} dossiers={dossiers} />
+
+      {/* Image lightbox */}
+      {lightboxImage && ReactDOM.createPortal(
+        <div onClick={() => setLightboxImage(null)} style={{
+          position: "fixed", top: 0, left: 0, right: 0, bottom: 0,
+          background: "rgba(0,0,0,0.85)", display: "flex",
+          alignItems: "center", justifyContent: "center", zIndex: 2000, cursor: "pointer",
+        }}>
+          <img src={lightboxImage} onClick={e => e.stopPropagation()} style={{
+            maxWidth: "90vw", maxHeight: "90vh", objectFit: "contain",
+            border: "2px solid var(--border-color)", borderRadius: "4px", cursor: "default",
+          }} />
+        </div>,
+        document.body
+      )}
     </div>
   );
 }
@@ -562,17 +634,34 @@ function CommsApp() {
     });
   }
 
-  function handleSendMessage(content, postingAs) {
+  function handleSendMessage(content, postingAs, image) {
     if (!activeThreadId) return;
-    const payload = { content: content };
-    if (postingAs) {
-      payload.postedAsType = postingAs.type;
-      payload.postedAsId = postingAs.id;
+
+    if (image) {
+      // Use FormData for image uploads
+      const formData = new FormData();
+      formData.append("content", content || "");
+      formData.append("image", image);
+      if (postingAs) {
+        formData.append("postedAsType", postingAs.type);
+        formData.append("postedAsId", postingAs.id);
+      }
+      fetch("/api/comms/threads/" + activeThreadId + "/messages/", {
+        method: "POST",
+        headers: { "X-CSRFToken": CSRF_TOKEN },
+        body: formData,
+      });
+    } else {
+      const payload = { content: content };
+      if (postingAs) {
+        payload.postedAsType = postingAs.type;
+        payload.postedAsId = postingAs.id;
+      }
+      api("/api/comms/threads/" + activeThreadId + "/messages/", {
+        method: "POST",
+        body: JSON.stringify(payload),
+      });
     }
-    api("/api/comms/threads/" + activeThreadId + "/messages/", {
-      method: "POST",
-      body: JSON.stringify(payload),
-    });
   }
 
   function handleAddMember(threadId, userId) {

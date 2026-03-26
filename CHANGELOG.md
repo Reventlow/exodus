@@ -1,5 +1,11 @@
 # Changelog
 
+## v0.8.21
+- Image upload in comms — attach images to messages via camera button next to input
+- Images displayed inline in chat bubbles with click-to-enlarge lightbox
+- Image preview shown before sending with ability to cancel
+- Messages can now be image-only, text-only, or both
+
 ## v0.8.20
 - Click-to-enlarge lightbox on character portrait images (edit and read-only views)
 - Owners: click image to enlarge, click CHANGE bar to upload; non-owners: click to enlarge

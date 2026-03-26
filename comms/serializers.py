@@ -31,6 +31,7 @@ def serialize_message(message: Message) -> dict:
             "displayName": _get_display_name(message.sender),
         },
         "content": message.content,
+        "image": message.image.url if message.image else None,
         "createdAt": localtime(message.created_at).isoformat(),
     }
     if message.posted_as_type and message.posted_as_name:

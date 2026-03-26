@@ -69,7 +69,8 @@ class Message(models.Model):
         on_delete=models.CASCADE,
         related_name="sent_messages",
     )
-    content = models.TextField()
+    content = models.TextField(blank=True, default="")
+    image = models.ImageField(upload_to="comms_images/", blank=True, null=True)
     posted_as_type = models.CharField(
         max_length=20, choices=POSTED_AS_TYPE_CHOICES, blank=True, default="",
         help_text="If set, the message is displayed as this dossier instead of the sender.",

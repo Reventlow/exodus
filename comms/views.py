@@ -122,14 +122,21 @@ def send_message(request, thread_id):
     if not _can_view_thread(request.user, thread):
         return JsonResponse({"error": "Forbidden"}, status=403)
 
-    try:
-        body = json.loads(request.body)
-    except json.JSONDecodeError:
-        return JsonResponse({"error": "Invalid JSON"}, status=400)
+    # Support both JSON and multipart (for image uploads)
+    image = None
+    if request.content_type and "multipart" in request.content_type:
+        content = request.POST.get("content", "").strip()
+        image = request.FILES.get("image")
+        body = request.POST
+    else:
+        try:
+            body = json.loads(request.body)
+        except json.JSONDecodeError:
+            return JsonResponse({"error": "Invalid JSON"}, status=400)
+        content = body.get("content", "").strip()
 
-    content = body.get("content", "").strip()
-    if not content:
-        return JsonResponse({"error": "Content is required"}, status=400)
+    if not content and not image:
+        return JsonResponse({"error": "Content or image is required"}, status=400)
 
     # Superusers can post as a character or NPC dossier
     posted_as_type = ""
@@ -159,6 +166,7 @@ def send_message(request, thread_id):
         thread=thread,
         sender=request.user,
         content=content,
+        image=image,
         posted_as_type=posted_as_type,
         posted_as_id=posted_as_id,
         posted_as_name=posted_as_name,
