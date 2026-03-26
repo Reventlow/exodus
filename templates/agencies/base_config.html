@@ -416,229 +416,286 @@
     //  FACILITY TYPES SECTION (with nested levels)
     // =====================================================================
     const FacilityTypesSection = ({ items, onUpdate }) => {
+        const [dragItem, setDragItem] = useState(null);
+        const [dragCat, setDragCat] = useState(null);
+
+        const save = (updated) => onUpdate('facilityTypes', updated);
+
         const updateFacility = (idx, field, value) => {
-            const updated = items.map((item, i) =>
-                i === idx ? { ...item, [field]: value } : item
-            );
-            onUpdate('facilityTypes', updated);
+            save(items.map((item, i) => i === idx ? { ...item, [field]: value } : item));
         };
 
         const updateLevel = (facilityIdx, levelIdx, field, value) => {
-            const updated = items.map((item, fi) => {
+            save(items.map((item, fi) => {
                 if (fi !== facilityIdx) return item;
                 const newLevels = item.levels.map((lv, li) =>
                     li === levelIdx ? { ...lv, [field]: value } : lv
                 );
                 return { ...item, levels: newLevels };
-            });
-            onUpdate('facilityTypes', updated);
+            }));
         };
 
-        const addFacility = () => {
+        const addFacility = (category) => {
             const key = 'new_facility_' + Date.now();
-            onUpdate('facilityTypes', [...items, {
-                key, name: 'New Facility', levels: [
-                    { level: 1, name: 'Level 1', exp: 0, size: 0, description: '' },
-                ],
+            save([...items, {
+                key, name: 'New Facility', category: category || 'Uncategorised',
+                sortOrder: items.filter(f => f.category === category).length,
+                levels: [{ level: 1, name: 'Level 1', exp: 0, size: 0, description: '' }],
             }]);
         };
 
-        const removeFacility = (idx) => {
-            onUpdate('facilityTypes', items.filter((_, i) => i !== idx));
-        };
+        const removeFacility = (idx) => save(items.filter((_, i) => i !== idx));
 
         const addLevel = (facilityIdx) => {
-            const updated = items.map((item, fi) => {
+            save(items.map((item, fi) => {
                 if (fi !== facilityIdx) return item;
                 const nextLevel = item.levels.length + 1;
-                return {
-                    ...item,
-                    levels: [...item.levels, {
-                        level: nextLevel,
-                        name: `Level ${nextLevel}`,
-                        exp: 0,
-                        size: 0,
-                        description: '',
-                    }],
-                };
-            });
-            onUpdate('facilityTypes', updated);
+                return { ...item, levels: [...item.levels, {
+                    level: nextLevel, name: `Level ${nextLevel}`, exp: 0, size: 0, description: '',
+                }]};
+            }));
         };
 
         const removeLevel = (facilityIdx, levelIdx) => {
-            const updated = items.map((item, fi) => {
+            save(items.map((item, fi) => {
                 if (fi !== facilityIdx) return item;
-                return {
-                    ...item,
-                    levels: item.levels.filter((_, li) => li !== levelIdx),
-                };
-            });
-            onUpdate('facilityTypes', updated);
+                return { ...item, levels: item.levels.filter((_, li) => li !== levelIdx) };
+            }));
         };
+
+        // Categories: derive unique, sorted by first occurrence's sortOrder
+        const catMap = {};
+        items.forEach((f, i) => {
+            const cat = f.category || 'Uncategorised';
+            if (!catMap[cat]) catMap[cat] = { catSortOrder: f.catSortOrder ?? i, facilities: [] };
+            catMap[cat].facilities.push({ ...f, _idx: i });
+        });
+        const categories = Object.entries(catMap)
+            .sort(([,a], [,b]) => a.catSortOrder - b.catSortOrder)
+            .map(([name, data]) => ({
+                name,
+                facilities: data.facilities.sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0)),
+            }));
+
+        // Drag-and-drop for facilities within a category
+        const onFacilityDragStart = (e, idx) => { setDragItem(idx); e.dataTransfer.effectAllowed = 'move'; };
+        const onFacilityDragOver = (e) => { e.preventDefault(); e.dataTransfer.dropEffect = 'move'; };
+        const onFacilityDrop = (e, targetIdx, cat) => {
+            e.preventDefault();
+            if (dragItem === null || dragItem === targetIdx) { setDragItem(null); return; }
+            const catFacilities = items.filter(f => (f.category || 'Uncategorised') === cat);
+            const srcKey = catFacilities[dragItem]?.key;
+            const tgtKey = catFacilities[targetIdx]?.key;
+            if (!srcKey || !tgtKey) { setDragItem(null); return; }
+            // Reorder within category
+            const reordered = [...catFacilities];
+            const [moved] = reordered.splice(dragItem, 1);
+            reordered.splice(targetIdx, 0, moved);
+            const updated = items.map(f => {
+                if ((f.category || 'Uncategorised') !== cat) return f;
+                const newIdx = reordered.findIndex(r => r.key === f.key);
+                return { ...f, sortOrder: newIdx };
+            });
+            save(updated);
+            setDragItem(null);
+        };
+
+        // Drag-and-drop for categories
+        const onCatDragStart = (e, catName) => { setDragCat(catName); e.dataTransfer.effectAllowed = 'move'; };
+        const onCatDragOver = (e) => { e.preventDefault(); e.dataTransfer.dropEffect = 'move'; };
+        const onCatDrop = (e, targetCat) => {
+            e.preventDefault();
+            if (!dragCat || dragCat === targetCat) { setDragCat(null); return; }
+            const catNames = categories.map(c => c.name);
+            const srcIdx = catNames.indexOf(dragCat);
+            const tgtIdx = catNames.indexOf(targetCat);
+            if (srcIdx === -1 || tgtIdx === -1) { setDragCat(null); return; }
+            const reordered = [...catNames];
+            const [moved] = reordered.splice(srcIdx, 1);
+            reordered.splice(tgtIdx, 0, moved);
+            const updated = items.map(f => {
+                const cat = f.category || 'Uncategorised';
+                return { ...f, catSortOrder: reordered.indexOf(cat) };
+            });
+            save(updated);
+            setDragCat(null);
+        };
+
+        // Add new category
+        const [newCat, setNewCat] = useState('');
+        const addCategory = () => {
+            const name = newCat.trim();
+            if (!name || catMap[name]) return;
+            // Add a placeholder facility so category exists
+            const key = 'new_facility_' + Date.now();
+            save([...items, {
+                key, name: 'New Facility', category: name,
+                catSortOrder: categories.length, sortOrder: 0,
+                levels: [{ level: 1, name: 'Level 1', exp: 0, size: 0, description: '' }],
+            }]);
+            setNewCat('');
+        };
+
+        const dragHandle = { cursor: 'grab', userSelect: 'none', padding: '0 0.4rem', fontSize: '1rem', color: 'var(--text-muted)' };
 
         return (
             <SectionPanel title="FACILITY TYPES" count={items.length}>
-                {items.length === 0 && (
-                    <p className="text-muted mono-text" style={{
-                        textAlign: 'center', padding: '2rem 0', fontStyle: 'italic', fontSize: '0.85rem',
-                    }}>
-                        No facility types configured.
-                    </p>
-                )}
-
-                {items.map((facility, fIdx) => (
-                    <div key={facility.key} className="tech-border" style={{
-                        padding: '1rem',
-                        marginBottom: '1rem',
-                        borderLeft: `3px solid ${BASE_ACCENT}`,
-                    }}>
-                        {/* Facility header */}
+                {categories.map(cat => (
+                    <div key={cat.name}
+                        draggable
+                        onDragStart={e => onCatDragStart(e, cat.name)}
+                        onDragOver={onCatDragOver}
+                        onDrop={e => { e.stopPropagation(); onCatDrop(e, cat.name); }}
+                        style={{
+                            marginBottom: '1.5rem',
+                            border: dragCat === cat.name ? `2px dashed ${BASE_ACCENT}` : '2px solid transparent',
+                            borderRadius: 'var(--radius-sm)', padding: '0.25rem',
+                        }}
+                    >
                         <div style={{
-                            display: 'flex', justifyContent: 'space-between',
-                            alignItems: 'center', marginBottom: '0.75rem',
+                            display: 'flex', alignItems: 'center', gap: '0.5rem',
+                            marginBottom: '0.75rem', borderBottom: `1px solid ${BASE_ACCENT}`, paddingBottom: '0.5rem',
                         }}>
-                            <div style={{ flex: 1, marginRight: '1rem' }}>
-                                <FieldLabel>FACILITY KEY</FieldLabel>
-                                <EditableInput
-                                    value={facility.key}
-                                    onChange={(v) => updateFacility(fIdx, 'key', v)}
-                                    placeholder="unique_key"
-                                    style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}
-                                />
-                            </div>
-                            <div style={{ flex: 2, marginRight: '1rem' }}>
-                                <FieldLabel>FACILITY NAME</FieldLabel>
-                                <EditableInput
-                                    value={facility.name}
-                                    onChange={(v) => updateFacility(fIdx, 'name', v)}
-                                    placeholder="Facility name"
-                                    style={{ fontWeight: 'bold' }}
-                                />
-                            </div>
-                            <button
-                                onClick={() => removeFacility(fIdx)}
-                                title="Delete facility type"
-                                className="mono-text"
-                                style={{
-                                    background: 'transparent',
-                                    border: '1px solid var(--accent-danger)',
-                                    color: 'var(--accent-danger)',
-                                    cursor: 'pointer',
-                                    padding: '0.3rem 0.6rem',
-                                    fontSize: '0.7rem',
-                                    fontFamily: 'var(--font-mono)',
-                                    borderRadius: 'var(--radius-sm)',
-                                    marginTop: '1rem',
-                                    flexShrink: 0,
-                                }}
-                            >
-                                DELETE
-                            </button>
+                            <span style={dragHandle} title="Drag to reorder category">&#9776;</span>
+                            <span className="mono-text" style={{ color: BASE_ACCENT, fontSize: '0.85rem', fontWeight: 'bold', flex: 1 }}>
+                                {cat.name.toUpperCase()}
+                            </span>
+                            <span className="text-muted mono-text" style={{ fontSize: '0.7rem' }}>
+                                {cat.facilities.length} facilities
+                            </span>
                         </div>
 
-                        {/* Levels */}
-                        <div style={{
-                            background: 'rgba(0,0,0,0.15)',
-                            borderRadius: 'var(--radius-sm)',
-                            padding: '0.75rem',
-                        }}>
-                            <div style={{
-                                display: 'flex', justifyContent: 'space-between',
-                                alignItems: 'center', marginBottom: '0.5rem',
-                            }}>
-                                <span className="mono-text" style={{
-                                    fontSize: '0.7rem', color: BASE_ACCENT, letterSpacing: '1px',
+                        {cat.facilities.map((facility, localIdx) => (
+                            <div key={facility.key}
+                                draggable
+                                onDragStart={e => { e.stopPropagation(); onFacilityDragStart(e, localIdx); }}
+                                onDragOver={e => { e.stopPropagation(); onFacilityDragOver(e); }}
+                                onDrop={e => { e.stopPropagation(); onFacilityDrop(e, localIdx, cat.name); }}
+                                className="tech-border" style={{
+                                    padding: '1rem', marginBottom: '0.75rem',
+                                    borderLeft: `3px solid ${BASE_ACCENT}`,
+                                    opacity: dragItem === localIdx ? 0.5 : 1,
+                                }}
+                            >
+                                <div style={{
+                                    display: 'flex', justifyContent: 'space-between',
+                                    alignItems: 'center', marginBottom: '0.75rem',
                                 }}>
-                                    LEVELS ({facility.levels.length})
-                                </span>
-                            </div>
-
-                            {/* Level column headers */}
-                            <div style={{
-                                display: 'grid',
-                                gridTemplateColumns: '50px 1fr 70px 70px 2fr 32px',
-                                gap: '0.4rem',
-                                marginBottom: '0.4rem',
-                                padding: '0 0.25rem',
-                            }}>
-                                <span className="text-muted mono-text" style={{ fontSize: '0.6rem' }}>LVL</span>
-                                <span className="text-muted mono-text" style={{ fontSize: '0.6rem' }}>NAME</span>
-                                <span className="text-muted mono-text" style={{ fontSize: '0.6rem' }}>EXP COST</span>
-                                <span className="text-muted mono-text" style={{ fontSize: '0.6rem' }}>SIZE</span>
-                                <span className="text-muted mono-text" style={{ fontSize: '0.6rem' }}>DESCRIPTION</span>
-                                <span></span>
-                            </div>
-
-                            {facility.levels.map((level, lIdx) => (
-                                <div key={lIdx} style={{
-                                    display: 'grid',
-                                    gridTemplateColumns: '50px 1fr 70px 70px 2fr 32px',
-                                    gap: '0.4rem',
-                                    marginBottom: '0.2rem',
-                                    alignItems: 'start',
-                                }}>
-                                    <EditableInput
-                                        value={level.level}
-                                        onChange={(v) => updateLevel(fIdx, lIdx, 'level', v)}
-                                        type="number"
-                                        style={{ textAlign: 'center', fontSize: '0.8rem' }}
-                                    />
-                                    <EditableInput
-                                        value={level.name}
-                                        onChange={(v) => updateLevel(fIdx, lIdx, 'name', v)}
-                                        placeholder="Level name"
-                                        style={{ fontSize: '0.8rem' }}
-                                    />
-                                    <EditableInput
-                                        value={level.exp}
-                                        onChange={(v) => updateLevel(fIdx, lIdx, 'exp', v)}
-                                        type="number"
-                                        style={{ textAlign: 'center', fontSize: '0.8rem' }}
-                                    />
-                                    <EditableInput
-                                        value={level.size}
-                                        onChange={(v) => updateLevel(fIdx, lIdx, 'size', v)}
-                                        type="number"
-                                        style={{ textAlign: 'center', fontSize: '0.8rem' }}
-                                    />
-                                    <EditableInput
-                                        value={level.description}
-                                        onChange={(v) => updateLevel(fIdx, lIdx, 'description', v)}
-                                        placeholder="Level description..."
-                                        style={{ fontSize: '0.8rem' }}
-                                    />
-                                    <DeleteButton
-                                        onClick={() => removeLevel(fIdx, lIdx)}
-                                        title="Remove level"
-                                        small
-                                    />
+                                    <span style={dragHandle} title="Drag to reorder">&#9776;</span>
+                                    <div style={{ flex: 1, marginRight: '0.5rem' }}>
+                                        <FieldLabel>KEY</FieldLabel>
+                                        <EditableInput value={facility.key}
+                                            onChange={v => updateFacility(facility._idx, 'key', v)}
+                                            placeholder="unique_key"
+                                            style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }} />
+                                    </div>
+                                    <div style={{ flex: 2, marginRight: '0.5rem' }}>
+                                        <FieldLabel>NAME</FieldLabel>
+                                        <EditableInput value={facility.name}
+                                            onChange={v => updateFacility(facility._idx, 'name', v)}
+                                            placeholder="Facility name"
+                                            style={{ fontWeight: 'bold' }} />
+                                    </div>
+                                    <div style={{ flex: 1, marginRight: '0.5rem' }}>
+                                        <FieldLabel>CATEGORY</FieldLabel>
+                                        <EditableInput value={facility.category || ''}
+                                            onChange={v => updateFacility(facility._idx, 'category', v || 'Uncategorised')}
+                                            placeholder="Category" style={{ fontSize: '0.8rem' }} />
+                                    </div>
+                                    <button onClick={() => removeFacility(facility._idx)}
+                                        title="Delete facility type" className="mono-text"
+                                        style={{
+                                            background: 'transparent', border: '1px solid var(--accent-danger)',
+                                            color: 'var(--accent-danger)', cursor: 'pointer',
+                                            padding: '0.3rem 0.6rem', fontSize: '0.7rem',
+                                            fontFamily: 'var(--font-mono)', borderRadius: 'var(--radius-sm)',
+                                            marginTop: '1rem', flexShrink: 0,
+                                        }}>DELETE</button>
                                 </div>
-                            ))}
 
-                            {/* Add level button */}
-                            <button
-                                onClick={() => addLevel(fIdx)}
-                                className="mono-text"
-                                style={{
-                                    background: 'transparent',
-                                    border: '1px dashed var(--border-color)',
-                                    color: 'var(--text-muted)',
-                                    width: '100%',
-                                    padding: '0.35rem',
-                                    cursor: 'pointer',
-                                    fontSize: '0.75rem',
-                                    marginTop: '0.5rem',
-                                    borderRadius: 'var(--radius-sm)',
-                                    fontFamily: 'var(--font-mono)',
-                                }}
-                            >
-                                + ADD LEVEL
-                            </button>
-                        </div>
+                                {/* Levels */}
+                                <div style={{
+                                    background: 'rgba(0,0,0,0.15)', borderRadius: 'var(--radius-sm)', padding: '0.75rem',
+                                }}>
+                                    <span className="mono-text" style={{
+                                        fontSize: '0.7rem', color: BASE_ACCENT, letterSpacing: '1px',
+                                        display: 'block', marginBottom: '0.5rem',
+                                    }}>LEVELS ({facility.levels.length})</span>
+
+                                    <div style={{
+                                        display: 'grid', gridTemplateColumns: '50px 1fr 70px 70px 2fr 32px',
+                                        gap: '0.4rem', marginBottom: '0.4rem', padding: '0 0.25rem',
+                                    }}>
+                                        <span className="text-muted mono-text" style={{ fontSize: '0.6rem' }}>LVL</span>
+                                        <span className="text-muted mono-text" style={{ fontSize: '0.6rem' }}>NAME</span>
+                                        <span className="text-muted mono-text" style={{ fontSize: '0.6rem' }}>EXP COST</span>
+                                        <span className="text-muted mono-text" style={{ fontSize: '0.6rem' }}>SIZE</span>
+                                        <span className="text-muted mono-text" style={{ fontSize: '0.6rem' }}>DESCRIPTION</span>
+                                        <span></span>
+                                    </div>
+
+                                    {facility.levels.map((level, lIdx) => (
+                                        <div key={lIdx} style={{
+                                            display: 'grid', gridTemplateColumns: '50px 1fr 70px 70px 2fr 32px',
+                                            gap: '0.4rem', marginBottom: '0.2rem', alignItems: 'start',
+                                        }}>
+                                            <EditableInput value={level.level}
+                                                onChange={v => updateLevel(facility._idx, lIdx, 'level', v)}
+                                                type="number" style={{ textAlign: 'center', fontSize: '0.8rem' }} />
+                                            <EditableInput value={level.name}
+                                                onChange={v => updateLevel(facility._idx, lIdx, 'name', v)}
+                                                placeholder="Level name" style={{ fontSize: '0.8rem' }} />
+                                            <EditableInput value={level.exp}
+                                                onChange={v => updateLevel(facility._idx, lIdx, 'exp', v)}
+                                                type="number" style={{ textAlign: 'center', fontSize: '0.8rem' }} />
+                                            <EditableInput value={level.size}
+                                                onChange={v => updateLevel(facility._idx, lIdx, 'size', v)}
+                                                type="number" style={{ textAlign: 'center', fontSize: '0.8rem' }} />
+                                            <EditableInput value={level.description}
+                                                onChange={v => updateLevel(facility._idx, lIdx, 'description', v)}
+                                                placeholder="Level description..." style={{ fontSize: '0.8rem' }} />
+                                            <DeleteButton onClick={() => removeLevel(facility._idx, lIdx)}
+                                                title="Remove level" small />
+                                        </div>
+                                    ))}
+
+                                    <button onClick={() => addLevel(facility._idx)} className="mono-text"
+                                        style={{
+                                            background: 'transparent', border: '1px dashed var(--border-color)',
+                                            color: 'var(--text-muted)', width: '100%', padding: '0.35rem',
+                                            cursor: 'pointer', fontSize: '0.75rem', marginTop: '0.5rem',
+                                            borderRadius: 'var(--radius-sm)', fontFamily: 'var(--font-mono)',
+                                        }}>+ ADD LEVEL</button>
+                                </div>
+                            </div>
+                        ))}
+
+                        <AddButton onClick={() => addFacility(cat.name)} label={`+ ADD FACILITY TO ${cat.name.toUpperCase()}`} />
                     </div>
                 ))}
 
-                <AddButton onClick={addFacility} label="+ ADD FACILITY TYPE" />
+                {/* Add new category */}
+                <div style={{
+                    display: 'flex', gap: '0.5rem', alignItems: 'center', marginTop: '1rem',
+                    padding: '0.75rem', border: '1px dashed var(--border-color)', borderRadius: 'var(--radius-sm)',
+                }}>
+                    <input value={newCat} onChange={e => setNewCat(e.target.value)}
+                        onKeyDown={e => e.key === 'Enter' && addCategory()}
+                        placeholder="New category name..."
+                        style={{
+                            background: 'transparent', border: '1px solid var(--border-color)',
+                            color: 'var(--text-primary)', padding: '0.35rem 0.5rem', flex: 1,
+                            fontFamily: 'var(--font-mono)', fontSize: '0.8rem', borderRadius: 'var(--radius-sm)',
+                        }} />
+                    <button onClick={addCategory} className="mono-text" disabled={!newCat.trim()}
+                        style={{
+                            background: newCat.trim() ? BASE_ACCENT : 'transparent',
+                            border: `1px solid ${BASE_ACCENT}`,
+                            color: newCat.trim() ? 'var(--bg-dark)' : 'var(--text-muted)',
+                            padding: '0.35rem 0.75rem', cursor: newCat.trim() ? 'pointer' : 'default',
+                            fontFamily: 'var(--font-mono)', fontSize: '0.75rem', borderRadius: 'var(--radius-sm)',
+                        }}>+ ADD CATEGORY</button>
+                </div>
             </SectionPanel>
         );
     };

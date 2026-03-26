@@ -1,5 +1,12 @@
 # Changelog
 
+## v0.8.22
+- Facility categories — facilities can be grouped into named categories with drag-and-drop ordering
+- Drag-and-drop reordering for both categories and facilities within categories on base config page
+- Add new categories with text input
+- Each facility has an editable category field
+- Agency base sheet displays facilities grouped by category in configured sort order
+
 ## v0.8.21
 - Image upload in comms — attach images to messages via camera button next to input
 - Images displayed inline in chat bubbles with click-to-enlarge lightbox
