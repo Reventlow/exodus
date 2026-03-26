@@ -416,9 +416,6 @@
     //  FACILITY TYPES SECTION (with nested levels)
     // =====================================================================
     const FacilityTypesSection = ({ items, onUpdate }) => {
-        const [dragItem, setDragItem] = useState(null);
-        const [dragCat, setDragCat] = useState(null);
-
         const save = (updated) => onUpdate('facilityTypes', updated);
 
         const updateFacility = (idx, field, value) => {
@@ -477,48 +474,33 @@
                 facilities: data.facilities.sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0)),
             }));
 
-        // Drag-and-drop for facilities within a category
-        const onFacilityDragStart = (e, idx) => { setDragItem(idx); e.dataTransfer.effectAllowed = 'move'; };
-        const onFacilityDragOver = (e) => { e.preventDefault(); e.dataTransfer.dropEffect = 'move'; };
-        const onFacilityDrop = (e, targetIdx, cat) => {
-            e.preventDefault();
-            if (dragItem === null || dragItem === targetIdx) { setDragItem(null); return; }
-            const catFacilities = items.filter(f => (f.category || 'Uncategorised') === cat);
-            const srcKey = catFacilities[dragItem]?.key;
-            const tgtKey = catFacilities[targetIdx]?.key;
-            if (!srcKey || !tgtKey) { setDragItem(null); return; }
-            // Reorder within category
+        // Move facility up/down within category
+        const moveFacility = (cat, localIdx, dir) => {
+            const catFacilities = items
+                .map((f, i) => ({ ...f, _idx: i }))
+                .filter(f => (f.category || 'Uncategorised') === cat)
+                .sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0));
+            const newIdx = localIdx + dir;
+            if (newIdx < 0 || newIdx >= catFacilities.length) return;
             const reordered = [...catFacilities];
-            const [moved] = reordered.splice(dragItem, 1);
-            reordered.splice(targetIdx, 0, moved);
-            const updated = items.map(f => {
-                if ((f.category || 'Uncategorised') !== cat) return f;
-                const newIdx = reordered.findIndex(r => r.key === f.key);
-                return { ...f, sortOrder: newIdx };
-            });
+            [reordered[localIdx], reordered[newIdx]] = [reordered[newIdx], reordered[localIdx]];
+            const updated = [...items];
+            reordered.forEach((f, i) => { updated[f._idx] = { ...updated[f._idx], sortOrder: i }; });
             save(updated);
-            setDragItem(null);
         };
 
-        // Drag-and-drop for categories
-        const onCatDragStart = (e, catName) => { setDragCat(catName); e.dataTransfer.effectAllowed = 'move'; };
-        const onCatDragOver = (e) => { e.preventDefault(); e.dataTransfer.dropEffect = 'move'; };
-        const onCatDrop = (e, targetCat) => {
-            e.preventDefault();
-            if (!dragCat || dragCat === targetCat) { setDragCat(null); return; }
+        // Move category up/down
+        const moveCategory = (catName, dir) => {
             const catNames = categories.map(c => c.name);
-            const srcIdx = catNames.indexOf(dragCat);
-            const tgtIdx = catNames.indexOf(targetCat);
-            if (srcIdx === -1 || tgtIdx === -1) { setDragCat(null); return; }
-            const reordered = [...catNames];
-            const [moved] = reordered.splice(srcIdx, 1);
-            reordered.splice(tgtIdx, 0, moved);
+            const idx = catNames.indexOf(catName);
+            const newIdx = idx + dir;
+            if (newIdx < 0 || newIdx >= catNames.length) return;
+            [catNames[idx], catNames[newIdx]] = [catNames[newIdx], catNames[idx]];
             const updated = items.map(f => {
                 const cat = f.category || 'Uncategorised';
-                return { ...f, catSortOrder: reordered.indexOf(cat) };
+                return { ...f, catSortOrder: catNames.indexOf(cat) };
             });
             save(updated);
-            setDragCat(null);
         };
 
         // Add new category
@@ -536,27 +518,30 @@
             setNewCat('');
         };
 
-        const dragHandle = { cursor: 'grab', userSelect: 'none', padding: '0 0.4rem', fontSize: '1rem', color: 'var(--text-muted)' };
+        const arrowBtn = (onClick, disabled, label) => (
+            <button onClick={onClick} disabled={disabled} title={label} className="mono-text" style={{
+                background: 'transparent', border: '1px solid var(--border-color)',
+                color: disabled ? 'var(--bg-panel)' : 'var(--text-muted)',
+                cursor: disabled ? 'default' : 'pointer',
+                padding: '0.1rem 0.35rem', fontSize: '0.75rem', lineHeight: 1,
+                borderRadius: 'var(--radius-sm)', fontFamily: 'var(--font-mono)',
+            }}>{label}</button>
+        );
 
         return (
             <SectionPanel title="FACILITY TYPES" count={items.length}>
-                {categories.map(cat => (
-                    <div key={cat.name}
-                        draggable
-                        onDragStart={e => onCatDragStart(e, cat.name)}
-                        onDragOver={onCatDragOver}
-                        onDrop={e => { e.stopPropagation(); onCatDrop(e, cat.name); }}
-                        style={{
-                            marginBottom: '1.5rem',
-                            border: dragCat === cat.name ? `2px dashed ${BASE_ACCENT}` : '2px solid transparent',
-                            borderRadius: 'var(--radius-sm)', padding: '0.25rem',
-                        }}
-                    >
+                {categories.map((cat, catIdx) => (
+                    <div key={cat.name} style={{
+                        marginBottom: '1.5rem', borderRadius: 'var(--radius-sm)', padding: '0.25rem',
+                    }}>
                         <div style={{
                             display: 'flex', alignItems: 'center', gap: '0.5rem',
                             marginBottom: '0.75rem', borderBottom: `1px solid ${BASE_ACCENT}`, paddingBottom: '0.5rem',
                         }}>
-                            <span style={dragHandle} title="Drag to reorder category">&#9776;</span>
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
+                                {arrowBtn(() => moveCategory(cat.name, -1), catIdx === 0, '▲')}
+                                {arrowBtn(() => moveCategory(cat.name, 1), catIdx === categories.length - 1, '▼')}
+                            </div>
                             <span className="mono-text" style={{ color: BASE_ACCENT, fontSize: '0.85rem', fontWeight: 'bold', flex: 1 }}>
                                 {cat.name.toUpperCase()}
                             </span>
@@ -567,21 +552,19 @@
 
                         {cat.facilities.map((facility, localIdx) => (
                             <div key={facility.key}
-                                draggable
-                                onDragStart={e => { e.stopPropagation(); onFacilityDragStart(e, localIdx); }}
-                                onDragOver={e => { e.stopPropagation(); onFacilityDragOver(e); }}
-                                onDrop={e => { e.stopPropagation(); onFacilityDrop(e, localIdx, cat.name); }}
                                 className="tech-border" style={{
                                     padding: '1rem', marginBottom: '0.75rem',
                                     borderLeft: `3px solid ${BASE_ACCENT}`,
-                                    opacity: dragItem === localIdx ? 0.5 : 1,
                                 }}
                             >
                                 <div style={{
                                     display: 'flex', justifyContent: 'space-between',
                                     alignItems: 'center', marginBottom: '0.75rem',
                                 }}>
-                                    <span style={dragHandle} title="Drag to reorder">&#9776;</span>
+                                    <div style={{ display: 'flex', flexDirection: 'column', gap: '2px', marginRight: '0.5rem' }}>
+                                        {arrowBtn(() => moveFacility(cat.name, localIdx, -1), localIdx === 0, '▲')}
+                                        {arrowBtn(() => moveFacility(cat.name, localIdx, 1), localIdx === cat.facilities.length - 1, '▼')}
+                                    </div>
                                     <div style={{ flex: 1, marginRight: '0.5rem' }}>
                                         <FieldLabel>KEY</FieldLabel>
                                         <EditableInput value={facility.key}

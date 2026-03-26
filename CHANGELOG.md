@@ -1,5 +1,8 @@
 # Changelog
 
+## v0.8.23
+- Replaced drag-and-drop with up/down arrow buttons for reordering facility categories and facilities
+
 ## v0.8.22
 - Facility categories — facilities can be grouped into named categories with drag-and-drop ordering
 - Drag-and-drop reordering for both categories and facilities within categories on base config page
