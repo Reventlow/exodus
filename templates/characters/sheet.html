@@ -2164,6 +2164,32 @@
                         }}
                     />
                 </div>
+
+                {/* Flaws */}
+                <ExpandableListModule
+                    title="FLAWS" itemLabel="Flaw Name"
+                    items={char.flaws || []}
+                    onAdd={() => {
+                        document.activeElement?.blur();
+                        const fresh = charRef.current.flaws || [];
+                        updateCharacter({
+                            flaws: [...fresh, { name: "", rating: 1, description: "" }]
+                        });
+                    }}
+                    onRemove={idx => {
+                        document.activeElement?.blur();
+                        const fresh = charRef.current.flaws || [];
+                        updateCharacter({
+                            flaws: fresh.filter((_, i) => i !== idx)
+                        });
+                    }}
+                    onUpdate={(idx, val) => updateCharacter({
+                        flaws: char.flaws.map((item, i) => i === idx ? val : item)
+                    })}
+                    onQuietSave={(idx, val) => saveCharacterQuiet({
+                        flaws: charRef.current.flaws.map((item, i) => i === idx ? val : item)
+                    })}
+                />
             </div>
         );
     };

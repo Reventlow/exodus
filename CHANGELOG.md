@@ -1,5 +1,9 @@
 # Changelog
 
+## v0.8.24
+- Flaws section on character sheet — players can add, edit, and remove flaws with name, rating, and description
+- Flaws visible on read-only character view when present
+
 ## v0.8.23
 - Replaced drag-and-drop with up/down arrow buttons for reordering facility categories and facilities
 

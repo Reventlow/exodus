@@ -901,6 +901,12 @@
                         items={char.merits || []}
                     />
                 </div>
+                {(char.flaws || []).length > 0 && (
+                    <ExpandableListModule
+                        title="FLAWS" itemLabel="Flaw Name"
+                        items={char.flaws || []}
+                    />
+                )}
             </div>
         );
     };
