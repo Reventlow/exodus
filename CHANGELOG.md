@@ -1,5 +1,10 @@
 # Changelog
 
+## v0.8.26
+- Classified notes section on character sheet — private markdown notes visible only to the player and GM
+- Red-bordered panel with "Visible only to you and the GM" disclaimer
+- Hidden from other players on read-only view (API returns null for non-owners)
+
 ## v0.8.25
 - Fix: Personal NPC pulling string picker now excludes dossiers already linked to another pulling string on the same character
 - Fix: character portrait click behaviour — clicking empty portrait triggers upload for owners

@@ -68,7 +68,7 @@ def api_character_list(request):
         owner=request.user,
         name=body.get("name", "UNKNOWN AGENT"),
     )
-    return JsonResponse(serialize_character(character), status=201)
+    return JsonResponse(serialize_character(character, request.user), status=201)
 
 
 @login_required
@@ -78,7 +78,7 @@ def api_character_detail(request, pk):
     character = get_object_or_404(Character, pk=pk)
 
     if request.method == "GET":
-        return JsonResponse(serialize_character(character))
+        return JsonResponse(serialize_character(character, request.user))
 
     if request.method == "PUT":
         # Only owner or admin can update
@@ -94,6 +94,8 @@ def api_character_detail(request, pk):
         for field in ("name", "concept", "chronicle", "virtue", "vice", "dossier"):
             if field in data:
                 setattr(character, field, data[field])
+        if "classifiedNotes" in data:
+            character.classified_notes = data["classifiedNotes"]
 
         # Update class — non-superusers cannot set AI
         if "characterClass" in data:
@@ -222,7 +224,7 @@ def api_character_detail(request, pk):
             )
 
         character.save()
-        return JsonResponse(serialize_character(character))
+        return JsonResponse(serialize_character(character, request.user))
 
     if request.method == "DELETE":
         # Only admin can delete

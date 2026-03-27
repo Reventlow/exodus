@@ -70,6 +70,10 @@ class Character(models.Model):
     virtue = models.CharField(max_length=100, blank=True, default="")
     vice = models.CharField(max_length=100, blank=True, default="")
     dossier = models.TextField(blank=True, default="")
+    classified_notes = models.TextField(
+        blank=True, default="",
+        help_text="Private notes visible only to the player and GM.",
+    )
     profile_picture = models.ImageField(
         upload_to="character_portraits/", blank=True, null=True
     )

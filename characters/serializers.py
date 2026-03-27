@@ -42,7 +42,7 @@ def serialize_character_merit(cm):
     }
 
 
-def serialize_character(character):
+def serialize_character(character, user=None):
     """Full character data for API responses."""
     cps_entries = character.character_pulling_strings.select_related(
         "pulling_string", "linked_npc"
@@ -82,6 +82,9 @@ def serialize_character(character):
         "experience": character.experience,
         "experienceUsed": character.experience_used,
         "pullingStringsCost": sum(cps.pulling_string.cost for cps in cps_entries),
+        "classifiedNotes": character.classified_notes if (
+            user and (user == character.owner or user.is_superuser)
+        ) else None,
         "willpower": {"current": character.willpower_current},
         "xpTransfers": [
             {
