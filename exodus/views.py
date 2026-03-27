@@ -29,16 +29,35 @@ def site_settings(request):
     return render(request, "site_settings.html", {"settings_obj": settings_obj})
 
 
-@staff_member_required
+@login_required
 def pulling_strings_page(request):
-    """Pulling strings catalog management page. Superuser only."""
-    return render(request, "pulling_strings_manage.html")
+    """Pulling strings catalog page. Staff can edit, players can view."""
+    # Get player's character class for filtering
+    char_class = ""
+    if not request.user.is_superuser:
+        from characters.models import Character
+        char = Character.objects.filter(owner=request.user).first()
+        if char:
+            char_class = char.character_class
+    return render(request, "pulling_strings_manage.html", {
+        "is_admin": request.user.is_superuser,
+        "character_class": char_class,
+    })
 
 
-@staff_member_required
+@login_required
 def merits_page(request):
-    """Merit catalog management page. Superuser only."""
-    return render(request, "merits_manage.html")
+    """Merit catalog page. Staff can edit, players can view."""
+    char_class = ""
+    if not request.user.is_superuser:
+        from characters.models import Character
+        char = Character.objects.filter(owner=request.user).first()
+        if char:
+            char_class = char.character_class
+    return render(request, "merits_manage.html", {
+        "is_admin": request.user.is_superuser,
+        "character_class": char_class,
+    })
 
 
 @login_required

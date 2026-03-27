@@ -13,6 +13,8 @@
 {% block scripts %}
 <script>
     const CSRF_TOKEN = '{{ csrf_token }}';
+    const IS_ADMIN = {{ is_admin|yesno:"true,false" }};
+    const CHARACTER_CLASS = '{{ character_class }}';
 </script>
 {% verbatim %}
 <script type="text/babel">
@@ -80,6 +82,7 @@
                     <td style={{ padding: '0.5rem' }}>{merit.classRestriction ? catLabel(merit.classRestriction) : '—'}</td>
                     <td style={{ padding: '0.5rem', fontSize: '0.8rem', maxWidth: '300px' }}>{merit.description}</td>
                     <td style={{ padding: '0.5rem', fontSize: '0.75rem' }}>{merit.prerequisites || '—'}</td>
+                    {IS_ADMIN && (
                     <td style={{ padding: '0.5rem' }}>
                         <button onClick={() => setEditing(true)} style={{
                             background: 'transparent', border: '1px solid var(--accent-primary)',
@@ -92,6 +95,7 @@
                             borderRadius: '3px', fontFamily: 'var(--font-mono)', fontSize: '0.75rem'
                         }}>DEL</button>
                     </td>
+                    )}
                 </tr>
             );
         }
@@ -181,7 +185,11 @@
             }
         };
 
-        const filtered = filter === 'all' ? merits : merits.filter(m => m.category === filter);
+        // Non-admins only see merits with no class restriction or matching their class
+        const visible = IS_ADMIN ? merits : merits.filter(m =>
+            !m.classRestriction || m.classRestriction === CHARACTER_CLASS
+        );
+        const filtered = filter === 'all' ? visible : visible.filter(m => m.category === filter);
 
         if (loading) return <div className="loading-screen"><h1 className="mono-text">LOADING...</h1></div>;
 
@@ -194,7 +202,7 @@
         return (
             <div className="glass-panel" style={{ padding: '1.5rem', maxWidth: '1400px', margin: '0 auto' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
-                    <h2 className="mono-text text-accent" style={{ margin: 0 }}>MERIT CATALOG ({merits.length})</h2>
+                    <h2 className="mono-text text-accent" style={{ margin: 0 }}>MERIT CATALOG ({visible.length})</h2>
                     <div style={{ display: 'flex', gap: '0.5rem' }}>
                         {['all', ...CATEGORIES].map(c => (
                             <button key={c} onClick={() => setFilter(c)} style={{
@@ -205,12 +213,12 @@
                                 fontFamily: 'var(--font-mono)', fontSize: '0.75rem',
                             }}>{c === 'all' ? 'ALL' : c.toUpperCase()}</button>
                         ))}
-                        <button onClick={() => setShowAdd(!showAdd)} style={{
+                        {IS_ADMIN && <button onClick={() => setShowAdd(!showAdd)} style={{
                             background: showAdd ? 'var(--accent-danger)' : 'var(--accent-primary)',
                             border: 'none', color: 'var(--bg-dark)',
                             padding: '0.25rem 0.75rem', borderRadius: '3px', cursor: 'pointer',
                             fontFamily: 'var(--font-mono)', fontSize: '0.75rem',
-                        }}>{showAdd ? 'CANCEL' : '+ ADD'}</button>
+                        }}>{showAdd ? 'CANCEL' : '+ ADD'}</button>}
                     </div>
                 </div>
 
@@ -273,7 +281,7 @@
                                 <th className="mono-text text-accent" style={{ padding: '0.5rem', textAlign: 'left', fontSize: '0.75rem' }}>CLASS</th>
                                 <th className="mono-text text-accent" style={{ padding: '0.5rem', textAlign: 'left', fontSize: '0.75rem' }}>DESCRIPTION</th>
                                 <th className="mono-text text-accent" style={{ padding: '0.5rem', textAlign: 'left', fontSize: '0.75rem' }}>PREREQ</th>
-                                <th className="mono-text text-accent" style={{ padding: '0.5rem', textAlign: 'left', fontSize: '0.75rem' }}>ACTIONS</th>
+                                {IS_ADMIN && <th className="mono-text text-accent" style={{ padding: '0.5rem', textAlign: 'left', fontSize: '0.75rem' }}>ACTIONS</th>}
                             </tr>
                         </thead>
                         <tbody>

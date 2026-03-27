@@ -1,5 +1,11 @@
 # Changelog
 
+## v0.8.31
+- Merits and Pulling Strings pages now accessible to all players (read-only)
+- Players only see merits/pulling strings available to their class (general + class-specific)
+- Add/Edit/Delete controls hidden for non-staff
+- Nav links moved outside staff-only block
+
 ## v0.8.30
 - Equipment requirements now support OR conditions (`requiresAnyOf`) — e.g. planes require Airstrip OR Carrier Strike Group
 - All aviation units require Airstrip (Aviation L1+) or Carrier Strike Group
