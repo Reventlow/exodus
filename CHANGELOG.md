@@ -1,5 +1,12 @@
 # Changelog
 
+## v0.8.29
+- Equipment requirements enforcement — equipment options are locked with a padlock icon if the base lacks required facilities
+- Requirements checked programmatically via `requiresFacilities` field (facility key + minimum level)
+- Locked equipment shown greyed out with tooltip explaining what's needed; hidden entirely for non-admins
+- Equipment categories hidden for non-admins if no items are available or selected
+- Naval Units and Motorized Units category visibility toggles added
+
 ## v0.8.28
 - Operative contributions log on agency page — shows which player transferred how much XP, with character name, player name, amount, and date
 - Scrollable list under CORE STATS, grouped with alternating row backgrounds

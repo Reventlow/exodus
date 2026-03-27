@@ -2240,17 +2240,32 @@
                                     <VisibilityToggle field={`${basePath}.equipment`} visibility={visibility} onToggle={onToggleVis} />
                                 </label>
                                 {base.classifiedEquipment && !IS_ADMIN ? <Classified /> : (() => {
+                                    // Check if base meets facility requirements for an equipment
+                                    const meetsRequirements = (eq) => {
+                                        const reqs = eq.requiresFacilities || [];
+                                        if (reqs.length === 0) return true;
+                                        return reqs.every(req => {
+                                            const match = (base.facilities || []).find(f => f.key === req.key);
+                                            return match && match.level >= req.minLevel;
+                                        });
+                                    };
+
                                     const categories = {};
                                     (baseConfig.equipmentTypes || []).forEach(eq => {
                                         const cat = eq.category || 'Other';
                                         if (!categories[cat]) categories[cat] = [];
                                         categories[cat].push(eq);
                                     });
-                                    // Map category names to hiddenSections keys
-                                    const catKeyMap = { 'Aviation Units': 'aviationUnits', 'Base Defenses': 'baseDefenses' };
+                                    const catKeyMap = {
+                                        'Aviation Units': 'aviationUnits', 'Base Defenses': 'baseDefenses',
+                                        'Naval Units': 'navalUnits', 'Motorized Units': 'motorizedUnits',
+                                    };
                                     return Object.entries(categories).map(([cat, items]) => {
                                         const catKey = catKeyMap[cat];
                                         const catHidden = catKey && isSectionHidden(catKey);
+                                        // Hide entire category if no items meet requirements and none are selected
+                                        const anyAvailable = items.some(eq => meetsRequirements(eq) || (base.equipment || []).includes(eq.key));
+                                        if (!anyAvailable && !IS_ADMIN) return null;
                                         return (
                                         <div key={cat} style={{ marginBottom: '0.5rem' }}>
                                             <span className="mono-text text-muted" style={{ fontSize: '0.7rem', display: 'block', marginBottom: '0.25rem', borderBottom: '1px solid var(--border-color)', paddingBottom: '0.15rem' }}>
@@ -2261,20 +2276,25 @@
                                             <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.4rem' }}>
                                                 {items.map(eq => {
                                                     const selected = (base.equipment || []).includes(eq.key);
+                                                    const reqMet = meetsRequirements(eq);
+                                                    // Hide unavailable unselected equipment for non-admins
+                                                    if (!reqMet && !selected && !IS_ADMIN) return null;
+                                                    const locked = !reqMet && !selected;
                                                     return (
                                                         <button key={eq.key}
-                                                            onClick={() => IS_ADMIN && toggleEquipment(base.id, eq.key)}
-                                                            disabled={!IS_ADMIN}
-                                                            title={eq.requires || eq.name}
+                                                            onClick={() => IS_ADMIN && reqMet && toggleEquipment(base.id, eq.key)}
+                                                            disabled={!IS_ADMIN || locked}
+                                                            title={locked ? `Requires: ${eq.requires}` : (eq.requires || eq.name)}
                                                             style={{
-                                                                background: selected ? '#f59e0b22' : 'rgba(0,0,0,0.2)',
-                                                                border: `1px solid ${selected ? '#f59e0b' : 'var(--border-color)'}`,
-                                                                color: selected ? '#f59e0b' : 'var(--text-muted)',
-                                                                padding: '0.3rem 0.6rem', cursor: IS_ADMIN ? 'pointer' : 'default',
+                                                                background: selected ? '#f59e0b22' : locked ? 'rgba(0,0,0,0.05)' : 'rgba(0,0,0,0.2)',
+                                                                border: `1px solid ${selected ? '#f59e0b' : locked ? 'var(--bg-panel)' : 'var(--border-color)'}`,
+                                                                color: selected ? '#f59e0b' : locked ? 'var(--bg-panel)' : 'var(--text-muted)',
+                                                                padding: '0.3rem 0.6rem', cursor: (IS_ADMIN && reqMet) ? 'pointer' : 'default',
                                                                 fontFamily: 'var(--font-mono)', fontSize: '0.75rem',
                                                                 borderRadius: 'var(--radius-sm)',
+                                                                opacity: locked ? 0.4 : 1,
                                                             }}>
-                                                            {eq.name}
+                                                            {locked && '🔒 '}{eq.name}
                                                             <span style={{ fontSize: '0.6rem', marginLeft: '0.4rem', opacity: 0.7 }}>E:{eq.exp}</span>
                                                         </button>
                                                     );
