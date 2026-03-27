@@ -1,5 +1,9 @@
 # Changelog
 
+## v0.8.25
+- Fix: Personal NPC pulling string picker now excludes dossiers already linked to another pulling string on the same character
+- Fix: character portrait click behaviour — clicking empty portrait triggers upload for owners
+
 ## v0.8.24
 - Flaws section on character sheet — players can add, edit, and remove flaws with name, rating, and description
 - Flaws visible on read-only character view when present
