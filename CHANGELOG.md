@@ -1,5 +1,9 @@
 # Changelog
 
+## v0.8.32
+- Fix: pulling string/merit add now clears pending save timer to prevent race condition with debounced auto-save
+- Increased reload delay after add/remove actions for more reliable server response
+
 ## v0.8.31
 - Merits and Pulling Strings pages now accessible to all players (read-only)
 - Players only see merits/pulling strings available to their class (general + class-specific)
