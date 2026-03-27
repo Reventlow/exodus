@@ -1,5 +1,9 @@
 # Changelog
 
+## v0.8.27
+- Base creation API now accepts all fields (location type, merits, facilities, workspaces, equipment, coordinates) on POST
+- MCP tools: create_base, update_base, delete_base
+
 ## v0.8.26
 - Classified notes section on character sheet — private markdown notes visible only to the player and GM
 - Red-bordered panel with "Visible only to you and the GM" disclaimer

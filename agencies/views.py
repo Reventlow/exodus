@@ -1168,6 +1168,15 @@ def api_agency_base_list(request, pk):
     base = Base.objects.create(
         agency=agency,
         name=body.get("name", "NEW BASE"),
+        location_type=body.get("locationType", ""),
+        merits=body.get("merits", []),
+        facilities=body.get("facilities", []),
+        workspaces=body.get("workspaces", []),
+        equipment=body.get("equipment", []),
+        notes=body.get("notes", ""),
+        is_hidden=bool(body.get("isHidden", False)),
+        latitude=body.get("latitude"),
+        longitude=body.get("longitude"),
     )
     return JsonResponse(serialize_base(base, is_admin=True), status=201)
 
