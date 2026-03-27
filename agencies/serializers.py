@@ -154,6 +154,23 @@ def serialize_agency(agency, user):
         for afp in agency.ftl_assignments.select_related("ftl_project").all()
     ]
 
+    # XP transfer log for player agencies
+    if agency.is_player_agency:
+        from characters.models import XpTransferLog
+        transfers = XpTransferLog.objects.filter(agency=agency).select_related(
+            "character", "character__owner"
+        ).order_by("-created_at")[:30]
+        data["xpTransfers"] = [
+            {
+                "characterName": t.character.name,
+                "playerName": t.character.owner.username,
+                "amount": t.amount,
+                "agencyReceived": t.agency_received,
+                "date": t.created_at.isoformat(),
+            }
+            for t in transfers
+        ]
+
     # Include visibility map and change request counts for admins
     if is_admin:
         data["fieldVisibility"] = agency.field_visibility

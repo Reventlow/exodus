@@ -1,5 +1,9 @@
 # Changelog
 
+## v0.8.28
+- Operative contributions log on agency page — shows which player transferred how much XP, with character name, player name, amount, and date
+- Scrollable list under CORE STATS, grouped with alternating row backgrounds
+
 ## v0.8.27
 - Base creation API now accepts all fields (location type, merits, facilities, workspaces, equipment, coordinates) on POST
 - MCP tools: create_base, update_base, delete_base
