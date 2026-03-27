@@ -1,5 +1,11 @@
 # Changelog
 
+## v0.8.30
+- Equipment requirements now support OR conditions (`requiresAnyOf`) — e.g. planes require Airstrip OR Carrier Strike Group
+- All aviation units require Airstrip (Aviation L1+) or Carrier Strike Group
+- All motorized units require appropriate Garage level
+- Orbital Vehicles still require Space Launch Pad (Aviation L3+)
+
 ## v0.8.29
 - Equipment requirements enforcement — equipment options are locked with a padlock icon if the base lacks required facilities
 - Requirements checked programmatically via `requiresFacilities` field (facility key + minimum level)

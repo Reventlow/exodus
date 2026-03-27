@@ -2240,14 +2240,24 @@
                                     <VisibilityToggle field={`${basePath}.equipment`} visibility={visibility} onToggle={onToggleVis} />
                                 </label>
                                 {base.classifiedEquipment && !IS_ADMIN ? <Classified /> : (() => {
-                                    // Check if base meets facility requirements for an equipment
+                                    // Check if base meets facility/equipment requirements
+                                    // requiresFacilities: AND conditions [{key, minLevel}]
+                                    // requiresAnyOf: OR conditions [{type:"facility"|"equipment", key, minLevel?}]
+                                    const hasFacility = (key, minLevel) => {
+                                        const match = (base.facilities || []).find(f => f.key === key);
+                                        return match && match.level >= (minLevel || 1);
+                                    };
+                                    const hasEquipment = (key) => (base.equipment || []).includes(key);
+
                                     const meetsRequirements = (eq) => {
                                         const reqs = eq.requiresFacilities || [];
-                                        if (reqs.length === 0) return true;
-                                        return reqs.every(req => {
-                                            const match = (base.facilities || []).find(f => f.key === req.key);
-                                            return match && match.level >= req.minLevel;
-                                        });
+                                        const anyOf = eq.requiresAnyOf || [];
+                                        const andMet = reqs.length === 0 || reqs.every(req => hasFacility(req.key, req.minLevel));
+                                        const orMet = anyOf.length === 0 || anyOf.some(req =>
+                                            req.type === 'equipment' ? hasEquipment(req.key)
+                                            : hasFacility(req.key, req.minLevel)
+                                        );
+                                        return andMet && orMet;
                                     };
 
                                     const categories = {};
