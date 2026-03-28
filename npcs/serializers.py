@@ -13,7 +13,7 @@ def serialize_npc_note(note):
     }
 
 
-def serialize_npc(npc, is_admin=False):
+def serialize_npc(npc, is_admin=False, is_assigned=False):
     """Full NPC data for API responses.
 
     Stats (attributes, skills, health, etc.) are only included for superusers.
@@ -53,8 +53,8 @@ def serialize_npc(npc, is_admin=False):
         notes = npc.notes.select_related("author").all()
         data["notes"] = [serialize_npc_note(n) for n in notes]
 
-    # Stats — superuser only
-    if is_admin:
+    # Stats — superuser or assigned user (player contacts)
+    if is_admin or is_assigned:
         data["attributes"] = npc.attributes
         data["skills"] = npc.skills
         data["health"] = {

@@ -1,5 +1,10 @@
 # Changelog
 
+## v0.8.39
+- Players can see stats (attributes, skills, health, merits, pulling strings, XP) on dossiers assigned to them (read-only)
+- Stats hidden from players on dossiers not assigned to them
+- All edit controls disabled in read-only mode
+
 ## v0.8.38
 - NPC dossiers now auto-calculate XP costs for attributes, skills, specialisations, and merits above WoD 2.0 creation baseline (same as operatives)
 - Creation incomplete warning on dossiers

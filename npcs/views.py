@@ -40,10 +40,12 @@ def npc_detail_page(request, pk):
         is_editor = request.user == npc.assigned_to or request.user.is_superuser
 
     is_admin = request.user.is_superuser
+    is_assigned = npc.assigned_to == request.user
     return render(request, "npcs/detail.html", {
         "npc_id": npc.id,
         "is_editor": is_editor,
         "is_admin": is_admin,
+        "is_assigned": is_assigned,
         "is_npc_dossier": npc.is_npc_dossier,
     })
 
@@ -102,7 +104,7 @@ def api_npc_list(request):
             created_by=request.user,
         )
 
-    return JsonResponse(serialize_npc(npc, is_admin=request.user.is_superuser), status=201)
+    return JsonResponse(serialize_npc(npc, is_admin=request.user.is_superuser, is_assigned=(npc.assigned_to == request.user)), status=201)
 
 
 @login_required
@@ -115,7 +117,7 @@ def api_npc_detail(request, pk):
         return JsonResponse({"error": "ACCESS DENIED."}, status=403)
 
     if request.method == "GET":
-        return JsonResponse(serialize_npc(npc, is_admin=request.user.is_superuser))
+        return JsonResponse(serialize_npc(npc, is_admin=request.user.is_superuser, is_assigned=(npc.assigned_to == request.user)))
 
     if request.method == "PUT":
         # NPC dossiers: admin only
@@ -281,7 +283,7 @@ def api_npc_detail(request, pk):
                         pass
 
         npc.save()
-        return JsonResponse(serialize_npc(npc, is_admin=request.user.is_superuser))
+        return JsonResponse(serialize_npc(npc, is_admin=request.user.is_superuser, is_assigned=(npc.assigned_to == request.user)))
 
     if request.method == "DELETE":
         if not request.user.is_superuser:

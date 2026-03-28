@@ -17,6 +17,7 @@
     const IS_EDITOR = {{ is_editor|yesno:"true,false" }};
     const IS_ADMIN = {{ is_admin|yesno:"true,false" }};
     const IS_NPC_DOSSIER = {{ is_npc_dossier|yesno:"true,false" }};
+    const IS_ASSIGNED = {{ is_assigned|yesno:"true,false" }};
     const CSRF_TOKEN = '{{ csrf_token }}';
     const CURRENT_USER = '{{ user.username }}';
     const CURRENT_USER_ID = {{ user.id }};
@@ -1226,7 +1227,7 @@
         return { totalXp: attrXp + skillXp + specXp + meritXp, attrXp, skillXp, specXp, meritXp, messages: msgs };
     };
 
-    const NpcStatsPanel = ({ npc, onSave, onRefresh, psCatalog, meritCatalog }) => {
+    const NpcStatsPanel = ({ npc, onSave, onRefresh, psCatalog, meritCatalog, readOnly }) => {
         const DEFAULT_ATTRS = {
             power: { mental: 1, physical: 1, social: 1 },
             finesse: { mental: 1, physical: 1, social: 1 },
@@ -1247,14 +1248,14 @@
                 <h3 className="mono-text text-accent" style={{
                     borderBottom: '2px solid var(--accent-primary)',
                     paddingBottom: '0.5rem', marginBottom: '1rem', fontSize: '1.1rem'
-                }}>OPERATIVE STATS (ADMIN ONLY)</h3>
+                }}>{readOnly ? 'OPERATIVE STATS' : 'OPERATIVE STATS (ADMIN ONLY)'}</h3>
 
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: '1rem', marginBottom: '1rem' }}>
-                    <NpcAttributesModule attributes={attrs} update={a => onSave({ attributes: a })} />
-                    <NpcSkillsModule skills={skills} update={s => onSave({ skills: s })} />
+                    <NpcAttributesModule attributes={attrs} update={readOnly ? () => {} : a => onSave({ attributes: a })} />
+                    <NpcSkillsModule skills={skills} update={readOnly ? () => {} : s => onSave({ skills: s })} />
                 </div>
 
-                <NpcDerivedTraitsModule npc={{ ...npc, attributes: attrs }} update={updates => onSave(updates)} />
+                <NpcDerivedTraitsModule npc={{ ...npc, attributes: attrs }} update={readOnly ? () => {} : updates => onSave(updates)} />
 
                 {/* Experience with auto-calculation */}
                 {(() => {
@@ -1358,7 +1359,7 @@
                                     display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.85rem'
                                 }}>
                                     PULLING STRINGS
-                                    {IS_EDITOR && <button onClick={() => setShowPsPicker(!showPsPicker)} style={{
+                                    {!readOnly && <button onClick={() => setShowPsPicker(!showPsPicker)} style={{
                                         background: 'transparent', border: '1px solid var(--accent-primary)',
                                         color: 'var(--accent-primary)', width: '20px', height: '20px',
                                         borderRadius: '3px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center',
@@ -1382,7 +1383,7 @@
                                             <span className="mono-text" style={{ fontSize: '0.8rem' }}>{ps.name}</span>
                                             <span className="text-accent mono-text" style={{ fontSize: '0.7rem', marginLeft: '0.5rem' }}>{ps.cost} XP</span>
                                         </div>
-                                        {IS_EDITOR && <button onClick={() => { onSave({ removePullingString: ps.id }); setTimeout(onRefresh, 500); }} style={{
+                                        {!readOnly && <button onClick={() => { onSave({ removePullingString: ps.id }); setTimeout(onRefresh, 500); }} style={{
                                             background: 'transparent', border: 'none', color: 'var(--accent-danger)', cursor: 'pointer', fontSize: '0.8rem'
                                         }}>×</button>}
                                     </div>
@@ -1409,7 +1410,7 @@
                                     display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.85rem'
                                 }}>
                                     MERITS
-                                    {IS_EDITOR && <button onClick={() => setShowMeritPicker(!showMeritPicker)} style={{
+                                    {!readOnly && <button onClick={() => setShowMeritPicker(!showMeritPicker)} style={{
                                         background: 'transparent', border: '1px solid var(--accent-primary)',
                                         color: 'var(--accent-primary)', width: '20px', height: '20px',
                                         borderRadius: '3px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center',
@@ -1439,7 +1440,7 @@
                                                 </span>
                                             )}
                                         </div>
-                                        {IS_EDITOR && <button onClick={() => { onSave({ removeMerit: m.id }); setTimeout(onRefresh, 500); }} style={{
+                                        {!readOnly && <button onClick={() => { onSave({ removeMerit: m.id }); setTimeout(onRefresh, 500); }} style={{
                                             background: 'transparent', border: 'none', color: 'var(--accent-danger)', cursor: 'pointer', fontSize: '0.8rem'
                                         }}>×</button>}
                                     </div>
@@ -2032,7 +2033,7 @@
                 <BioModule npc={npc} onSave={saveNPCQuiet} />
 
                 {/* Stats — superuser only */}
-                {IS_ADMIN && npc.attributes && <NpcStatsPanel npc={npc} onSave={saveNPCQuiet} onRefresh={fetchNPC} psCatalog={psCatalog} meritCatalog={meritCatalog} />}
+                {(IS_ADMIN || IS_ASSIGNED) && npc.attributes && <NpcStatsPanel npc={npc} onSave={IS_ADMIN ? saveNPCQuiet : () => {}} onRefresh={fetchNPC} psCatalog={psCatalog} meritCatalog={meritCatalog} readOnly={!IS_ADMIN} />}
 
                 {/* Merits and Pulling Strings for non-admin view */}
                 {!IS_ADMIN && (npc.merits?.length > 0 || npc.pullingStrings?.length > 0) && (
