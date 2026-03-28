@@ -1,5 +1,8 @@
 # Changelog
 
+## v0.8.40
+- Fix: dossier page crash — moved React useState hooks out of IIFEs to component level
+
 ## v0.8.39
 - Players can see stats (attributes, skills, health, merits, pulling strings, XP) on dossiers assigned to them (read-only)
 - Stats hidden from players on dossiers not assigned to them

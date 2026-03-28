@@ -1228,6 +1228,8 @@
     };
 
     const NpcStatsPanel = ({ npc, onSave, onRefresh, psCatalog, meritCatalog, readOnly }) => {
+        const [showPsPicker, setShowPsPicker] = useState(false);
+        const [showMeritPicker, setShowMeritPicker] = useState(false);
         const DEFAULT_ATTRS = {
             power: { mental: 1, physical: 1, social: 1 },
             finesse: { mental: 1, physical: 1, social: 1 },
@@ -1350,7 +1352,6 @@
                             !owned.includes(ps.id) &&
                             (ps.category === 'general' || ps.category === charClass)
                         );
-                        const [showPsPicker, setShowPsPicker] = useState(false);
                         return (
                             <div className="glass-panel" style={{ padding: '1rem', marginBottom: '0.5rem' }}>
                                 <h4 className="mono-text text-accent" style={{
@@ -1401,7 +1402,6 @@
                             !owned.includes(m.id) &&
                             (!m.classRestriction || m.classRestriction === charClass)
                         );
-                        const [showMeritPicker, setShowMeritPicker] = useState(false);
                         return (
                             <div className="glass-panel" style={{ padding: '1rem', marginBottom: '0.5rem' }}>
                                 <h4 className="mono-text text-accent" style={{
