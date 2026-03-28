@@ -866,7 +866,7 @@
         );
     };
 
-    const NpcAttributesModule = ({ attributes, update }) => {
+    const NpcAttributesModule = ({ attributes, update, lockPhysical }) => {
         const updateAttr = (cat, type, val) => {
             update({ ...attributes, [cat]: { ...attributes[cat], [type]: val } });
         };
@@ -887,11 +887,13 @@
                         ))}
                     </div>
                     <div>
-                        <div className="text-center text-muted mono-text" style={{ marginBottom: '0.5rem' }}>PHYSICAL</div>
+                        <div className="text-center text-muted mono-text" style={{ marginBottom: '0.5rem' }}>
+                            PHYSICAL {lockPhysical && <span style={{ color: 'var(--accent-danger)', fontSize: '0.65rem' }}>(REQUIRES ANDROID)</span>}
+                        </div>
                         {[['Strength', 'power'], ['Dexterity', 'finesse'], ['Stamina', 'resistance']].map(([label, cat]) => (
-                            <div key={label} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
+                            <div key={label} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem', opacity: lockPhysical ? 0.3 : 1 }}>
                                 <span>{label}</span>
-                                <StatDots value={attributes[cat].physical} onChange={v => updateAttr(cat, 'physical', v)} editable={true} />
+                                <StatDots value={lockPhysical ? 0 : attributes[cat].physical} onChange={v => !lockPhysical && updateAttr(cat, 'physical', v)} editable={!lockPhysical} />
                             </div>
                         ))}
                     </div>
@@ -909,20 +911,22 @@
         );
     };
 
-    const NpcSkillsModule = ({ skills, update }) => {
+    const NpcSkillsModule = ({ skills, update, lockPhysical }) => {
         const updateSkill = (cat, name, val) => {
             update({ ...skills, [cat]: { ...skills[cat], [name]: val } });
         };
-        const SkillCol = ({ category, title }) => (
-            <div>
-                <h4 className="text-center text-muted mono-text" style={{ marginBottom: '1rem', textTransform: 'uppercase' }}>{title}</h4>
+        const SkillCol = ({ category, title, locked }) => (
+            <div style={{ opacity: locked ? 0.3 : 1 }}>
+                <h4 className="text-center text-muted mono-text" style={{ marginBottom: '1rem', textTransform: 'uppercase' }}>
+                    {title} {locked && <span style={{ color: 'var(--accent-danger)', fontSize: '0.6rem' }}>(LOCKED)</span>}
+                </h4>
                 {Object.entries(skills[category]).map(([name, val]) => (
                     <div key={name} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
-                        <span style={{ fontSize: '0.9rem', color: val === 0 ? 'var(--text-muted)' : 'var(--text-primary)' }}>
+                        <span style={{ fontSize: '0.9rem', color: (val === 0 || locked) ? 'var(--text-muted)' : 'var(--text-primary)' }}>
                             {name.replace(/([A-Z])/g, ' $1').trim()}
-                            {val === 0 && <span style={{ fontSize: '0.7em', marginLeft: '4px', opacity: 0.5 }}>(-{category === 'mental' ? 3 : 1})</span>}
+                            {val === 0 && !locked && <span style={{ fontSize: '0.7em', marginLeft: '4px', opacity: 0.5 }}>(-{category === 'mental' ? 3 : 1})</span>}
                         </span>
-                        <StatDots value={val} onChange={v => updateSkill(category, name, v)} editable={true} />
+                        <StatDots value={locked ? 0 : val} onChange={v => !locked && updateSkill(category, name, v)} editable={!locked} />
                     </div>
                 ))}
             </div>
@@ -935,7 +939,7 @@
                 }}>SKILLS</h3>
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))', gap: '2rem' }}>
                     <SkillCol category="mental" title="Mental (-3 Unskilled)" />
-                    <SkillCol category="physical" title="Physical (-1 Unskilled)" />
+                    <SkillCol category="physical" title="Physical (-1 Unskilled)" locked={lockPhysical} />
                     <SkillCol category="social" title="Social (-1 Unskilled)" />
                 </div>
             </div>
@@ -1245,6 +1249,11 @@
         const health = npc.health || { bashing: 0, lethal: 0, aggravated: 0 };
         const healthMax = (attrs.resistance?.physical || 1) + (npc.size || 5);
 
+        // AI restrictions: physical locked unless Android merit is present
+        const isAi = npc.characterClass === 'ai';
+        const hasAndroid = (npc.merits || []).some(m => m.name === 'Android');
+        const lockPhysical = isAi && !hasAndroid;
+
         return (
             <div style={{ marginTop: '1rem' }}>
                 <h3 className="mono-text text-accent" style={{
@@ -1252,9 +1261,25 @@
                     paddingBottom: '0.5rem', marginBottom: '1rem', fontSize: '1.1rem'
                 }}>{readOnly ? 'OPERATIVE STATS' : 'OPERATIVE STATS (ADMIN ONLY)'}</h3>
 
+                {isAi && (
+                    <div style={{
+                        background: lockPhysical ? 'rgba(255,100,100,0.1)' : 'rgba(0,255,136,0.1)',
+                        border: `1px solid ${lockPhysical ? 'var(--accent-danger)' : 'var(--accent-primary)'}`,
+                        borderRadius: '4px', padding: '0.75rem', marginBottom: '1rem',
+                        fontSize: '0.8rem', color: lockPhysical ? 'var(--accent-danger)' : 'var(--text-accent)'
+                    }}>
+                        <strong className="mono-text">AI ENTITY</strong>
+                        <span style={{ marginLeft: '0.5rem' }}>
+                            {lockPhysical
+                                ? 'Physical attributes, skills, and merits locked. Acquire the Android merit to unlock a synthetic body.'
+                                : `Android body active (${(npc.merits || []).find(m => m.name === 'Android')?.rating || '?'} dots). Physical traits enabled.`}
+                        </span>
+                    </div>
+                )}
+
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: '1rem', marginBottom: '1rem' }}>
-                    <NpcAttributesModule attributes={attrs} update={readOnly ? () => {} : a => onSave({ attributes: a })} />
-                    <NpcSkillsModule skills={skills} update={readOnly ? () => {} : s => onSave({ skills: s })} />
+                    <NpcAttributesModule attributes={attrs} update={readOnly ? () => {} : a => onSave({ attributes: a })} lockPhysical={lockPhysical} />
+                    <NpcSkillsModule skills={skills} update={readOnly ? () => {} : s => onSave({ skills: s })} lockPhysical={lockPhysical} />
                 </div>
 
                 <NpcDerivedTraitsModule npc={{ ...npc, attributes: attrs }} update={readOnly ? () => {} : updates => onSave(updates)} />

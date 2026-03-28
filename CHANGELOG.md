@@ -1,5 +1,12 @@
 # Changelog
 
+## v0.8.43
+- AI class restrictions — physical attributes and skills locked to 0 unless the Android merit (3-5 dots) is acquired
+- Android merit added (AI class only) — enables synthetic body with human-likeness scaling by dot rating
+- AI entity banner on stats panel showing locked/unlocked status
+- Physical column greyed out with "(REQUIRES ANDROID)" label when locked
+- Works on both operative character sheets and NPC dossiers
+
 ## v0.8.42
 - Dossier pulling strings and merits now show descriptions in both admin and read-only views
 

@@ -479,7 +479,7 @@
     );
 
     // --- ATTRIBUTES MODULE ---
-    const AttributesModule = ({ attributes, update }) => {
+    const AttributesModule = ({ attributes, update, lockPhysical }) => {
         const updateAttr = (cat, type, val) => {
             update({ ...attributes, [cat]: { ...attributes[cat], [type]: val } });
         };
@@ -509,22 +509,24 @@
                                 onChange={v => updateAttr('resistance', 'mental', v)} editable={IS_OWNER} />
                         </div>
                     </div>
-                    <div>
-                        <div className="text-center text-muted mono-text" style={{ marginBottom: '0.5rem' }}>PHYSICAL</div>
+                    <div style={{ opacity: lockPhysical ? 0.3 : 1 }}>
+                        <div className="text-center text-muted mono-text" style={{ marginBottom: '0.5rem' }}>
+                            PHYSICAL {lockPhysical && <span style={{ color: 'var(--accent-danger)', fontSize: '0.65rem' }}>(REQUIRES ANDROID)</span>}
+                        </div>
                         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
                             <span>Strength</span>
-                            <StatDots value={attributes.power.physical}
-                                onChange={v => updateAttr('power', 'physical', v)} editable={IS_OWNER} />
+                            <StatDots value={lockPhysical ? 0 : attributes.power.physical}
+                                onChange={v => !lockPhysical && updateAttr('power', 'physical', v)} editable={IS_OWNER && !lockPhysical} />
                         </div>
                         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
                             <span>Dexterity</span>
-                            <StatDots value={attributes.finesse.physical}
-                                onChange={v => updateAttr('finesse', 'physical', v)} editable={IS_OWNER} />
+                            <StatDots value={lockPhysical ? 0 : attributes.finesse.physical}
+                                onChange={v => !lockPhysical && updateAttr('finesse', 'physical', v)} editable={IS_OWNER && !lockPhysical} />
                         </div>
                         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                             <span>Stamina</span>
-                            <StatDots value={attributes.resistance.physical}
-                                onChange={v => updateAttr('resistance', 'physical', v)} editable={IS_OWNER} />
+                            <StatDots value={lockPhysical ? 0 : attributes.resistance.physical}
+                                onChange={v => !lockPhysical && updateAttr('resistance', 'physical', v)} editable={IS_OWNER && !lockPhysical} />
                         </div>
                     </div>
                     <div>
@@ -551,16 +553,16 @@
     };
 
     // --- SKILLS MODULE ---
-    const SkillsModule = ({ skills, update }) => {
+    const SkillsModule = ({ skills, update, lockPhysical }) => {
         const updateSkill = (cat, name, val) => {
             update({ ...skills, [cat]: { ...skills[cat], [name]: val } });
         };
 
-        const SkillCol = ({ category, title }) => (
-            <div>
+        const SkillCol = ({ category, title, locked }) => (
+            <div style={{ opacity: locked ? 0.3 : 1 }}>
                 <h4 className="text-center text-muted mono-text" style={{
                     marginBottom: '1rem', textTransform: 'uppercase'
-                }}>{title}</h4>
+                }}>{title} {locked && <span style={{ color: 'var(--accent-danger)', fontSize: '0.6rem' }}>(LOCKED)</span>}</h4>
                 {Object.entries(skills[category]).map(([name, val]) => (
                     <div key={name} style={{
                         display: 'flex', justifyContent: 'space-between',
@@ -568,15 +570,15 @@
                     }}>
                         <span style={{
                             fontSize: '0.9rem',
-                            color: val === 0 ? 'var(--text-muted)' : 'var(--text-primary)'
+                            color: (val === 0 || locked) ? 'var(--text-muted)' : 'var(--text-primary)'
                         }}>
                             {name.replace(/([A-Z])/g, ' $1').trim()}
-                            {val === 0 && <span style={{
+                            {val === 0 && !locked && <span style={{
                                 fontSize: '0.7em', marginLeft: '4px', opacity: 0.5
                             }}>(-{category === 'mental' ? 3 : 1})</span>}
                         </span>
-                        <StatDots value={val}
-                            onChange={v => updateSkill(category, name, v)} editable={IS_OWNER} />
+                        <StatDots value={locked ? 0 : val}
+                            onChange={v => !locked && updateSkill(category, name, v)} editable={IS_OWNER && !locked} />
                     </div>
                 ))}
             </div>
@@ -594,7 +596,7 @@
                     gap: '2rem'
                 }}>
                     <SkillCol category="mental" title="Mental (-3 Unskilled)" />
-                    <SkillCol category="physical" title="Physical (-1 Unskilled)" />
+                    <SkillCol category="physical" title="Physical (-1 Unskilled)" locked={lockPhysical} />
                     <SkillCol category="social" title="Social (-1 Unskilled)" />
                 </div>
             </div>
@@ -2113,6 +2115,11 @@
             );
         }
 
+        // AI restrictions
+        const isAi = char.characterClass === 'ai';
+        const hasAndroid = (char.merits || []).some(m => m.name === 'Android');
+        const lockPhysical = isAi && !hasAndroid;
+
         return (
             <div className="fade-in">
                 {/* Sub-header with save status */}
@@ -2156,10 +2163,12 @@
                 }}>
                     <AttributesModule
                         attributes={char.attributes}
-                        update={attrs => updateCharacter({ attributes: attrs })} />
+                        update={attrs => updateCharacter({ attributes: attrs })}
+                        lockPhysical={lockPhysical} />
                     <SkillsModule
                         skills={char.skills}
-                        update={skills => updateCharacter({ skills })} />
+                        update={skills => updateCharacter({ skills })}
+                        lockPhysical={lockPhysical} />
                 </div>
 
                 <SpecialisationsModule
