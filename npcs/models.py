@@ -69,6 +69,7 @@ class NPC(models.Model):
     mental_load = models.IntegerField(default=0)
     willpower_current = models.IntegerField(default=0)
     experience = models.IntegerField(default=0)
+    experience_used = models.IntegerField(default=0)
     merits_old = models.JSONField(default=list, db_column="merits")
     merit_entries = models.ManyToManyField(
         "exodus.MeritDefinition", through="NpcMerit", blank=True,

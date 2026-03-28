@@ -1161,6 +1161,63 @@
 
                 <NpcDerivedTraitsModule npc={{ ...npc, attributes: attrs }} update={updates => onSave(updates)} />
 
+                {/* Experience */}
+                <div className="glass-panel" style={{ padding: '1.5rem', marginBottom: '1rem' }}>
+                    <h3 className="mono-text text-accent" style={{
+                        borderBottom: '1px solid var(--border-color)',
+                        paddingBottom: '0.5rem', marginBottom: '1rem'
+                    }}>EXPERIENCE</h3>
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '1rem' }}>
+                        <div className="tech-border text-center" style={{ padding: '0.5rem' }}>
+                            <div className="text-secondary mono-text" style={{ fontSize: '0.8rem' }}>TOTAL</div>
+                            <input type="number" value={npc.experience || 0}
+                                onChange={e => onSave({ experience: parseInt(e.target.value) || 0 })}
+                                style={{
+                                    background: 'transparent', border: 'none',
+                                    color: 'var(--text-accent)', width: '100%',
+                                    textAlign: 'center', fontSize: '1.5rem'
+                                }} />
+                        </div>
+                        <div className="tech-border text-center" style={{ padding: '0.5rem' }}>
+                            <div className="text-secondary mono-text" style={{ fontSize: '0.8rem' }}>MANUAL</div>
+                            <input type="number" value={npc.experienceUsed || 0}
+                                onChange={e => onSave({ experienceUsed: parseInt(e.target.value) || 0 })}
+                                style={{
+                                    background: 'transparent', border: 'none',
+                                    color: 'var(--text-primary)', width: '100%',
+                                    textAlign: 'center', fontSize: '1.5rem'
+                                }} />
+                        </div>
+                        <div className="tech-border text-center" style={{ padding: '0.5rem' }}>
+                            <div className="text-secondary mono-text" style={{ fontSize: '0.8rem' }}>AUTO</div>
+                            <div style={{ fontSize: '1.5rem', color: 'var(--text-primary)' }}>
+                                {(npc.pullingStringsCost || 0)}
+                            </div>
+                            <div style={{ fontSize: '0.65rem', color: 'var(--text-muted)' }}>
+                                PS {npc.pullingStringsCost || 0}
+                            </div>
+                        </div>
+                        <div className="tech-border text-center" style={{ padding: '0.5rem' }}>
+                            <div className="text-secondary mono-text" style={{ fontSize: '0.8rem' }}>REMAINING</div>
+                            {(() => {
+                                const totalUsed = (npc.experienceUsed || 0) + (npc.pullingStringsCost || 0);
+                                const remaining = (npc.experience || 0) - totalUsed;
+                                return (
+                                    <>
+                                        <div style={{
+                                            fontSize: '1.5rem',
+                                            color: remaining < 0 ? 'var(--accent-danger)' : 'var(--text-accent)'
+                                        }}>{remaining}</div>
+                                        <div style={{ fontSize: '0.65rem', color: 'var(--text-muted)' }}>
+                                            {totalUsed} used
+                                        </div>
+                                    </>
+                                );
+                            })()}
+                        </div>
+                    </div>
+                </div>
+
                 <NpcHealthModule
                     health={health}
                     max={healthMax}

@@ -1,5 +1,9 @@
 # Changelog
 
+## v0.8.37
+- XP tracking on NPC dossiers — total, manual, auto (pulling strings cost), and remaining
+- Experience visible to all players, editable by admins
+
 ## v0.8.36
 - Catalog-based merits and pulling strings on NPC dossiers — same picker system as operative character sheets
 - Admins can add/remove merits and pulling strings on dossiers, filtered by NPC's class

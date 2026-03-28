@@ -65,12 +65,20 @@ def serialize_npc(npc, is_admin=False):
         data["size"] = npc.size
         data["mentalLoad"] = npc.mental_load
         data["willpowerCurrent"] = npc.willpower_current
-        data["experience"] = npc.experience
         data["flaws"] = npc.flaws
         data["specialisations"] = npc.specialisations
 
-    # Merits and pulling strings — visible to everyone
+    # Experience — visible to everyone
     nm_entries = npc.npc_merits.select_related("merit").all()
+    nps_entries = npc.npc_pulling_strings.select_related("pulling_string").all()
+    ps_cost = sum(nps.pulling_string.cost for nps in nps_entries)
+    merit_dots = sum(nm.rating for nm in nm_entries)
+    data["experience"] = npc.experience
+    data["experienceUsed"] = npc.experience_used
+    data["pullingStringsCost"] = ps_cost
+    data["meritDots"] = merit_dots
+
+    # Merits and pulling strings — visible to everyone
     data["merits"] = [
         {
             "id": nm.id,

@@ -195,6 +195,8 @@ def api_npc_detail(request, pk):
                 npc.willpower_current = data["willpowerCurrent"]
             if "experience" in data:
                 npc.experience = data["experience"]
+            if "experienceUsed" in data:
+                npc.experience_used = data["experienceUsed"]
             if "flaws" in data:
                 npc.flaws = data["flaws"]
             if "specialisations" in data:
