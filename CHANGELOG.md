@@ -1,5 +1,8 @@
 # Changelog
 
+## v0.8.33
+- Fix: NPC dossier linking on Personal NPC pulling strings — dropdown now correctly shows available NPCs, excludes only NPCs linked to OTHER entries (not the current one)
+
 ## v0.8.32
 - Fix: pulling string/merit add now clears pending save timer to prevent race condition with debounced auto-save
 - Increased reload delay after add/remove actions for more reliable server response
