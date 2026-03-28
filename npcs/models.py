@@ -69,7 +69,13 @@ class NPC(models.Model):
     mental_load = models.IntegerField(default=0)
     willpower_current = models.IntegerField(default=0)
     experience = models.IntegerField(default=0)
-    merits = models.JSONField(default=list)
+    merits_old = models.JSONField(default=list, db_column="merits")
+    merit_entries = models.ManyToManyField(
+        "exodus.MeritDefinition", through="NpcMerit", blank=True,
+    )
+    pulling_strings = models.ManyToManyField(
+        "exodus.PullingString", through="NpcPullingString", blank=True,
+    )
     flaws = models.JSONField(default=list)
     specialisations = models.JSONField(default=list)
 
@@ -82,6 +88,31 @@ class NPC(models.Model):
     def __str__(self):
         prefix = "[NPC] " if self.is_npc_dossier else ""
         return f"{prefix}{self.name} ({self.get_state_display()})"
+
+
+class NpcMerit(models.Model):
+    """Through table for NPC ↔ merit definition."""
+    npc = models.ForeignKey(NPC, on_delete=models.CASCADE, related_name="npc_merits")
+    merit = models.ForeignKey("exodus.MeritDefinition", on_delete=models.CASCADE)
+    rating = models.IntegerField(default=1)
+
+    class Meta:
+        ordering = ["merit__category", "merit__name"]
+
+    def __str__(self):
+        return f"{self.npc.name}: {self.merit.name} ({self.rating})"
+
+
+class NpcPullingString(models.Model):
+    """Through table for NPC ↔ pulling string."""
+    npc = models.ForeignKey(NPC, on_delete=models.CASCADE, related_name="npc_pulling_strings")
+    pulling_string = models.ForeignKey("exodus.PullingString", on_delete=models.CASCADE)
+
+    class Meta:
+        ordering = ["pulling_string__category", "pulling_string__name"]
+
+    def __str__(self):
+        return f"{self.npc.name}: {self.pulling_string.name}"
 
 
 class NPCNote(models.Model):

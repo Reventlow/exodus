@@ -1,5 +1,10 @@
 # Changelog
 
+## v0.8.36
+- Catalog-based merits and pulling strings on NPC dossiers — same picker system as operative character sheets
+- Admins can add/remove merits and pulling strings on dossiers, filtered by NPC's class
+- Non-admin players see merits and pulling strings as read-only
+
 ## v0.8.35
 - Dossier list can now be filtered by agency — dynamic filter buttons appear for each agency that has NPC dossiers
 

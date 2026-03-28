@@ -66,9 +66,40 @@ def serialize_npc(npc, is_admin=False):
         data["mentalLoad"] = npc.mental_load
         data["willpowerCurrent"] = npc.willpower_current
         data["experience"] = npc.experience
-        data["merits"] = npc.merits
         data["flaws"] = npc.flaws
         data["specialisations"] = npc.specialisations
+
+    # Merits and pulling strings — visible to everyone
+    nm_entries = npc.npc_merits.select_related("merit").all()
+    data["merits"] = [
+        {
+            "id": nm.id,
+            "meritId": nm.merit.id,
+            "name": nm.merit.name,
+            "description": nm.merit.description,
+            "category": nm.merit.category,
+            "classRestriction": nm.merit.class_restriction,
+            "rating": nm.rating,
+            "maxRating": nm.merit.cost,
+            "minRating": nm.merit.min_cost,
+            "prerequisites": nm.merit.prerequisites,
+            "effects": nm.merit.effects,
+        }
+        for nm in nm_entries
+    ]
+
+    nps_entries = npc.npc_pulling_strings.select_related("pulling_string").all()
+    data["pullingStrings"] = [
+        {
+            "id": nps.id,
+            "pullingStringId": nps.pulling_string.id,
+            "name": nps.pulling_string.name,
+            "description": nps.pulling_string.description,
+            "cost": nps.pulling_string.cost,
+            "category": nps.pulling_string.category,
+        }
+        for nps in nps_entries
+    ]
 
     return data
 

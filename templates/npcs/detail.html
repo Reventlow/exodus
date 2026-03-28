@@ -1131,7 +1131,7 @@
         );
     };
 
-    const NpcStatsPanel = ({ npc, onSave }) => {
+    const NpcStatsPanel = ({ npc, onSave, onRefresh, psCatalog, meritCatalog }) => {
         const DEFAULT_ATTRS = {
             power: { mental: 1, physical: 1, social: 1 },
             finesse: { mental: 1, physical: 1, social: 1 },
@@ -1170,21 +1170,123 @@
                 />
 
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: '1rem' }}>
-                    <NpcExpandableListModule
-                        title="MERITS" itemLabel="Merit"
-                        items={npc.merits || []}
-                        onAdd={() => onSave({ merits: [...(npc.merits || []), { name: '', rating: 1, description: '' }] })}
-                        onRemove={idx => onSave({ merits: (npc.merits || []).filter((_, i) => i !== idx) })}
-                        onUpdate={(idx, val) => onSave({ merits: (npc.merits || []).map((item, i) => i === idx ? val : item) })}
-                    />
-                    <NpcExpandableListModule
-                        title="FLAWS" itemLabel="Flaw"
-                        items={npc.flaws || []}
-                        onAdd={() => onSave({ flaws: [...(npc.flaws || []), { name: '', rating: 1, description: '' }] })}
-                        onRemove={idx => onSave({ flaws: (npc.flaws || []).filter((_, i) => i !== idx) })}
-                        onUpdate={(idx, val) => onSave({ flaws: (npc.flaws || []).map((item, i) => i === idx ? val : item) })}
-                    />
+                    {/* Pulling Strings (catalog-based) */}
+                    {(() => {
+                        const owned = (npc.pullingStrings || []).map(ps => ps.pullingStringId);
+                        const charClass = npc.characterClass || '';
+                        const available = (psCatalog || []).filter(ps =>
+                            !owned.includes(ps.id) &&
+                            (ps.category === 'general' || ps.category === charClass)
+                        );
+                        const [showPsPicker, setShowPsPicker] = useState(false);
+                        return (
+                            <div className="glass-panel" style={{ padding: '1rem', marginBottom: '0.5rem' }}>
+                                <h4 className="mono-text text-accent" style={{
+                                    borderBottom: '1px solid var(--border-color)',
+                                    paddingBottom: '0.5rem', marginBottom: '0.5rem',
+                                    display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.85rem'
+                                }}>
+                                    PULLING STRINGS
+                                    {IS_EDITOR && <button onClick={() => setShowPsPicker(!showPsPicker)} style={{
+                                        background: 'transparent', border: '1px solid var(--accent-primary)',
+                                        color: 'var(--accent-primary)', width: '20px', height: '20px',
+                                        borderRadius: '3px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                    }}>{showPsPicker ? '×' : '+'}</button>}
+                                </h4>
+                                {showPsPicker && (
+                                    <div style={{ border: '1px solid var(--accent-primary)', borderRadius: '3px', padding: '0.5rem', marginBottom: '0.5rem', background: 'rgba(0,0,0,0.3)', maxHeight: '200px', overflowY: 'auto' }}>
+                                        {available.map(ps => (
+                                            <div key={ps.id} onClick={() => { onSave({ addPullingString: { pullingStringId: ps.id } }); setShowPsPicker(false); setTimeout(onRefresh, 500); }}
+                                                style={{ padding: '0.3rem 0.5rem', marginBottom: '0.2rem', background: 'rgba(0,0,0,0.2)', borderRadius: '3px', cursor: 'pointer', display: 'flex', justifyContent: 'space-between' }}>
+                                                <span className="mono-text" style={{ fontSize: '0.8rem' }}>{ps.name}</span>
+                                                <span className="text-accent mono-text" style={{ fontSize: '0.75rem' }}>{ps.cost} XP</span>
+                                            </div>
+                                        ))}
+                                        {available.length === 0 && <p className="text-muted" style={{ fontSize: '0.75rem', fontStyle: 'italic' }}>No more available.</p>}
+                                    </div>
+                                )}
+                                {(npc.pullingStrings || []).map(ps => (
+                                    <div key={ps.id} className="tech-border" style={{ padding: '0.4rem', marginBottom: '0.3rem', background: 'rgba(0,0,0,0.2)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                        <div>
+                                            <span className="mono-text" style={{ fontSize: '0.8rem' }}>{ps.name}</span>
+                                            <span className="text-accent mono-text" style={{ fontSize: '0.7rem', marginLeft: '0.5rem' }}>{ps.cost} XP</span>
+                                        </div>
+                                        {IS_EDITOR && <button onClick={() => { onSave({ removePullingString: ps.id }); setTimeout(onRefresh, 500); }} style={{
+                                            background: 'transparent', border: 'none', color: 'var(--accent-danger)', cursor: 'pointer', fontSize: '0.8rem'
+                                        }}>×</button>}
+                                    </div>
+                                ))}
+                                {(npc.pullingStrings || []).length === 0 && !showPsPicker && <p className="text-muted" style={{ fontSize: '0.75rem', fontStyle: 'italic' }}>None.</p>}
+                            </div>
+                        );
+                    })()}
+
+                    {/* Merits (catalog-based) */}
+                    {(() => {
+                        const owned = (npc.merits || []).map(m => m.meritId);
+                        const charClass = npc.characterClass || '';
+                        const available = (meritCatalog || []).filter(m =>
+                            !owned.includes(m.id) &&
+                            (!m.classRestriction || m.classRestriction === charClass)
+                        );
+                        const [showMeritPicker, setShowMeritPicker] = useState(false);
+                        return (
+                            <div className="glass-panel" style={{ padding: '1rem', marginBottom: '0.5rem' }}>
+                                <h4 className="mono-text text-accent" style={{
+                                    borderBottom: '1px solid var(--border-color)',
+                                    paddingBottom: '0.5rem', marginBottom: '0.5rem',
+                                    display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.85rem'
+                                }}>
+                                    MERITS
+                                    {IS_EDITOR && <button onClick={() => setShowMeritPicker(!showMeritPicker)} style={{
+                                        background: 'transparent', border: '1px solid var(--accent-primary)',
+                                        color: 'var(--accent-primary)', width: '20px', height: '20px',
+                                        borderRadius: '3px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                    }}>{showMeritPicker ? '×' : '+'}</button>}
+                                </h4>
+                                {showMeritPicker && (
+                                    <div style={{ border: '1px solid var(--accent-primary)', borderRadius: '3px', padding: '0.5rem', marginBottom: '0.5rem', background: 'rgba(0,0,0,0.3)', maxHeight: '200px', overflowY: 'auto' }}>
+                                        {available.map(m => (
+                                            <div key={m.id} onClick={() => { onSave({ addMerit: { meritId: m.id, rating: m.cost } }); setShowMeritPicker(false); setTimeout(onRefresh, 500); }}
+                                                style={{ padding: '0.3rem 0.5rem', marginBottom: '0.2rem', background: 'rgba(0,0,0,0.2)', borderRadius: '3px', cursor: 'pointer', display: 'flex', justifyContent: 'space-between' }}>
+                                                <span className="mono-text" style={{ fontSize: '0.8rem' }}>{m.name}</span>
+                                                <span className="text-accent mono-text" style={{ fontSize: '0.75rem' }}>
+                                                    {m.minCost === m.cost ? m.cost : `${m.minCost}-${m.cost}`} dots
+                                                </span>
+                                            </div>
+                                        ))}
+                                        {available.length === 0 && <p className="text-muted" style={{ fontSize: '0.75rem', fontStyle: 'italic' }}>No more available.</p>}
+                                    </div>
+                                )}
+                                {(npc.merits || []).map(m => (
+                                    <div key={m.id} className="tech-border" style={{ padding: '0.4rem', marginBottom: '0.3rem', background: 'rgba(0,0,0,0.2)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                        <div>
+                                            <span className="mono-text" style={{ fontSize: '0.8rem' }}>{m.name}</span>
+                                            {m.minRating !== m.maxRating && (
+                                                <span className="text-muted" style={{ fontSize: '0.7rem', marginLeft: '0.5rem' }}>
+                                                    ({m.rating}/{m.maxRating})
+                                                </span>
+                                            )}
+                                        </div>
+                                        {IS_EDITOR && <button onClick={() => { onSave({ removeMerit: m.id }); setTimeout(onRefresh, 500); }} style={{
+                                            background: 'transparent', border: 'none', color: 'var(--accent-danger)', cursor: 'pointer', fontSize: '0.8rem'
+                                        }}>×</button>}
+                                    </div>
+                                ))}
+                                {(npc.merits || []).length === 0 && !showMeritPicker && <p className="text-muted" style={{ fontSize: '0.75rem', fontStyle: 'italic' }}>None.</p>}
+                            </div>
+                        );
+                    })()}
                 </div>
+
+                {/* Flaws (free-text) */}
+                <NpcExpandableListModule
+                    title="FLAWS" itemLabel="Flaw"
+                    items={npc.flaws || []}
+                    onAdd={() => onSave({ flaws: [...(npc.flaws || []), { name: '', rating: 1, description: '' }] })}
+                    onRemove={idx => onSave({ flaws: (npc.flaws || []).filter((_, i) => i !== idx) })}
+                    onUpdate={(idx, val) => onSave({ flaws: (npc.flaws || []).map((item, i) => i === idx ? val : item) })}
+                />
             </div>
         );
     };
@@ -1580,8 +1682,13 @@
         const saveTimerRef = useRef(null);
         const charRef = useRef(null);
 
+        const [meritCatalog, setMeritCatalog] = useState([]);
+        const [psCatalog, setPsCatalog] = useState([]);
+
         useEffect(() => {
             fetchNPC();
+            fetch('/api/merits/').then(r => r.json()).then(setMeritCatalog).catch(() => {});
+            fetch('/api/pulling-strings/').then(r => r.json()).then(setPsCatalog).catch(() => {});
         }, []);
 
         const fetchNPC = async () => {
@@ -1754,7 +1861,35 @@
                 <BioModule npc={npc} onSave={saveNPCQuiet} />
 
                 {/* Stats — superuser only */}
-                {IS_ADMIN && npc.attributes && <NpcStatsPanel npc={npc} onSave={saveNPCQuiet} />}
+                {IS_ADMIN && npc.attributes && <NpcStatsPanel npc={npc} onSave={saveNPCQuiet} onRefresh={fetchNPC} psCatalog={psCatalog} meritCatalog={meritCatalog} />}
+
+                {/* Merits and Pulling Strings for non-admin view */}
+                {!IS_ADMIN && (npc.merits?.length > 0 || npc.pullingStrings?.length > 0) && (
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: '1rem' }}>
+                        {(npc.pullingStrings || []).length > 0 && (
+                            <div className="glass-panel" style={{ padding: '1rem' }}>
+                                <h4 className="mono-text text-accent" style={{ borderBottom: '1px solid var(--border-color)', paddingBottom: '0.5rem', marginBottom: '0.5rem', fontSize: '0.85rem' }}>PULLING STRINGS</h4>
+                                {npc.pullingStrings.map(ps => (
+                                    <div key={ps.id} className="tech-border" style={{ padding: '0.4rem', marginBottom: '0.3rem', background: 'rgba(0,0,0,0.2)', display: 'flex', justifyContent: 'space-between' }}>
+                                        <span className="mono-text" style={{ fontSize: '0.8rem' }}>{ps.name}</span>
+                                        <span className="text-accent mono-text" style={{ fontSize: '0.7rem' }}>{ps.cost} XP</span>
+                                    </div>
+                                ))}
+                            </div>
+                        )}
+                        {(npc.merits || []).length > 0 && (
+                            <div className="glass-panel" style={{ padding: '1rem' }}>
+                                <h4 className="mono-text text-accent" style={{ borderBottom: '1px solid var(--border-color)', paddingBottom: '0.5rem', marginBottom: '0.5rem', fontSize: '0.85rem' }}>MERITS</h4>
+                                {npc.merits.map(m => (
+                                    <div key={m.id} className="tech-border" style={{ padding: '0.4rem', marginBottom: '0.3rem', background: 'rgba(0,0,0,0.2)', display: 'flex', justifyContent: 'space-between' }}>
+                                        <span className="mono-text" style={{ fontSize: '0.8rem' }}>{m.name}</span>
+                                        <span className="text-muted" style={{ fontSize: '0.7rem' }}>{m.rating}/{m.maxRating}</span>
+                                    </div>
+                                ))}
+                            </div>
+                        )}
+                    </div>
+                )}
 
                 {/* Notes section - available on all dossiers */}
                 {IS_NPC_DOSSIER && <NotesModule npc={npc} />}

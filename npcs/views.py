@@ -7,9 +7,10 @@ from django.shortcuts import render, get_object_or_404
 from django.contrib.auth.decorators import login_required
 from django.views.decorators.http import require_http_methods
 
-from .models import NPC, NPCNote
+from .models import NPC, NPCNote, NpcMerit, NpcPullingString
 from .serializers import serialize_npc, serialize_npc_summary, serialize_npc_note
 from agencies.models import Agency
+from exodus.models import MeritDefinition, PullingString
 
 
 # ---------------------------------------------------------------------------
@@ -194,12 +195,44 @@ def api_npc_detail(request, pk):
                 npc.willpower_current = data["willpowerCurrent"]
             if "experience" in data:
                 npc.experience = data["experience"]
-            if "merits" in data:
-                npc.merits = data["merits"]
             if "flaws" in data:
                 npc.flaws = data["flaws"]
             if "specialisations" in data:
                 npc.specialisations = data["specialisations"]
+
+        # Merits — add/remove/update rating (editor)
+        if "addMerit" in data:
+            merit_id = data["addMerit"].get("meritId")
+            rating = data["addMerit"].get("rating", 1)
+            try:
+                merit = MeritDefinition.objects.get(pk=merit_id)
+                rating = max(merit.min_cost, min(merit.cost, rating))
+                if not NpcMerit.objects.filter(npc=npc, merit=merit).exists():
+                    NpcMerit.objects.create(npc=npc, merit=merit, rating=rating)
+            except MeritDefinition.DoesNotExist:
+                pass
+        if "removeMerit" in data:
+            NpcMerit.objects.filter(pk=data["removeMerit"], npc=npc).delete()
+        if "updateMeritRating" in data:
+            try:
+                nm = NpcMerit.objects.select_related("merit").get(
+                    pk=data["updateMeritRating"]["id"], npc=npc)
+                nm.rating = max(nm.merit.min_cost, min(nm.merit.cost, data["updateMeritRating"]["rating"]))
+                nm.save()
+            except (NpcMerit.DoesNotExist, KeyError):
+                pass
+
+        # Pulling strings — add/remove (editor)
+        if "addPullingString" in data:
+            ps_id = data["addPullingString"].get("pullingStringId")
+            try:
+                ps = PullingString.objects.get(pk=ps_id)
+                if not NpcPullingString.objects.filter(npc=npc, pulling_string=ps).exists():
+                    NpcPullingString.objects.create(npc=npc, pulling_string=ps)
+            except PullingString.DoesNotExist:
+                pass
+        if "removePullingString" in data:
+            NpcPullingString.objects.filter(pk=data["removePullingString"], npc=npc).delete()
 
         # Admin can assign/change agency (NPC dossiers)
         if "agencyId" in data and request.user.is_superuser and npc.is_npc_dossier:
