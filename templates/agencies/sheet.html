@@ -2279,6 +2279,7 @@
                                         return match && match.level >= (minLevel || 1);
                                     };
                                     const hasEquipment = (key) => (base.equipment || []).includes(key);
+                                    const hasMerit = (key) => (base.merits || []).includes(key);
 
                                     const meetsRequirements = (eq) => {
                                         const reqs = eq.requiresFacilities || [];
@@ -2286,6 +2287,7 @@
                                         const andMet = reqs.length === 0 || reqs.every(req => hasFacility(req.key, req.minLevel));
                                         const orMet = anyOf.length === 0 || anyOf.some(req =>
                                             req.type === 'equipment' ? hasEquipment(req.key)
+                                            : req.type === 'merit' ? hasMerit(req.key)
                                             : hasFacility(req.key, req.minLevel)
                                         );
                                         return andMet && orMet;
