@@ -1,5 +1,8 @@
 # Changelog
 
+## v0.8.35
+- Dossier list can now be filtered by agency — dynamic filter buttons appear for each agency that has NPC dossiers
+
 ## v0.8.34
 - Personal NPC pulling string hidden from picker when player has no unlinked dossiers left
 

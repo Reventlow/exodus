@@ -321,6 +321,14 @@
         ];
         if (IS_ADMIN) filters.push({ key: 'hidden', label: 'HIDDEN' });
 
+        // Dynamic agency filters
+        const agencyNames = [...new Set(
+            npcs.filter(n => n.isNpcDossier && n.agencyName).map(n => n.agencyName)
+        )].sort();
+        agencyNames.forEach(name => {
+            filters.push({ key: 'agency:' + name, label: name.toUpperCase() });
+        });
+
         return (
             <div style={{
                 display: 'flex',
@@ -577,6 +585,10 @@
                 case 'hidden':
                     return npcs.filter(n => n.isHidden);
                 default:
+                    if (activeFilter.startsWith('agency:')) {
+                        const agencyName = activeFilter.slice(7);
+                        return npcs.filter(n => n.isNpcDossier && n.agencyName === agencyName);
+                    }
                     return npcs;
             }
         };
