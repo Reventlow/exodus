@@ -1,5 +1,8 @@
 # Changelog
 
+## v0.8.45
+- Agency notes now render as markdown with edit/view toggle (same as operative dossier)
+
 ## v0.8.44
 - XP transfer endpoint now supports negative amounts (retractions) for admins — properly logs and reverses transfers
 

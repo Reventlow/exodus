@@ -392,31 +392,62 @@
     );
 
     // --- NOTES MODULE ---
-    const NotesModule = ({ notes, onSave, visibility, onToggleVis }) => (
-        <div className="glass-panel" style={{ padding: '1.5rem', marginBottom: '1rem' }}>
-            <h3 className="mono-text text-accent" style={{
-                borderBottom: '1px solid var(--border-color)',
-                paddingBottom: '0.5rem', marginBottom: '1rem'
-            }}>
-                NOTES
-                <VisibilityToggle field="notes" visibility={visibility} onToggle={onToggleVis} />
-            </h3>
-            {notes === 'CLASSIFIED' ? <Classified /> : (
-                <AutoSaveInput
-                    component="textarea"
-                    defaultValue={notes}
-                    onSave={val => onSave({ notes: val })}
-                    disabled={!IS_ADMIN}
-                    placeholder="Agency notes..."
-                    style={{
-                        width: '100%', minHeight: '80px', background: 'transparent',
-                        border: '1px solid var(--border-color)', color: 'var(--text-primary)',
-                        padding: '0.5rem', fontFamily: 'inherit', resize: 'vertical'
-                    }}
-                />
-            )}
-        </div>
-    );
+    const NotesModule = ({ notes, onSave, visibility, onToggleVis }) => {
+        const [editing, setEditing] = useState(false);
+        const textareaRef = useRef(null);
+
+        const handleSave = () => {
+            if (textareaRef.current) {
+                onSave({ notes: textareaRef.current.value });
+            }
+            setEditing(false);
+        };
+
+        const renderMarkdown = (text) => {
+            if (!text) return '<p style="color: var(--text-muted); font-style: italic;">No notes recorded.</p>';
+            try { return window.marked.parse(text); } catch { return text; }
+        };
+
+        return (
+            <div className="glass-panel" style={{ padding: '1.5rem', marginBottom: '1rem' }}>
+                <div style={{
+                    display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+                    borderBottom: '1px solid var(--border-color)',
+                    paddingBottom: '0.5rem', marginBottom: '1rem'
+                }}>
+                    <h3 className="mono-text text-accent" style={{ margin: 0 }}>
+                        NOTES
+                        <VisibilityToggle field="notes" visibility={visibility} onToggle={onToggleVis} />
+                    </h3>
+                    {IS_ADMIN && notes !== 'CLASSIFIED' && (
+                        <button onClick={() => editing ? handleSave() : setEditing(true)}
+                            style={{
+                                background: 'transparent',
+                                border: '1px solid var(--accent-primary)',
+                                color: 'var(--accent-primary)',
+                                padding: '0.25rem 0.75rem', cursor: 'pointer',
+                                fontFamily: 'var(--font-mono)', fontSize: '0.8rem',
+                            }}>
+                            {editing ? 'SAVE' : 'EDIT'}
+                        </button>
+                    )}
+                </div>
+                {notes === 'CLASSIFIED' ? <Classified /> : editing ? (
+                    <textarea ref={textareaRef} defaultValue={notes}
+                        placeholder="Write notes in markdown..."
+                        style={{
+                            width: '100%', minHeight: '200px', background: 'var(--bg-input)',
+                            border: '1px solid var(--border-color)', color: 'var(--text-primary)',
+                            padding: '1rem', fontFamily: 'var(--font-mono)', fontSize: '0.9rem',
+                            resize: 'vertical', borderRadius: 'var(--radius-sm)',
+                        }} />
+                ) : (
+                    <div className="dossier-content"
+                        dangerouslySetInnerHTML={{ __html: renderMarkdown(notes) }} />
+                )}
+            </div>
+        );
+    };
 
     // --- INTEGRITY & EXPERIENCE MODULE ---
     const getWorkspaceConfig = (baseConfig) => (baseConfig.facilityTypes || []).find(f => f.key === 'workspace');
