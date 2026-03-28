@@ -1,5 +1,8 @@
 # Changelog
 
+## v0.8.47
+- Base notes now render as markdown with edit/view toggle
+
 ## v0.8.46
 - Fix: naval equipment now requires Shipyard or Coastal Access merit — no more ships in mountain bases
 - Equipment requirements now support location merit checks (type: "merit" in requiresAnyOf)

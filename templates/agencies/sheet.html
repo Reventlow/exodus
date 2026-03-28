@@ -1680,6 +1680,45 @@
     // --- BASES MODULE ---
     const BASE_ACCENT = '#22c55e';
 
+    const BaseNotesModule = ({ notes, onSave }) => {
+        const [editing, setEditing] = useState(false);
+        const notesRef = useRef(null);
+        const renderMd = (text) => {
+            if (!text) return '<p style="color: var(--text-muted); font-style: italic;">No notes.</p>';
+            try { return window.marked.parse(text); } catch { return text; }
+        };
+        return (
+            <div style={{ marginBottom: '0.5rem' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.25rem' }}>
+                    <label className="text-muted mono-text" style={{ fontSize: '0.7rem' }}>NOTES</label>
+                    {IS_ADMIN && (
+                        <button onClick={() => {
+                            if (editing && notesRef.current) onSave(notesRef.current.value);
+                            setEditing(!editing);
+                        }} style={{
+                            background: 'transparent', border: '1px solid var(--accent-primary)',
+                            color: 'var(--accent-primary)', padding: '0.15rem 0.5rem',
+                            cursor: 'pointer', fontFamily: 'var(--font-mono)', fontSize: '0.7rem',
+                        }}>{editing ? 'SAVE' : 'EDIT'}</button>
+                    )}
+                </div>
+                {editing ? (
+                    <textarea ref={notesRef} defaultValue={notes}
+                        placeholder="Write notes in markdown..."
+                        style={{
+                            background: 'rgba(0,0,0,0.2)', border: '1px solid var(--border-color)',
+                            color: 'var(--text-primary)', width: '100%', minHeight: '150px',
+                            fontSize: '0.85rem', fontFamily: 'var(--font-mono)', padding: '0.5rem',
+                            resize: 'vertical', borderRadius: 'var(--radius-sm)',
+                        }} />
+                ) : (
+                    <div className="dossier-content" style={{ fontSize: '0.85rem' }}
+                        dangerouslySetInnerHTML={{ __html: renderMd(notes) }} />
+                )}
+            </div>
+        );
+    };
+
     const BasesModule = ({ bases: initialBases, baseConfig, agencyId, onBasesChange, assignableCharacters, assignableNpcs, visibility, onToggleVis, classifiedBases }) => {
         const [bases, setBases] = useState(initialBases || []);
         const [expandedBase, setExpandedBase] = useState(() => {
@@ -2350,19 +2389,8 @@
                                 })()}
                             </div>
 
-                            {/* Notes */}
-                            <div style={{ marginBottom: '0.5rem' }}>
-                                <label className="text-muted mono-text" style={{ fontSize: '0.7rem', display: 'block', marginBottom: '0.25rem' }}>NOTES</label>
-                                <AutoSaveInput component="textarea" defaultValue={base.notes || ''}
-                                    onSave={val => updateBaseField(base.id, 'notes', val)}
-                                    disabled={!IS_ADMIN}
-                                    style={{
-                                        background: 'rgba(0,0,0,0.2)', border: '1px solid var(--border-color)',
-                                        color: 'var(--text-primary)', width: '100%', minHeight: '3rem',
-                                        fontSize: '0.85rem', fontFamily: 'inherit', padding: '0.5rem',
-                                        resize: 'vertical', borderRadius: 'var(--radius-sm)',
-                                    }} />
-                            </div>
+                            {/* Notes (markdown) */}
+                            <BaseNotesModule notes={base.notes || ''} onSave={val => updateBaseField(base.id, 'notes', val)} />
 
                             {/* Coordinates for world map */}
                             {IS_ADMIN && (
