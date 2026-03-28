@@ -1379,14 +1379,17 @@
                                     </div>
                                 )}
                                 {(npc.pullingStrings || []).map(ps => (
-                                    <div key={ps.id} className="tech-border" style={{ padding: '0.4rem', marginBottom: '0.3rem', background: 'rgba(0,0,0,0.2)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                                        <div>
-                                            <span className="mono-text" style={{ fontSize: '0.8rem' }}>{ps.name}</span>
-                                            <span className="text-accent mono-text" style={{ fontSize: '0.7rem', marginLeft: '0.5rem' }}>{ps.cost} XP</span>
+                                    <div key={ps.id} className="tech-border" style={{ padding: '0.5rem', marginBottom: '0.3rem', background: 'rgba(0,0,0,0.2)' }}>
+                                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                            <div>
+                                                <span className="mono-text" style={{ fontSize: '0.8rem' }}>{ps.name}</span>
+                                                <span className="text-accent mono-text" style={{ fontSize: '0.7rem', marginLeft: '0.5rem' }}>{ps.cost} XP</span>
+                                            </div>
+                                            {!readOnly && <button onClick={() => { onSave({ removePullingString: ps.id }); setTimeout(onRefresh, 500); }} style={{
+                                                background: 'transparent', border: 'none', color: 'var(--accent-danger)', cursor: 'pointer', fontSize: '0.8rem'
+                                            }}>×</button>}
                                         </div>
-                                        {!readOnly && <button onClick={() => { onSave({ removePullingString: ps.id }); setTimeout(onRefresh, 500); }} style={{
-                                            background: 'transparent', border: 'none', color: 'var(--accent-danger)', cursor: 'pointer', fontSize: '0.8rem'
-                                        }}>×</button>}
+                                        {ps.description && <p className="text-secondary" style={{ fontSize: '0.75rem', margin: '0.25rem 0 0 0' }}>{ps.description}</p>}
                                     </div>
                                 ))}
                                 {(npc.pullingStrings || []).length === 0 && !showPsPicker && <p className="text-muted" style={{ fontSize: '0.75rem', fontStyle: 'italic' }}>None.</p>}
@@ -1431,18 +1434,21 @@
                                     </div>
                                 )}
                                 {(npc.merits || []).map(m => (
-                                    <div key={m.id} className="tech-border" style={{ padding: '0.4rem', marginBottom: '0.3rem', background: 'rgba(0,0,0,0.2)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                                        <div>
-                                            <span className="mono-text" style={{ fontSize: '0.8rem' }}>{m.name}</span>
-                                            {m.minRating !== m.maxRating && (
-                                                <span className="text-muted" style={{ fontSize: '0.7rem', marginLeft: '0.5rem' }}>
-                                                    ({m.rating}/{m.maxRating})
-                                                </span>
-                                            )}
+                                    <div key={m.id} className="tech-border" style={{ padding: '0.5rem', marginBottom: '0.3rem', background: 'rgba(0,0,0,0.2)' }}>
+                                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                            <div>
+                                                <span className="mono-text" style={{ fontSize: '0.8rem' }}>{m.name}</span>
+                                                {m.minRating !== m.maxRating && (
+                                                    <span className="text-muted" style={{ fontSize: '0.7rem', marginLeft: '0.5rem' }}>
+                                                        ({m.rating}/{m.maxRating})
+                                                    </span>
+                                                )}
+                                            </div>
+                                            {!readOnly && <button onClick={() => { onSave({ removeMerit: m.id }); setTimeout(onRefresh, 500); }} style={{
+                                                background: 'transparent', border: 'none', color: 'var(--accent-danger)', cursor: 'pointer', fontSize: '0.8rem'
+                                            }}>×</button>}
                                         </div>
-                                        {!readOnly && <button onClick={() => { onSave({ removeMerit: m.id }); setTimeout(onRefresh, 500); }} style={{
-                                            background: 'transparent', border: 'none', color: 'var(--accent-danger)', cursor: 'pointer', fontSize: '0.8rem'
-                                        }}>×</button>}
+                                        {m.description && <p className="text-secondary" style={{ fontSize: '0.75rem', margin: '0.25rem 0 0 0' }}>{m.description}</p>}
                                     </div>
                                 ))}
                                 {(npc.merits || []).length === 0 && !showMeritPicker && <p className="text-muted" style={{ fontSize: '0.75rem', fontStyle: 'italic' }}>None.</p>}
@@ -2042,9 +2048,12 @@
                             <div className="glass-panel" style={{ padding: '1rem' }}>
                                 <h4 className="mono-text text-accent" style={{ borderBottom: '1px solid var(--border-color)', paddingBottom: '0.5rem', marginBottom: '0.5rem', fontSize: '0.85rem' }}>PULLING STRINGS</h4>
                                 {npc.pullingStrings.map(ps => (
-                                    <div key={ps.id} className="tech-border" style={{ padding: '0.4rem', marginBottom: '0.3rem', background: 'rgba(0,0,0,0.2)', display: 'flex', justifyContent: 'space-between' }}>
-                                        <span className="mono-text" style={{ fontSize: '0.8rem' }}>{ps.name}</span>
-                                        <span className="text-accent mono-text" style={{ fontSize: '0.7rem' }}>{ps.cost} XP</span>
+                                    <div key={ps.id} className="tech-border" style={{ padding: '0.5rem', marginBottom: '0.3rem', background: 'rgba(0,0,0,0.2)' }}>
+                                        <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                                            <span className="mono-text" style={{ fontSize: '0.8rem' }}>{ps.name}</span>
+                                            <span className="text-accent mono-text" style={{ fontSize: '0.7rem' }}>{ps.cost} XP</span>
+                                        </div>
+                                        {ps.description && <p className="text-secondary" style={{ fontSize: '0.75rem', margin: '0.25rem 0 0 0' }}>{ps.description}</p>}
                                     </div>
                                 ))}
                             </div>
@@ -2053,9 +2062,12 @@
                             <div className="glass-panel" style={{ padding: '1rem' }}>
                                 <h4 className="mono-text text-accent" style={{ borderBottom: '1px solid var(--border-color)', paddingBottom: '0.5rem', marginBottom: '0.5rem', fontSize: '0.85rem' }}>MERITS</h4>
                                 {npc.merits.map(m => (
-                                    <div key={m.id} className="tech-border" style={{ padding: '0.4rem', marginBottom: '0.3rem', background: 'rgba(0,0,0,0.2)', display: 'flex', justifyContent: 'space-between' }}>
-                                        <span className="mono-text" style={{ fontSize: '0.8rem' }}>{m.name}</span>
-                                        <span className="text-muted" style={{ fontSize: '0.7rem' }}>{m.rating}/{m.maxRating}</span>
+                                    <div key={m.id} className="tech-border" style={{ padding: '0.5rem', marginBottom: '0.3rem', background: 'rgba(0,0,0,0.2)' }}>
+                                        <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                                            <span className="mono-text" style={{ fontSize: '0.8rem' }}>{m.name}</span>
+                                            <span className="text-muted" style={{ fontSize: '0.7rem' }}>{m.rating}/{m.maxRating}</span>
+                                        </div>
+                                        {m.description && <p className="text-secondary" style={{ fontSize: '0.75rem', margin: '0.25rem 0 0 0' }}>{m.description}</p>}
                                     </div>
                                 ))}
                             </div>

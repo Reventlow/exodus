@@ -1,5 +1,8 @@
 # Changelog
 
+## v0.8.42
+- Dossier pulling strings and merits now show descriptions in both admin and read-only views
+
 ## v0.8.41
 - Fix: dossier list page crash — npcs variable not passed as prop to FilterBar component
 
