@@ -770,10 +770,15 @@
         // IDs of catalog entries already owned (non-linkable only)
         const ownedPsIds = pullingStrings.filter(ps => !ps.isLinkable).map(ps => ps.pullingStringId);
 
+        // NPCs already linked to any pulling string
+        const linkedNpcIds = pullingStrings.filter(ps => ps.linkedNpc).map(ps => ps.linkedNpc.id);
+        const unlinkedNpcsLeft = npcs.filter(n => !linkedNpcIds.includes(n.id)).length;
+
         // Filter catalog: general + character's class, exclude already-owned non-linkable
+        // Hide linkable entries (Personal NPC) if no unlinked dossiers remain
         const available = catalog.filter(ps =>
             (ps.category === 'general' || ps.category === characterClass) &&
-            (ps.isLinkable || !ownedPsIds.includes(ps.id))
+            (ps.isLinkable ? unlinkedNpcsLeft > 0 : !ownedPsIds.includes(ps.id))
         );
 
         // Group owned by category

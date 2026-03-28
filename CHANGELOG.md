@@ -1,5 +1,8 @@
 # Changelog
 
+## v0.8.34
+- Personal NPC pulling string hidden from picker when player has no unlinked dossiers left
+
 ## v0.8.33
 - Fix: NPC dossier linking on Personal NPC pulling strings — dropdown now correctly shows available NPCs, excludes only NPCs linked to OTHER entries (not the current one)
 
