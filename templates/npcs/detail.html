@@ -995,22 +995,31 @@
         );
     };
 
-    const getMentalLoadPenalties = (level) => {
+    const getMentalLoadMax = (attributes) => {
+        const composure = (attributes?.resistance?.social) || 1;
+        const resolve = (attributes?.resistance?.mental) || 1;
+        return 4 + Math.floor((composure + resolve) / 2);
+    };
+
+    const getMentalLoadPenalties = (level, mlMax) => {
+        const penaltyStart = mlMax - 3;
         let social = 0, cognitive = 0;
-        if (level >= 3) social -= 2;
-        if (level >= 4) cognitive -= 2;
-        if (level >= 5) { social -= 1; cognitive -= 1; }
-        if (level >= 6) { social -= 2; cognitive -= 2; }
+        if (level >= penaltyStart)     social -= 2;
+        if (level >= penaltyStart + 1) cognitive -= 2;
+        if (level >= penaltyStart + 2) { social -= 1; cognitive -= 1; }
+        if (level >= penaltyStart + 3) { social -= 2; cognitive -= 2; }
         return { social, cognitive };
     };
 
-    const NpcHealthModule = ({ health, max, mentalLoad, update, onMentalLoadChange }) => {
+    const NpcHealthModule = ({ health, max, mentalLoad, attributes, update, onMentalLoadChange }) => {
+        const mlMax = getMentalLoadMax(attributes);
+        const penaltyStart = mlMax - 3;
         const deadlyFill = (health.lethal || 0) + (health.aggravated || 0);
         const isFlatline = max > 0 && deadlyFill >= max;
-        const ekgSpeed = isFlatline ? 0 : Math.max(0.3, 2 - mentalLoad * 0.25);
+        const ekgSpeed = isFlatline ? 0 : Math.max(0.3, 2 - (mentalLoad / mlMax) * 2);
         const ekgPath = isFlatline ? "M0,30 L300,30" : "M0,30 L20,30 L25,10 L35,50 L40,30 L300,30";
         const ekgColor = isFlatline ? 'var(--text-muted)' : 'var(--accent-danger)';
-        const penalties = getMentalLoadPenalties(mentalLoad);
+        const penalties = getMentalLoadPenalties(mentalLoad, mlMax);
         return (
             <div className="glass-panel" style={{ padding: '1.5rem', marginBottom: '1rem', border: '1px solid var(--accent-danger)' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem', flexWrap: 'wrap', gap: '0.5rem' }}>
@@ -1050,7 +1059,12 @@
                 </div>
                 <div style={{ marginTop: '1.5rem', paddingTop: '1rem', borderTop: '1px solid var(--border-color)' }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.75rem', flexWrap: 'wrap', gap: '0.5rem' }}>
-                        <span className="mono-text text-danger" style={{ fontSize: '0.9rem' }}>MENTAL LOAD</span>
+                        <span className="mono-text text-danger" style={{ fontSize: '0.9rem' }}>
+                            MENTAL LOAD
+                            <span className="text-muted" style={{ fontSize: '0.65rem', marginLeft: '0.5rem', fontWeight: 'normal' }}>
+                                {mentalLoad}/{mlMax} (4 + ⌊(Comp+Res)/2⌋)
+                            </span>
+                        </span>
                         {(penalties.social !== 0 || penalties.cognitive !== 0) && (
                             <div style={{ display: 'flex', gap: '0.75rem' }}>
                                 {penalties.social !== 0 && <span className="mono-text" style={{ fontSize: '0.75rem', color: 'var(--accent-warning)' }}>SOCIAL {penalties.social}</span>}
@@ -1058,18 +1072,29 @@
                             </div>
                         )}
                     </div>
-                    <div style={{ display: 'flex', justifyContent: 'center', gap: '0.5rem' }}>
-                        {[...Array(6)].map((_, i) => {
+                    <div className="text-muted" style={{ textAlign: 'center', fontSize: '0.7rem', marginBottom: '0.5rem', fontFamily: 'var(--font-mono)' }}>
+                        {mlMax - 4} safe · <span style={{ color: 'var(--accent-danger)' }}>4 penalty</span> (-2 soc → -2 cog → -1 both → -2 both)
+                    </div>
+                    <div style={{ display: 'flex', justifyContent: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
+                        {[...Array(mlMax)].map((_, i) => {
                             const filled = i < mentalLoad;
                             const level = i + 1;
+                            const inPenaltyZone = level >= penaltyStart;
+                            const penaltyIndex = level - penaltyStart;
                             let boxColor = 'var(--border-color)';
-                            if (filled && level <= 2) boxColor = 'var(--accent-primary)';
-                            else if (filled && level <= 4) boxColor = 'var(--accent-warning)';
+                            if (filled && !inPenaltyZone) boxColor = 'var(--accent-primary)';
+                            else if (filled && penaltyIndex <= 1) boxColor = 'var(--accent-warning)';
                             else if (filled) boxColor = 'var(--accent-danger)';
                             return (
                                 <div key={i}
                                     onClick={() => onMentalLoadChange(mentalLoad === level ? level - 1 : level)}
-                                    style={{ width: '28px', height: '28px', border: '1px solid var(--accent-danger)', background: filled ? boxColor : 'transparent', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'all 0.2s', boxShadow: filled ? '0 0 6px ' + boxColor : 'none' }}
+                                    style={{
+                                        width: '28px', height: '28px',
+                                        border: inPenaltyZone ? '1px solid var(--accent-danger)' : '1px solid var(--border-color)',
+                                        background: filled ? boxColor : 'transparent',
+                                        cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                        transition: 'all 0.2s', boxShadow: filled ? '0 0 6px ' + boxColor : 'none'
+                                    }}
                                     title={'Level ' + level}>
                                     {filled && <span style={{ color: 'var(--bg-dark)', fontWeight: 'bold', fontSize: '0.7rem' }}>{level}</span>}
                                 </div>
@@ -1131,6 +1156,76 @@
         );
     };
 
+    // --- CREATION ALLOCATION & XP COMPUTATION (same as operative sheet) ---
+    const computeNpcCreation = (npc) => {
+        const cats = ['mental', 'physical', 'social'];
+        const attrs = npc.attributes || { power: {mental:1,physical:1,social:1}, finesse: {mental:1,physical:1,social:1}, resistance: {mental:1,physical:1,social:1} };
+        const skills = npc.skills || { mental: {}, physical: {}, social: {} };
+
+        const attrDots = {};
+        cats.forEach(c => {
+            attrDots[c] = ((attrs.power||{})[c]||1) - 1 + ((attrs.finesse||{})[c]||1) - 1 + ((attrs.resistance||{})[c]||1) - 1;
+        });
+        const skillDots = {};
+        cats.forEach(c => {
+            skillDots[c] = Object.values((skills||{})[c]||{}).reduce((a, b) => a + b, 0);
+        });
+
+        const assign = (dots, allocs) => {
+            const sorted = [...cats].sort((a, b) => dots[b] - dots[a]);
+            const sortedA = [...allocs].sort((a, b) => b - a);
+            const r = {};
+            sorted.forEach((c, i) => { r[c] = { dots: dots[c], alloc: sortedA[i] }; });
+            return r;
+        };
+        const attrAssign = assign(attrDots, [5, 4, 3]);
+        const skillAssign = assign(skillDots, [11, 7, 4]);
+
+        const calcCategoryXp = (catAssign, getValues, costPerDot) => {
+            let xp = 0;
+            cats.forEach(c => {
+                const { dots, alloc } = catAssign[c];
+                if (dots <= alloc) return;
+                const values = getValues(c);
+                const dotCosts = [];
+                values.forEach(val => {
+                    const base = costPerDot === 5 ? 2 : 1;
+                    for (let i = base; i <= val; i++) dotCosts.push(i * costPerDot);
+                });
+                dotCosts.sort((a, b) => a - b);
+                dotCosts.slice(0, dots - alloc).forEach(c => { xp += c; });
+            });
+            return xp;
+        };
+
+        const attrXp = calcCategoryXp(attrAssign,
+            c => [(attrs.power||{})[c]||1, (attrs.finesse||{})[c]||1, (attrs.resistance||{})[c]||1], 5);
+        const skillXp = calcCategoryXp(skillAssign,
+            c => Object.values((skills||{})[c]||{}), 3);
+
+        const specCount = (npc.specialisations || []).length;
+        const specXp = Math.max(0, specCount - 3) * 3;
+
+        const meritDots = (npc.merits || []).reduce((s, m) => s + (m.rating || 0), 0);
+        let meritXp = 0;
+        if (meritDots > 7) {
+            const meritCosts = [];
+            (npc.merits || []).forEach(m => {
+                for (let i = 1; i <= (m.rating || 0); i++) meritCosts.push(i * 2);
+            });
+            meritCosts.sort((a, b) => a - b);
+            meritCosts.slice(0, meritDots - 7).forEach(c => { meritXp += c; });
+        }
+
+        const msgs = [];
+        cats.forEach(c => { const u = Math.max(0, attrAssign[c].alloc - attrAssign[c].dots); if (u) msgs.push(`${u} attr (${c})`); });
+        cats.forEach(c => { const u = Math.max(0, skillAssign[c].alloc - skillAssign[c].dots); if (u) msgs.push(`${u} skill (${c})`); });
+        const specU = Math.max(0, 3 - specCount); if (specU) msgs.push(`${specU} spec`);
+        const meritU = Math.max(0, 7 - meritDots); if (meritU) msgs.push(`${meritU} merit dots`);
+
+        return { totalXp: attrXp + skillXp + specXp + meritXp, attrXp, skillXp, specXp, meritXp, messages: msgs };
+    };
+
     const NpcStatsPanel = ({ npc, onSave, onRefresh, psCatalog, meritCatalog }) => {
         const DEFAULT_ATTRS = {
             power: { mental: 1, physical: 1, social: 1 },
@@ -1161,67 +1256,86 @@
 
                 <NpcDerivedTraitsModule npc={{ ...npc, attributes: attrs }} update={updates => onSave(updates)} />
 
-                {/* Experience */}
-                <div className="glass-panel" style={{ padding: '1.5rem', marginBottom: '1rem' }}>
-                    <h3 className="mono-text text-accent" style={{
-                        borderBottom: '1px solid var(--border-color)',
-                        paddingBottom: '0.5rem', marginBottom: '1rem'
-                    }}>EXPERIENCE</h3>
-                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '1rem' }}>
-                        <div className="tech-border text-center" style={{ padding: '0.5rem' }}>
-                            <div className="text-secondary mono-text" style={{ fontSize: '0.8rem' }}>TOTAL</div>
-                            <input type="number" value={npc.experience || 0}
-                                onChange={e => onSave({ experience: parseInt(e.target.value) || 0 })}
-                                style={{
-                                    background: 'transparent', border: 'none',
-                                    color: 'var(--text-accent)', width: '100%',
-                                    textAlign: 'center', fontSize: '1.5rem'
-                                }} />
-                        </div>
-                        <div className="tech-border text-center" style={{ padding: '0.5rem' }}>
-                            <div className="text-secondary mono-text" style={{ fontSize: '0.8rem' }}>MANUAL</div>
-                            <input type="number" value={npc.experienceUsed || 0}
-                                onChange={e => onSave({ experienceUsed: parseInt(e.target.value) || 0 })}
-                                style={{
-                                    background: 'transparent', border: 'none',
-                                    color: 'var(--text-primary)', width: '100%',
-                                    textAlign: 'center', fontSize: '1.5rem'
-                                }} />
-                        </div>
-                        <div className="tech-border text-center" style={{ padding: '0.5rem' }}>
-                            <div className="text-secondary mono-text" style={{ fontSize: '0.8rem' }}>AUTO</div>
-                            <div style={{ fontSize: '1.5rem', color: 'var(--text-primary)' }}>
-                                {(npc.pullingStringsCost || 0)}
+                {/* Experience with auto-calculation */}
+                {(() => {
+                    const creation = computeNpcCreation(npc);
+                    const psCost = npc.pullingStringsCost || 0;
+                    const autoXp = psCost + creation.totalXp;
+                    const totalUsed = (npc.experienceUsed || 0) + autoXp;
+                    const remaining = (npc.experience || 0) - totalUsed;
+                    return (
+                        <div className="glass-panel" style={{ padding: '1.5rem', marginBottom: '1rem' }}>
+                            <h3 className="mono-text text-accent" style={{
+                                borderBottom: '1px solid var(--border-color)',
+                                paddingBottom: '0.5rem', marginBottom: '1rem'
+                            }}>EXPERIENCE</h3>
+
+                            {creation.messages.length > 0 && (
+                                <div style={{
+                                    background: 'rgba(255,200,0,0.1)', border: '1px solid var(--accent-warning)',
+                                    borderRadius: '4px', padding: '0.75rem', marginBottom: '1rem',
+                                    fontSize: '0.8rem', color: 'var(--accent-warning)'
+                                }}>
+                                    <strong className="mono-text">CREATION INCOMPLETE</strong>
+                                    <span style={{ marginLeft: '0.5rem' }}>
+                                        Still need: {creation.messages.join(', ')}
+                                    </span>
+                                </div>
+                            )}
+
+                            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '1rem' }}>
+                                <div className="tech-border text-center" style={{ padding: '0.5rem' }}>
+                                    <div className="text-secondary mono-text" style={{ fontSize: '0.8rem' }}>TOTAL</div>
+                                    <input type="number" value={npc.experience || 0}
+                                        onChange={e => onSave({ experience: parseInt(e.target.value) || 0 })}
+                                        style={{
+                                            background: 'transparent', border: 'none',
+                                            color: 'var(--text-accent)', width: '100%',
+                                            textAlign: 'center', fontSize: '1.5rem'
+                                        }} />
+                                </div>
+                                <div className="tech-border text-center" style={{ padding: '0.5rem' }}>
+                                    <div className="text-secondary mono-text" style={{ fontSize: '0.8rem' }}>MANUAL</div>
+                                    <input type="number" value={npc.experienceUsed || 0}
+                                        onChange={e => onSave({ experienceUsed: parseInt(e.target.value) || 0 })}
+                                        style={{
+                                            background: 'transparent', border: 'none',
+                                            color: 'var(--text-primary)', width: '100%',
+                                            textAlign: 'center', fontSize: '1.5rem'
+                                        }} />
+                                </div>
+                                <div className="tech-border text-center" style={{
+                                    padding: '0.5rem', cursor: 'default'
+                                }} title={[
+                                    `Attributes: ${creation.attrXp} XP`,
+                                    `Skills: ${creation.skillXp} XP`,
+                                    `Specialisations: ${creation.specXp} XP`,
+                                    `Merits: ${creation.meritXp} XP`,
+                                    `Pulling Strings: ${psCost} XP`,
+                                    `Total Auto: ${autoXp} XP`,
+                                ].join('\n')}>
+                                    <div className="text-secondary mono-text" style={{ fontSize: '0.8rem' }}>AUTO</div>
+                                    <div style={{ fontSize: '1.5rem', color: 'var(--text-primary)' }}>{autoXp}</div>
+                                    <div style={{ fontSize: '0.65rem', color: 'var(--text-muted)' }}>Hover for details</div>
+                                </div>
+                                <div className="tech-border text-center" style={{ padding: '0.5rem' }}>
+                                    <div className="text-secondary mono-text" style={{ fontSize: '0.8rem' }}>REMAINING</div>
+                                    <div style={{
+                                        fontSize: '1.5rem',
+                                        color: remaining < 0 ? 'var(--accent-danger)' : 'var(--text-accent)'
+                                    }}>{remaining}</div>
+                                    <div style={{ fontSize: '0.65rem', color: 'var(--text-muted)' }}>{totalUsed} used</div>
+                                </div>
                             </div>
-                            <div style={{ fontSize: '0.65rem', color: 'var(--text-muted)' }}>
-                                PS {npc.pullingStringsCost || 0}
-                            </div>
                         </div>
-                        <div className="tech-border text-center" style={{ padding: '0.5rem' }}>
-                            <div className="text-secondary mono-text" style={{ fontSize: '0.8rem' }}>REMAINING</div>
-                            {(() => {
-                                const totalUsed = (npc.experienceUsed || 0) + (npc.pullingStringsCost || 0);
-                                const remaining = (npc.experience || 0) - totalUsed;
-                                return (
-                                    <>
-                                        <div style={{
-                                            fontSize: '1.5rem',
-                                            color: remaining < 0 ? 'var(--accent-danger)' : 'var(--text-accent)'
-                                        }}>{remaining}</div>
-                                        <div style={{ fontSize: '0.65rem', color: 'var(--text-muted)' }}>
-                                            {totalUsed} used
-                                        </div>
-                                    </>
-                                );
-                            })()}
-                        </div>
-                    </div>
-                </div>
+                    );
+                })()}
 
                 <NpcHealthModule
                     health={health}
                     max={healthMax}
                     mentalLoad={npc.mentalLoad || 0}
+                    attributes={attrs}
                     update={h => onSave({ health: h })}
                     onMentalLoadChange={v => onSave({ mentalLoad: v })}
                 />

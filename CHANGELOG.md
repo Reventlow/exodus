@@ -1,5 +1,11 @@
 # Changelog
 
+## v0.8.38
+- NPC dossiers now auto-calculate XP costs for attributes, skills, specialisations, and merits above WoD 2.0 creation baseline (same as operatives)
+- Creation incomplete warning on dossiers
+- Hover tooltip on AUTO XP showing breakdown
+- Dynamic mental load boxes on dossiers — 4 + floor((Composure + Resolve) / 2), with penalty zone and explainer
+
 ## v0.8.37
 - XP tracking on NPC dossiers — total, manual, auto (pulling strings cost), and remaining
 - Experience visible to all players, editable by admins
