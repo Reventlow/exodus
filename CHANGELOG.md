@@ -1,5 +1,8 @@
 # Changelog
 
+## v0.8.41
+- Fix: dossier list page crash — npcs variable not passed as prop to FilterBar component
+
 ## v0.8.40
 - Fix: dossier page crash — moved React useState hooks out of IIFEs to component level
 

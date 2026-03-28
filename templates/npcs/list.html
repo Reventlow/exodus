@@ -310,7 +310,7 @@
     };
 
     // Filter bar with filter buttons
-    const FilterBar = ({ activeFilter, onFilterChange }) => {
+    const FilterBar = ({ activeFilter, onFilterChange, npcs }) => {
         const filters = [
             { key: 'all', label: 'ALL' },
             { key: 'my_contacts', label: 'MY CONTACTS' },
@@ -323,7 +323,7 @@
 
         // Dynamic agency filters
         const agencyNames = [...new Set(
-            npcs.filter(n => n.isNpcDossier && n.agencyName).map(n => n.agencyName)
+            (npcs || []).filter(n => n.isNpcDossier && n.agencyName).map(n => n.agencyName)
         )].sort();
         agencyNames.forEach(name => {
             filters.push({ key: 'agency:' + name, label: name.toUpperCase() });
@@ -626,7 +626,7 @@
                         </span>
                     </h2>
 
-                    <FilterBar activeFilter={activeFilter} onFilterChange={setActiveFilter} />
+                    <FilterBar activeFilter={activeFilter} onFilterChange={setActiveFilter} npcs={npcs} />
 
                     <div style={{
                         textAlign: 'right', marginBottom: '1.5rem',
