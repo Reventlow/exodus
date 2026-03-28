@@ -288,10 +288,14 @@ def api_transfer_xp(request, pk):
     amount = data.get("amount", 0)
     agency_id = data.get("agencyId")
 
-    if not isinstance(amount, int) or amount < 1:
-        return JsonResponse({"error": "Amount must be a positive integer."}, status=400)
+    if not isinstance(amount, int) or amount == 0:
+        return JsonResponse({"error": "Amount must be a non-zero integer."}, status=400)
 
-    if amount > character.experience:
+    # Negative amounts (retractions) require admin
+    if amount < 0 and not request.user.is_superuser:
+        return JsonResponse({"error": "Only administrators can retract XP."}, status=403)
+
+    if amount > 0 and amount > character.experience:
         return JsonResponse(
             {"error": f"Insufficient XP. Character has {character.experience}."},
             status=400,
