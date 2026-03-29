@@ -1,5 +1,9 @@
 # Changelog
 
+## v0.8.48
+- Added new base facility type: Engineering Build Project Site (levels 1-5, XP cost matches project scale)
+- Added new base facility type: Science Research Project Site (levels 1-5, XP cost matches project scale)
+
 ## v0.8.47
 - Base notes now render as markdown with edit/view toggle
 

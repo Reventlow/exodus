@@ -436,6 +436,28 @@ def default_base_facility_types():
                 {"level": 1, "name": "Suite 55", "exp": 5, "size": 2, "description": "HR off-boarding office suite 55."},
             ],
         },
+        {
+            "key": "engineering_project",
+            "name": "Engineering Build Project Site",
+            "levels": [
+                {"level": 1, "name": "Minor Project", "exp": 1, "size": 2, "description": "A small-scale engineering build project — prototyping, component fabrication, or minor construction."},
+                {"level": 2, "name": "Standard Project", "exp": 2, "size": 4, "description": "A moderate engineering project — vehicle assembly, facility expansion, or systems integration."},
+                {"level": 3, "name": "Major Project", "exp": 3, "size": 6, "description": "A large-scale build — ship construction, major infrastructure, or industrial plant assembly."},
+                {"level": 4, "name": "Grand Project", "exp": 4, "size": 10, "description": "A massive engineering undertaking — orbital components, gate sections, or megastructure fabrication."},
+                {"level": 5, "name": "Monumental Project", "exp": 5, "size": 16, "description": "A civilisation-defining build — orbital shipyards, space stations, or planetary-scale engineering."},
+            ],
+        },
+        {
+            "key": "science_project",
+            "name": "Science Research Project Site",
+            "levels": [
+                {"level": 1, "name": "Minor Research", "exp": 1, "size": 1, "description": "A small-scale research project — literature review, sample analysis, or proof-of-concept study."},
+                {"level": 2, "name": "Standard Research", "exp": 2, "size": 2, "description": "A moderate research project — experimental trials, field studies, or technology validation."},
+                {"level": 3, "name": "Major Research", "exp": 3, "size": 4, "description": "A large-scale research programme — multi-team studies, prototype testing, or theoretical breakthrough attempts."},
+                {"level": 4, "name": "Grand Research", "exp": 4, "size": 6, "description": "A massive research undertaking — FTL theory validation, exotic materials research, or cross-agency scientific collaboration."},
+                {"level": 5, "name": "Monumental Research", "exp": 5, "size": 10, "description": "A civilisation-defining scientific endeavour — fundamental physics breakthroughs, consciousness research, or reality-altering experimentation."},
+            ],
+        },
     ]
 
 
