@@ -447,10 +447,32 @@ def _handle_deploy(thread, actor, deploy_action, pool, pool_desc,
 
     # Check deploys remaining (unless backdoor or GM)
     if session and not session.has_backdoor and session.deploys_remaining <= 0 and not actor.is_superuser:
-        # Auto-close session
         session.is_active = False
         session.save(update_fields=["is_active"])
         return JsonResponse({"error": "No deploy actions remaining. Connection auto-closed."}, status=400)
+
+    # Close Connection — no roll, no passive detection, just clean exit
+    if deploy_action == "close_connection":
+        removed_hidden = ThreadMembership.objects.filter(
+            thread=thread, user=actor, hidden=True,
+        ).delete()[0]
+        removed_backdoors = ThreadEffect.objects.filter(
+            thread=thread, source_user=actor, effect_type="backdoor", is_active=True,
+        ).update(is_active=False)
+        if session:
+            session.is_active = False
+            session.save(update_fields=["is_active"])
+        parts = ["Connection closed cleanly"]
+        if removed_hidden:
+            parts.append(f"{removed_hidden} hidden access(es) removed")
+        if removed_backdoors:
+            parts.append(f"{removed_backdoors} backdoor(s) removed")
+        outcome = "; ".join(parts) + ". All traces erased."
+        _log_action(thread, actor, "deploy:close_connection", 0, None, outcome,
+                    persona_type, persona_id, persona_name, None, gm_modifier)
+        return _roll_response("deploy", "No roll required", None, outcome, hide_dice=True,
+                              session_data={"id": 0, "gainAccessSuccesses": 0, "deploysRemaining": 0,
+                                            "hasBackdoor": False, "detected": False, "isActive": False, "difficultyPenalty": 0})
 
     result = roll_dice(pool)
 
