@@ -399,6 +399,7 @@ function CyberTerminal({ thread, members, onClose, postingAs }) {
   const [targetAgencyId, setTargetAgencyId] = useState("");
   const [targetBaseId, setTargetBaseId] = useState("");
   const [infraTarget, setInfraTarget] = useState("");
+  const [useZeroDay, setUseZeroDay] = useState(false);
   const [agencies, setAgencies] = useState([]);
   const [bases, setBases] = useState([]);
   const [gmMod, setGmMod] = useState(0);
@@ -445,6 +446,7 @@ function CyberTerminal({ thread, members, onClose, postingAs }) {
       personaId: postingAs ? postingAs.id : null,
       personaName: postingAs ? postingAs.name : "",
       gmModifier: gmMod,
+      useZeroDay: useZeroDay,
     };
     api("/api/comms/threads/" + thread.id + "/cyber/roll/", {
       method: "POST",
@@ -535,7 +537,8 @@ function CyberTerminal({ thread, members, onClose, postingAs }) {
               <div style={{borderTop: "1px solid #042", paddingTop: "0.5rem"}}>
                 <span style={{color: "#0f0"}}>DICE</span>: d10 pool. 8+ = success. 10s explode. 5+ successes = exceptional. 0 or less = chance die (only 10 succeeds, 1 = dramatic failure).<br/>
                 <span style={{color: "#0f0"}}>MODIFIERS</span>: Relevant specialisations grant +1 die.<br/>
-                <span style={{color: "#0f0"}}>MERITS</span>: Computer Aptitude +2 dice (all actions). Digital Infiltration +rating dice (attack). Digital Ghost +2 dice (attack, harder to detect).
+                <span style={{color: "#0f0"}}>MERITS</span>: Computer Aptitude +2 dice (all actions). Digital Infiltration +rating dice (attack). Digital Ghost +2 dice (attack, harder to detect).<br/>
+                <span style={{color: "#0f0"}}>PULLING STRINGS</span>: Bot Farm +4 gain access (defender +2 detect). Backdoor Access = free infrastructure shutdown. Compromise Firmware / Digital Payload = free sabotage (+4 close difficulty). Zero-Day Repository +6 attack (consumes from agency pool).
                 {IS_STAFF && <span><br/>GM can add bonus/penalty dice via the modifier field.</span>}
               </div>
             </div>
@@ -669,6 +672,16 @@ function CyberTerminal({ thread, members, onClose, postingAs }) {
                   <option value="comms">Communications</option>
                 </select>
               </React.Fragment>
+            )}
+
+            {(action === "gain_access" || action === "deploy") && (
+              <label style={{display: "flex", alignItems: "center", gap: "0.5rem", marginBottom: "0.5rem", cursor: "pointer"}}>
+                <input type="checkbox" checked={useZeroDay} onChange={e => setUseZeroDay(e.target.checked)}
+                  style={{accentColor: "#0f0"}} />
+                <span style={{color: "#0a3", fontSize: "0.7rem", fontFamily: "var(--font-mono)"}}>
+                  USE ZERO-DAY EXPLOIT (+6 dice, consumes 1 from agency pool)
+                </span>
+              </label>
             )}
 
             {IS_STAFF && (
