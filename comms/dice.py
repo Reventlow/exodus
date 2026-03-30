@@ -111,7 +111,9 @@ def get_cyber_pool(action_type: str, attributes: dict, skills: dict,
                    specialisations: list[str] | None = None,
                    gm_modifier: int = 0,
                    deploy_action: str = "",
-                   merits: list[dict] | None = None) -> tuple[int, str]:
+                   merits: list[dict] | None = None,
+                   pulling_strings: list[dict] | None = None,
+                   use_zero_day: bool = False) -> tuple[int, str, dict]:
     """Calculate the dice pool for a cyber action.
 
     Args:
@@ -122,9 +124,12 @@ def get_cyber_pool(action_type: str, attributes: dict, skills: dict,
         gm_modifier: Bonus/penalty dice from GM.
         deploy_action: Sub-action for deploy (e.g. 'backdoor', 'ransomware').
         merits: List of merit dicts [{name, rating}, ...] from the character/NPC.
+        pulling_strings: List of pulling string dicts [{name}, ...].
+        use_zero_day: Whether to consume a zero-day from the agency pool.
 
     Returns:
-        Tuple of (pool_size, pool_description).
+        Tuple of (pool_size, pool_description, flags_dict).
+        flags_dict may contain: free_deploy, defender_bonus, close_penalty, zero_day_used
     """
     # Determine attribute and skill based on action type
     if action_type == "deploy" and deploy_action in DEPLOY_POOLS:
@@ -177,6 +182,43 @@ def get_cyber_pool(action_type: str, attributes: dict, skills: dict,
                         merit_names.append(f"{m.get('name', m_name).title()} +{rating}")
     pool += merit_bonus
 
+    # Check pulling strings
+    ps_bonus = 0
+    ps_names = []
+    flags = {}
+    if pulling_strings:
+        ps_lower = {(ps.get("name") or "").lower(): ps for ps in pulling_strings}
+
+        # Bot Farm: +4 gain access, but defender gets +2
+        if "bot farm" in ps_lower and action_type == "gain_access":
+            ps_bonus += 4
+            ps_names.append("Bot Farm +4")
+            flags["defender_bonus"] = 2
+
+        # Backdoor Access: free deploy on infrastructure shutdown
+        if "backdoor access" in ps_lower and deploy_action == "shutdown_infra":
+            flags["free_deploy"] = True
+            ps_names.append("Backdoor Access (free action)")
+
+        # Compromise Firmware / Digital Payload: free deploy on sabotage, +4 close penalty
+        for name in ("compromise firmware", "digital payload"):
+            if name in ps_lower and deploy_action == "sabotage":
+                flags["free_deploy"] = True
+                flags["close_penalty"] = 4
+                ps_names.append(f"{name.title()} (free action, +4 close diff)")
+                break
+            if name in ps_lower and deploy_action == "close_connection":
+                # This would already be handled but flag the penalty
+                flags["close_penalty"] = flags.get("close_penalty", 0) + 4
+
+    # Zero-Day Repository: +6 attack roll
+    if use_zero_day and action_type in ("gain_access", "deploy"):
+        ps_bonus += 6
+        ps_names.append("Zero-Day Exploit +6")
+        flags["zero_day_used"] = True
+
+    pool += ps_bonus
+
     parts = [f"{attr_name} {attr_value}", f"{skill_name} {skill_value}"]
     if gm_modifier:
         parts.append(f"GM modifier {gm_modifier:+d}")
@@ -184,6 +226,8 @@ def get_cyber_pool(action_type: str, attributes: dict, skills: dict,
         parts.append("Specialisation +1")
     for mn in merit_names:
         parts.append(mn)
+    for pn in ps_names:
+        parts.append(pn)
     desc = " + ".join(parts) + f" = {pool} dice"
 
-    return pool, desc
+    return pool, desc, flags

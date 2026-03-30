@@ -66,6 +66,10 @@ class Agency(models.Model):
         max_length=7, blank=True, default="",
         help_text="Hex color for the world map (e.g. #ff0000).",
     )
+    zero_day_pool = models.IntegerField(
+        default=0,
+        help_text="Available zero-day vulnerabilities. Used by Government Zero-Day Repository pulling string.",
+    )
 
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)

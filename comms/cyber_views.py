@@ -67,20 +67,20 @@ def _get_actor_stats(user, persona_type=None, persona_id=None):
         npc = NPC.objects.filter(pk=persona_id).first()
         if npc:
             comp = npc.skills.get("mental", {}).get("Computer", 0)
-            # Get NPC merits from NpcMerit model
-            npc_merits = []
-            for nm in npc.npc_merits.select_related("merit").all():
-                npc_merits.append({"name": nm.merit.name, "rating": nm.rating})
-            return npc.attributes, npc.skills, npc.specialisations, comp, npc.name, npc_merits
+            npc_merits = [{"name": nm.merit.name, "rating": nm.rating}
+                          for nm in npc.npc_merits.select_related("merit").all()]
+            npc_ps = [{"name": ps.pulling_string.name}
+                      for ps in npc.npc_pulling_strings.select_related("pulling_string").all()]
+            return npc.attributes, npc.skills, npc.specialisations, comp, npc.name, npc_merits, npc_ps, npc.agency_id
         return None
     char = Character.objects.filter(owner=user).first()
     if char:
         comp = char.skills.get("mental", {}).get("Computer", 0)
-        # Get character merits from CharacterMerit model
-        char_merits = []
-        for cm in char.character_merits.select_related("merit").all():
-            char_merits.append({"name": cm.merit.name, "rating": cm.rating})
-        return char.attributes, char.skills, char.specialisations, comp, char.name, char_merits
+        char_merits = [{"name": cm.merit.name, "rating": cm.rating}
+                       for cm in char.character_merits.select_related("merit").all()]
+        char_ps = [{"name": ps.pulling_string.name}
+                   for ps in char.character_pulling_strings.select_related("pulling_string").all()]
+        return char.attributes, char.skills, char.specialisations, comp, char.name, char_merits, char_ps, None
     return None
 
 
@@ -111,7 +111,7 @@ def _get_defender_stats(thread, attacker):
     return None
 
 
-def _passive_detect(thread, attacker, difficulty):
+def _passive_detect(thread, attacker, difficulty, defender_bonus=0):
     """Roll passive detection for the defender.
 
     Returns (detected: bool, roll_result, defender_name) or None if no passive roll.
@@ -122,7 +122,7 @@ def _passive_detect(thread, attacker, difficulty):
     resolve, computer, name = defender
     if computer < 1:
         return None  # Unskilled get no passive roll
-    pool = resolve + computer
+    pool = resolve + computer + defender_bonus
     result = roll_dice(pool)
     detected = result.successes >= difficulty
     return detected, result, name
@@ -173,7 +173,7 @@ def cyber_eligible(request):
     if not stats:
         return JsonResponse({"eligible": False, "reason": "No character found"})
 
-    _, _, _, computer_skill, name, _ = stats
+    _, _, _, computer_skill, name, _, _, _ = stats
     eligible = computer_skill >= 4
     return JsonResponse({
         "eligible": eligible,
@@ -285,6 +285,7 @@ def cyber_roll(request, thread_id):
     target_user = User.objects.filter(pk=target_user_id).first() if target_user_id else None
 
     # Get actor stats and pool
+    ps_flags = {}
     if request.user.is_superuser and persona_type == "gm":
         pool = 10 + gm_modifier
         pool_desc = f"GM base 10 + modifier {gm_modifier:+d} = {pool} dice"
@@ -292,27 +293,38 @@ def cyber_roll(request, thread_id):
         stats = _get_actor_stats(request.user, persona_type, persona_id)
         if not stats:
             return JsonResponse({"error": "No character found"}, status=400)
-        attributes, skills, specialisations, computer_skill, name, actor_merits = stats
+        attributes, skills, specialisations, computer_skill, name, actor_merits, actor_ps, actor_agency_id = stats
         if computer_skill < 4 and not request.user.is_superuser:
             return JsonResponse({"error": "Computer skill too low (need 4+)"}, status=403)
         if not persona_name:
             persona_name = name
-        pool, pool_desc = get_cyber_pool(
+        use_zero_day = body.get("useZeroDay", False)
+        pool, pool_desc, ps_flags = get_cyber_pool(
             action_type, attributes, skills, specialisations, gm_modifier,
             deploy_action=deploy_action, merits=actor_merits,
+            pulling_strings=actor_ps, use_zero_day=use_zero_day,
         )
+        # Consume zero-day from agency pool
+        if ps_flags.get("zero_day_used") and actor_agency_id:
+            from agencies.models import Agency
+            agency = Agency.objects.filter(pk=actor_agency_id).first()
+            if agency and agency.zero_day_pool > 0:
+                agency.zero_day_pool -= 1
+                agency.save(update_fields=["zero_day_pool"])
+            else:
+                return JsonResponse({"error": "No zero-day vulnerabilities remaining in agency pool."}, status=400)
 
     # Dispatch to action handler
     if action_type == "gain_access":
         return _handle_gain_access(
             thread, request.user, target_user, pool, pool_desc,
-            persona_type, persona_id, persona_name, gm_modifier,
+            persona_type, persona_id, persona_name, gm_modifier, ps_flags,
         )
     elif action_type == "deploy":
         return _handle_deploy(
             thread, request.user, deploy_action, pool, pool_desc,
             persona_type, persona_id, persona_name, gm_modifier,
-            target_agency_id, target_base_id,
+            target_agency_id, target_base_id, infra_target, ps_flags,
         )
     elif action_type == "defend":
         return _handle_defend(
@@ -333,8 +345,9 @@ def cyber_roll(request, thread_id):
 # ---------------------------------------------------------------------------
 
 def _handle_gain_access(thread, actor, target_user, pool, pool_desc,
-                        persona_type, persona_id, persona_name, gm_modifier):
+                        persona_type, persona_id, persona_name, gm_modifier, ps_flags=None):
     """Handle Gain Access with session creation and passive detection."""
+    ps_flags = ps_flags or {}
 
     # Check difficulty escalation from prior closed sessions
     prior_closes = CyberSession.objects.filter(
@@ -405,7 +418,8 @@ def _handle_gain_access(thread, actor, target_user, pool, pool_desc,
     # Passive detection (only for 1-4 successes)
     detection_msg = ""
     if not exceptional:
-        passive = _passive_detect(thread, actor, s)
+        defender_bonus = ps_flags.get("defender_bonus", 0)
+        passive = _passive_detect(thread, actor, s, defender_bonus)
         if passive:
             detected, det_result, def_name = passive
             if detected:
@@ -445,9 +459,11 @@ def _handle_gain_access(thread, actor, target_user, pool, pool_desc,
 
 def _handle_deploy(thread, actor, deploy_action, pool, pool_desc,
                    persona_type, persona_id, persona_name, gm_modifier,
-                   target_agency_id, target_base_id):
+                   target_agency_id, target_base_id, infra_target="", ps_flags=None):
     """Handle deploy with session tracking and passive detection."""
     from agencies.models import Agency
+    ps_flags = ps_flags or {}
+    free_deploy = ps_flags.get("free_deploy", False)
 
     session = CyberSession.objects.filter(
         thread=thread, attacker=actor, is_active=True,
@@ -520,8 +536,8 @@ def _handle_deploy(thread, actor, deploy_action, pool, pool_desc,
             session.has_backdoor = True
             session.save(update_fields=["has_backdoor"])
 
-    # Decrement deploys (unless backdoor)
-    if session and not session.has_backdoor:
+    # Decrement deploys (unless backdoor or free deploy from pulling string)
+    if session and not session.has_backdoor and not free_deploy:
         session.deploys_remaining = max(0, session.deploys_remaining - 1)
         session.detect_stale = False
         session.save(update_fields=["deploys_remaining", "detect_stale"])
@@ -529,7 +545,7 @@ def _handle_deploy(thread, actor, deploy_action, pool, pool_desc,
     # Passive detection on each deploy
     detection_msg = ""
     if session:
-        passive = _passive_detect(thread, actor, session.gain_access_successes)
+        passive = _passive_detect(thread, actor, session.gain_access_successes, ps_flags.get("defender_bonus", 0))
         if passive:
             detected, det_result, def_name = passive
             if detected:

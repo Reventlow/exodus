@@ -72,6 +72,7 @@ def serialize_agency(agency, user):
         "isCouncilChairman": agency.is_council_chairman,
         "isHidden": agency.is_hidden,
         "mapColor": agency.map_color,
+        "zeroDayPool": agency.zero_day_pool if is_admin else None,
         "attributes": vis_attributes(agency.attributes),
         "specializations": vis("specializations", agency.specializations),
         "merits": vis("merits", agency.merits),
