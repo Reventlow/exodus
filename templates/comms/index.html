@@ -487,32 +487,49 @@ function CyberTerminal({ thread, members, onClose, postingAs }) {
           <div style={{marginBottom: "1rem", padding: "0.75rem", border: "1px solid #042", background: "rgba(0,255,0,0.02)"}}>
             <div style={{...termStyle.label, marginBottom: "0.5rem", fontSize: "0.75rem", color: "#0f0"}}>TERMINAL OPERATIONS MANUAL</div>
             <div style={{fontSize: "0.7rem", lineHeight: "1.6", color: "#0a3"}}>
-              <div style={{marginBottom: "0.5rem"}}>
-                <span style={{color: "#0f0"}}>GAIN ACCESS</span> — <span style={{color: "#064"}}>Intelligence + Computer</span><br/>
+              <div style={{marginBottom: "0.75rem", borderBottom: "1px solid #042", paddingBottom: "0.5rem"}}>
+                <span style={{color: "#0f0", fontWeight: "bold"}}>GAIN ACCESS</span> — <span style={{color: "#064"}}>Intelligence + Computer</span><br/>
                 Breach target's comm encryption. On success, gain hidden read-only access
                 to all threads the target participates in (excluding direct GM channels).
-                You will not appear in their roster. Intercepted channels appear in a
-                separate section of your channel list.
+                You will not appear in their roster.<br/><br/>
+                <span style={{color: "#064"}}>1-4 successes:</span> Access granted. The target gets a passive detection roll
+                (Resolve + Computer) against your successes. If they detect you, a system
+                alert appears in the chat. Unskilled defenders get no passive roll.<br/>
+                <span style={{color: "#064"}}>5+ successes (exceptional):</span> Undetected breach — no passive detection triggered.<br/>
+                <span style={{color: "#064"}}>Deploy actions:</span> You receive successes ÷ 2 (rounded down) deploy actions.<br/>
+                <span style={{color: "#064"}}>Re-entry:</span> Each closed connection adds +1 difficulty to the next Gain Access attempt.
               </div>
-              <div style={{marginBottom: "0.5rem"}}>
-                <span style={{color: "#0f0"}}>DEPLOY</span> — <span style={{color: "#064"}}>Wits + Computer</span><br/>
-                Plant a backdoor on this channel. Creates a persistent effect that can
-                be detected and swept by defenders. Exceptional success (5+) makes it
-                harder to remove.
+              <div style={{marginBottom: "0.75rem", borderBottom: "1px solid #042", paddingBottom: "0.5rem"}}>
+                <span style={{color: "#0f0", fontWeight: "bold"}}>DEPLOY</span> — <span style={{color: "#064"}}>Varies by operation</span><br/>
+                Requires successful Gain Access first. Each operation costs one deploy action
+                and triggers a new passive detection roll on the defender.<br/>
+                Deploy a <span style={{color: "#0f0"}}>Permanent Backdoor</span> for unlimited actions until connection is closed.<br/>
+                When all deploy actions are used, the connection auto-closes.<br/><br/>
+                <span style={{color: "#064"}}>Operations:</span> Backdoor, Ransomware, Force Bad Deals (UTC),
+                Steal Intel, Discover Hidden Base, Gain Base Access,
+                Plant False Intel, Exfiltrate Comms, Sabotage Project,
+                Corrupt Data, Close Connection &amp; Remove Traces.
               </div>
-              <div style={{marginBottom: "0.5rem"}}>
-                <span style={{color: "#0f0"}}>DEFEND</span> — <span style={{color: "#064"}}>Resolve + Computer</span><br/>
+              <div style={{marginBottom: "0.75rem", borderBottom: "1px solid #042", paddingBottom: "0.5rem"}}>
+                <span style={{color: "#0f0", fontWeight: "bold"}}>DEFEND</span> — <span style={{color: "#064"}}>Resolve + Computer</span><br/>
                 Strengthen this channel's encryption and sweep for threats. Removes
-                active backdoors, expels hidden intruders, and raises the encryption
-                level making future breaches harder.
+                active backdoors, expels hidden intruders, terminates active hacker sessions,
+                and raises the encryption level making future breaches harder.
               </div>
-              <div style={{marginBottom: "0.5rem"}}>
-                <span style={{color: "#0f0"}}>DETECT</span> — <span style={{color: "#064"}}>Resolve + Computer</span><br/>
-                Scan this channel for compromise. Reveals active effects (backdoors,
-                encryption levels) and any hidden intruders with shadow access.
+              <div style={{marginBottom: "0.75rem", borderBottom: "1px solid #042", paddingBottom: "0.5rem"}}>
+                <span style={{color: "#0f0", fontWeight: "bold"}}>DETECT</span> — <span style={{color: "#064"}}>Resolve + Computer + 2 bonus</span><br/>
+                Active scan for intrusion. Difficulty equals the attacker's Gain Access successes.
+                Only shows <span style={{color: "#0f0"}}>INTRUSION DETECTED</span> or <span style={{color: "#0f0"}}>NO INTRUSION DETECTED</span> — dice are not shown.
+                Can only be triggered after a Gain Access or Deploy action has occurred.
+                Repeating Detect before a new attacker action returns the cached result.
               </div>
-              <div style={{borderTop: "1px solid #042", paddingTop: "0.5rem", marginTop: "0.5rem"}}>
-                <span style={{color: "#0f0"}}>DICE</span>: d10 pool. 8+ = success. 10s explode. 5+ successes = exceptional.<br/>
+              <div style={{marginBottom: "0.75rem", borderBottom: "1px solid #042", paddingBottom: "0.5rem"}}>
+                <span style={{color: "#0f0", fontWeight: "bold"}}>CLOSE CONNECTION</span><br/>
+                Any party can close the connection. Once closed, no new messages can be sent
+                and no terminal actions can be taken on this thread. Permanently locks the channel.
+              </div>
+              <div style={{borderTop: "1px solid #042", paddingTop: "0.5rem"}}>
+                <span style={{color: "#0f0"}}>DICE</span>: d10 pool. 8+ = success. 10s explode. 5+ successes = exceptional. 0 or less = chance die (only 10 succeeds, 1 = dramatic failure).<br/>
                 <span style={{color: "#0f0"}}>MODIFIERS</span>: Relevant specialisations grant +1 die.
                 {IS_STAFF && <span> GM can add bonus/penalty dice via the modifier field.</span>}
               </div>
