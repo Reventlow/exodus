@@ -641,7 +641,7 @@ function CyberTerminal({ thread, members, onClose, postingAs }) {
               </React.Fragment>
             )}
 
-            {action === "deploy" && deployAction === "base_access" && (
+            {action === "deploy" && ["base_access", "ransomware"].includes(deployAction) && (
               <React.Fragment>
                 <div style={termStyle.label}>TARGET BASE</div>
                 <select value={targetBaseId} onChange={e => setTargetBaseId(e.target.value)} style={termStyle.select}>
