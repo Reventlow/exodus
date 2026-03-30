@@ -464,7 +464,7 @@ function CyberTerminal({ thread, members, onClose, postingAs }) {
 
   const actions = [
     { key: "gain_access", label: "GAIN ACCESS", desc: "Int + Computer" },
-    { key: "deploy", label: "DEPLOY", desc: "Wits + Computer", locked: !hasGainedAccess && !IS_STAFF },
+    { key: "deploy", label: "DEPLOY", desc: "Wits + Computer", locked: (!hasGainedAccess || (session && !session.hasBackdoor && session.deploysRemaining <= 0)) && !IS_STAFF },
     { key: "defend", label: "DEFEND", desc: "Res + Computer" },
     { key: "detect", label: "DETECT", desc: "Res + Computer" },
   ];
