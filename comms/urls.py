@@ -13,6 +13,7 @@ urlpatterns = [
     # API endpoints
     path("api/comms/threads/", views.thread_list, name="thread-list"),
     path("api/comms/threads/<int:thread_id>/", views.thread_detail, name="thread-detail"),
+    path("api/comms/threads/<int:thread_id>/delete/", views.delete_thread, name="delete-thread"),
     path("api/comms/threads/<int:thread_id>/messages/", views.send_message, name="send-message"),
     path("api/comms/threads/<int:thread_id>/members/", views.add_member, name="add-member"),
     path(

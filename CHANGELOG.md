@@ -1,5 +1,8 @@
 # Changelog
 
+## v0.8.54
+- GM (superuser) can delete threads via X button in thread header with confirmation
+
 ## v0.8.53
 - Portrait thumbnails in comms thread header are clickable to open full-size lightbox
 

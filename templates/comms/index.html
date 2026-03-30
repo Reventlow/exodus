@@ -390,7 +390,7 @@ function MessageInput({ onSend, dossiers, postingAs, onPostingAsChange }) {
 // ThreadView
 // ---------------------------------------------------------------------------
 
-function ThreadView({ thread, onSend, onBack, onOpenMembers, dossiers, postingAs, onPostingAsChange }) {
+function ThreadView({ thread, onSend, onBack, onOpenMembers, onDeleteThread, dossiers, postingAs, onPostingAsChange }) {
   const messagesEndRef = useRef(null);
   const [lightboxImage, setLightboxImage] = useState(null);
 
@@ -431,6 +431,9 @@ function ThreadView({ thread, onSend, onBack, onOpenMembers, dossiers, postingAs
           </div>
         </div>
         <button onClick={onOpenMembers} style={S.rosterBtn}>ROSTER</button>
+        {IS_STAFF && (
+          <button onClick={() => { if (confirm("Delete this thread and all messages?")) onDeleteThread(thread.id); }} style={S.deleteThreadBtn}>&#10005;</button>
+        )}
       </div>
 
       {/* Messages */}
@@ -684,6 +687,17 @@ function CommsApp() {
     }
   }
 
+  function handleDeleteThread(threadId) {
+    api("/api/comms/threads/" + threadId + "/delete/", {
+      method: "DELETE",
+    }).then(() => {
+      setActiveThreadId(null);
+      setActiveThread(null);
+      setMobileShowThread(false);
+      api("/api/comms/threads/").then(setThreads);
+    });
+  }
+
   function handleAddMember(threadId, userId) {
     api("/api/comms/threads/" + threadId + "/members/", {
       method: "POST",
@@ -726,6 +740,7 @@ function CommsApp() {
           onSend={handleSendMessage}
           onBack={() => setMobileShowThread(false)}
           onOpenMembers={() => setShowMembers(true)}
+          onDeleteThread={handleDeleteThread}
           dossiers={dossiers}
           postingAs={activeThreadId ? (threadPersonas[activeThreadId] !== undefined ? threadPersonas[activeThreadId] : (IS_STAFF ? GM_PERSONA : null)) : null}
           onPostingAsChange={persona => activeThreadId && setThreadPersonas(prev => ({...prev, [activeThreadId]: persona}))}
@@ -847,6 +862,12 @@ const S = {
     borderRadius: "var(--radius-sm)", color: "var(--text-secondary)",
     cursor: "pointer", padding: "0.3rem 0.5rem", fontSize: "0.75rem",
     fontFamily: "var(--font-mono)",
+  },
+  deleteThreadBtn: {
+    background: "none", border: "1px solid var(--accent-danger, #c0392b)",
+    borderRadius: "var(--radius-sm)", color: "var(--accent-danger, #c0392b)",
+    cursor: "pointer", padding: "0.3rem 0.5rem", fontSize: "0.85rem",
+    lineHeight: 1,
   },
   messageList: {
     flex: 1, overflowY: "auto", padding: "1rem",

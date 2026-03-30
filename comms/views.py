@@ -110,6 +110,17 @@ def thread_detail(request, thread_id):
     return JsonResponse(data)
 
 
+@login_required
+@require_http_methods(["DELETE"])
+def delete_thread(request, thread_id):
+    """Delete a thread. Superuser only."""
+    if not request.user.is_superuser:
+        return JsonResponse({"error": "Forbidden"}, status=403)
+    thread = get_object_or_404(Thread, pk=thread_id)
+    thread.delete()
+    return JsonResponse({"status": "deleted"})
+
+
 # ---------------------------------------------------------------------------
 # Messages
 # ---------------------------------------------------------------------------
