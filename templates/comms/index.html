@@ -417,7 +417,8 @@ function ThreadView({ thread, onSend, onBack, onOpenMembers, dossiers, postingAs
           <h2 className="mono-text text-accent" style={S.threadTitle}>{threadTitle}</h2>
           <div style={S.memberPortraits}>
             {thread.members.map(m => (
-              <div key={m.id} style={S.portraitThumb} title={m.displayName}>
+              <div key={m.id} style={{...S.portraitThumb, cursor: m.portrait ? "pointer" : "default"}} title={m.displayName}
+                onClick={() => m.portrait && setLightboxImage(m.portrait)}>
                 {m.portrait ? (
                   <img src={m.portrait} alt={m.displayName} style={S.portraitImg} />
                 ) : (

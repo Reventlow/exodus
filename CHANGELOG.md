@@ -1,5 +1,8 @@
 # Changelog
 
+## v0.8.53
+- Portrait thumbnails in comms thread header are clickable to open full-size lightbox
+
 ## v0.8.52
 - Comms remembers chosen persona per thread until actively changed
 
