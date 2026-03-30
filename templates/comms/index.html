@@ -394,7 +394,12 @@ const termStyle = {
 function CyberTerminal({ thread, members, onClose, postingAs }) {
   const [eligible, setEligible] = useState(null);
   const [action, setAction] = useState(null);
+  const [deployAction, setDeployAction] = useState("");
   const [targetId, setTargetId] = useState("");
+  const [targetAgencyId, setTargetAgencyId] = useState("");
+  const [targetBaseId, setTargetBaseId] = useState("");
+  const [agencies, setAgencies] = useState([]);
+  const [bases, setBases] = useState([]);
   const [gmMod, setGmMod] = useState(0);
   const [rolling, setRolling] = useState(false);
   const [lastResult, setLastResult] = useState(null);
@@ -409,6 +414,8 @@ function CyberTerminal({ thread, members, onClose, postingAs }) {
       params.set("personaId", postingAs.id);
     }
     api("/api/comms/cyber/eligible/?" + params).then(setEligible);
+    api("/api/agencies/").then(data => setAgencies(data.agencies || data || [])).catch(() => {});
+    api("/api/agencies/bases/").then(data => setBases(data.bases || data || [])).catch(() => {});
     api("/api/comms/threads/" + thread.id + "/cyber/").then(data => {
       setCyberLog(data.actions || []);
       setEffects(data.effects || []);
@@ -420,7 +427,10 @@ function CyberTerminal({ thread, members, onClose, postingAs }) {
     setRolling(true);
     const payload = {
       actionType: action,
+      deployAction: action === "deploy" ? deployAction : "",
       targetUserId: targetId ? parseInt(targetId) : null,
+      targetAgencyId: targetAgencyId ? parseInt(targetAgencyId) : null,
+      targetBaseId: targetBaseId ? parseInt(targetBaseId) : null,
       personaType: postingAs ? postingAs.type : "",
       personaId: postingAs ? postingAs.id : null,
       personaName: postingAs ? postingAs.name : "",
@@ -449,7 +459,7 @@ function CyberTerminal({ thread, members, onClose, postingAs }) {
     { key: "detect", label: "DETECT", desc: "Res + Computer" },
   ];
 
-  const needsTarget = action === "gain_access" || action === "deploy";
+  const needsTarget = action === "gain_access";
 
   return (
     <div style={termStyle.overlay}>
@@ -527,13 +537,57 @@ function CyberTerminal({ thread, members, onClose, postingAs }) {
               ))}
             </div>
 
-            {needsTarget && (
+            {action === "deploy" && (
+              <React.Fragment>
+                <div style={termStyle.label}>DEPLOY OPERATION</div>
+                <select value={deployAction} onChange={e => setDeployAction(e.target.value)} style={termStyle.select}>
+                  <option value="">Select operation...</option>
+                  <option value="backdoor">Create Permanent Backdoor (Wits + Computer)</option>
+                  <option value="ransomware">Deploy Ransomware (Wits + Computer)</option>
+                  <option value="bad_deals">Force Bad Deals — UTC (Manipulation + Computer)</option>
+                  <option value="steal_intel">Steal Intel (Intelligence + Computer)</option>
+                  <option value="discover_base">Discover Hidden Base (Intelligence + Investigation)</option>
+                  <option value="base_access">Gain Base System Access (Intelligence + Computer)</option>
+                  <option value="plant_intel">Plant False Intel (Manipulation + Computer)</option>
+                  <option value="exfil_comms">Exfiltrate Communications (Wits + Computer)</option>
+                  <option value="sabotage">Sabotage Project (Wits + Computer)</option>
+                  <option value="corrupt_data">Corrupt Data (Wits + Computer)</option>
+                  <option value="close_connection">Close Connection &amp; Remove Traces (Wits + Computer)</option>
+                </select>
+              </React.Fragment>
+            )}
+
+            {needsTarget && action !== "deploy" && (
               <React.Fragment>
                 <div style={termStyle.label}>TARGET</div>
                 <select value={targetId} onChange={e => setTargetId(e.target.value)} style={termStyle.select}>
                   <option value="">Select target...</option>
                   {members.filter(m => m.id !== CURRENT_USER_ID).map(m => (
                     <option key={m.id} value={m.id}>{m.displayName}</option>
+                  ))}
+                </select>
+              </React.Fragment>
+            )}
+
+            {action === "deploy" && ["bad_deals", "ransomware", "corrupt_data", "backdoor", "exfil_comms"].includes(deployAction) && (
+              <React.Fragment>
+                <div style={termStyle.label}>TARGET AGENCY</div>
+                <select value={targetAgencyId} onChange={e => setTargetAgencyId(e.target.value)} style={termStyle.select}>
+                  <option value="">Select agency...</option>
+                  {agencies.map(a => (
+                    <option key={a.id} value={a.id}>{a.name}</option>
+                  ))}
+                </select>
+              </React.Fragment>
+            )}
+
+            {action === "deploy" && deployAction === "base_access" && (
+              <React.Fragment>
+                <div style={termStyle.label}>TARGET BASE</div>
+                <select value={targetBaseId} onChange={e => setTargetBaseId(e.target.value)} style={termStyle.select}>
+                  <option value="">Select base...</option>
+                  {bases.map(b => (
+                    <option key={b.id} value={b.id}>{b.name} {b.agencyName ? `(${b.agencyName})` : ''}</option>
                   ))}
                 </select>
               </React.Fragment>
@@ -548,8 +602,8 @@ function CyberTerminal({ thread, members, onClose, postingAs }) {
               </React.Fragment>
             )}
 
-            <button onClick={handleRoll} disabled={!action || rolling || (needsTarget && !targetId)}
-              style={{...termStyle.rollBtn, opacity: (!action || rolling) ? 0.4 : 1}}>
+            <button onClick={handleRoll} disabled={!action || rolling || (action === "deploy" && !deployAction) || (needsTarget && action !== "deploy" && !targetId)}
+              style={{...termStyle.rollBtn, opacity: (!action || rolling || (action === "deploy" && !deployAction)) ? 0.4 : 1}}>
               {rolling ? "ROLLING..." : "EXECUTE"}
             </button>
 

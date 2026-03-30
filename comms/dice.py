@@ -69,9 +69,38 @@ def roll_dice(pool: int) -> RollResult:
     return result
 
 
+# Deploy sub-action pool definitions: {action: (attribute_path, skill_category, skill_name)}
+DEPLOY_POOLS = {
+    "backdoor":       (("finesse", "mental"),    "mental", "Computer"),      # Wits + Computer
+    "ransomware":     (("finesse", "mental"),    "mental", "Computer"),      # Wits + Computer
+    "bad_deals":      (("finesse", "social"),    "mental", "Computer"),      # Manipulation + Computer
+    "steal_intel":    (("power", "mental"),      "mental", "Computer"),      # Intelligence + Computer
+    "discover_base":  (("power", "mental"),      "mental", "Investigation"), # Intelligence + Investigation
+    "base_access":    (("power", "mental"),      "mental", "Computer"),      # Intelligence + Computer
+    "plant_intel":    (("finesse", "social"),    "mental", "Computer"),      # Manipulation + Computer
+    "exfil_comms":    (("finesse", "mental"),    "mental", "Computer"),      # Wits + Computer
+    "sabotage":       (("finesse", "mental"),    "mental", "Computer"),      # Wits + Computer
+    "corrupt_data":   (("finesse", "mental"),    "mental", "Computer"),      # Wits + Computer
+    "close_connection": (("finesse", "mental"),  "mental", "Computer"),      # Wits + Computer
+}
+
+ATTR_NAMES = {
+    ("power", "mental"): "Intelligence",
+    ("power", "physical"): "Strength",
+    ("power", "social"): "Presence",
+    ("finesse", "mental"): "Wits",
+    ("finesse", "physical"): "Dexterity",
+    ("finesse", "social"): "Manipulation",
+    ("resistance", "mental"): "Resolve",
+    ("resistance", "physical"): "Stamina",
+    ("resistance", "social"): "Composure",
+}
+
+
 def get_cyber_pool(action_type: str, attributes: dict, skills: dict,
                    specialisations: list[str] | None = None,
-                   gm_modifier: int = 0) -> tuple[int, str]:
+                   gm_modifier: int = 0,
+                   deploy_action: str = "") -> tuple[int, str]:
     """Calculate the dice pool for a cyber action.
 
     Args:
@@ -80,26 +109,28 @@ def get_cyber_pool(action_type: str, attributes: dict, skills: dict,
         skills: Character skills dict {mental: {Computer: N, ...}, ...}
         specialisations: List of skill specialisation strings.
         gm_modifier: Bonus/penalty dice from GM.
+        deploy_action: Sub-action for deploy (e.g. 'backdoor', 'ransomware').
 
     Returns:
         Tuple of (pool_size, pool_description).
     """
-    computers = skills.get("mental", {}).get("Computer", 0)
-
-    # Determine which attribute to use
-    attr_name = ""
-    attr_value = 0
-    if action_type == "gain_access":
-        attr_name = "Intelligence"
-        attr_value = attributes.get("power", {}).get("mental", 1)
+    # Determine attribute and skill based on action type
+    if action_type == "deploy" and deploy_action in DEPLOY_POOLS:
+        attr_path, skill_cat, skill_name = DEPLOY_POOLS[deploy_action]
+    elif action_type == "gain_access":
+        attr_path, skill_cat, skill_name = ("power", "mental"), "mental", "Computer"
     elif action_type == "deploy":
-        attr_name = "Wits"
-        attr_value = attributes.get("finesse", {}).get("mental", 1)
+        attr_path, skill_cat, skill_name = ("finesse", "mental"), "mental", "Computer"
     elif action_type in ("defend", "detect"):
-        attr_name = "Resolve"
-        attr_value = attributes.get("resistance", {}).get("mental", 1)
+        attr_path, skill_cat, skill_name = ("resistance", "mental"), "mental", "Computer"
+    else:
+        attr_path, skill_cat, skill_name = ("finesse", "mental"), "mental", "Computer"
 
-    pool = attr_value + computers + gm_modifier
+    attr_name = ATTR_NAMES.get(attr_path, "?")
+    attr_value = attributes.get(attr_path[0], {}).get(attr_path[1], 1)
+    skill_value = skills.get(skill_cat, {}).get(skill_name, 0)
+
+    pool = attr_value + skill_value + gm_modifier
 
     # Check for relevant specialisations
     spec_bonus = 0
@@ -107,16 +138,20 @@ def get_cyber_pool(action_type: str, attributes: dict, skills: dict,
         cyber_specs = ["hacking", "encryption", "network security", "intrusion",
                        "cybersecurity", "cyber warfare", "digital forensics"]
         for spec in specialisations:
-            if spec.lower() in cyber_specs:
+            if isinstance(spec, dict):
+                spec_name = spec.get("name", "").lower()
+            else:
+                spec_name = str(spec).lower()
+            if spec_name in cyber_specs:
                 spec_bonus = 1
                 break
     pool += spec_bonus
 
-    parts = [f"{attr_name} {attr_value}", f"Computer {computers}"]
+    parts = [f"{attr_name} {attr_value}", f"{skill_name} {skill_value}"]
     if gm_modifier:
         parts.append(f"GM modifier {gm_modifier:+d}")
     if spec_bonus:
-        parts.append(f"Specialisation +1")
+        parts.append("Specialisation +1")
     desc = " + ".join(parts) + f" = {pool} dice"
 
     return pool, desc

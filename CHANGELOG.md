@@ -1,5 +1,10 @@
 # Changelog
 
+## v0.9.12
+- Deploy submenu with 11 operations: backdoor, ransomware, force bad deals, steal intel, discover base, base access, plant false intel, exfiltrate comms, sabotage project, corrupt data, close connection
+- Each operation has its own dice pool (Wits/Intelligence/Manipulation + Computer/Investigation)
+- Target pickers for agency and base where relevant
+
 ## v0.9.11
 - GM can create NPC-to-NPC threads: pick persona + NPC target to test cyber terminal and roleplay NPC conversations
 
