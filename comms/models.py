@@ -26,6 +26,10 @@ class Thread(models.Model):
     )
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
+    is_connection_closed = models.BooleanField(
+        default=False,
+        help_text="Connection closed — no new messages or terminal actions.",
+    )
 
     class Meta:
         ordering = ["-updated_at"]
@@ -191,3 +195,53 @@ class ThreadEffect(models.Model):
 
     def __str__(self) -> str:
         return f"{self.effect_type} (lvl {self.level}) on {self.thread}"
+
+
+class CyberSession(models.Model):
+    """Tracks an active hacking session on a thread.
+
+    Created on successful Gain Access, tracks deploy actions remaining,
+    detection state, and difficulty escalation.
+    """
+
+    thread = models.ForeignKey(
+        Thread, on_delete=models.CASCADE, related_name="cyber_sessions",
+    )
+    attacker = models.ForeignKey(
+        User, on_delete=models.CASCADE, related_name="cyber_sessions",
+    )
+    attacker_persona_name = models.CharField(max_length=200, blank=True, default="")
+    # Gain access roll result
+    gain_access_successes = models.IntegerField(default=0)
+    is_exceptional = models.BooleanField(default=False)
+    # Deploy actions: successes // 2, or unlimited if backdoor deployed
+    deploys_remaining = models.IntegerField(default=0)
+    has_backdoor = models.BooleanField(
+        default=False, help_text="Permanent backdoor = unlimited deploys.",
+    )
+    # Detection state
+    detected = models.BooleanField(default=False)
+    last_detect_result = models.CharField(
+        max_length=50, blank=True, default="",
+        help_text="Cache: 'detected' or 'clean'. Reset on new attacker action.",
+    )
+    detect_stale = models.BooleanField(
+        default=True, help_text="True if no new attacker action since last detect.",
+    )
+    # Difficulty escalation: how many times access was closed before
+    difficulty_penalty = models.IntegerField(
+        default=0, help_text="Extra difficulty on next Gain Access (+1 per prior close).",
+    )
+    # State
+    is_active = models.BooleanField(default=True)
+    is_closed = models.BooleanField(
+        default=False, help_text="Connection closed — no further actions possible.",
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+
+    def __str__(self) -> str:
+        state = "active" if self.is_active else "closed"
+        return f"Session on {self.thread} by {self.attacker.username} ({state})"
