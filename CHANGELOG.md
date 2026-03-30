@@ -1,5 +1,8 @@
 # Changelog
 
+## v0.9.2
+- Fix: accounts migration not running (missing __init__.py in migrations package)
+
 ## v0.9.1
 - User avatar upload on profile page (used as fallback portrait in comms when no character portrait exists)
 
