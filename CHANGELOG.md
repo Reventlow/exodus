@@ -1,6 +1,9 @@
 # Changelog
 
-## v0.9.5
+## v0.9.6
+- Dice roller on NPC dossier pages (superuser only) — pick attribute + skill, roll with NPC's stats
+
+## v0.9.5 (2)
 - Cyber terminal RULES button shows operations manual explaining each action, dice mechanics, and modifiers
 
 ## v0.9.4

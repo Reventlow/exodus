@@ -866,6 +866,133 @@
         );
     };
 
+    // --- DICE ROLLER (GM only) ---
+    const ATTR_MAP = {
+        'Intelligence': ['power', 'mental'], 'Strength': ['power', 'physical'], 'Presence': ['power', 'social'],
+        'Wits': ['finesse', 'mental'], 'Dexterity': ['finesse', 'physical'], 'Manipulation': ['finesse', 'social'],
+        'Resolve': ['resistance', 'mental'], 'Stamina': ['resistance', 'physical'], 'Composure': ['resistance', 'social'],
+    };
+    const SKILL_LIST = {
+        mental: ['Academics','Computer','Crafts','Investigation','Medicine','Occult','Politics','Science'],
+        physical: ['Athletics','Brawl','Drive','Firearms','Larceny','Stealth','Survival','Weaponry'],
+        social: ['AnimalKen','Empathy','Expression','Intimidation','Persuasion','Socialize','Streetwise','Subterfuge'],
+    };
+
+    const DiceRoller = ({ npc }) => {
+        const [selAttr, setSelAttr] = useState('');
+        const [selSkill, setSelSkill] = useState('');
+        const [modifier, setModifier] = useState(0);
+        const [rolling, setRolling] = useState(false);
+        const [result, setResult] = useState(null);
+
+        const attrs = npc.attributes || {};
+        const skills = npc.skills || {};
+
+        const getAttrVal = (name) => {
+            const path = ATTR_MAP[name];
+            return path ? (attrs[path[0]]?.[path[1]] || 0) : 0;
+        };
+        const getSkillVal = (name) => {
+            for (const cat of ['mental','physical','social']) {
+                if (skills[cat]?.[name] !== undefined) return skills[cat][name];
+            }
+            return 0;
+        };
+
+        const attrVal = selAttr ? getAttrVal(selAttr) : 0;
+        const skillVal = selSkill ? getSkillVal(selSkill) : 0;
+        const pool = attrVal + skillVal + modifier;
+
+        function rollDice() {
+            setRolling(true);
+            let dice = Math.max(pool, 0);
+            if (dice === 0) dice = 1; // chance die
+            const isChance = pool <= 0;
+            let rolls = [];
+            let toRoll = dice;
+            while (toRoll > 0) {
+                const batch = [];
+                for (let i = 0; i < toRoll; i++) batch.push(Math.floor(Math.random() * 10) + 1);
+                rolls = rolls.concat(batch);
+                toRoll = isChance ? 0 : batch.filter(d => d === 10).length;
+            }
+            const successes = isChance
+                ? (rolls[0] === 10 ? 1 : 0)
+                : rolls.filter(d => d >= 8).length;
+            const dramaticFailure = isChance && rolls[0] === 1;
+            const exceptional = successes >= 5;
+            setResult({ rolls, successes, exceptional, dramaticFailure, isChance, pool });
+            setRolling(false);
+        }
+
+        const poolParts = [];
+        if (selAttr) poolParts.push(`${selAttr} ${attrVal}`);
+        if (selSkill) poolParts.push(`${selSkill} ${skillVal}`);
+        if (modifier) poolParts.push(`Mod ${modifier > 0 ? '+' : ''}${modifier}`);
+
+        return (
+            <div className="glass-panel" style={{ padding: '1rem', marginBottom: '1rem' }}>
+                <h4 className="mono-text text-accent" style={{ borderBottom: '1px solid var(--border-color)', paddingBottom: '0.5rem', marginBottom: '0.75rem', fontSize: '0.85rem' }}>
+                    DICE ROLLER
+                </h4>
+                <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', marginBottom: '0.75rem' }}>
+                    <select value={selAttr} onChange={e => setSelAttr(e.target.value)}
+                        style={{ flex: 1, minWidth: '120px', padding: '0.4rem', background: 'var(--bg-input)', border: '1px solid var(--border-color)', color: 'var(--text-primary)', fontFamily: 'var(--font-mono)', fontSize: '0.8rem' }}>
+                        <option value="">Attribute...</option>
+                        {Object.keys(ATTR_MAP).map(a => (
+                            <option key={a} value={a}>{a} ({getAttrVal(a)})</option>
+                        ))}
+                    </select>
+                    <select value={selSkill} onChange={e => setSelSkill(e.target.value)}
+                        style={{ flex: 1, minWidth: '120px', padding: '0.4rem', background: 'var(--bg-input)', border: '1px solid var(--border-color)', color: 'var(--text-primary)', fontFamily: 'var(--font-mono)', fontSize: '0.8rem' }}>
+                        <option value="">Skill...</option>
+                        {['mental','physical','social'].map(cat => (
+                            <optgroup key={cat} label={cat.toUpperCase()}>
+                                {SKILL_LIST[cat].map(s => (
+                                    <option key={s} value={s}>{s} ({getSkillVal(s)})</option>
+                                ))}
+                            </optgroup>
+                        ))}
+                    </select>
+                    <input type="number" value={modifier} onChange={e => setModifier(parseInt(e.target.value) || 0)}
+                        placeholder="Mod" title="Modifier"
+                        style={{ width: '60px', padding: '0.4rem', background: 'var(--bg-input)', border: '1px solid var(--border-color)', color: 'var(--text-primary)', fontFamily: 'var(--font-mono)', fontSize: '0.8rem', textAlign: 'center' }} />
+                    <button onClick={rollDice} disabled={rolling || (!selAttr && !selSkill)}
+                        style={{ padding: '0.4rem 1rem', background: 'var(--accent-primary)', color: 'var(--bg-dark)', border: 'none', fontFamily: 'var(--font-mono)', fontWeight: 'bold', fontSize: '0.8rem', cursor: 'pointer', opacity: (!selAttr && !selSkill) ? 0.4 : 1 }}>
+                        ROLL {pool > 0 ? `(${pool}d10)` : '(chance)'}
+                    </button>
+                </div>
+                {poolParts.length > 0 && (
+                    <div className="text-muted mono-text" style={{ fontSize: '0.7rem', marginBottom: '0.5rem' }}>
+                        Pool: {poolParts.join(' + ')} = {pool} {pool <= 0 ? '(chance die)' : 'dice'}
+                    </div>
+                )}
+                {result && (
+                    <div style={{ padding: '0.75rem', border: '1px solid var(--border-color)', background: 'rgba(0,0,0,0.2)', borderRadius: '4px' }}>
+                        <div style={{ display: 'flex', gap: '4px', flexWrap: 'wrap', marginBottom: '0.5rem' }}>
+                            {result.rolls.map((d, i) => (
+                                <span key={i} style={{
+                                    width: 28, height: 28, display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+                                    border: '1px solid ' + (d >= 8 ? 'var(--accent-primary)' : 'var(--border-color)'),
+                                    background: d >= 8 ? 'rgba(56, 189, 248, 0.15)' : 'transparent',
+                                    color: d >= 8 ? 'var(--accent-primary)' : 'var(--text-muted)',
+                                    borderRadius: '3px', fontSize: '0.75rem', fontFamily: 'var(--font-mono)',
+                                }}>{d}</span>
+                            ))}
+                        </div>
+                        <div className="mono-text" style={{
+                            fontSize: '0.85rem', fontWeight: 'bold',
+                            color: result.dramaticFailure ? 'var(--accent-danger)' : result.successes > 0 ? 'var(--accent-success, #2ecc71)' : 'var(--text-muted)',
+                        }}>
+                            {result.dramaticFailure ? 'DRAMATIC FAILURE' :
+                             `${result.successes} SUCCESS${result.successes !== 1 ? 'ES' : ''}${result.exceptional ? ' — EXCEPTIONAL' : ''}`}
+                        </div>
+                    </div>
+                )}
+            </div>
+        );
+    };
+
     const NpcAttributesModule = ({ attributes, update, lockPhysical }) => {
         const updateAttr = (cat, type, val) => {
             update({ ...attributes, [cat]: { ...attributes[cat], [type]: val } });
@@ -2064,6 +2191,7 @@
                 <BioModule npc={npc} onSave={saveNPCQuiet} />
 
                 {/* Stats — superuser only */}
+                {IS_ADMIN && npc.attributes && <DiceRoller npc={npc} />}
                 {(IS_ADMIN || IS_ASSIGNED) && npc.attributes && <NpcStatsPanel npc={npc} onSave={IS_ADMIN ? saveNPCQuiet : () => {}} onRefresh={fetchNPC} psCatalog={psCatalog} meritCatalog={meritCatalog} readOnly={!IS_ADMIN} />}
 
                 {/* Merits and Pulling Strings for non-admin view */}
