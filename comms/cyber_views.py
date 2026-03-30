@@ -281,11 +281,30 @@ def thread_cyber_status(request, thread_id):
             "difficultyPenalty": session.difficulty_penalty,
         }
 
+    # Resolve defender's agency and bases for target pickers
+    defender_agency = None
+    defender_bases = []
+    for m in ThreadMembership.objects.filter(thread=thread, hidden=False).exclude(user=request.user):
+        if m.alias_type == "npc" and m.alias_id:
+            npc = NPC.objects.filter(pk=m.alias_id).first()
+            if npc and npc.agency_id:
+                from agencies.models import Agency, Base
+                ag = Agency.objects.filter(pk=npc.agency_id).first()
+                if ag:
+                    defender_agency = {"id": ag.id, "name": ag.name}
+                    defender_bases = [
+                        {"id": b.id, "name": b.name}
+                        for b in Base.objects.filter(agency=ag, is_hidden=False)
+                    ]
+                break
+
     return JsonResponse({
         "effects": effects_data,
         "actions": actions_data,
         "session": session_data,
         "isConnectionClosed": thread.is_connection_closed,
+        "defenderAgency": defender_agency,
+        "defenderBases": defender_bases,
     })
 
 
