@@ -126,10 +126,11 @@ const sectionFooter = {
 // NewThreadModal
 // ---------------------------------------------------------------------------
 
-function NewThreadModal({ users, onClose, onCreate }) {
+function NewThreadModal({ users, dossiers, onClose, onCreate }) {
   const [title, setTitle] = useState("");
   const [selectedIds, setSelectedIds] = useState([]);
   const [search, setSearch] = useState("");
+  const [persona, setPersona] = useState(IS_STAFF ? GM_PERSONA : null);
 
   const filtered = users.filter(u =>
     u.id !== CURRENT_USER_ID &&
@@ -144,7 +145,7 @@ function NewThreadModal({ users, onClose, onCreate }) {
 
   function handleCreate() {
     if (selectedIds.length === 0) return;
-    onCreate(title, selectedIds);
+    onCreate(title, selectedIds, persona);
   }
 
   return (
@@ -163,6 +164,30 @@ function NewThreadModal({ users, onClose, onCreate }) {
             value={title}
             onChange={e => setTitle(e.target.value)}
           />
+          {IS_STAFF && dossiers && (
+            <div style={{display: "flex", alignItems: "center", gap: "0.5rem"}}>
+              <label className="mono-text text-muted" style={{fontSize: "0.7rem", flexShrink: 0}}>POST AS:</label>
+              <select
+                value={persona ? `${persona.type}:${persona.id}` : "self:0"}
+                onChange={e => {
+                  if (e.target.value === "self:0") { setPersona(null); return; }
+                  if (e.target.value === "gm:0") { setPersona(GM_PERSONA); return; }
+                  const [type, id] = e.target.value.split(":");
+                  const d = dossiers.find(d => d.type === type && d.id === parseInt(id));
+                  if (d) setPersona(d);
+                }}
+                style={Object.assign({}, inputStyle, {flex: 1})}
+              >
+                <option value="gm:0">GM</option>
+                <option value="self:0">SELF</option>
+                {dossiers.map(d => (
+                  <option key={`${d.type}:${d.id}`} value={`${d.type}:${d.id}`}>
+                    [{d.type === "character" ? "PC" : "NPC"}] {d.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
           <input
             style={inputStyle}
             type="text"
@@ -640,7 +665,7 @@ function CommsApp() {
     setMobileShowThread(true);
   }
 
-  function handleCreateThread(title, memberIds) {
+  function handleCreateThread(title, memberIds, persona) {
     api("/api/comms/threads/", {
       method: "POST",
       body: JSON.stringify({ title: title, members: memberIds }),
@@ -650,6 +675,10 @@ function CommsApp() {
       setActiveThread(data);
       setShowNewThread(false);
       setMobileShowThread(true);
+      // Set the chosen persona for this new thread
+      if (persona !== undefined) {
+        setThreadPersonas(prev => ({...prev, [data.id]: persona}));
+      }
     });
   }
 
@@ -749,6 +778,7 @@ function CommsApp() {
       {showNewThread && (
         <NewThreadModal
           users={users}
+          dossiers={dossiers}
           onClose={() => setShowNewThread(false)}
           onCreate={handleCreateThread}
         />

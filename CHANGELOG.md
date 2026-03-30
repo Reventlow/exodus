@@ -1,5 +1,8 @@
 # Changelog
 
+## v0.8.55
+- GM can choose persona (GM/SELF/NPC) when creating a new thread; choice carries into the thread
+
 ## v0.8.54
 - GM (superuser) can delete threads via X button in thread header with confirmation
 
