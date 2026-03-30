@@ -281,9 +281,9 @@ function MemberManager({ thread, users, onClose, onAddMember, onRemoveMember }) 
 
 const GM_PERSONA = { type: "gm", id: 0, name: "GM" };
 
-function MessageInput({ onSend, dossiers }) {
+function MessageInput({ onSend, dossiers, postingAs, onPostingAsChange }) {
   const [text, setText] = useState("");
-  const [postingAs, setPostingAs] = useState(IS_STAFF ? GM_PERSONA : null);
+  const setPostingAs = onPostingAsChange;
   const [pendingImage, setPendingImage] = useState(null);
   const [imagePreview, setImagePreview] = useState(null);
   const fileRef = useRef(null);
@@ -390,7 +390,7 @@ function MessageInput({ onSend, dossiers }) {
 // ThreadView
 // ---------------------------------------------------------------------------
 
-function ThreadView({ thread, onSend, onBack, onOpenMembers, dossiers }) {
+function ThreadView({ thread, onSend, onBack, onOpenMembers, dossiers, postingAs, onPostingAsChange }) {
   const messagesEndRef = useRef(null);
   const [lightboxImage, setLightboxImage] = useState(null);
 
@@ -477,7 +477,7 @@ function ThreadView({ thread, onSend, onBack, onOpenMembers, dossiers }) {
       </div>
 
       {/* Input */}
-      <MessageInput onSend={onSend} dossiers={dossiers} />
+      <MessageInput onSend={onSend} dossiers={dossiers} postingAs={postingAs} onPostingAsChange={onPostingAsChange} />
 
       {/* Image lightbox */}
       {lightboxImage && ReactDOM.createPortal(
@@ -563,6 +563,7 @@ function CommsApp() {
   const [showMembers, setShowMembers] = useState(false);
   const [mobileShowThread, setMobileShowThread] = useState(false);
   const [dossiers, setDossiers] = useState([]);
+  const [threadPersonas, setThreadPersonas] = useState({});
 
   useEffect(() => {
     api("/api/comms/threads/").then(setThreads);
@@ -725,6 +726,8 @@ function CommsApp() {
           onBack={() => setMobileShowThread(false)}
           onOpenMembers={() => setShowMembers(true)}
           dossiers={dossiers}
+          postingAs={activeThreadId ? (threadPersonas[activeThreadId] !== undefined ? threadPersonas[activeThreadId] : (IS_STAFF ? GM_PERSONA : null)) : null}
+          onPostingAsChange={persona => activeThreadId && setThreadPersonas(prev => ({...prev, [activeThreadId]: persona}))}
         />
       </div>
       {showNewThread && (

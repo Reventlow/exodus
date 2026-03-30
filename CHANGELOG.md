@@ -1,5 +1,8 @@
 # Changelog
 
+## v0.8.52
+- Comms remembers chosen persona per thread until actively changed
+
 ## v0.8.51
 - Superuser defaults to posting as GM persona in comms instead of self
 - GM badge shown on GM messages; NPC dossier posting still available via dropdown
