@@ -241,10 +241,16 @@ def get_helper_bonus(npc) -> int:
 
 
 def get_concealment_max(npc) -> int:
-    """Calculate digital concealment max: Computer + Resolve."""
+    """Calculate digital concealment max: Computer + Resolve + merit bonuses."""
     computer = npc.skills.get("mental", {}).get("Computer", 0)
     resolve = npc.attributes.get("resistance", {}).get("mental", 1)
-    return computer + resolve
+    bonus = 0
+    # Digital Ghost adds +2 concealment levels
+    for nm in npc.npc_merits.select_related("merit").all():
+        if nm.merit.name.lower() == "digital ghost":
+            bonus += 2
+            break
+    return computer + resolve + bonus
 
 
 def get_concealment_defender_bonus(damage: int, max_levels: int) -> int:
