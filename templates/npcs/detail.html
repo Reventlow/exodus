@@ -1598,7 +1598,7 @@
                         const charClass = npc.characterClass || '';
                         const available = (meritCatalog || []).filter(m =>
                             !owned.includes(m.id) &&
-                            (!m.classRestriction || m.classRestriction === charClass)
+                            (!m.classRestriction || m.classRestriction.split(',').map(c => c.trim()).includes(charClass))
                         );
                         return (
                             <div className="glass-panel" style={{ padding: '1rem', marginBottom: '0.5rem' }}>

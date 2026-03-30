@@ -981,7 +981,7 @@
         const ownedMeritIds = merits.map(m => m.meritId);
         const available = catalog.filter(m =>
             !ownedMeritIds.includes(m.id) &&
-            (!m.classRestriction || m.classRestriction === characterClass)
+            (!m.classRestriction || m.classRestriction.split(',').map(c => c.trim()).includes(characterClass))
         );
 
         const catOrder = ['physical', 'mental', 'social', 'supernatural'];
