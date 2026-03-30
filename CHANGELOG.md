@@ -1,5 +1,8 @@
 # Changelog
 
+## v0.9.5
+- Cyber terminal RULES button shows operations manual explaining each action, dice mechanics, and modifiers
+
 ## v0.9.4
 - Hide cyber terminal button when posting as GM persona
 

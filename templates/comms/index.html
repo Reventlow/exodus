@@ -378,6 +378,7 @@ function CyberTerminal({ thread, members, onClose, postingAs }) {
   const [rolling, setRolling] = useState(false);
   const [lastResult, setLastResult] = useState(null);
   const [cyberLog, setCyberLog] = useState([]);
+  const [showRules, setShowRules] = useState(false);
   const [effects, setEffects] = useState([]);
 
   useEffect(() => {
@@ -431,11 +432,51 @@ function CyberTerminal({ thread, members, onClose, postingAs }) {
     <div style={termStyle.overlay}>
       <div style={termStyle.header}>
         <span style={termStyle.title}>&gt;_ CYBER TERMINAL</span>
-        <button onClick={onClose} style={termStyle.closeBtn}>ESC</button>
+        <div style={{display: "flex", gap: "0.5rem"}}>
+          <button onClick={() => setShowRules(!showRules)} style={{...termStyle.closeBtn, color: showRules ? "#0f0" : "#064"}}>RULES</button>
+          <button onClick={onClose} style={termStyle.closeBtn}>ESC</button>
+        </div>
       </div>
       <div style={termStyle.body}>
         {eligible && !eligible.eligible && !IS_STAFF && (
           <div style={{color: "#a33"}}>ACCESS DENIED — {eligible.reason}</div>
+        )}
+
+        {showRules && (eligible?.eligible || IS_STAFF) && (
+          <div style={{marginBottom: "1rem", padding: "0.75rem", border: "1px solid #042", background: "rgba(0,255,0,0.02)"}}>
+            <div style={{...termStyle.label, marginBottom: "0.5rem", fontSize: "0.75rem", color: "#0f0"}}>TERMINAL OPERATIONS MANUAL</div>
+            <div style={{fontSize: "0.7rem", lineHeight: "1.6", color: "#0a3"}}>
+              <div style={{marginBottom: "0.5rem"}}>
+                <span style={{color: "#0f0"}}>GAIN ACCESS</span> — <span style={{color: "#064"}}>Intelligence + Computer</span><br/>
+                Breach target's comm encryption. On success, gain hidden read-only access
+                to all threads the target participates in (excluding direct GM channels).
+                You will not appear in their roster. Intercepted channels appear in a
+                separate section of your channel list.
+              </div>
+              <div style={{marginBottom: "0.5rem"}}>
+                <span style={{color: "#0f0"}}>DEPLOY</span> — <span style={{color: "#064"}}>Wits + Computer</span><br/>
+                Plant a backdoor on this channel. Creates a persistent effect that can
+                be detected and swept by defenders. Exceptional success (5+) makes it
+                harder to remove.
+              </div>
+              <div style={{marginBottom: "0.5rem"}}>
+                <span style={{color: "#0f0"}}>DEFEND</span> — <span style={{color: "#064"}}>Resolve + Computer</span><br/>
+                Strengthen this channel's encryption and sweep for threats. Removes
+                active backdoors, expels hidden intruders, and raises the encryption
+                level making future breaches harder.
+              </div>
+              <div style={{marginBottom: "0.5rem"}}>
+                <span style={{color: "#0f0"}}>DETECT</span> — <span style={{color: "#064"}}>Resolve + Computer</span><br/>
+                Scan this channel for compromise. Reveals active effects (backdoors,
+                encryption levels) and any hidden intruders with shadow access.
+              </div>
+              <div style={{borderTop: "1px solid #042", paddingTop: "0.5rem", marginTop: "0.5rem"}}>
+                <span style={{color: "#0f0"}}>DICE</span>: d10 pool. 8+ = success. 10s explode. 5+ successes = exceptional.<br/>
+                <span style={{color: "#0f0"}}>MODIFIERS</span>: Relevant specialisations grant +1 die.
+                {IS_STAFF && <span> GM can add bonus/penalty dice via the modifier field.</span>}
+              </div>
+            </div>
+          </div>
         )}
 
         {(eligible?.eligible || IS_STAFF) && (
