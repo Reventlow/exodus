@@ -34,4 +34,5 @@ urlpatterns = [
     path("api/comms/threads/<int:thread_id>/cyber/", cyber_views.thread_cyber_status, name="cyber-status"),
     path("api/comms/threads/<int:thread_id>/cyber/roll/", cyber_views.cyber_roll, name="cyber-roll"),
     path("api/comms/threads/<int:thread_id>/cyber/modify/", cyber_views.cyber_modify, name="cyber-modify"),
+    path("api/comms/threads/<int:thread_id>/cyber/close/", cyber_views.close_connection, name="cyber-close"),
 ]

@@ -1,5 +1,16 @@
 # Changelog
 
+## v0.9.15
+- Complete cyber session flow: Gain Access creates session with deploy limits (successes/2)
+- Passive detection on Gain Access (1-4 successes) and each Deploy action
+- 5+ successes = exceptional, no passive detection triggered
+- Difficulty escalation: +1 per prior closed connection
+- Active Detect: Resolve + Computer + 2 vs attacker successes, cached between actions
+- Detect only shows INTRUSION DETECTED / NO INTRUSION DETECTED (no dice shown)
+- Close Connection: locks thread, ends all sessions, blocks further actions
+- Session state displayed in terminal (deploys remaining, detected status)
+- Backdoor = unlimited deploys until connection closed
+
 ## v0.9.14
 - CyberSession model for tracking active hacking sessions (deploys remaining, detection state, difficulty escalation)
 - Thread connection closed state (prep for revised cyber flow)

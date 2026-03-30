@@ -406,6 +406,17 @@ function CyberTerminal({ thread, members, onClose, postingAs }) {
   const [cyberLog, setCyberLog] = useState([]);
   const [showRules, setShowRules] = useState(false);
   const [effects, setEffects] = useState([]);
+  const [session, setSession] = useState(null);
+  const [connectionClosed, setConnectionClosed] = useState(false);
+
+  function refreshStatus() {
+    api("/api/comms/threads/" + thread.id + "/cyber/").then(data => {
+      setCyberLog(data.actions || []);
+      setEffects(data.effects || []);
+      setSession(data.session || null);
+      setConnectionClosed(data.isConnectionClosed || false);
+    });
+  }
 
   useEffect(() => {
     const params = new URLSearchParams();
@@ -416,10 +427,7 @@ function CyberTerminal({ thread, members, onClose, postingAs }) {
     api("/api/comms/cyber/eligible/?" + params).then(setEligible);
     api("/api/agencies/").then(data => setAgencies(data.agencies || data || [])).catch(() => {});
     api("/api/agencies/bases/").then(data => setBases(data.bases || data || [])).catch(() => {});
-    api("/api/comms/threads/" + thread.id + "/cyber/").then(data => {
-      setCyberLog(data.actions || []);
-      setEffects(data.effects || []);
-    });
+    refreshStatus();
   }, [thread.id]);
 
   function handleRoll() {
@@ -441,13 +449,13 @@ function CyberTerminal({ thread, members, onClose, postingAs }) {
       body: JSON.stringify(payload),
     }).then(data => {
       setLastResult(data.action);
+      if (data.session) setSession(data.session);
       setRolling(false);
-      // Refresh log
-      api("/api/comms/threads/" + thread.id + "/cyber/").then(d => {
-        setCyberLog(d.actions || []);
-        setEffects(d.effects || []);
-      });
-    }).catch(() => setRolling(false));
+      refreshStatus();
+    }).catch(err => {
+      setRolling(false);
+      if (err && err.error) setLastResult({ outcome: err.error, roll: null });
+    });
   }
 
   const hasGainedAccess = cyberLog.some(e => e.actionType === "gain_access" && e.successes > 0);
@@ -512,7 +520,14 @@ function CyberTerminal({ thread, members, onClose, postingAs }) {
           </div>
         )}
 
-        {(eligible?.eligible || IS_STAFF) && (
+        {connectionClosed && (
+          <div style={{padding: "1rem", border: "1px solid #a33", background: "rgba(170,51,51,0.1)", marginBottom: "1rem", textAlign: "center"}}>
+            <span style={{color: "#f44", fontWeight: "bold", letterSpacing: "2px"}}>CONNECTION CLOSED</span>
+            <div style={{color: "#a33", fontSize: "0.7rem", marginTop: "0.25rem"}}>No further actions possible on this thread.</div>
+          </div>
+        )}
+
+        {(eligible?.eligible || IS_STAFF) && !connectionClosed && (
           <React.Fragment>
             {effects.length > 0 && (
               <div style={{marginBottom: "0.75rem"}}>
@@ -525,7 +540,32 @@ function CyberTerminal({ thread, members, onClose, postingAs }) {
               </div>
             )}
 
-            <div style={termStyle.label}>SELECT ACTION</div>
+            {session && (
+              <div style={{marginBottom: "0.75rem", padding: "0.5rem", border: "1px solid #042", background: "rgba(0,255,0,0.02)"}}>
+                <div style={termStyle.label}>ACTIVE SESSION</div>
+                <div style={{fontSize: "0.7rem", color: "#0a3"}}>
+                  Access level: {session.gainAccessSuccesses} successes{session.hasBackdoor ? " + BACKDOOR (unlimited)" : ` — ${session.deploysRemaining} deploy(s) remaining`}
+                </div>
+                {session.detected && (
+                  <div style={{color: "#f44", fontSize: "0.7rem", fontWeight: "bold", marginTop: "0.25rem"}}>
+                    ⚠ INTRUSION DETECTED BY DEFENDER
+                  </div>
+                )}
+              </div>
+            )}
+
+            <div style={{display: "flex", justifyContent: "space-between", alignItems: "center"}}>
+              <div style={termStyle.label}>SELECT ACTION</div>
+              <button onClick={() => {
+                if (confirm("Close this connection? No further actions will be possible.")) {
+                  api("/api/comms/threads/" + thread.id + "/cyber/close/", { method: "POST" }).then(() => {
+                    setConnectionClosed(true);
+                    setSession(null);
+                    refreshStatus();
+                  });
+                }
+              }} style={{...termStyle.closeBtn, color: "#a33", borderColor: "#a33", fontSize: "0.65rem"}}>CLOSE CONNECTION</button>
+            </div>
             <div style={termStyle.actionGrid}>
               {actions.map(a => (
                 <button key={a.key}
