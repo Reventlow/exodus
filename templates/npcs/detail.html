@@ -901,7 +901,11 @@
 
         const attrVal = selAttr ? getAttrVal(selAttr) : 0;
         const skillVal = selSkill ? getSkillVal(selSkill) : 0;
-        const unskilledPenalty = (selSkill && skillVal === 0) ? -1 : 0;
+        let unskilledPenalty = 0;
+        if (selSkill && skillVal === 0) {
+            const isMental = SKILL_LIST.mental.includes(selSkill);
+            unskilledPenalty = isMental ? -3 : -1;
+        }
         const pool = attrVal + skillVal + modifier + unskilledPenalty;
 
         function rollDice() {

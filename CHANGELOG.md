@@ -1,5 +1,8 @@
 # Changelog
 
+## v0.9.8
+- Fix: unskilled mental skills now apply -3 penalty (not -1); physical and social remain -1
+
 ## v0.9.7
 - Dice roller applies -1 unskilled penalty when rolling a skill at 0 dots
 
