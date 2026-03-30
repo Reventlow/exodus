@@ -469,7 +469,11 @@ def _handle_deploy(thread, actor, deploy_action, pool, pool_desc,
             if detected:
                 session.detected = True
                 session.save(update_fields=["detected"])
-                detection_msg = f" Passive detection triggered — {def_name} detected the intrusion!"
+                detection_msg = f" ⚠ Passive detection by {def_name} — INTRUSION DETECTED!"
+            else:
+                detection_msg = f" Passive detection by {def_name} — still undetected."
+        else:
+            detection_msg = " No passive detection (defender unskilled)."
         session.detect_stale = False
         session.save(update_fields=["detect_stale"])
 
