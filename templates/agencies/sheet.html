@@ -1023,6 +1023,22 @@
                         background: 'rgba(0,0,0,0.2)', alignItems: 'start'
                     }}>
                         {columns.map(col => {
+                            if (col.type === 'boolean') {
+                                return (
+                                    <div key={col.key} style={{ display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                                        <input type="checkbox" checked={!!item[col.key]}
+                                            onChange={e => {
+                                                const updated = actualItems.map((it, i) =>
+                                                    i === idx ? { ...it, [col.key]: e.target.checked } : it
+                                                );
+                                                onSave(updated);
+                                            }}
+                                            disabled={!IS_ADMIN}
+                                            style={{ accentColor: 'var(--accent-primary)' }}
+                                        />
+                                    </div>
+                                );
+                            }
                             const isNotes = col.key === 'notes' || col.type === 'textarea';
                             return (
                                 <AutoSaveInput
@@ -2973,8 +2989,9 @@
                         { key: 'duration', label: 'DURATION', width: '1fr' },
                         { key: 'completionScore', label: 'COMPLETION', width: '80px', type: 'number' },
                         { key: 'notes', label: 'NOTES', width: '2fr' },
+                        { key: 'classified', label: 'CLASS.', width: '50px', type: 'boolean' },
                     ]}
-                    emptyItem={{ name: '', player: '', duration: '', completionScore: 0, notes: '' }}
+                    emptyItem={{ name: '', player: '', duration: '', completionScore: 0, notes: '', classified: true }}
                     update={val => updateAgency({ projects: val })}
                     onSave={val => saveAgencyQuiet({ projects: val })}
                     getFreshItems={() => agencyRef.current.projects || []}

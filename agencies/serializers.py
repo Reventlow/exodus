@@ -80,7 +80,10 @@ def serialize_agency(agency, user):
         "assets": vis("assets", agency.assets),
         "fleet": vis("fleet", agency.fleet),
         "conditions": vis("conditions", agency.conditions),
-        "projects": vis("projects", agency.projects),
+        "projects": vis("projects", agency.projects) if show_all else [
+            p for p in (agency.projects or [])
+            if isinstance(p, dict) and not p.get("classified", False)
+        ] if is_field_visible(agency, "projects") else redact_value(agency.projects),
         "history": vis("history", agency.history),
     }
 
