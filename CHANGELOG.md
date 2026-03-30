@@ -1,11 +1,14 @@
 # Changelog
 
-## v0.8.58
-- Cyber Terminal: hacking overlay for characters with Computer 4+ (green terminal UI)
+## v0.9.0
+- **Cyber Terminal**: hacking overlay for characters with Computer 4+ (green-on-black terminal UI)
 - Actions: Gain Access (hidden thread surveillance), Deploy (backdoor), Defend (encrypt/sweep), Detect (reveal threats)
-- WoD 2.0 dice roller with exploding 10s, exceptional success, dramatic failure
-- Intercepted channels section shows threads gained via Gain Access
+- WoD 2.0 dice roller: d10, success on 8+, 10s explode, exceptional success (5+), dramatic failure
+- Dice pools: Intelligence/Wits/Resolve + Computer, specialisation bonuses, GM modifiers
+- Intercepted channels section in sidebar shows threads gained via Gain Access (read-only)
+- Hidden membership: hackers don't appear in roster/thumbnails of intercepted threads
 - GM can set modifier dice and manually manage thread effects
+- Comms improvements: member portrait thumbnails, clickable lightbox, GM persona system, per-thread persona memory, thread deletion, auto-refresh channels
 
 ## v0.8.57
 - Channels list auto-refreshes every 15 seconds to pick up new threads, deletions, and alias changes
