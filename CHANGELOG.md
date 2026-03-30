@@ -1,5 +1,8 @@
 # Changelog
 
+## v0.9.7
+- Dice roller applies -1 unskilled penalty when rolling a skill at 0 dots
+
 ## v0.9.6
 - Dice roller on NPC dossier pages (superuser only) — pick attribute + skill, roll with NPC's stats
 

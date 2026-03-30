@@ -901,7 +901,8 @@
 
         const attrVal = selAttr ? getAttrVal(selAttr) : 0;
         const skillVal = selSkill ? getSkillVal(selSkill) : 0;
-        const pool = attrVal + skillVal + modifier;
+        const unskilledPenalty = (selSkill && skillVal === 0) ? -1 : 0;
+        const pool = attrVal + skillVal + modifier + unskilledPenalty;
 
         function rollDice() {
             setRolling(true);
@@ -928,6 +929,7 @@
         const poolParts = [];
         if (selAttr) poolParts.push(`${selAttr} ${attrVal}`);
         if (selSkill) poolParts.push(`${selSkill} ${skillVal}`);
+        if (unskilledPenalty) poolParts.push('Unskilled -1');
         if (modifier) poolParts.push(`Mod ${modifier > 0 ? '+' : ''}${modifier}`);
 
         return (
