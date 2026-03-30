@@ -915,9 +915,11 @@ def _resolve_deploy(deploy_action, result, thread, actor,
         return f"{s} successes — communications exfiltrated. GM applies hidden access to target agency threads."
 
     elif deploy_action == "sabotage":
-        # Resolve defender agency and project name
+        # Resolve defender agency and project, reduce completion points
         project_name = "unknown project"
         defender_agency_name = "target"
+        old_score = 0
+        new_score = 0
         for m in ThreadMembership.objects.filter(thread=thread, hidden=False).exclude(user=actor):
             if m.alias_type == "npc" and m.alias_id:
                 npc = NPC.objects.filter(pk=m.alias_id).first()
@@ -930,10 +932,14 @@ def _resolve_deploy(deploy_action, result, thread, actor,
                                 idx = int(target_project_index)
                                 if 0 <= idx < len(ag.projects):
                                     project_name = ag.projects[idx].get("name", f"Project {idx+1}")
+                                    old_score = int(ag.projects[idx].get("completionScore", 0))
+                                    new_score = max(0, old_score - s)
+                                    ag.projects[idx]["completionScore"] = new_score
+                                    ag.save(update_fields=["projects"])
                             except (ValueError, IndexError):
                                 pass
                     break
-        return f"{s} successes — '{project_name}' in {defender_agency_name} sabotaged. Inform GM for narrative resolution."
+        return f"{s} successes — '{project_name}' in {defender_agency_name} sabotaged. Completion reduced from {old_score} to {new_score} (-{old_score - new_score})."
 
     elif deploy_action == "shutdown_infra":
         # Auto-resolve defender agency
