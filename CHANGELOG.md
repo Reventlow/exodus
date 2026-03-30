@@ -1,5 +1,9 @@
 # Changelog
 
+## v0.8.51
+- Superuser defaults to posting as GM persona in comms instead of self
+- GM badge shown on GM messages; NPC dossier posting still available via dropdown
+
 ## v0.8.50
 - Comms thread header now shows member portrait thumbnails instead of operative count text
 

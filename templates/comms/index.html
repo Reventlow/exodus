@@ -279,9 +279,11 @@ function MemberManager({ thread, users, onClose, onAddMember, onRemoveMember }) 
 // MessageInput
 // ---------------------------------------------------------------------------
 
+const GM_PERSONA = { type: "gm", id: 0, name: "GM" };
+
 function MessageInput({ onSend, dossiers }) {
   const [text, setText] = useState("");
-  const [postingAs, setPostingAs] = useState(null);
+  const [postingAs, setPostingAs] = useState(IS_STAFF ? GM_PERSONA : null);
   const [pendingImage, setPendingImage] = useState(null);
   const [imagePreview, setImagePreview] = useState(null);
   const fileRef = useRef(null);
@@ -322,16 +324,18 @@ function MessageInput({ onSend, dossiers }) {
         <div style={S.postingAsBar}>
           <label className="mono-text text-muted" style={S.postingAsLabel}>POST AS:</label>
           <select
-            value={postingAs ? `${postingAs.type}:${postingAs.id}` : ""}
+            value={postingAs ? `${postingAs.type}:${postingAs.id}` : "self:0"}
             onChange={e => {
-              if (!e.target.value) { setPostingAs(null); return; }
+              if (e.target.value === "self:0") { setPostingAs(null); return; }
+              if (e.target.value === "gm:0") { setPostingAs(GM_PERSONA); return; }
               const [type, id] = e.target.value.split(":");
               const d = dossiers.find(d => d.type === type && d.id === parseInt(id));
               if (d) setPostingAs(d);
             }}
             style={S.postingAsSelect}
           >
-            <option value="">SELF</option>
+            <option value="gm:0">GM</option>
+            <option value="self:0">SELF</option>
             {dossiers.map(d => (
               <option key={`${d.type}:${d.id}`} value={`${d.type}:${d.id}`}>
                 [{d.type === "character" ? "PC" : "NPC"}] {d.name}
@@ -433,7 +437,7 @@ function ThreadView({ thread, onSend, onBack, onOpenMembers, dossiers }) {
         {(thread.messages || []).map(msg => {
           const isOwn = msg.sender.id === CURRENT_USER_ID && !msg.postedAs;
           const displayName = msg.postedAs ? msg.postedAs.name : msg.sender.displayName;
-          const dossierUrl = msg.postedAs
+          const dossierUrl = msg.postedAs && msg.postedAs.type !== "gm"
             ? (msg.postedAs.type === "character" ? `/character/${msg.postedAs.id}/` : `/npcs/${msg.postedAs.id}/`)
             : null;
           return (
@@ -446,7 +450,7 @@ function ThreadView({ thread, onSend, onBack, onOpenMembers, dossiers }) {
                     ) : displayName}
                     {msg.postedAs && (
                       <span style={S.postedAsBadge}>
-                        {msg.postedAs.type === "character" ? "PC" : "NPC"}
+                        {msg.postedAs.type === "gm" ? "GM" : msg.postedAs.type === "character" ? "PC" : "NPC"}
                       </span>
                     )}
                   </div>
@@ -655,6 +659,8 @@ function CommsApp() {
       if (postingAs) {
         formData.append("postedAsType", postingAs.type);
         formData.append("postedAsId", postingAs.id);
+      } else if (IS_STAFF) {
+        formData.append("postedAsType", "self");
       }
       fetch("/api/comms/threads/" + activeThreadId + "/messages/", {
         method: "POST",
@@ -666,6 +672,8 @@ function CommsApp() {
       if (postingAs) {
         payload.postedAsType = postingAs.type;
         payload.postedAsId = postingAs.id;
+      } else if (IS_STAFF) {
+        payload.postedAsType = "self";
       }
       api("/api/comms/threads/" + activeThreadId + "/messages/", {
         method: "POST",

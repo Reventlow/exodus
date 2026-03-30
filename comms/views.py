@@ -139,14 +139,20 @@ def send_message(request, thread_id):
     if not content and not image:
         return JsonResponse({"error": "Content or image is required"}, status=400)
 
-    # Superusers can post as a character or NPC dossier
+    # Superusers can post as GM (default), a character, or NPC dossier
     posted_as_type = ""
     posted_as_id = None
     posted_as_name = ""
     if request.user.is_superuser:
-        pa_type = body.get("postedAsType", "")
+        pa_type = body.get("postedAsType", "gm")
         pa_id = body.get("postedAsId")
-        if pa_type == "character" and pa_id:
+        if pa_type == "gm" or (not pa_type and not pa_id):
+            posted_as_type = "gm"
+            posted_as_id = None
+            posted_as_name = "GM"
+        elif pa_type == "self":
+            pass  # Leave posted_as fields empty — posts as own user
+        elif pa_type == "character" and pa_id:
             try:
                 char = Character.objects.only("id", "name").get(pk=pa_id)
                 posted_as_type = "character"
