@@ -34,7 +34,8 @@ def _serialize_member(user: User, membership: ThreadMembership | None = None) ->
     if membership and membership.alias_type:
         if membership.alias_type == "gm":
             data["displayName"] = "GM"
-            data["portrait"] = None
+            profile = getattr(user, "profile", None)
+            data["portrait"] = profile.avatar.url if profile and profile.avatar else None
         elif membership.alias_type == "npc" and membership.alias_id:
             npc = NPC.objects.filter(pk=membership.alias_id).first()
             data["displayName"] = membership.alias_name or (npc.name if npc else "NPC")

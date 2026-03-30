@@ -1,5 +1,8 @@
 # Changelog
 
+## v0.9.3
+- GM persona in comms now shows the user's avatar as portrait
+
 ## v0.9.2
 - Fix: accounts migration not running (missing __init__.py in migrations package)
 
