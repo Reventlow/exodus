@@ -100,6 +100,21 @@ def thread_list(request):
             except User.DoesNotExist:
                 continue
 
+    # NPC participant (GM feature): add a system user aliased as the NPC
+    npc_participant = body.get("npcParticipant")
+    if npc_participant and request.user.is_superuser:
+        system_user, _ = User.objects.get_or_create(
+            username="__system__",
+            defaults={"is_active": False},
+        )
+        ThreadMembership.objects.create(
+            thread=thread,
+            user=system_user,
+            alias_type=npc_participant.get("type", "npc"),
+            alias_id=npc_participant.get("id"),
+            alias_name=npc_participant.get("name", "NPC"),
+        )
+
     data = serialize_thread_detail(thread, request.user)
     return JsonResponse(data, status=201)
 

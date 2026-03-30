@@ -131,6 +131,7 @@ function NewThreadModal({ users, dossiers, onClose, onCreate }) {
   const [selectedIds, setSelectedIds] = useState([]);
   const [search, setSearch] = useState("");
   const [persona, setPersona] = useState(IS_STAFF ? GM_PERSONA : null);
+  const [npcParticipant, setNpcParticipant] = useState(null);
 
   const filtered = users.filter(u =>
     u.id !== CURRENT_USER_ID &&
@@ -144,8 +145,8 @@ function NewThreadModal({ users, dossiers, onClose, onCreate }) {
   }
 
   function handleCreate() {
-    if (selectedIds.length === 0) return;
-    onCreate(title, selectedIds, persona);
+    if (selectedIds.length === 0 && !npcParticipant && !IS_STAFF) return;
+    onCreate(title, selectedIds, persona, npcParticipant);
   }
 
   return (
@@ -188,6 +189,26 @@ function NewThreadModal({ users, dossiers, onClose, onCreate }) {
               </select>
             </div>
           )}
+          {IS_STAFF && dossiers && (
+            <div style={{display: "flex", alignItems: "center", gap: "0.5rem"}}>
+              <label className="mono-text text-muted" style={{fontSize: "0.7rem", flexShrink: 0}}>NPC TARGET:</label>
+              <select
+                value={npcParticipant ? `${npcParticipant.type}:${npcParticipant.id}` : ""}
+                onChange={e => {
+                  if (!e.target.value) { setNpcParticipant(null); return; }
+                  const [type, id] = e.target.value.split(":");
+                  const d = dossiers.find(d => d.type === type && d.id === parseInt(id));
+                  if (d) setNpcParticipant(d);
+                }}
+                style={Object.assign({}, inputStyle, {flex: 1})}
+              >
+                <option value="">None (player thread)</option>
+                {dossiers.filter(d => d.type === "npc").map(d => (
+                  <option key={`npc:${d.id}`} value={`npc:${d.id}`}>{d.name}</option>
+                ))}
+              </select>
+            </div>
+          )}
           <input
             style={inputStyle}
             type="text"
@@ -214,9 +235,9 @@ function NewThreadModal({ users, dossiers, onClose, onCreate }) {
         <div style={sectionFooter}>
           <button style={btnGhost} onClick={onClose}>CANCEL</button>
           <button
-            style={Object.assign({}, btnPrimary, {opacity: selectedIds.length === 0 ? 0.4 : 1})}
+            style={Object.assign({}, btnPrimary, {opacity: (selectedIds.length === 0 && !IS_STAFF) ? 0.4 : 1})}
             onClick={handleCreate}
-            disabled={selectedIds.length === 0}
+            disabled={selectedIds.length === 0 && !IS_STAFF}
           >TRANSMIT</button>
         </div>
       </div>
@@ -1008,12 +1029,15 @@ function CommsApp() {
     setMobileShowThread(true);
   }
 
-  function handleCreateThread(title, memberIds, persona) {
+  function handleCreateThread(title, memberIds, persona, npcTarget) {
     const payload = { title: title, members: memberIds };
     if (persona && IS_STAFF) {
       payload.aliasType = persona.type;
       payload.aliasId = persona.id || null;
       payload.aliasName = persona.name || "";
+    }
+    if (npcTarget && IS_STAFF) {
+      payload.npcParticipant = { type: npcTarget.type, id: npcTarget.id, name: npcTarget.name };
     }
     api("/api/comms/threads/", {
       method: "POST",

@@ -1,5 +1,8 @@
 # Changelog
 
+## v0.9.11
+- GM can create NPC-to-NPC threads: pick persona + NPC target to test cyber terminal and roleplay NPC conversations
+
 ## v0.9.10
 - Deploy action in cyber terminal locked until a successful Gain Access has been performed (GM bypasses)
 
