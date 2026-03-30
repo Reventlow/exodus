@@ -695,7 +695,7 @@ function CyberTerminal({ thread, members, onClose, postingAs }) {
                 <div style={termStyle.label}>ACTION LOG</div>
                 {cyberLog.map(entry => (
                   <div key={entry.id} style={termStyle.logEntry}>
-                    [{entry.actionType.replace("_"," ")}] {entry.actorName} — {entry.successes} success(es) — {entry.outcome?.substring(0, 80)}
+                    [{entry.actionType.replace("_"," ")}] {entry.actorName}{entry.actionType !== "detect" ? ` — ${entry.successes} success(es)` : ""} — {entry.outcome?.substring(0, 80)}
                   </div>
                 ))}
               </div>
