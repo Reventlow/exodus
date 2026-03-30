@@ -748,7 +748,24 @@ def _resolve_deploy(deploy_action, result, thread, actor,
         return f"{s} successes — classified data extracted from {agency.name}: [{field_display}] has been unlocked."
 
     elif deploy_action == "discover_base":
-        return f"{s} successes — hidden base location discovered. GM reveals the base."
+        # Find a random hidden base belonging to the defender's agency
+        defender_agency_id = None
+        for m in ThreadMembership.objects.filter(thread=thread, hidden=False).exclude(user=actor):
+            if m.alias_type == "npc" and m.alias_id:
+                npc = NPC.objects.filter(pk=m.alias_id).first()
+                if npc and npc.agency_id:
+                    defender_agency_id = npc.agency_id
+                    break
+        if defender_agency_id:
+            from agencies.models import Base
+            hidden_bases = list(Base.objects.filter(agency_id=defender_agency_id, is_hidden=True))
+            if hidden_bases:
+                base = random.choice(hidden_bases)
+                base.is_hidden = False
+                base.save(update_fields=["is_hidden"])
+                return f"{s} successes — hidden base discovered: {base.name}. Base is now visible."
+            return f"{s} successes — no hidden bases found for this agency."
+        return f"{s} successes — could not determine defender's agency."
 
     elif deploy_action == "base_access":
         base_info = ""
