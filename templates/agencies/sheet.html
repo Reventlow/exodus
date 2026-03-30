@@ -545,6 +545,27 @@
                             </>
                         )}
                     </div>
+                    {IS_ADMIN && (
+                    <div className="tech-border text-center" style={{ padding: '1rem', minWidth: '160px' }}>
+                        <div className="text-secondary mono-text" style={{ fontSize: '0.8rem' }}>
+                            ZERO-DAY POOL
+                        </div>
+                        <input type="number" value={agency.zeroDayPool || 0}
+                            onChange={e => update({ zeroDayPool: parseInt(e.target.value) || 0 })}
+                            style={{
+                                background: 'transparent', border: 'none',
+                                color: '#0f0', width: '100%',
+                                textAlign: 'center', fontSize: '2rem',
+                                fontFamily: 'var(--font-mono)'
+                            }} />
+                        <div style={{
+                            marginTop: '0.25rem', fontFamily: 'var(--font-mono)',
+                            color: 'var(--text-muted)', fontSize: '0.7rem',
+                        }}>
+                            Gov Zero-Day Repository
+                        </div>
+                    </div>
+                    )}
                 </div>
 
                 {/* XP Transfer Log */}

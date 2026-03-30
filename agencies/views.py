@@ -259,6 +259,8 @@ def api_agency_detail(request, pk):
             agency.integrity = data["integrity"]
         if "experience" in data:
             agency.experience = data["experience"]
+        if "zeroDayPool" in data:
+            agency.zero_day_pool = data["zeroDayPool"]
 
         # Update booleans
         if "isPlayerAgency" in data:
