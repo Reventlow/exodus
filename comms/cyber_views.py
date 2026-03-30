@@ -158,9 +158,6 @@ def _log_action(thread, actor, action_type, pool, result, outcome,
 @require_GET
 def cyber_eligible(request):
     """Check if current user/persona can use the cyber terminal."""
-    if request.user.is_superuser:
-        return JsonResponse({"eligible": True, "reason": "GM access"})
-
     persona_type = request.GET.get("personaType", "")
     persona_id = request.GET.get("personaId")
     if persona_id:
@@ -171,10 +168,12 @@ def cyber_eligible(request):
 
     stats = _get_actor_stats(request.user, persona_type, persona_id)
     if not stats:
+        if request.user.is_superuser:
+            return JsonResponse({"eligible": True, "reason": "GM access", "modifiers": []})
         return JsonResponse({"eligible": False, "reason": "No character found"})
 
     _, _, specialisations, computer_skill, name, merits, pulling_strings, agency_id = stats
-    eligible = computer_skill >= 4
+    eligible = computer_skill >= 4 or request.user.is_superuser
 
     # Build active modifiers list
     from .dice import CYBER_MERITS
