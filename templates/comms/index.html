@@ -686,11 +686,14 @@ function CyberTerminal({ thread, members, onClose, postingAs }) {
               </React.Fragment>
             )}
 
-            {(action === "gain_access" || action === "deploy") && eligible && eligible.modifiers && eligible.modifiers.filter(m => m.name === "Zero-Day Repository").map(m => {
-              const remaining = m.remaining || 0;
+            {(() => {
+              if ((action !== "gain_access" && action !== "deploy") || !eligible || !eligible.modifiers) return null;
+              const zdMod = eligible.modifiers.find(m => m.name === "Zero-Day Repository");
+              if (!zdMod) return null;
+              const remaining = zdMod.remaining || 0;
               const disabled = remaining <= 0;
               return (
-                <label key="zd" style={{display: "flex", alignItems: "center", gap: "0.5rem", marginBottom: "0.5rem", cursor: disabled ? "not-allowed" : "pointer", opacity: disabled ? 0.4 : 1}}>
+                <label style={{display: "flex", alignItems: "center", gap: "0.5rem", marginBottom: "0.5rem", cursor: disabled ? "not-allowed" : "pointer", opacity: disabled ? 0.4 : 1}}>
                   <input type="checkbox" checked={useZeroDay && !disabled} onChange={e => !disabled && setUseZeroDay(e.target.checked)}
                     disabled={disabled} style={{accentColor: "#0f0"}} />
                   <span style={{color: "#0a3", fontSize: "0.7rem", fontFamily: "var(--font-mono)"}}>
@@ -698,8 +701,7 @@ function CyberTerminal({ thread, members, onClose, postingAs }) {
                   </span>
                 </label>
               );
-            })
-            )}
+            })()}
 
             {IS_STAFF && (
               <React.Fragment>
