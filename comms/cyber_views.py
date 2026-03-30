@@ -264,7 +264,25 @@ def _resolve_deploy(deploy_action, result, thread, actor,
         return f"{s} successes — fraudulent trade orders placed on the UTC on behalf of {agency_name}. GM determines economic impact."
 
     elif deploy_action == "steal_intel":
-        return f"{s} successes — classified data extracted. A random classified field on the target agency has been unlocked. GM reveals the intel."
+        if not target_agency_id:
+            return f"{s} successes — but no target agency specified."
+        agency = Agency.objects.filter(pk=target_agency_id).first()
+        if not agency:
+            return f"{s} successes — target agency not found."
+        # Find classified fields (field_visibility entries set to False)
+        visibility = agency.field_visibility or {}
+        classified_fields = [k for k, v in visibility.items() if v is False]
+        if not classified_fields:
+            return f"{s} successes — no classified intel remaining on {agency.name}. All data already accessible."
+        # Pick a random field to reveal
+        import random
+        revealed = random.choice(classified_fields)
+        visibility[revealed] = True
+        agency.field_visibility = visibility
+        agency.save(update_fields=["field_visibility"])
+        # Format the field name for display
+        field_display = revealed.replace(".", " > ").replace("_", " ").title()
+        return f"{s} successes — classified data extracted from {agency.name}: [{field_display}] has been unlocked."
 
     elif deploy_action == "discover_base":
         return f"{s} successes — hidden base location discovered. GM reveals the base."

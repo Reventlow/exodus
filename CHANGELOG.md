@@ -1,5 +1,8 @@
 # Changelog
 
+## v0.9.13
+- Steal Intel now requires target agency, picks a random classified field, unlocks it, and logs what was uncovered
+
 ## v0.9.12
 - Deploy submenu with 11 operations: backdoor, ransomware, force bad deals, steal intel, discover base, base access, plant false intel, exfiltrate comms, sabotage project, corrupt data, close connection
 - Each operation has its own dice pool (Wits/Intelligence/Manipulation + Computer/Investigation)
