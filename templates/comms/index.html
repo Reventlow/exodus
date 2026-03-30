@@ -448,13 +448,15 @@ function CyberTerminal({ thread, members, onClose, postingAs }) {
       method: "POST",
       body: JSON.stringify(payload),
     }).then(data => {
-      setLastResult(data.action);
+      console.log("cyber roll response:", data);
+      setLastResult(data.action || { outcome: "No response", roll: null });
       if (data.session) setSession(data.session);
       setRolling(false);
       refreshStatus();
     }).catch(err => {
+      console.error("cyber roll error:", err);
       setRolling(false);
-      if (err && err.error) setLastResult({ outcome: err.error, roll: null });
+      setLastResult({ outcome: (err && err.error) || "Request failed", roll: null, actionType: action, poolDescription: "" });
     });
   }
 
@@ -667,7 +669,7 @@ function CyberTerminal({ thread, members, onClose, postingAs }) {
 
             {lastResult && (
               <div style={termStyle.result}>
-                <div style={termStyle.label}>{lastResult.actionType.replace("_", " ").toUpperCase()} — {lastResult.poolDescription}</div>
+                {lastResult.actionType && <div style={termStyle.label}>{lastResult.actionType.replace("_", " ").toUpperCase()}{lastResult.poolDescription ? ` — ${lastResult.poolDescription}` : ""}</div>}
                 {lastResult.roll && lastResult.roll.rolls && lastResult.roll.rolls.length > 0 && (
                   <React.Fragment>
                     <div style={termStyle.dice}>
