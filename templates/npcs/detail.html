@@ -1501,6 +1501,43 @@
                     onMentalLoadChange={v => onSave({ mentalLoad: v })}
                 />
 
+                {(() => {
+                    const comp = skills.mental?.Computer || 0;
+                    const resolve = attrs.resistance?.mental || 1;
+                    if (comp < 4) return null;
+                    const concealMax = comp + resolve;
+                    const threshold = concealMax - 4;
+                    return (
+                        <div className="glass-panel" style={{ padding: '1rem', marginBottom: '1rem' }}>
+                            <h4 className="mono-text text-accent" style={{ borderBottom: '1px solid var(--border-color)', paddingBottom: '0.5rem', marginBottom: '0.75rem', fontSize: '0.85rem' }}>
+                                DIGITAL CONCEALMENT
+                            </h4>
+                            <div style={{ display: 'flex', gap: '3px', flexWrap: 'wrap', marginBottom: '0.5rem' }}>
+                                {Array.from({ length: concealMax }, (_, i) => {
+                                    const isLast4 = i >= threshold;
+                                    const bonusLabel = isLast4 ? `+${i - threshold + 1}` : '';
+                                    return (
+                                        <div key={i} style={{ position: 'relative' }}>
+                                            <div style={{
+                                                width: 24, height: 24, borderRadius: '3px',
+                                                border: '1px solid ' + (isLast4 ? 'var(--accent-danger, #c0392b)' : 'var(--border-color)'),
+                                                background: 'transparent',
+                                                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                            }}>
+                                                {isLast4 && <span style={{ fontSize: '0.6rem', color: 'var(--accent-danger, #c0392b)', fontFamily: 'var(--font-mono)' }}>{bonusLabel}</span>}
+                                            </div>
+                                        </div>
+                                    );
+                                })}
+                            </div>
+                            <div className="text-muted mono-text" style={{ fontSize: '0.7rem' }}>
+                                Computer {comp} + Resolve {resolve} = {concealMax} levels.
+                                Last 4 give defender +1 to +4 detection bonus. When full — intrusion detected.
+                            </div>
+                        </div>
+                    );
+                })()}
+
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: '1rem' }}>
                     {/* Pulling Strings (catalog-based) */}
                     {(() => {
