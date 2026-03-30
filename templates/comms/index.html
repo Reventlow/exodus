@@ -581,7 +581,8 @@ function CyberTerminal({ thread, members, onClose, postingAs }) {
                     refreshStatus();
                   });
                 }
-              }} style={{...termStyle.closeBtn, color: "#a33", borderColor: "#a33", fontSize: "0.65rem"}}>CLOSE CONNECTION</button>
+              }} title="Closes this connection permanently. No party will be able to add messages or access the terminal on this thread."
+              style={{...termStyle.closeBtn, color: "#a33", borderColor: "#a33", fontSize: "0.65rem"}}>CLOSE CONNECTION</button>
             </div>
             <div style={termStyle.actionGrid}>
               {actions.map(a => (
@@ -864,16 +865,17 @@ function ThreadView({ thread, onSend, onBack, onOpenMembers, onDeleteThread, dos
         </div>
         <button onClick={onOpenMembers} style={S.rosterBtn}>ROSTER</button>
         {!thread.isConnectionClosed && (
-          <button onClick={() => {
-            if (confirm("Close this connection? No further messages or actions will be possible.")) {
-              api("/api/comms/threads/" + thread.id + "/cyber/close/", { method: "POST" }).then(() => {
-                api("/api/comms/threads/" + thread.id + "/").then(data => {
-                  // Force refresh - the parent will pick up isConnectionClosed on next poll
-                  window.location.reload();
+          <button
+            title="Closes this connection permanently. No party will be able to add messages or access the terminal on this thread."
+            onClick={() => {
+              if (confirm("Close this connection permanently? No party will be able to add messages or access the terminal on this thread.")) {
+                api("/api/comms/threads/" + thread.id + "/cyber/close/", { method: "POST" }).then(() => {
+                  api("/api/comms/threads/" + thread.id + "/").then(data => {
+                    window.location.reload();
+                  });
                 });
-              });
-            }
-          }} style={{...S.rosterBtn, color: "#c0392b", borderColor: "#c0392b"}}>CLOSE</button>
+              }
+            }} style={{...S.rosterBtn, color: "#c0392b", borderColor: "#c0392b"}}>CLOSE</button>
         )}
         {IS_STAFF && (
           <button onClick={() => { if (confirm("Delete this thread and all messages?")) onDeleteThread(thread.id); }} style={S.deleteThreadBtn}>&#10005;</button>
