@@ -254,19 +254,35 @@ def cyber_eligible(request):
         "reason": f"Computer {computer_skill}" + (" (need 4+)" if not eligible else ""),
         "modifiers": active_mods,
     }
-    # Available helpers: NPC dossiers in actor's agency with Computer 4+
+    # Available helpers: agency dossiers + personal contacts with Computer 4+
     from .dice import get_helper_bonus, get_concealment_max
     helpers = []
+    seen_ids = set()
+    # Agency dossiers
     if agency_id:
         for npc in NPC.objects.filter(agency_id=agency_id, is_npc_dossier=True):
             comp = npc.skills.get("mental", {}).get("Computer", 0)
-            if comp >= 4 and npc.name != name:  # Exclude self
+            if comp >= 4 and npc.name != name:
                 helpers.append({
                     "npcId": npc.id,
-                    "name": npc.name,
+                    "name": f"{npc.name} (agency)",
                     "bonus": get_helper_bonus(npc),
                     "concealmentMax": get_concealment_max(npc),
                 })
+                seen_ids.add(npc.id)
+    # Personal contacts assigned to this user
+    for npc in NPC.objects.filter(assigned_to=request.user, is_npc_dossier=False):
+        if npc.id in seen_ids:
+            continue
+        comp = npc.skills.get("mental", {}).get("Computer", 0)
+        if comp >= 4 and npc.name != name:
+            helpers.append({
+                "npcId": npc.id,
+                "name": f"{npc.name} (contact)",
+                "bonus": get_helper_bonus(npc),
+                "concealmentMax": get_concealment_max(npc),
+            })
+            seen_ids.add(npc.id)
     resp["helpers"] = helpers
     return JsonResponse(resp)
 
