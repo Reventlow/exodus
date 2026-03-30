@@ -1,5 +1,9 @@
 # Changelog
 
+## v0.8.56
+- GM persona now reflected in thread roster and thumbnails (shows GM/NPC identity instead of real user)
+- Persona persists on the server per-thread so all players see the correct identity
+
 ## v0.8.55
 - GM can choose persona (GM/SELF/NPC) when creating a new thread; choice carries into the thread
 

@@ -76,8 +76,19 @@ def thread_list(request):
 
     thread = Thread.objects.create(title=title, creator=request.user)
 
-    # Always add creator as member
-    ThreadMembership.objects.create(thread=thread, user=request.user)
+    # Always add creator as member, with optional persona alias
+    alias_kwargs = {}
+    if request.user.is_superuser:
+        alias_type = body.get("aliasType", "")
+        alias_id = body.get("aliasId")
+        alias_name = body.get("aliasName", "")
+        if alias_type:
+            alias_kwargs = {
+                "alias_type": alias_type,
+                "alias_id": alias_id if alias_type in ("npc", "character") else None,
+                "alias_name": alias_name,
+            }
+    ThreadMembership.objects.create(thread=thread, user=request.user, **alias_kwargs)
 
     # Add other members
     for uid in member_ids:
@@ -108,6 +119,37 @@ def thread_detail(request, thread_id):
 
     data = serialize_thread_detail(thread, request.user)
     return JsonResponse(data)
+
+
+@login_required
+@require_POST
+def update_alias(request, thread_id):
+    """Update the current user's display alias in a thread. Superuser only."""
+    if not request.user.is_superuser:
+        return JsonResponse({"error": "Forbidden"}, status=403)
+    thread = get_object_or_404(Thread, pk=thread_id)
+    try:
+        membership = ThreadMembership.objects.get(thread=thread, user=request.user)
+    except ThreadMembership.DoesNotExist:
+        return JsonResponse({"error": "Not a member"}, status=400)
+
+    try:
+        body = json.loads(request.body)
+    except json.JSONDecodeError:
+        return JsonResponse({"error": "Invalid JSON"}, status=400)
+
+    alias_type = body.get("aliasType", "")
+    if alias_type == "self" or not alias_type:
+        membership.alias_type = ""
+        membership.alias_id = None
+        membership.alias_name = ""
+    else:
+        membership.alias_type = alias_type
+        membership.alias_id = body.get("aliasId") if alias_type in ("npc", "character") else None
+        membership.alias_name = body.get("aliasName", "")
+    membership.save(update_fields=["alias_type", "alias_id", "alias_name"])
+
+    return JsonResponse({"status": "ok"})
 
 
 @login_required

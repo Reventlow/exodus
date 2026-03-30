@@ -613,6 +613,18 @@ function CommsApp() {
       setThreads(prev => prev.map(t =>
         t.id === activeThreadId ? Object.assign({}, t, {unreadCount: 0}) : t
       ));
+      // Restore persona from server alias if not already set locally
+      if (IS_STAFF && !(activeThreadId in threadPersonas)) {
+        const myMember = (data.members || []).find(m => m.id === CURRENT_USER_ID);
+        if (myMember && myMember.alias) {
+          const a = myMember.alias;
+          setThreadPersonas(prev => ({...prev, [activeThreadId]:
+            a.type === "gm" ? GM_PERSONA :
+            a.type === "self" || !a.type ? null :
+            { type: a.type, id: a.id, name: a.name }
+          }));
+        }
+      }
     });
   }, [activeThreadId]);
 
@@ -666,16 +678,21 @@ function CommsApp() {
   }
 
   function handleCreateThread(title, memberIds, persona) {
+    const payload = { title: title, members: memberIds };
+    if (persona && IS_STAFF) {
+      payload.aliasType = persona.type;
+      payload.aliasId = persona.id || null;
+      payload.aliasName = persona.name || "";
+    }
     api("/api/comms/threads/", {
       method: "POST",
-      body: JSON.stringify({ title: title, members: memberIds }),
+      body: JSON.stringify(payload),
     }).then(data => {
       setThreads(prev => [data].concat(prev));
       setActiveThreadId(data.id);
       setActiveThread(data);
       setShowNewThread(false);
       setMobileShowThread(true);
-      // Set the chosen persona for this new thread
       if (persona !== undefined) {
         setThreadPersonas(prev => ({...prev, [data.id]: persona}));
       }
@@ -772,7 +789,22 @@ function CommsApp() {
           onDeleteThread={handleDeleteThread}
           dossiers={dossiers}
           postingAs={activeThreadId ? (threadPersonas[activeThreadId] !== undefined ? threadPersonas[activeThreadId] : (IS_STAFF ? GM_PERSONA : null)) : null}
-          onPostingAsChange={persona => activeThreadId && setThreadPersonas(prev => ({...prev, [activeThreadId]: persona}))}
+          onPostingAsChange={persona => {
+            if (!activeThreadId) return;
+            setThreadPersonas(prev => ({...prev, [activeThreadId]: persona}));
+            if (IS_STAFF) {
+              const aliasPayload = persona
+                ? { aliasType: persona.type, aliasId: persona.id || null, aliasName: persona.name || "" }
+                : { aliasType: "self" };
+              api("/api/comms/threads/" + activeThreadId + "/alias/", {
+                method: "POST",
+                body: JSON.stringify(aliasPayload),
+              }).then(() => {
+                api("/api/comms/threads/" + activeThreadId + "/").then(setActiveThread);
+                api("/api/comms/threads/").then(setThreads);
+              });
+            }
+          }}
         />
       </div>
       {showNewThread && (

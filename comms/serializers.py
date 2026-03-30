@@ -9,6 +9,7 @@ from django.contrib.auth.models import User
 from django.utils.timezone import localtime
 
 from characters.models import Character
+from npcs.models import NPC
 
 from .models import Message, Thread, ThreadMembership
 
@@ -21,10 +22,35 @@ def _get_display_name(user: User) -> str:
     return user.username
 
 
-def _serialize_member(user: User) -> dict:
-    """Serialize a thread member with display name and portrait."""
-    character = Character.objects.filter(owner=user).first()
+def _serialize_member(user: User, membership: ThreadMembership | None = None) -> dict:
+    """Serialize a thread member with display name and portrait.
+
+    If the membership has an alias (GM/NPC persona), use that instead
+    of the user's real character identity.
+    """
     data = {"id": user.pk}
+
+    # Check for alias on the membership
+    if membership and membership.alias_type:
+        if membership.alias_type == "gm":
+            data["displayName"] = "GM"
+            data["portrait"] = None
+        elif membership.alias_type == "npc" and membership.alias_id:
+            npc = NPC.objects.filter(pk=membership.alias_id).first()
+            data["displayName"] = membership.alias_name or (npc.name if npc else "NPC")
+            data["portrait"] = npc.image.url if npc and npc.image else None
+        elif membership.alias_type == "character" and membership.alias_id:
+            char = Character.objects.filter(pk=membership.alias_id).first()
+            data["displayName"] = membership.alias_name or (char.name if char else "Character")
+            data["portrait"] = char.profile_picture.url if char and char.profile_picture else None
+        else:
+            data["displayName"] = membership.alias_name or user.username
+            data["portrait"] = None
+        data["alias"] = {"type": membership.alias_type, "id": membership.alias_id, "name": membership.alias_name}
+        return data
+
+    # Default: use the user's character
+    character = Character.objects.filter(owner=user).first()
     if character:
         data["displayName"] = f"{character.name} ({user.username})"
         data["portrait"] = character.profile_picture.url if character.profile_picture else None
@@ -59,7 +85,7 @@ def serialize_message(message: Message) -> dict:
 def serialize_thread_summary(thread: Thread, user: User) -> dict:
     """Serialize a thread for the list view."""
     memberships = thread.memberships.select_related("user").all()
-    members = [_serialize_member(m.user) for m in memberships]
+    members = [_serialize_member(m.user, m) for m in memberships]
 
     # Last message preview
     last_msg = thread.messages.select_related("sender").order_by("-created_at").first()

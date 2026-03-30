@@ -11,6 +11,7 @@ POSTED_AS_TYPE_CHOICES = [
     ("", "Self"),
     ("character", "Character"),
     ("npc", "NPC"),
+    ("gm", "GM"),
 ]
 
 
@@ -48,6 +49,12 @@ class ThreadMembership(models.Model):
     )
     joined_at = models.DateTimeField(auto_now_add=True)
     last_read_at = models.DateTimeField(auto_now_add=True)
+    # Optional display alias — overrides the user's character identity in roster/thumbnails
+    alias_type = models.CharField(
+        max_length=20, choices=POSTED_AS_TYPE_CHOICES, blank=True, default="",
+    )
+    alias_name = models.CharField(max_length=200, blank=True, default="")
+    alias_id = models.PositiveIntegerField(null=True, blank=True)
 
     class Meta:
         unique_together = ("thread", "user")
