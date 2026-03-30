@@ -190,6 +190,8 @@ def send_message(request, thread_id):
     thread = get_object_or_404(Thread, pk=thread_id)
     if not _can_view_thread(request.user, thread):
         return JsonResponse({"error": "Forbidden"}, status=403)
+    if thread.is_connection_closed:
+        return JsonResponse({"error": "Connection closed"}, status=400)
 
     # Support both JSON and multipart (for image uploads)
     image = None

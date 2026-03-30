@@ -863,6 +863,18 @@ function ThreadView({ thread, onSend, onBack, onOpenMembers, onDeleteThread, dos
           </div>
         </div>
         <button onClick={onOpenMembers} style={S.rosterBtn}>ROSTER</button>
+        {!thread.isConnectionClosed && (
+          <button onClick={() => {
+            if (confirm("Close this connection? No further messages or actions will be possible.")) {
+              api("/api/comms/threads/" + thread.id + "/cyber/close/", { method: "POST" }).then(() => {
+                api("/api/comms/threads/" + thread.id + "/").then(data => {
+                  // Force refresh - the parent will pick up isConnectionClosed on next poll
+                  window.location.reload();
+                });
+              });
+            }
+          }} style={{...S.rosterBtn, color: "#c0392b", borderColor: "#c0392b"}}>CLOSE</button>
+        )}
         {IS_STAFF && (
           <button onClick={() => { if (confirm("Delete this thread and all messages?")) onDeleteThread(thread.id); }} style={S.deleteThreadBtn}>&#10005;</button>
         )}
@@ -935,8 +947,14 @@ function ThreadView({ thread, onSend, onBack, onOpenMembers, onDeleteThread, dos
       )}
 
       {/* Input */}
-      <MessageInput onSend={onSend} dossiers={dossiers} postingAs={postingAs} onPostingAsChange={onPostingAsChange}
-        cyberEligible={cyberEligible} onOpenTerminal={() => setShowTerminal(true)} />
+      {thread.isConnectionClosed ? (
+        <div style={{padding: "0.75rem", textAlign: "center", borderTop: "1px solid #a33", background: "rgba(170,51,51,0.05)"}}>
+          <span className="mono-text" style={{color: "#f44", fontSize: "0.8rem", letterSpacing: "1px"}}>CONNECTION CLOSED</span>
+        </div>
+      ) : (
+        <MessageInput onSend={onSend} dossiers={dossiers} postingAs={postingAs} onPostingAsChange={onPostingAsChange}
+          cyberEligible={cyberEligible} onOpenTerminal={() => setShowTerminal(true)} />
+      )}
 
       {/* Image lightbox */}
       {lightboxImage && ReactDOM.createPortal(
