@@ -686,14 +686,19 @@ function CyberTerminal({ thread, members, onClose, postingAs }) {
               </React.Fragment>
             )}
 
-            {(action === "gain_access" || action === "deploy") && eligible && eligible.modifiers && eligible.modifiers.some(m => m.name === "Zero-Day Repository") && (
-              <label style={{display: "flex", alignItems: "center", gap: "0.5rem", marginBottom: "0.5rem", cursor: "pointer"}}>
-                <input type="checkbox" checked={useZeroDay} onChange={e => setUseZeroDay(e.target.checked)}
-                  style={{accentColor: "#0f0"}} />
-                <span style={{color: "#0a3", fontSize: "0.7rem", fontFamily: "var(--font-mono)"}}>
-                  USE ZERO-DAY EXPLOIT (+6 dice, consumes 1 from agency pool)
-                </span>
-              </label>
+            {(action === "gain_access" || action === "deploy") && eligible && eligible.modifiers && eligible.modifiers.filter(m => m.name === "Zero-Day Repository").map(m => {
+              const remaining = m.remaining || 0;
+              const disabled = remaining <= 0;
+              return (
+                <label key="zd" style={{display: "flex", alignItems: "center", gap: "0.5rem", marginBottom: "0.5rem", cursor: disabled ? "not-allowed" : "pointer", opacity: disabled ? 0.4 : 1}}>
+                  <input type="checkbox" checked={useZeroDay && !disabled} onChange={e => !disabled && setUseZeroDay(e.target.checked)}
+                    disabled={disabled} style={{accentColor: "#0f0"}} />
+                  <span style={{color: "#0a3", fontSize: "0.7rem", fontFamily: "var(--font-mono)"}}>
+                    USE ZERO-DAY EXPLOIT (+6 dice) — {remaining} remaining
+                  </span>
+                </label>
+              );
+            })
             )}
 
             {IS_STAFF && (

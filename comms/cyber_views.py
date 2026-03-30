@@ -196,7 +196,13 @@ def cyber_eligible(request):
         elif ps_name in ("compromise firmware", "digital payload"):
             active_mods.append({"name": ps["name"], "bonus": "free action", "applies": "sabotage (+4 close diff)"})
         elif ps_name == "government zero-day repository":
-            active_mods.append({"name": "Zero-Day Repository", "bonus": "+6", "applies": "attack (consumes pool)"})
+            # Fetch remaining pool from agency
+            zd_remaining = 0
+            if agency_id:
+                from agencies.models import Agency as Ag
+                ag = Ag.objects.filter(pk=agency_id).first()
+                zd_remaining = ag.zero_day_pool if ag else 0
+            active_mods.append({"name": "Zero-Day Repository", "bonus": "+6", "applies": "attack (consumes pool)", "remaining": zd_remaining})
 
     # Check for relevant specialisations
     cyber_specs = ["hacking", "encryption", "network security", "intrusion",
