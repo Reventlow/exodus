@@ -97,10 +97,21 @@ ATTR_NAMES = {
 }
 
 
+# Merits that affect cyber terminal rolls
+# name_lower: (bonus_type, bonus_value_or_"rating", applicable_actions)
+# bonus_type: "flat" = fixed bonus, "rating" = bonus equals merit rating
+CYBER_MERITS = {
+    "computer aptitude":    ("flat", 2, ("gain_access", "deploy", "defend", "detect")),
+    "digital infiltration": ("rating", 0, ("gain_access", "deploy")),
+    "digital ghost":        ("flat", 2, ("gain_access", "deploy")),  # Stealth bonus for attacker
+}
+
+
 def get_cyber_pool(action_type: str, attributes: dict, skills: dict,
                    specialisations: list[str] | None = None,
                    gm_modifier: int = 0,
-                   deploy_action: str = "") -> tuple[int, str]:
+                   deploy_action: str = "",
+                   merits: list[dict] | None = None) -> tuple[int, str]:
     """Calculate the dice pool for a cyber action.
 
     Args:
@@ -110,6 +121,7 @@ def get_cyber_pool(action_type: str, attributes: dict, skills: dict,
         specialisations: List of skill specialisation strings.
         gm_modifier: Bonus/penalty dice from GM.
         deploy_action: Sub-action for deploy (e.g. 'backdoor', 'ransomware').
+        merits: List of merit dicts [{name, rating}, ...] from the character/NPC.
 
     Returns:
         Tuple of (pool_size, pool_description).
@@ -147,11 +159,31 @@ def get_cyber_pool(action_type: str, attributes: dict, skills: dict,
                 break
     pool += spec_bonus
 
+    # Check for cyber merits
+    merit_bonus = 0
+    merit_names = []
+    if merits:
+        for m in merits:
+            m_name = (m.get("name") or m.get("merit_name", "")).lower()
+            if m_name in CYBER_MERITS:
+                bonus_type, bonus_val, applicable = CYBER_MERITS[m_name]
+                if action_type in applicable:
+                    if bonus_type == "flat":
+                        merit_bonus += bonus_val
+                        merit_names.append(f"{m.get('name', m_name).title()} +{bonus_val}")
+                    elif bonus_type == "rating":
+                        rating = m.get("rating", m.get("dots", 1))
+                        merit_bonus += rating
+                        merit_names.append(f"{m.get('name', m_name).title()} +{rating}")
+    pool += merit_bonus
+
     parts = [f"{attr_name} {attr_value}", f"{skill_name} {skill_value}"]
     if gm_modifier:
         parts.append(f"GM modifier {gm_modifier:+d}")
     if spec_bonus:
         parts.append("Specialisation +1")
+    for mn in merit_names:
+        parts.append(mn)
     desc = " + ".join(parts) + f" = {pool} dice"
 
     return pool, desc

@@ -534,8 +534,9 @@ function CyberTerminal({ thread, members, onClose, postingAs }) {
               </div>
               <div style={{borderTop: "1px solid #042", paddingTop: "0.5rem"}}>
                 <span style={{color: "#0f0"}}>DICE</span>: d10 pool. 8+ = success. 10s explode. 5+ successes = exceptional. 0 or less = chance die (only 10 succeeds, 1 = dramatic failure).<br/>
-                <span style={{color: "#0f0"}}>MODIFIERS</span>: Relevant specialisations grant +1 die.
-                {IS_STAFF && <span> GM can add bonus/penalty dice via the modifier field.</span>}
+                <span style={{color: "#0f0"}}>MODIFIERS</span>: Relevant specialisations grant +1 die.<br/>
+                <span style={{color: "#0f0"}}>MERITS</span>: Computer Aptitude +2 dice (all actions). Digital Infiltration +rating dice (attack). Digital Ghost +2 dice (attack, harder to detect).
+                {IS_STAFF && <span><br/>GM can add bonus/penalty dice via the modifier field.</span>}
               </div>
             </div>
           </div>

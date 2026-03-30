@@ -59,17 +59,28 @@ def _post_system_alert(thread, message_text):
 
 
 def _get_actor_stats(user, persona_type=None, persona_id=None):
-    """Get attributes, skills, and specialisations for the acting entity."""
+    """Get attributes, skills, specialisations, and merits for the acting entity.
+
+    Returns (attributes, skills, specialisations, computer_skill, name, merits) or None.
+    """
     if persona_type == "npc" and persona_id:
         npc = NPC.objects.filter(pk=persona_id).first()
         if npc:
             comp = npc.skills.get("mental", {}).get("Computer", 0)
-            return npc.attributes, npc.skills, npc.specialisations, comp, npc.name
+            # Get NPC merits from NpcMerit model
+            npc_merits = []
+            for nm in npc.npc_merits.select_related("merit").all():
+                npc_merits.append({"name": nm.merit.name, "rating": nm.rating})
+            return npc.attributes, npc.skills, npc.specialisations, comp, npc.name, npc_merits
         return None
     char = Character.objects.filter(owner=user).first()
     if char:
         comp = char.skills.get("mental", {}).get("Computer", 0)
-        return char.attributes, char.skills, char.specialisations, comp, char.name
+        # Get character merits from CharacterMerit model
+        char_merits = []
+        for cm in char.character_merits.select_related("merit").all():
+            char_merits.append({"name": cm.merit.name, "rating": cm.rating})
+        return char.attributes, char.skills, char.specialisations, comp, char.name, char_merits
     return None
 
 
@@ -162,7 +173,7 @@ def cyber_eligible(request):
     if not stats:
         return JsonResponse({"eligible": False, "reason": "No character found"})
 
-    _, _, _, computer_skill, name = stats
+    _, _, _, computer_skill, name, _ = stats
     eligible = computer_skill >= 4
     return JsonResponse({
         "eligible": eligible,
@@ -281,14 +292,14 @@ def cyber_roll(request, thread_id):
         stats = _get_actor_stats(request.user, persona_type, persona_id)
         if not stats:
             return JsonResponse({"error": "No character found"}, status=400)
-        attributes, skills, specialisations, computer_skill, name = stats
+        attributes, skills, specialisations, computer_skill, name, actor_merits = stats
         if computer_skill < 4 and not request.user.is_superuser:
             return JsonResponse({"error": "Computer skill too low (need 4+)"}, status=403)
         if not persona_name:
             persona_name = name
         pool, pool_desc = get_cyber_pool(
             action_type, attributes, skills, specialisations, gm_modifier,
-            deploy_action=deploy_action,
+            deploy_action=deploy_action, merits=actor_merits,
         )
 
     # Dispatch to action handler
