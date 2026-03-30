@@ -173,13 +173,47 @@ def cyber_eligible(request):
     if not stats:
         return JsonResponse({"eligible": False, "reason": "No character found"})
 
-    _, _, _, computer_skill, name, _, _, _ = stats
+    _, _, specialisations, computer_skill, name, merits, pulling_strings, agency_id = stats
     eligible = computer_skill >= 4
+
+    # Build active modifiers list
+    from .dice import CYBER_MERITS
+    active_mods = []
+    for m in merits:
+        m_name = (m.get("name") or "").lower()
+        if m_name in CYBER_MERITS:
+            bonus_type, bonus_val, applicable = CYBER_MERITS[m_name]
+            if bonus_type == "flat":
+                active_mods.append({"name": m["name"], "bonus": f"+{bonus_val}", "applies": ", ".join(applicable)})
+            else:
+                active_mods.append({"name": m["name"], "bonus": f"+{m.get('rating', 1)}", "applies": ", ".join(applicable)})
+
+    for ps in pulling_strings:
+        ps_name = (ps.get("name") or "").lower()
+        if ps_name == "bot farm":
+            active_mods.append({"name": "Bot Farm", "bonus": "+4 gain access", "applies": "defender +2 detect"})
+        elif ps_name == "backdoor access":
+            active_mods.append({"name": "Backdoor Access", "bonus": "free action", "applies": "infrastructure shutdown"})
+        elif ps_name in ("compromise firmware", "digital payload"):
+            active_mods.append({"name": ps["name"], "bonus": "free action", "applies": "sabotage (+4 close diff)"})
+        elif ps_name == "government zero-day repository":
+            active_mods.append({"name": "Zero-Day Repository", "bonus": "+6", "applies": "attack (consumes pool)"})
+
+    # Check for relevant specialisations
+    cyber_specs = ["hacking", "encryption", "network security", "intrusion",
+                   "cybersecurity", "cyber warfare", "digital forensics"]
+    for spec in (specialisations or []):
+        spec_name = spec.get("name", str(spec)) if isinstance(spec, dict) else str(spec)
+        if spec_name.lower() in cyber_specs:
+            active_mods.append({"name": f"Spec: {spec_name}", "bonus": "+1", "applies": "all actions"})
+            break
+
     return JsonResponse({
         "eligible": eligible,
         "computerSkill": computer_skill,
         "name": name,
         "reason": f"Computer {computer_skill}" + (" (need 4+)" if not eligible else ""),
+        "modifiers": active_mods,
     })
 
 

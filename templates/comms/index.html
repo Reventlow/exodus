@@ -579,6 +579,18 @@ function CyberTerminal({ thread, members, onClose, postingAs }) {
               </div>
             )}
 
+            {eligible && eligible.modifiers && eligible.modifiers.length > 0 && (
+              <div style={{marginBottom: "0.75rem", padding: "0.5rem", border: "1px solid #042", background: "rgba(0,255,0,0.02)"}}>
+                <div style={termStyle.label}>ACTIVE MODIFIERS</div>
+                {eligible.modifiers.map((m, i) => (
+                  <div key={i} style={{fontSize: "0.7rem", color: "#0a3", display: "flex", justifyContent: "space-between", padding: "0.15rem 0"}}>
+                    <span style={{color: "#0f0"}}>{m.name}</span>
+                    <span>{m.bonus} <span style={{color: "#064"}}>({m.applies})</span></span>
+                  </div>
+                ))}
+              </div>
+            )}
+
             <div style={{display: "flex", justifyContent: "space-between", alignItems: "center"}}>
               <div style={termStyle.label}>SELECT ACTION</div>
               <button onClick={() => {
