@@ -411,9 +411,19 @@ function ThreadView({ thread, onSend, onBack, onOpenMembers, dossiers }) {
         <button onClick={onBack} className="mobile-only" style={S.backBtn}>&#8592;</button>
         <div style={S.threadTitleWrap}>
           <h2 className="mono-text text-accent" style={S.threadTitle}>{threadTitle}</h2>
-          <span className="text-muted" style={S.threadSub}>
-            {thread.members.length} operative{thread.members.length !== 1 && "s"}
-          </span>
+          <div style={S.memberPortraits}>
+            {thread.members.map(m => (
+              <div key={m.id} style={S.portraitThumb} title={m.displayName}>
+                {m.portrait ? (
+                  <img src={m.portrait} alt={m.displayName} style={S.portraitImg} />
+                ) : (
+                  <span style={S.portraitInitial}>
+                    {m.displayName.charAt(0).toUpperCase()}
+                  </span>
+                )}
+              </div>
+            ))}
+          </div>
         </div>
         <button onClick={onOpenMembers} style={S.rosterBtn}>ROSTER</button>
       </div>
@@ -804,6 +814,22 @@ const S = {
     textOverflow: "ellipsis", whiteSpace: "nowrap",
   },
   threadSub: { fontSize: "0.7rem" },
+  memberPortraits: {
+    display: "flex", gap: "4px", flexWrap: "wrap", marginTop: "4px",
+  },
+  portraitThumb: {
+    width: 28, height: 28, borderRadius: "50%", overflow: "hidden",
+    border: "1px solid var(--border-color)", background: "var(--bg-input)",
+    display: "flex", alignItems: "center", justifyContent: "center",
+    flexShrink: 0,
+  },
+  portraitImg: {
+    width: "100%", height: "100%", objectFit: "cover",
+  },
+  portraitInitial: {
+    fontSize: "0.65rem", fontFamily: "var(--font-mono)",
+    color: "var(--text-secondary)", fontWeight: "bold",
+  },
   rosterBtn: {
     background: "none", border: "1px solid var(--border-color)",
     borderRadius: "var(--radius-sm)", color: "var(--text-secondary)",

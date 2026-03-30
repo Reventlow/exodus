@@ -22,6 +22,7 @@ from npcs.models import NPC
 from .models import Message, Thread, ThreadMembership
 from .serializers import (
     _get_display_name,
+    _serialize_member,
     serialize_message,
     serialize_thread_detail,
     serialize_thread_summary,
@@ -331,10 +332,7 @@ def unread_count(request):
 def user_list(request):
     """List all users for the member picker."""
     users = User.objects.filter(is_active=True).order_by("username")
-    data = [
-        {"id": u.pk, "displayName": _get_display_name(u)}
-        for u in users
-    ]
+    data = [_serialize_member(u) for u in users]
     return JsonResponse(data, safe=False)
 
 

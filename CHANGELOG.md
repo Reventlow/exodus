@@ -1,5 +1,8 @@
 # Changelog
 
+## v0.8.50
+- Comms thread header now shows member portrait thumbnails instead of operative count text
+
 ## v0.8.49
 - Hide dossier filter buttons when no visible NPCs match that filter for the current user
 

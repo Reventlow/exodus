@@ -21,6 +21,19 @@ def _get_display_name(user: User) -> str:
     return user.username
 
 
+def _serialize_member(user: User) -> dict:
+    """Serialize a thread member with display name and portrait."""
+    character = Character.objects.filter(owner=user).first()
+    data = {"id": user.pk}
+    if character:
+        data["displayName"] = f"{character.name} ({user.username})"
+        data["portrait"] = character.profile_picture.url if character.profile_picture else None
+    else:
+        data["displayName"] = user.username
+        data["portrait"] = None
+    return data
+
+
 def serialize_message(message: Message) -> dict:
     """Serialize a single message."""
     data = {
@@ -46,10 +59,7 @@ def serialize_message(message: Message) -> dict:
 def serialize_thread_summary(thread: Thread, user: User) -> dict:
     """Serialize a thread for the list view."""
     memberships = thread.memberships.select_related("user").all()
-    members = [
-        {"id": m.user_id, "displayName": _get_display_name(m.user)}
-        for m in memberships
-    ]
+    members = [_serialize_member(m.user) for m in memberships]
 
     # Last message preview
     last_msg = thread.messages.select_related("sender").order_by("-created_at").first()
