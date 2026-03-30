@@ -1,5 +1,8 @@
 # Changelog
 
+## v0.9.4
+- Hide cyber terminal button when posting as GM persona
+
 ## v0.9.3
 - GM persona in comms now shows the user's avatar as portrait
 

@@ -617,7 +617,7 @@ function MessageInput({ onSend, dossiers, postingAs, onPostingAsChange, cyberEli
           color: "var(--text-muted)", padding: "0.4rem 0.6rem", cursor: "pointer",
           borderRadius: "4px", fontSize: "1rem", lineHeight: 1,
         }}>&#128247;</button>
-        {cyberEligible && (
+        {cyberEligible && !(postingAs && postingAs.type === "gm") && (
           <button onClick={onOpenTerminal} title="Cyber Terminal" style={{
             background: "transparent", border: "1px solid #0a3",
             color: "#0f0", padding: "0.4rem 0.6rem", cursor: "pointer",
