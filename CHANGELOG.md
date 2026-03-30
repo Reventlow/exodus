@@ -1,5 +1,8 @@
 # Changelog
 
+## v0.8.57
+- Channels list auto-refreshes every 15 seconds to pick up new threads, deletions, and alias changes
+
 ## v0.8.56
 - GM persona now reflected in thread roster and thumbnails (shows GM/NPC identity instead of real user)
 - Persona persists on the server per-thread so all players see the correct identity

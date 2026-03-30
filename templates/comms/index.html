@@ -600,6 +600,11 @@ function CommsApp() {
     if (IS_STAFF) {
       api("/api/comms/dossiers/").then(setDossiers).catch(() => {});
     }
+    // Poll thread list every 15 seconds for changes (new threads, deletions, alias updates)
+    const interval = setInterval(() => {
+      api("/api/comms/threads/").then(setThreads).catch(() => {});
+    }, 15000);
+    return () => clearInterval(interval);
   }, []);
 
   useEffect(() => {
