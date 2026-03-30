@@ -1,5 +1,13 @@
 # Changelog
 
+## v0.9.17
+- Intrusion detection posts a system alert message in the chat (red centered warning)
+- Alert visible to all non-hidden thread members via WebSocket
+- System messages styled distinctly from user messages
+
+## v0.9.16
+- Show passive detection result on every deploy action to increase tension
+
 ## v0.9.15
 - Complete cyber session flow: Gain Access creates session with deploy limits (successes/2)
 - Passive detection on Gain Access (1-4 successes) and each Deploy action

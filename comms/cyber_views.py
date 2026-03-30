@@ -27,6 +27,37 @@ from .models import (
 # Helpers
 # ---------------------------------------------------------------------------
 
+def _post_system_alert(thread, message_text):
+    """Post a system alert message to a thread and broadcast via WebSocket."""
+    from asgiref.sync import async_to_sync
+    from channels.layers import get_channel_layer
+    from .models import Message
+    from .serializers import serialize_message
+
+    # Get or create system user
+    system_user, _ = User.objects.get_or_create(
+        username="__system__", defaults={"is_active": False},
+    )
+
+    msg = Message.objects.create(
+        thread=thread,
+        sender=system_user,
+        content=message_text,
+        posted_as_type="system",
+        posted_as_name="SYSTEM",
+    )
+
+    # Broadcast to all non-hidden members
+    msg_data = serialize_message(msg)
+    channel_layer = get_channel_layer()
+    memberships = thread.memberships.filter(hidden=False).select_related("user")
+    for m in memberships:
+        async_to_sync(channel_layer.group_send)(
+            f"user_{m.user_id}",
+            {"type": "chat.message", "message": msg_data},
+        )
+
+
 def _get_actor_stats(user, persona_type=None, persona_id=None):
     """Get attributes, skills, and specialisations for the acting entity."""
     if persona_type == "npc" and persona_id:
@@ -369,6 +400,7 @@ def _handle_gain_access(thread, actor, target_user, pool, pool_desc,
                 session.detected = True
                 session.save(update_fields=["detected"])
                 detection_msg = f" WARNING: Passive detection by {def_name} succeeded — intrusion detected!"
+                _post_system_alert(thread, "⚠ INTRUSION DETECTED — Unauthorized access to this channel has been identified.")
             else:
                 detection_msg = f" Passive detection by {def_name} failed — undetected."
         else:
@@ -470,6 +502,7 @@ def _handle_deploy(thread, actor, deploy_action, pool, pool_desc,
                 session.detected = True
                 session.save(update_fields=["detected"])
                 detection_msg = f" ⚠ Passive detection by {def_name} — INTRUSION DETECTED!"
+                _post_system_alert(thread, "⚠ INTRUSION DETECTED — Unauthorized activity detected on this channel.")
             else:
                 detection_msg = f" Passive detection by {def_name} — still undetected."
         else:

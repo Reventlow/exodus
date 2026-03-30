@@ -12,6 +12,7 @@ POSTED_AS_TYPE_CHOICES = [
     ("character", "Character"),
     ("npc", "NPC"),
     ("gm", "GM"),
+    ("system", "System"),
 ]
 
 

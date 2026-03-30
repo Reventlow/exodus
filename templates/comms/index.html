@@ -854,11 +854,23 @@ function ThreadView({ thread, onSend, onBack, onOpenMembers, onDeleteThread, dos
       {/* Messages */}
       <div style={S.messageList}>
         {(thread.messages || []).map(msg => {
-          const isOwn = msg.sender.id === CURRENT_USER_ID && !msg.postedAs;
+          const isSystem = msg.postedAs && msg.postedAs.type === "system";
+          const isOwn = !isSystem && msg.sender.id === CURRENT_USER_ID && !msg.postedAs;
           const displayName = msg.postedAs ? msg.postedAs.name : msg.sender.displayName;
-          const dossierUrl = msg.postedAs && msg.postedAs.type !== "gm"
+          const dossierUrl = msg.postedAs && !["gm", "system"].includes(msg.postedAs.type)
             ? (msg.postedAs.type === "character" ? `/character/${msg.postedAs.id}/` : `/npcs/${msg.postedAs.id}/`)
             : null;
+
+          if (isSystem) {
+            return (
+              <div key={msg.id} style={S.systemMsgRow}>
+                <div style={S.systemMsgBubble}>
+                  <span style={S.systemMsgText}>{msg.content}</span>
+                </div>
+              </div>
+            );
+          }
+
           return (
             <div key={msg.id} style={isOwn ? S.msgRowOwn : S.msgRowOther}>
               <div style={isOwn ? S.msgBubbleOwn : S.msgBubbleOther}>
@@ -1385,6 +1397,15 @@ const S = {
   messageList: {
     flex: 1, overflowY: "auto", padding: "1rem",
     display: "flex", flexDirection: "column", gap: "0.5rem",
+  },
+  systemMsgRow: { display: "flex", justifyContent: "center", margin: "0.5rem 0" },
+  systemMsgBubble: {
+    padding: "0.4rem 1rem", border: "1px solid #a33",
+    background: "rgba(170,51,51,0.1)", borderRadius: "4px",
+  },
+  systemMsgText: {
+    fontFamily: "var(--font-mono)", fontSize: "0.75rem",
+    color: "#f44", letterSpacing: "0.5px",
   },
   msgRowOwn: { display: "flex", justifyContent: "flex-end" },
   msgRowOther: { display: "flex", justifyContent: "flex-start" },
