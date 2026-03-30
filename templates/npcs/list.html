@@ -309,21 +309,31 @@
         );
     };
 
-    // Filter bar with filter buttons
+    // Filter bar with filter buttons — only shows filters that have matching NPCs
     const FilterBar = ({ activeFilter, onFilterChange, npcs }) => {
+        const npcList = npcs || [];
+
+        // Check which filters have at least one matching NPC
+        const hasMyContacts = npcList.some(n => !n.isNpcDossier && n.assignedTo === CURRENT_USER);
+        const hasDossiers = npcList.some(n => n.isNpcDossier);
+        const hasUnaffiliated = npcList.some(n => n.isNpcDossier && !n.agencyName);
+        const hasActive = npcList.some(n => n.state === 'active');
+        const hasDeceased = npcList.some(n => n.state === 'deceased');
+        const hasHidden = IS_ADMIN && npcList.some(n => n.isHidden);
+
         const filters = [
             { key: 'all', label: 'ALL' },
-            { key: 'my_contacts', label: 'MY CONTACTS' },
-            { key: 'npc_dossiers', label: 'NPC DOSSIERS' },
-            { key: 'unaffiliated', label: 'UNAFFILIATED' },
-            { key: 'active', label: 'ACTIVE' },
-            { key: 'deceased', label: 'DECEASED' },
         ];
-        if (IS_ADMIN) filters.push({ key: 'hidden', label: 'HIDDEN' });
+        if (hasMyContacts) filters.push({ key: 'my_contacts', label: 'MY CONTACTS' });
+        if (hasDossiers) filters.push({ key: 'npc_dossiers', label: 'NPC DOSSIERS' });
+        if (hasUnaffiliated) filters.push({ key: 'unaffiliated', label: 'UNAFFILIATED' });
+        if (hasActive) filters.push({ key: 'active', label: 'ACTIVE' });
+        if (hasDeceased) filters.push({ key: 'deceased', label: 'DECEASED' });
+        if (hasHidden) filters.push({ key: 'hidden', label: 'HIDDEN' });
 
-        // Dynamic agency filters
+        // Dynamic agency filters — only agencies with visible NPCs
         const agencyNames = [...new Set(
-            (npcs || []).filter(n => n.isNpcDossier && n.agencyName).map(n => n.agencyName)
+            npcList.filter(n => n.isNpcDossier && n.agencyName).map(n => n.agencyName)
         )].sort();
         agencyNames.forEach(name => {
             filters.push({ key: 'agency:' + name, label: name.toUpperCase() });

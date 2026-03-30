@@ -1,5 +1,8 @@
 # Changelog
 
+## v0.8.49
+- Hide dossier filter buttons when no visible NPCs match that filter for the current user
+
 ## v0.8.48
 - Added new base facility type: Engineering Build Project Site (levels 1-5, XP cost matches project scale)
 - Added new base facility type: Science Research Project Site (levels 1-5, XP cost matches project scale)
