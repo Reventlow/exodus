@@ -1,5 +1,8 @@
 # Changelog
 
+## v0.9.10
+- Deploy action in cyber terminal locked until a successful Gain Access has been performed (GM bypasses)
+
 ## v0.9.8
 - Fix: unskilled mental skills now apply -3 penalty (not -1); physical and social remain -1
 

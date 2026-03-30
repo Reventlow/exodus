@@ -419,9 +419,11 @@ function CyberTerminal({ thread, members, onClose, postingAs }) {
     }).catch(() => setRolling(false));
   }
 
+  const hasGainedAccess = cyberLog.some(e => e.actionType === "gain_access" && e.successes > 0);
+
   const actions = [
     { key: "gain_access", label: "GAIN ACCESS", desc: "Int + Computer" },
-    { key: "deploy", label: "DEPLOY", desc: "Wits + Computer" },
+    { key: "deploy", label: "DEPLOY", desc: "Wits + Computer", locked: !hasGainedAccess && !IS_STAFF },
     { key: "defend", label: "DEFEND", desc: "Res + Computer" },
     { key: "detect", label: "DETECT", desc: "Res + Computer" },
   ];
@@ -496,9 +498,10 @@ function CyberTerminal({ thread, members, onClose, postingAs }) {
             <div style={termStyle.actionGrid}>
               {actions.map(a => (
                 <button key={a.key}
-                  style={action === a.key ? termStyle.actionBtnActive : termStyle.actionBtn}
-                  onClick={() => setAction(a.key)}>
-                  {a.label}<br/><span style={{fontSize: "0.65rem", color: "#064"}}>{a.desc}</span>
+                  disabled={a.locked}
+                  style={{...(action === a.key ? termStyle.actionBtnActive : termStyle.actionBtn), ...(a.locked ? {opacity: 0.3, cursor: "not-allowed"} : {})}}
+                  onClick={() => !a.locked && setAction(a.key)}>
+                  {a.label}{a.locked && " [LOCKED]"}<br/><span style={{fontSize: "0.65rem", color: "#064"}}>{a.locked ? "Requires Gain Access" : a.desc}</span>
                 </button>
               ))}
             </div>
