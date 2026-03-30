@@ -474,6 +474,10 @@ function CyberTerminal({ thread, members, onClose, postingAs }) {
   ];
 
   const needsTarget = action === "gain_access";
+  const zdMod = eligible && eligible.modifiers ? eligible.modifiers.find(m => m.name === "Zero-Day Repository") : null;
+  const showZeroDay = (action === "gain_access" || action === "deploy") && zdMod;
+  const zdRemaining = zdMod ? (zdMod.remaining || 0) : 0;
+  const zdDisabled = zdRemaining <= 0;
 
   return (
     <div style={termStyle.overlay}>
@@ -686,22 +690,15 @@ function CyberTerminal({ thread, members, onClose, postingAs }) {
               </React.Fragment>
             )}
 
-            {(() => {
-              if ((action !== "gain_access" && action !== "deploy") || !eligible || !eligible.modifiers) return null;
-              const zdMod = eligible.modifiers.find(m => m.name === "Zero-Day Repository");
-              if (!zdMod) return null;
-              const remaining = zdMod.remaining || 0;
-              const disabled = remaining <= 0;
-              return (
-                <label style={{display: "flex", alignItems: "center", gap: "0.5rem", marginBottom: "0.5rem", cursor: disabled ? "not-allowed" : "pointer", opacity: disabled ? 0.4 : 1}}>
-                  <input type="checkbox" checked={useZeroDay && !disabled} onChange={e => !disabled && setUseZeroDay(e.target.checked)}
-                    disabled={disabled} style={{accentColor: "#0f0"}} />
-                  <span style={{color: "#0a3", fontSize: "0.7rem", fontFamily: "var(--font-mono)"}}>
-                    USE ZERO-DAY EXPLOIT (+6 dice) — {remaining} remaining
-                  </span>
-                </label>
-              );
-            })()}
+            {showZeroDay && (
+              <label style={{display: "flex", alignItems: "center", gap: "0.5rem", marginBottom: "0.5rem", cursor: zdDisabled ? "not-allowed" : "pointer", opacity: zdDisabled ? 0.4 : 1}}>
+                <input type="checkbox" checked={useZeroDay && !zdDisabled} onChange={e => !zdDisabled && setUseZeroDay(e.target.checked)}
+                  disabled={zdDisabled} style={{accentColor: "#0f0"}} />
+                <span style={{color: "#0a3", fontSize: "0.7rem", fontFamily: "var(--font-mono)"}}>
+                  USE ZERO-DAY EXPLOIT (+6 dice) — {zdRemaining} remaining
+                </span>
+              </label>
+            )}
 
             {IS_STAFF && (
               <React.Fragment>
