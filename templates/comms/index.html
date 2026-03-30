@@ -398,6 +398,7 @@ function CyberTerminal({ thread, members, onClose, postingAs }) {
   const [targetId, setTargetId] = useState("");
   const [targetAgencyId, setTargetAgencyId] = useState("");
   const [targetBaseId, setTargetBaseId] = useState("");
+  const [infraTarget, setInfraTarget] = useState("");
   const [agencies, setAgencies] = useState([]);
   const [bases, setBases] = useState([]);
   const [gmMod, setGmMod] = useState(0);
@@ -439,6 +440,7 @@ function CyberTerminal({ thread, members, onClose, postingAs }) {
       targetUserId: targetId ? parseInt(targetId) : null,
       targetAgencyId: targetAgencyId ? parseInt(targetAgencyId) : null,
       targetBaseId: targetBaseId ? parseInt(targetBaseId) : null,
+      infraTarget: infraTarget || "",
       personaType: postingAs ? postingAs.type : "",
       personaId: postingAs ? postingAs.id : null,
       personaName: postingAs ? postingAs.name : "",
@@ -611,7 +613,7 @@ function CyberTerminal({ thread, members, onClose, postingAs }) {
                   <option value="plant_intel">Plant False Intel (Manipulation + Computer)</option>
                   <option value="exfil_comms">Exfiltrate Communications (Wits + Computer)</option>
                   <option value="sabotage">Sabotage Project (Wits + Computer)</option>
-                  <option value="corrupt_data">Corrupt Data (Wits + Computer)</option>
+                  <option value="shutdown_infra">Shut Down Infrastructure (Wits + Computer)</option>
                   <option value="close_connection">Close Connection &amp; Remove Traces (Wits + Computer)</option>
                 </select>
               </React.Fragment>
@@ -629,7 +631,7 @@ function CyberTerminal({ thread, members, onClose, postingAs }) {
               </React.Fragment>
             )}
 
-            {action === "deploy" && ["bad_deals", "corrupt_data", "backdoor", "exfil_comms", "steal_intel"].includes(deployAction) && (
+            {action === "deploy" && ["bad_deals", "backdoor", "exfil_comms", "steal_intel"].includes(deployAction) && (
               <React.Fragment>
                 <div style={termStyle.label}>TARGET AGENCY</div>
                 <select value={targetAgencyId} onChange={e => setTargetAgencyId(e.target.value)} style={termStyle.select}>
@@ -649,6 +651,21 @@ function CyberTerminal({ thread, members, onClose, postingAs }) {
                   {bases.map(b => (
                     <option key={b.id} value={b.id}>{b.name} {b.agencyName ? `(${b.agencyName})` : ''}</option>
                   ))}
+                </select>
+              </React.Fragment>
+            )}
+
+            {action === "deploy" && deployAction === "shutdown_infra" && (
+              <React.Fragment>
+                <div style={termStyle.label}>TARGET INFRASTRUCTURE</div>
+                <select value={infraTarget} onChange={e => setInfraTarget(e.target.value)} style={termStyle.select}>
+                  <option value="">Select infrastructure...</option>
+                  <option value="power">Power Grid</option>
+                  <option value="water">Water Systems</option>
+                  <option value="logistics">Logistics Network</option>
+                  <option value="transport">Transport Infrastructure</option>
+                  <option value="media">Media Channels</option>
+                  <option value="comms">Communications</option>
                 </select>
               </React.Fragment>
             )}

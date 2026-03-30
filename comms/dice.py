@@ -80,7 +80,7 @@ DEPLOY_POOLS = {
     "plant_intel":    (("finesse", "social"),    "mental", "Computer"),      # Manipulation + Computer
     "exfil_comms":    (("finesse", "mental"),    "mental", "Computer"),      # Wits + Computer
     "sabotage":       (("finesse", "mental"),    "mental", "Computer"),      # Wits + Computer
-    "corrupt_data":   (("finesse", "mental"),    "mental", "Computer"),      # Wits + Computer
+    "shutdown_infra":  (("finesse", "mental"),    "mental", "Computer"),      # Wits + Computer
     "close_connection": (("finesse", "mental"),  "mental", "Computer"),      # Wits + Computer
 }
 

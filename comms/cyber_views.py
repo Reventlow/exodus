@@ -269,6 +269,7 @@ def cyber_roll(request, thread_id):
     target_user_id = body.get("targetUserId")
     target_agency_id = body.get("targetAgencyId")
     target_base_id = body.get("targetBaseId")
+    infra_target = body.get("infraTarget", "")
 
     target_user = User.objects.filter(pk=target_user_id).first() if target_user_id else None
 
@@ -478,7 +479,7 @@ def _handle_deploy(thread, actor, deploy_action, pool, pool_desc,
 
     # Resolve the deploy sub-action
     outcome = _resolve_deploy(deploy_action, result, thread, actor,
-                              target_agency_id, target_base_id)
+                              target_agency_id, target_base_id, infra_target)
 
     # Track backdoor for unlimited deploys
     if deploy_action == "backdoor" and result.successes > 0:
@@ -686,7 +687,7 @@ def close_connection(request, thread_id):
 # ---------------------------------------------------------------------------
 
 def _resolve_deploy(deploy_action, result, thread, actor,
-                    target_agency_id=None, target_base_id=None):
+                    target_agency_id=None, target_base_id=None, infra_target=""):
     """Handle deploy sub-action outcomes."""
     from agencies.models import Agency
     s = result.successes
@@ -793,12 +794,21 @@ def _resolve_deploy(deploy_action, result, thread, actor,
     elif deploy_action == "sabotage":
         return f"{s} successes — project sabotaged. Inform GM for narrative resolution."
 
-    elif deploy_action == "corrupt_data":
-        agency_name = "unknown"
-        if target_agency_id:
-            ag = Agency.objects.filter(pk=target_agency_id).first()
-            agency_name = ag.name if ag else "unknown"
-        return f"{s} successes — data corruption deployed against {agency_name}. GM adjusts integrity."
+    elif deploy_action == "shutdown_infra":
+        # Auto-resolve defender agency
+        defender_agency_name = "target"
+        for m in ThreadMembership.objects.filter(thread=thread, hidden=False).exclude(user=actor):
+            if m.alias_type == "npc" and m.alias_id:
+                npc = NPC.objects.filter(pk=m.alias_id).first()
+                if npc and npc.agency_id:
+                    defender_agency_name = Agency.objects.filter(pk=npc.agency_id).values_list("name", flat=True).first() or "target"
+                    break
+        infra_names = {
+            "power": "Power Grid", "water": "Water Systems", "logistics": "Logistics Network",
+            "transport": "Transport Infrastructure", "media": "Media Channels", "comms": "Communications",
+        }
+        infra_name = infra_names.get(infra_target, infra_target or "unknown system")
+        return f"{s} successes — {infra_name} shut down in {defender_agency_name}. GM determines duration and impact."
 
     elif deploy_action == "close_connection":
         removed_hidden = ThreadMembership.objects.filter(
