@@ -686,7 +686,7 @@ function CyberTerminal({ thread, members, onClose, postingAs }) {
               </React.Fragment>
             )}
 
-            {(action === "gain_access" || action === "deploy") && (
+            {(action === "gain_access" || action === "deploy") && eligible && eligible.modifiers && eligible.modifiers.some(m => m.name === "Zero-Day Repository") && (
               <label style={{display: "flex", alignItems: "center", gap: "0.5rem", marginBottom: "0.5rem", cursor: "pointer"}}>
                 <input type="checkbox" checked={useZeroDay} onChange={e => setUseZeroDay(e.target.checked)}
                   style={{accentColor: "#0f0"}} />
