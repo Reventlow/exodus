@@ -412,6 +412,8 @@ function CyberTerminal({ thread, members, onClose, postingAs }) {
   const [connectionClosed, setConnectionClosed] = useState(false);
   const [defenderAgency, setDefenderAgency] = useState(null);
   const [defenderBases, setDefenderBases] = useState([]);
+  const [defenderProjects, setDefenderProjects] = useState([]);
+  const [targetProjectIdx, setTargetProjectIdx] = useState("");
 
   function refreshStatus() {
     api("/api/comms/threads/" + thread.id + "/cyber/").then(data => {
@@ -421,6 +423,7 @@ function CyberTerminal({ thread, members, onClose, postingAs }) {
       setConnectionClosed(data.isConnectionClosed || false);
       if (data.defenderAgency) setDefenderAgency(data.defenderAgency);
       if (data.defenderBases) setDefenderBases(data.defenderBases);
+      if (data.defenderProjects) setDefenderProjects(data.defenderProjects);
     });
   }
 
@@ -446,6 +449,7 @@ function CyberTerminal({ thread, members, onClose, postingAs }) {
       targetAgencyId: defenderAgency ? defenderAgency.id : (targetAgencyId ? parseInt(targetAgencyId) : null),
       targetBaseId: targetBaseId ? parseInt(targetBaseId) : null,
       infraTarget: infraTarget || "",
+      targetProjectIndex: targetProjectIdx !== "" ? parseInt(targetProjectIdx) : null,
       personaType: postingAs ? postingAs.type : "",
       personaId: postingAs ? postingAs.id : null,
       personaName: postingAs ? postingAs.name : "",
@@ -685,6 +689,21 @@ function CyberTerminal({ thread, members, onClose, postingAs }) {
                   <option value="media">Media Channels</option>
                   <option value="comms">Communications</option>
                 </select>
+              </React.Fragment>
+            )}
+
+            {action === "deploy" && deployAction === "sabotage" && (
+              <React.Fragment>
+                <div style={termStyle.label}>TARGET PROJECT</div>
+                <select value={targetProjectIdx} onChange={e => setTargetProjectIdx(e.target.value)} style={termStyle.select}>
+                  <option value="">Select project...</option>
+                  {defenderProjects.map(p => (
+                    <option key={p.index} value={p.index}>{p.name}</option>
+                  ))}
+                </select>
+                {defenderProjects.length === 0 && (
+                  <div style={{color: "#a33", fontSize: "0.7rem", marginBottom: "0.5rem"}}>No declassified projects available to target.</div>
+                )}
               </React.Fragment>
             )}
 

@@ -298,6 +298,18 @@ def thread_cyber_status(request, thread_id):
                     ]
                 break
 
+    # Declassified projects from defender's agency
+    defender_projects = []
+    if defender_agency:
+        from agencies.models import Agency
+        ag = Agency.objects.filter(pk=defender_agency["id"]).first()
+        if ag and ag.projects:
+            defender_projects = [
+                {"index": i, "name": p.get("name", f"Project {i+1}")}
+                for i, p in enumerate(ag.projects)
+                if isinstance(p, dict) and not p.get("classified", True)
+            ]
+
     return JsonResponse({
         "effects": effects_data,
         "actions": actions_data,
@@ -305,6 +317,7 @@ def thread_cyber_status(request, thread_id):
         "isConnectionClosed": thread.is_connection_closed,
         "defenderAgency": defender_agency,
         "defenderBases": defender_bases,
+        "defenderProjects": defender_projects,
     })
 
 
@@ -339,6 +352,7 @@ def cyber_roll(request, thread_id):
     target_agency_id = body.get("targetAgencyId")
     target_base_id = body.get("targetBaseId")
     infra_target = body.get("infraTarget", "")
+    target_project_index = body.get("targetProjectIndex")
 
     target_user = User.objects.filter(pk=target_user_id).first() if target_user_id else None
 
@@ -586,7 +600,8 @@ def _handle_deploy(thread, actor, deploy_action, pool, pool_desc,
 
     # Resolve the deploy sub-action
     outcome = _resolve_deploy(deploy_action, result, thread, actor,
-                              target_agency_id, target_base_id, infra_target)
+                              target_agency_id, target_base_id, infra_target,
+                              target_project_index=target_project_index)
 
     # Track backdoor for unlimited deploys
     if deploy_action == "backdoor" and result.successes > 0:
@@ -794,7 +809,8 @@ def close_connection(request, thread_id):
 # ---------------------------------------------------------------------------
 
 def _resolve_deploy(deploy_action, result, thread, actor,
-                    target_agency_id=None, target_base_id=None, infra_target=""):
+                    target_agency_id=None, target_base_id=None, infra_target="",
+                    target_project_index=None):
     """Handle deploy sub-action outcomes."""
     from agencies.models import Agency
     s = result.successes
@@ -899,7 +915,25 @@ def _resolve_deploy(deploy_action, result, thread, actor,
         return f"{s} successes — communications exfiltrated. GM applies hidden access to target agency threads."
 
     elif deploy_action == "sabotage":
-        return f"{s} successes — project sabotaged. Inform GM for narrative resolution."
+        # Resolve defender agency and project name
+        project_name = "unknown project"
+        defender_agency_name = "target"
+        for m in ThreadMembership.objects.filter(thread=thread, hidden=False).exclude(user=actor):
+            if m.alias_type == "npc" and m.alias_id:
+                npc = NPC.objects.filter(pk=m.alias_id).first()
+                if npc and npc.agency_id:
+                    ag = Agency.objects.filter(pk=npc.agency_id).first()
+                    if ag:
+                        defender_agency_name = ag.name
+                        if target_project_index is not None and ag.projects:
+                            try:
+                                idx = int(target_project_index)
+                                if 0 <= idx < len(ag.projects):
+                                    project_name = ag.projects[idx].get("name", f"Project {idx+1}")
+                            except (ValueError, IndexError):
+                                pass
+                    break
+        return f"{s} successes — '{project_name}' in {defender_agency_name} sabotaged. Inform GM for narrative resolution."
 
     elif deploy_action == "shutdown_infra":
         # Auto-resolve defender agency
