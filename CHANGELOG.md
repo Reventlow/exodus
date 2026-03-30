@@ -1,5 +1,9 @@
 # Changelog
 
+## v0.9.14
+- CyberSession model for tracking active hacking sessions (deploys remaining, detection state, difficulty escalation)
+- Thread connection closed state (prep for revised cyber flow)
+
 ## v0.9.13
 - Steal Intel now requires target agency, picks a random classified field, unlocks it, and logs what was uncovered
 
