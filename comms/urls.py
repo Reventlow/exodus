@@ -2,7 +2,7 @@
 
 from django.urls import path
 
-from . import views
+from . import cyber_views, views
 
 app_name = "comms"
 
@@ -27,4 +27,11 @@ urlpatterns = [
     path("api/comms/unread/", views.unread_count, name="unread-count"),
     path("api/comms/users/", views.user_list, name="user-list"),
     path("api/comms/dossiers/", views.dossier_list, name="dossier-list"),
+
+    # Cyber terminal
+    path("api/comms/cyber/eligible/", cyber_views.cyber_eligible, name="cyber-eligible"),
+    path("api/comms/cyber/intercepted/", cyber_views.intercepted_threads, name="intercepted-threads"),
+    path("api/comms/threads/<int:thread_id>/cyber/", cyber_views.thread_cyber_status, name="cyber-status"),
+    path("api/comms/threads/<int:thread_id>/cyber/roll/", cyber_views.cyber_roll, name="cyber-roll"),
+    path("api/comms/threads/<int:thread_id>/cyber/modify/", cyber_views.cyber_modify, name="cyber-modify"),
 ]

@@ -85,7 +85,9 @@ def serialize_message(message: Message) -> dict:
 def serialize_thread_summary(thread: Thread, user: User) -> dict:
     """Serialize a thread for the list view."""
     memberships = thread.memberships.select_related("user").all()
-    members = [_serialize_member(m.user, m) for m in memberships]
+    # Filter out hidden members (shadow access from cyber terminal)
+    visible = [m for m in memberships if not m.hidden]
+    members = [_serialize_member(m.user, m) for m in visible]
 
     # Last message preview
     last_msg = thread.messages.select_related("sender").order_by("-created_at").first()
