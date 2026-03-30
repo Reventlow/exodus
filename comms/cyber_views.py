@@ -605,17 +605,21 @@ def _handle_detect(thread, actor, pool, pool_desc,
     Only shows 'INTRUSION DETECTED' or 'NO INTRUSION DETECTED'.
     Same result returned if no new attacker action since last detect.
     """
-    # Find any active attacker session on this thread (not by this actor)
-    attacker_session = CyberSession.objects.filter(
-        thread=thread, is_active=True,
-    ).exclude(attacker=actor).first()
+    # Find any active attacker session on this thread (not by this persona)
+    # For NPC-vs-NPC threads, both sides may be the same user (GM),
+    # so exclude by persona name rather than user when a persona is set.
+    sessions_qs = CyberSession.objects.filter(thread=thread, is_active=True)
+    if persona_name:
+        attacker_session = sessions_qs.exclude(attacker_persona_name=persona_name).first()
+    else:
+        attacker_session = sessions_qs.exclude(attacker=actor).first()
 
     if not attacker_session:
         # No active session — check for dormant threats (backdoors, hidden members)
-        has_threats = (
-            ThreadEffect.objects.filter(thread=thread, effect_type="backdoor", is_active=True).exists()
-            or ThreadMembership.objects.filter(thread=thread, hidden=True).exists()
-        )
+        # Exclude threats placed by the detecting actor themselves
+        backdoors = ThreadEffect.objects.filter(thread=thread, effect_type="backdoor", is_active=True).exclude(source_user=actor)
+        hidden = ThreadMembership.objects.filter(thread=thread, hidden=True).exclude(user=actor)
+        has_threats = backdoors.exists() or hidden.exists()
         if not has_threats:
             outcome = "NO INTRUSION DETECTED"
         else:
