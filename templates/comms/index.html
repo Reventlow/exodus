@@ -507,53 +507,102 @@ function CyberTerminal({ thread, members, onClose, postingAs }) {
           <div style={{marginBottom: "1rem", padding: "0.75rem", border: "1px solid #042", background: "rgba(0,255,0,0.02)"}}>
             <div style={{...termStyle.label, marginBottom: "0.5rem", fontSize: "0.75rem", color: "#0f0"}}>TERMINAL OPERATIONS MANUAL</div>
             <div style={{fontSize: "0.7rem", lineHeight: "1.6", color: "#0a3"}}>
+
+              <div style={{marginBottom: "0.75rem", borderBottom: "1px solid #042", paddingBottom: "0.5rem"}}>
+                <span style={{color: "#0f0", fontWeight: "bold"}}>ACCESS REQUIREMENT</span><br/>
+                Computer 4+ required. Terminal icon appears next to the message input when eligible.
+                Not available when posting as GM persona.
+              </div>
+
               <div style={{marginBottom: "0.75rem", borderBottom: "1px solid #042", paddingBottom: "0.5rem"}}>
                 <span style={{color: "#0f0", fontWeight: "bold"}}>GAIN ACCESS</span> — <span style={{color: "#064"}}>Intelligence + Computer</span><br/>
                 Breach target's comm encryption. On success, gain hidden read-only access
                 to all threads the target participates in (excluding direct GM channels).
-                You will not appear in their roster.<br/><br/>
+                You will not appear in their roster. Intercepted channels appear in a separate
+                section of your channel list.<br/><br/>
                 <span style={{color: "#064"}}>1-4 successes:</span> Access granted. The target gets a passive detection roll
-                (Resolve + Computer) against your successes. If they detect you, a system
-                alert appears in the chat. Unskilled defenders get no passive roll.<br/>
+                (Resolve + Computer) against your successes as difficulty. If they detect you, a system
+                alert appears in the chat. Unskilled defenders (Computer 0) get no passive roll.<br/>
                 <span style={{color: "#064"}}>5+ successes (exceptional):</span> Undetected breach — no passive detection triggered.<br/>
                 <span style={{color: "#064"}}>Deploy actions:</span> You receive successes ÷ 2 (rounded down) deploy actions.<br/>
                 <span style={{color: "#064"}}>Re-entry:</span> Each closed connection adds +1 difficulty to the next Gain Access attempt.
               </div>
+
               <div style={{marginBottom: "0.75rem", borderBottom: "1px solid #042", paddingBottom: "0.5rem"}}>
                 <span style={{color: "#0f0", fontWeight: "bold"}}>DEPLOY</span> — <span style={{color: "#064"}}>Varies by operation</span><br/>
-                Requires successful Gain Access first. Each operation costs one deploy action
-                and triggers a new passive detection roll on the defender.<br/>
-                Deploy a <span style={{color: "#0f0"}}>Permanent Backdoor</span> for unlimited actions until connection is closed.<br/>
+                Requires successful Gain Access first. Locked until access is gained.
+                Each operation costs one deploy action and triggers a new passive detection roll on the defender.
                 When all deploy actions are used, the connection auto-closes.<br/><br/>
-                <span style={{color: "#064"}}>Operations:</span> Backdoor, Ransomware, Force Bad Deals (UTC),
-                Steal Intel, Discover Hidden Base, Gain Base Access,
-                Plant False Intel, Exfiltrate Comms, Sabotage Project,
-                Corrupt Data, Close Connection &amp; Remove Traces.
+                <span style={{color: "#064"}}>Operations:</span><br/>
+                • <span style={{color: "#0f0"}}>Permanent Backdoor</span> (Wits + Computer) — unlimited deploy actions until connection closed<br/>
+                • <span style={{color: "#0f0"}}>Ransomware</span> (Wits + Computer) — lock target base systems until swept<br/>
+                • <span style={{color: "#0f0"}}>Force Bad Deals</span> (Manipulation + Computer) — fraudulent UTC trade orders on behalf of target agency<br/>
+                • <span style={{color: "#0f0"}}>Steal Intel</span> (Intelligence + Computer) — reveal a random classified field on target agency<br/>
+                • <span style={{color: "#0f0"}}>Discover Hidden Base</span> (Intelligence + Investigation) — unhide a random hidden base<br/>
+                • <span style={{color: "#0f0"}}>Gain Base System Access</span> (Intelligence + Computer) — reveal hidden sections of a target base<br/>
+                • <span style={{color: "#0f0"}}>Plant False Intel</span> (Manipulation + Computer) — inject disinformation (GM narrates)<br/>
+                • <span style={{color: "#0f0"}}>Exfiltrate Comms</span> (Wits + Computer) — tap target agency NPC threads<br/>
+                • <span style={{color: "#0f0"}}>Sabotage Project</span> (Wits + Computer) — reduce project completion by successes (min 0)<br/>
+                • <span style={{color: "#0f0"}}>Shut Down Infrastructure</span> (Wits + Computer) — disable power, water, logistics, transport, media, or comms<br/>
+                • <span style={{color: "#0f0"}}>Close Connection &amp; Remove Traces</span> — no roll, removes all backdoors and hidden access silently
               </div>
+
               <div style={{marginBottom: "0.75rem", borderBottom: "1px solid #042", paddingBottom: "0.5rem"}}>
                 <span style={{color: "#0f0", fontWeight: "bold"}}>DEFEND</span> — <span style={{color: "#064"}}>Resolve + Computer</span><br/>
                 Strengthen this channel's encryption and sweep for threats. Removes
                 active backdoors, expels hidden intruders, terminates active hacker sessions,
                 and raises the encryption level making future breaches harder.
               </div>
+
               <div style={{marginBottom: "0.75rem", borderBottom: "1px solid #042", paddingBottom: "0.5rem"}}>
                 <span style={{color: "#0f0", fontWeight: "bold"}}>DETECT</span> — <span style={{color: "#064"}}>Resolve + Computer + 2 bonus</span><br/>
                 Active scan for intrusion. Difficulty equals the attacker's Gain Access successes.
-                Only shows <span style={{color: "#0f0"}}>INTRUSION DETECTED</span> or <span style={{color: "#0f0"}}>NO INTRUSION DETECTED</span> — dice are not shown.
+                Only shows <span style={{color: "#0f0"}}>INTRUSION DETECTED</span> or <span style={{color: "#0f0"}}>NO INTRUSION DETECTED</span> — dice are never shown.
                 Can only be triggered after a Gain Access or Deploy action has occurred.
-                Repeating Detect before a new attacker action returns the cached result.
+                Repeating Detect before a new attacker action returns the cached result (no re-roll).
               </div>
+
               <div style={{marginBottom: "0.75rem", borderBottom: "1px solid #042", paddingBottom: "0.5rem"}}>
                 <span style={{color: "#0f0", fontWeight: "bold"}}>CLOSE CONNECTION</span><br/>
-                Any party can close the connection. Once closed, no new messages can be sent
-                and no terminal actions can be taken on this thread. Permanently locks the channel.
+                Any party can close the connection from the chat header or terminal.
+                Once closed, no new messages can be sent and no terminal actions can be taken.
+                Permanently locks the channel. Close Connection &amp; Remove Traces (deploy action)
+                silently removes your backdoors and hidden access without triggering detection.
               </div>
-              <div style={{borderTop: "1px solid #042", paddingTop: "0.5rem"}}>
-                <span style={{color: "#0f0"}}>DICE</span>: d10 pool. 8+ = success. 10s explode. 5+ successes = exceptional. 0 or less = chance die (only 10 succeeds, 1 = dramatic failure).<br/>
-                <span style={{color: "#0f0"}}>MODIFIERS</span>: Relevant specialisations grant +1 die.<br/>
-                <span style={{color: "#0f0"}}>MERITS</span>: Computer Aptitude +2 dice (all actions). Digital Infiltration +rating dice (attack). Digital Ghost +2 dice (attack, harder to detect).<br/>
-                <span style={{color: "#0f0"}}>PULLING STRINGS</span>: Bot Farm +4 gain access (defender +2 detect). Backdoor Access = free infrastructure shutdown. Compromise Firmware / Digital Payload = free sabotage (+4 close difficulty). Zero-Day Repository +6 attack (consumes from agency pool).
-                {IS_STAFF && <span><br/>GM can add bonus/penalty dice via the modifier field.</span>}
+
+              <div style={{marginBottom: "0.75rem", borderBottom: "1px solid #042", paddingBottom: "0.5rem"}}>
+                <span style={{color: "#0f0", fontWeight: "bold"}}>HELPERS</span><br/>
+                NPC dossiers from your agency or personal contacts with Computer 4+ can assist.
+                Select a helper before Gain Access.<br/>
+                <span style={{color: "#064"}}>Bonus dice:</span> (Helper's Computer + Wits) ÷ 2 added to all attack rolls.<br/>
+                <span style={{color: "#064"}}>Digital Concealment:</span> Helper has a concealment track (Computer + Resolve + merit bonuses).
+                Each action triggers a detection roll against the helper. Successes mark boxes on their track.
+                The last 4 boxes give the defender +1, +2, +3, +4 bonus to detection rolls.
+                When all boxes are filled, the intrusion is automatically detected.
+                Track resets when the connection is closed.
+              </div>
+
+              <div style={{marginBottom: "0.75rem", borderBottom: "1px solid #042", paddingBottom: "0.5rem"}}>
+                <span style={{color: "#0f0", fontWeight: "bold"}}>DICE</span><br/>
+                d10 pool. 8+ = success. 10s explode (roll again). 5+ successes = exceptional success.<br/>
+                0 or fewer dice = chance die (single d10, only 10 succeeds, 1 = dramatic failure, no explosions).<br/>
+                <span style={{color: "#064"}}>Unskilled penalty:</span> -3 for mental skills at 0, -1 for physical/social skills at 0.
+              </div>
+
+              <div style={{marginBottom: "0.75rem", borderBottom: "1px solid #042", paddingBottom: "0.5rem"}}>
+                <span style={{color: "#0f0", fontWeight: "bold"}}>MERITS</span><br/>
+                • <span style={{color: "#0f0"}}>Computer Aptitude</span> — +2 dice on all terminal actions<br/>
+                • <span style={{color: "#0f0"}}>Digital Infiltration</span> (AI) — +rating dice on Gain Access and Deploy<br/>
+                • <span style={{color: "#0f0"}}>Digital Ghost</span> (AI/Engineer) — +2 dice on attack, +2 concealment levels for helpers
+              </div>
+
+              <div style={{paddingTop: "0.5rem"}}>
+                <span style={{color: "#0f0", fontWeight: "bold"}}>PULLING STRINGS</span><br/>
+                • <span style={{color: "#0f0"}}>Bot Farm</span> — +4 dice on Gain Access, but defender gets +2 to all detection rolls during session<br/>
+                • <span style={{color: "#0f0"}}>Backdoor Access</span> — Shut Down Infrastructure does not cost a deploy action<br/>
+                • <span style={{color: "#0f0"}}>Compromise Firmware / Digital Payload</span> — Sabotage Project does not cost a deploy action, but Close Connection difficulty +4<br/>
+                • <span style={{color: "#0f0"}}>Government Zero-Day Repository</span> — +6 dice on any attack roll, consumes 1 from agency's zero-day pool
+                {IS_STAFF && <span><br/><br/><span style={{color: "#0f0"}}>GM:</span> Modifier field adds bonus/penalty dice to any roll.</span>}
               </div>
             </div>
           </div>
