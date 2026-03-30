@@ -128,6 +128,40 @@ def _passive_detect(thread, attacker, difficulty, defender_bonus=0):
     return detected, result, name
 
 
+def _detect_helper(session, thread, actor):
+    """Run detection against the helper NPC. Returns message string."""
+    from .dice import get_concealment_max, get_concealment_defender_bonus
+    if not session.helper_npc_id:
+        return ""
+    helper_npc = NPC.objects.filter(pk=session.helper_npc_id).first()
+    if not helper_npc:
+        return ""
+    c_max = get_concealment_max(helper_npc)
+    c_bonus = get_concealment_defender_bonus(session.helper_concealment_damage, c_max)
+
+    # Defender rolls against helper with concealment bonus
+    passive = _passive_detect(thread, actor, session.gain_access_successes, c_bonus)
+    if not passive:
+        return f" Helper {helper_npc.name}: no detection (defender unskilled)."
+
+    detected, det_result, def_name = passive
+    if detected and det_result.successes > 0:
+        # Mark concealment boxes
+        session.helper_concealment_damage = min(
+            session.helper_concealment_damage + det_result.successes, c_max
+        )
+        session.save(update_fields=["helper_concealment_damage"])
+        if session.helper_concealment_damage >= c_max:
+            session.detected = True
+            session.save(update_fields=["detected"])
+            _post_system_alert(thread, f"⚠ INTRUSION DETECTED — Helper operative {helper_npc.name} compromised!")
+            return f" ⚠ Helper {helper_npc.name}: EXPOSED! Concealment {session.helper_concealment_damage}/{c_max} — intrusion detected!"
+        new_bonus = get_concealment_defender_bonus(session.helper_concealment_damage, c_max)
+        bonus_text = f" (defender +{new_bonus})" if new_bonus > 0 else ""
+        return f" Helper {helper_npc.name}: concealment {session.helper_concealment_damage}/{c_max}{bonus_text}."
+    return f" Helper {helper_npc.name}: concealment {session.helper_concealment_damage}/{c_max} — undetected."
+
+
 def _log_action(thread, actor, action_type, pool, result, outcome,
                 persona_type="", persona_id=None, persona_name="",
                 target_user=None, gm_modifier=0, notes=""):
@@ -213,13 +247,28 @@ def cyber_eligible(request):
             active_mods.append({"name": f"Spec: {spec_name}", "bonus": "+1", "applies": "all actions"})
             break
 
-    return JsonResponse({
+    resp = {
         "eligible": eligible,
         "computerSkill": computer_skill,
         "name": name,
         "reason": f"Computer {computer_skill}" + (" (need 4+)" if not eligible else ""),
         "modifiers": active_mods,
-    })
+    }
+    # Available helpers: NPC dossiers in actor's agency with Computer 4+
+    from .dice import get_helper_bonus, get_concealment_max
+    helpers = []
+    if agency_id:
+        for npc in NPC.objects.filter(agency_id=agency_id, is_npc_dossier=True):
+            comp = npc.skills.get("mental", {}).get("Computer", 0)
+            if comp >= 4 and npc.name != name:  # Exclude self
+                helpers.append({
+                    "npcId": npc.id,
+                    "name": npc.name,
+                    "bonus": get_helper_bonus(npc),
+                    "concealmentMax": get_concealment_max(npc),
+                })
+    resp["helpers"] = helpers
+    return JsonResponse(resp)
 
 
 # ---------------------------------------------------------------------------
@@ -271,6 +320,20 @@ def thread_cyber_status(request, thread_id):
     ).first()
     session_data = None
     if session:
+        from .dice import get_concealment_max, get_concealment_defender_bonus
+        helper_data = None
+        if session.helper_npc_id:
+            helper_npc = NPC.objects.filter(pk=session.helper_npc_id).first()
+            if helper_npc:
+                c_max = get_concealment_max(helper_npc)
+                c_bonus = get_concealment_defender_bonus(session.helper_concealment_damage, c_max)
+                helper_data = {
+                    "npcId": session.helper_npc_id,
+                    "name": helper_npc.name,
+                    "concealmentDamage": session.helper_concealment_damage,
+                    "concealmentMax": c_max,
+                    "defenderBonus": c_bonus,
+                }
         session_data = {
             "id": session.pk,
             "gainAccessSuccesses": session.gain_access_successes,
@@ -279,6 +342,7 @@ def thread_cyber_status(request, thread_id):
             "detected": session.detected,
             "isActive": session.is_active,
             "difficultyPenalty": session.difficulty_penalty,
+            "helper": helper_data,
         }
 
     # Resolve defender's agency and bases for target pickers
@@ -352,6 +416,7 @@ def cyber_roll(request, thread_id):
     target_agency_id = body.get("targetAgencyId")
     target_base_id = body.get("targetBaseId")
     infra_target = body.get("infraTarget", "")
+    helper_npc_id = body.get("helperNpcId")
     target_project_index = body.get("targetProjectIndex")
 
     target_user = User.objects.filter(pk=target_user_id).first() if target_user_id else None
@@ -386,11 +451,23 @@ def cyber_roll(request, thread_id):
             else:
                 return JsonResponse({"error": "No zero-day vulnerabilities remaining in agency pool."}, status=400)
 
+    # Apply helper bonus
+    helper_bonus_desc = ""
+    if helper_npc_id and action_type in ("gain_access", "deploy"):
+        from .dice import get_helper_bonus
+        helper_npc = NPC.objects.filter(pk=helper_npc_id).first()
+        if helper_npc:
+            hb = get_helper_bonus(helper_npc)
+            pool += hb
+            helper_bonus_desc = f" + {helper_npc.name} +{hb}"
+            pool_desc = pool_desc.rsplit("=", 1)[0] + helper_bonus_desc + f" = {pool} dice"
+
     # Dispatch to action handler
     if action_type == "gain_access":
         return _handle_gain_access(
             thread, request.user, target_user, pool, pool_desc,
             persona_type, persona_id, persona_name, gm_modifier, ps_flags,
+            helper_npc_id=helper_npc_id,
         )
     elif action_type == "deploy":
         return _handle_deploy(
@@ -417,7 +494,8 @@ def cyber_roll(request, thread_id):
 # ---------------------------------------------------------------------------
 
 def _handle_gain_access(thread, actor, target_user, pool, pool_desc,
-                        persona_type, persona_id, persona_name, gm_modifier, ps_flags=None):
+                        persona_type, persona_id, persona_name, gm_modifier, ps_flags=None,
+                        helper_npc_id=None):
     """Handle Gain Access with session creation and passive detection."""
     ps_flags = ps_flags or {}
 
@@ -462,6 +540,8 @@ def _handle_gain_access(thread, actor, target_user, pool, pool_desc,
         deploys_remaining=deploys,
         difficulty_penalty=prior_closes,
         detect_stale=True,
+        helper_npc_id=helper_npc_id,
+        helper_concealment_damage=0,
     )
 
     # Grant hidden thread access
@@ -506,10 +586,17 @@ def _handle_gain_access(thread, actor, target_user, pool, pool_desc,
     else:
         detection_msg = " Exceptional success — no passive detection triggered."
 
+    # Helper concealment detection
+    helper_msg = ""
+    if helper_npc_id and not exceptional:
+        helper_msg = _detect_helper(session, thread, actor)
+
     parts = [f"{s} successes — access gained. {deploys} deploy action(s) available."]
     if granted:
         parts.append(f"Hidden access to {granted} thread(s).")
     parts.append(detection_msg.strip())
+    if helper_msg:
+        parts.append(helper_msg)
 
     outcome = " ".join(parts)
     _log_action(thread, actor, "gain_access", effective_pool, result, outcome,
@@ -632,6 +719,11 @@ def _handle_deploy(thread, actor, deploy_action, pool, pool_desc,
             detection_msg = " No passive detection (defender unskilled)."
         session.detect_stale = False
         session.save(update_fields=["detect_stale"])
+        # Helper concealment detection on deploy
+        if session.helper_npc_id:
+            helper_msg = _detect_helper(session, thread, actor)
+            if helper_msg:
+                detection_msg += helper_msg
 
     # Auto-close if deploys exhausted
     if session and not session.has_backdoor and session.deploys_remaining <= 0:

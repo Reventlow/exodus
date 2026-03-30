@@ -414,6 +414,7 @@ function CyberTerminal({ thread, members, onClose, postingAs }) {
   const [defenderBases, setDefenderBases] = useState([]);
   const [defenderProjects, setDefenderProjects] = useState([]);
   const [targetProjectIdx, setTargetProjectIdx] = useState("");
+  const [selectedHelper, setSelectedHelper] = useState("");
 
   function refreshStatus() {
     api("/api/comms/threads/" + thread.id + "/cyber/").then(data => {
@@ -450,6 +451,7 @@ function CyberTerminal({ thread, members, onClose, postingAs }) {
       targetBaseId: targetBaseId ? parseInt(targetBaseId) : null,
       infraTarget: infraTarget || "",
       targetProjectIndex: targetProjectIdx !== "" ? parseInt(targetProjectIdx) : null,
+      helperNpcId: selectedHelper ? parseInt(selectedHelper) : null,
       personaType: postingAs ? postingAs.type : "",
       personaId: postingAs ? postingAs.id : null,
       personaName: postingAs ? postingAs.name : "",
@@ -600,6 +602,41 @@ function CyberTerminal({ thread, members, onClose, postingAs }) {
                     <span>{m.bonus} <span style={{color: "#064"}}>({m.applies})</span></span>
                   </div>
                 ))}
+              </div>
+            )}
+
+            {eligible && eligible.helpers && eligible.helpers.length > 0 && !session && (
+              <div style={{marginBottom: "0.75rem"}}>
+                <div style={termStyle.label}>HELPER (agency dossier)</div>
+                <select value={selectedHelper} onChange={e => setSelectedHelper(e.target.value)} style={termStyle.select}>
+                  <option value="">None — solo operation</option>
+                  {eligible.helpers.map(h => (
+                    <option key={h.npcId} value={h.npcId}>{h.name} (+{h.bonus} dice, concealment {h.concealmentMax})</option>
+                  ))}
+                </select>
+              </div>
+            )}
+
+            {session && session.helper && (
+              <div style={{marginBottom: "0.75rem", padding: "0.5rem", border: "1px solid #042", background: "rgba(0,255,0,0.02)"}}>
+                <div style={termStyle.label}>HELPER: {session.helper.name}</div>
+                <div style={{display: "flex", gap: "3px", marginTop: "0.25rem"}}>
+                  {Array.from({length: session.helper.concealmentMax}, (_, i) => {
+                    const filled = i < session.helper.concealmentDamage;
+                    const isLast4 = i >= session.helper.concealmentMax - 4;
+                    return (
+                      <div key={i} style={{
+                        width: 16, height: 16, borderRadius: "2px",
+                        border: "1px solid " + (isLast4 ? "#a33" : "#0a3"),
+                        background: filled ? (isLast4 ? "#a33" : "#0a3") : "transparent",
+                      }} />
+                    );
+                  })}
+                  <span style={{color: "#0a3", fontSize: "0.7rem", marginLeft: "0.5rem"}}>
+                    {session.helper.concealmentDamage}/{session.helper.concealmentMax}
+                    {session.helper.defenderBonus > 0 && <span style={{color: "#a33"}}> (defender +{session.helper.defenderBonus})</span>}
+                  </span>
+                </div>
               </div>
             )}
 

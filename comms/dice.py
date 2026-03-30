@@ -231,3 +231,30 @@ def get_cyber_pool(action_type: str, attributes: dict, skills: dict,
     desc = " + ".join(parts) + f" = {pool} dice"
 
     return pool, desc, flags
+
+
+def get_helper_bonus(npc) -> int:
+    """Calculate helper dice bonus: (Computer + Wits) // 2."""
+    computer = npc.skills.get("mental", {}).get("Computer", 0)
+    wits = npc.attributes.get("finesse", {}).get("mental", 1)
+    return (computer + wits) // 2
+
+
+def get_concealment_max(npc) -> int:
+    """Calculate digital concealment max: Computer + Resolve."""
+    computer = npc.skills.get("mental", {}).get("Computer", 0)
+    resolve = npc.attributes.get("resistance", {}).get("mental", 1)
+    return computer + resolve
+
+
+def get_concealment_defender_bonus(damage: int, max_levels: int) -> int:
+    """Get defender bonus from helper's concealment damage.
+
+    Last 4 levels give +1, +2, +3, +4 to defender detection.
+    """
+    if max_levels <= 0:
+        return 0
+    threshold = max_levels - 4  # First box that gives a bonus
+    if damage <= threshold:
+        return 0
+    return min(damage - threshold, 4)

@@ -233,6 +233,14 @@ class CyberSession(models.Model):
     difficulty_penalty = models.IntegerField(
         default=0, help_text="Extra difficulty on next Gain Access (+1 per prior close).",
     )
+    # Helper NPC (dossier from attacker's agency with Computer 4+)
+    helper_npc_id = models.PositiveIntegerField(
+        null=True, blank=True,
+        help_text="NPC dossier ID assisting the attacker.",
+    )
+    helper_concealment_damage = models.IntegerField(
+        default=0, help_text="Boxes marked on helper's digital concealment track.",
+    )
     # State
     is_active = models.BooleanField(default=True)
     is_closed = models.BooleanField(
