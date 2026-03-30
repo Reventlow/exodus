@@ -24,6 +24,42 @@
         </div>
     </div>
 
+    <div class="glass-panel" style="padding: 2rem; margin-bottom: 1.5rem;">
+        <h3 class="mono-text text-accent" style="margin-bottom: 1.5rem; border-bottom: 1px solid var(--border-color); padding-bottom: 0.5rem;">
+            AVATAR
+        </h3>
+        <div style="display: flex; align-items: center; gap: 1.5rem; margin-bottom: 1rem;">
+            {% if profile.avatar %}
+            <img src="{{ profile.avatar.url }}" alt="Avatar"
+                style="width: 80px; height: 80px; border-radius: 50%; object-fit: cover; border: 2px solid var(--border-color);">
+            {% else %}
+            <div style="width: 80px; height: 80px; border-radius: 50%; background: var(--bg-input); border: 2px solid var(--border-color); display: flex; align-items: center; justify-content: center;">
+                <span class="mono-text text-secondary" style="font-size: 2rem;">{{ user.username|first|upper }}</span>
+            </div>
+            {% endif %}
+            <div style="flex: 1;">
+                <form method="post" enctype="multipart/form-data">
+                    {% csrf_token %}
+                    <input type="hidden" name="action" value="avatar">
+                    <div style="display: flex; gap: 0.5rem; align-items: center; flex-wrap: wrap;">
+                        <label style="background: var(--bg-input); border: 1px solid var(--border-color); padding: 0.5rem 1rem; cursor: pointer; font-family: var(--font-mono); font-size: 0.8rem; color: var(--text-secondary);">
+                            CHOOSE FILE
+                            <input type="file" name="avatar" accept="image/*"
+                                onchange="this.form.submit()"
+                                style="display: none;">
+                        </label>
+                        {% if profile.avatar %}
+                        <button type="submit" name="remove_avatar" value="1"
+                            style="background: none; border: 1px solid var(--accent-danger, #c0392b); color: var(--accent-danger, #c0392b); padding: 0.5rem 1rem; cursor: pointer; font-family: var(--font-mono); font-size: 0.8rem;">
+                            REMOVE
+                        </button>
+                        {% endif %}
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
     <div class="glass-panel" style="padding: 2rem;">
         <h3 class="mono-text text-accent" style="margin-bottom: 1.5rem; border-bottom: 1px solid var(--border-color); padding-bottom: 0.5rem;">
             UPDATE PASSPHRASE

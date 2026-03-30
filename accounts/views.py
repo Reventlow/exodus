@@ -81,21 +81,41 @@ def register_view(request):
 
 @login_required
 def profile_view(request):
-    """Show profile info and password change form."""
+    """Show profile info, avatar upload, and password change form."""
+    from .models import UserProfile
+
+    profile, _ = UserProfile.objects.get_or_create(user=request.user)
+
     if request.method == "POST":
-        form = PasswordChangeForm(request.user, request.POST)
-        if form.is_valid():
-            user = form.save()
-            # Keep the user logged in after password change
-            from django.contrib.auth import update_session_auth_hash
-            update_session_auth_hash(request, user)
-            messages.success(request, "Passphrase updated successfully.")
+        action = request.POST.get("action", "")
+
+        if action == "avatar":
+            if "avatar" in request.FILES:
+                profile.avatar = request.FILES["avatar"]
+                profile.save(update_fields=["avatar"])
+                messages.success(request, "Avatar updated.")
+            elif request.POST.get("remove_avatar"):
+                profile.avatar = None
+                profile.save(update_fields=["avatar"])
+                messages.success(request, "Avatar removed.")
             return redirect("accounts:profile")
+
         else:
-            for field, field_errors in form.errors.items():
-                for error in field_errors:
-                    messages.error(request, error)
+            form = PasswordChangeForm(request.user, request.POST)
+            if form.is_valid():
+                user = form.save()
+                from django.contrib.auth import update_session_auth_hash
+                update_session_auth_hash(request, user)
+                messages.success(request, "Passphrase updated successfully.")
+                return redirect("accounts:profile")
+            else:
+                for field, field_errors in form.errors.items():
+                    for error in field_errors:
+                        messages.error(request, error)
     else:
         form = PasswordChangeForm(request.user)
 
-    return render(request, "accounts/profile.html", {"form": form})
+    return render(request, "accounts/profile.html", {
+        "form": form,
+        "profile": profile,
+    })

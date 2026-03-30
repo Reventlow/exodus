@@ -1,5 +1,8 @@
 # Changelog
 
+## v0.9.1
+- User avatar upload on profile page (used as fallback portrait in comms when no character portrait exists)
+
 ## v0.9.0
 - **Cyber Terminal**: hacking overlay for characters with Computer 4+ (green-on-black terminal UI)
 - Actions: Gain Access (hidden thread surveillance), Deploy (backdoor), Defend (encrypt/sweep), Detect (reveal threats)

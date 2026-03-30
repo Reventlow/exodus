@@ -49,7 +49,7 @@ def _serialize_member(user: User, membership: ThreadMembership | None = None) ->
         data["alias"] = {"type": membership.alias_type, "id": membership.alias_id, "name": membership.alias_name}
         return data
 
-    # Default: use the user's character
+    # Default: use the user's character portrait, fall back to avatar
     character = Character.objects.filter(owner=user).first()
     if character:
         data["displayName"] = f"{character.name} ({user.username})"
@@ -57,6 +57,13 @@ def _serialize_member(user: User, membership: ThreadMembership | None = None) ->
     else:
         data["displayName"] = user.username
         data["portrait"] = None
+
+    # Fall back to user avatar if no character portrait
+    if not data["portrait"]:
+        profile = getattr(user, "profile", None)
+        if profile and profile.avatar:
+            data["portrait"] = profile.avatar.url
+
     return data
 
 
