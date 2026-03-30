@@ -768,12 +768,21 @@ def _resolve_deploy(deploy_action, result, thread, actor,
         return f"{s} successes — could not determine defender's agency."
 
     elif deploy_action == "base_access":
-        base_info = ""
-        if target_base_id:
-            from agencies.models import Base
-            base = Base.objects.filter(pk=target_base_id).first()
-            base_info = f" ({base.name})" if base else ""
-        return f"{s} successes — gained access to base systems{base_info}. Facilities, equipment, and operations exposed."
+        if not target_base_id:
+            return f"{s} successes — but no target base specified."
+        from agencies.models import Base
+        base = Base.objects.filter(pk=target_base_id).first()
+        if not base:
+            return f"{s} successes — target base not found."
+        # Unhide all hidden sections on this base
+        revealed = []
+        if base.hidden_sections:
+            revealed = list(base.hidden_sections)
+            base.hidden_sections = []
+            base.save(update_fields=["hidden_sections"])
+        if revealed:
+            return f"{s} successes — gained access to {base.name}. Revealed sections: {', '.join(revealed)}."
+        return f"{s} successes — gained access to {base.name}. All sections already visible."
 
     elif deploy_action == "plant_intel":
         return f"{s} successes — false intelligence planted. GM determines what the target sees."
