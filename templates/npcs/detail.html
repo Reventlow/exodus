@@ -933,7 +933,7 @@
         const poolParts = [];
         if (selAttr) poolParts.push(`${selAttr} ${attrVal}`);
         if (selSkill) poolParts.push(`${selSkill} ${skillVal}`);
-        if (unskilledPenalty) poolParts.push('Unskilled -1');
+        if (unskilledPenalty) poolParts.push(`Unskilled ${unskilledPenalty}`);
         if (modifier) poolParts.push(`Mod ${modifier > 0 ? '+' : ''}${modifier}`);
 
         return (
