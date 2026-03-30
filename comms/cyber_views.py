@@ -122,7 +122,8 @@ def _passive_detect(thread, attacker, difficulty, defender_bonus=0):
     resolve, computer, name = defender
     if computer < 1:
         return None  # Unskilled get no passive roll
-    pool = resolve + computer + defender_bonus
+    thread_defense = thread.defense_bonus if hasattr(thread, 'defense_bonus') else 0
+    pool = resolve + computer + defender_bonus + thread_defense
     result = roll_dice(pool)
     detected = result.successes >= difficulty
     return detected, result, name
@@ -395,6 +396,8 @@ def thread_cyber_status(request, thread_id):
         "actions": actions_data,
         "session": session_data,
         "isConnectionClosed": thread.is_connection_closed,
+        "defenseActive": thread.defense_active,
+        "defenseBonus": thread.defense_bonus,
         "defenderAgency": defender_agency,
         "defenderBases": defender_bases,
         "defenderProjects": defender_projects,
@@ -778,48 +781,47 @@ def _handle_deploy(thread, actor, deploy_action, pool, pool_desc,
 
 def _handle_defend(thread, actor, pool, pool_desc,
                    persona_type, persona_id, persona_name, gm_modifier):
-    """Handle defend: strengthen encryption, sweep threats."""
+    """Handle defend: activate defense systems, add detection bonus."""
+
+    # Can only defend once per thread
+    if thread.defense_active:
+        return JsonResponse({"error": "Defense systems already running on this channel."}, status=400)
+
     result = roll_dice(pool)
 
     if result.successes == 0:
-        outcome = "Failure — no effect."
+        outcome = "Failure — defense systems failed to activate."
         _log_action(thread, actor, "defend", pool, result, outcome,
                     persona_type, persona_id, persona_name, None, gm_modifier)
         return _roll_response("defend", pool_desc, result, outcome)
 
-    # Raise encryption
-    existing = ThreadEffect.objects.filter(
-        thread=thread, effect_type="encrypted", is_active=True,
-    ).first()
-    if existing:
-        existing.level = min(existing.level + 1, 3)
-        existing.save(update_fields=["level"])
-    else:
-        ThreadEffect.objects.create(
-            thread=thread, effect_type="encrypted",
-            level=min(result.successes, 3), source_user=actor,
-        )
+    s = result.successes
 
-    # Sweep: remove backdoors, hidden members, and close attacker sessions
-    removed_backdoors = ThreadEffect.objects.filter(
-        thread=thread, effect_type="backdoor", is_active=True,
-    ).update(is_active=False)
-    removed_hidden = ThreadMembership.objects.filter(
-        thread=thread, hidden=True,
-    ).delete()[0]
-    closed_sessions = CyberSession.objects.filter(
-        thread=thread, is_active=True,
-    ).exclude(attacker=actor).update(is_active=False)
+    # Set defense bonus and mark as active
+    thread.defense_bonus = s
+    thread.defense_active = True
+    thread.save(update_fields=["defense_bonus", "defense_active"])
 
-    parts = [f"{result.successes} successes — encryption strengthened"]
-    if removed_backdoors:
-        parts.append(f"{removed_backdoors} backdoor(s) removed")
-    if removed_hidden:
-        parts.append(f"{removed_hidden} intruder(s) expelled")
-    if closed_sessions:
-        parts.append(f"{closed_sessions} active session(s) terminated")
+    # Build outcome with escalating messages
+    actor_name = persona_name or actor.username
+    messages = []
+    if s >= 1:
+        messages.append(f"{actor_name} hardened their encryption")
+    if s >= 2:
+        messages.append("Rerouting through secure network protocols")
+    if s >= 3:
+        messages.append("Adding monitoring bots")
+    if s >= 4:
+        messages.append("Starting honey pots")
+    if s >= 5:
+        messages.append("Activating machine learning monitoring")
 
-    outcome = "; ".join(parts) + "."
+    outcome = f"{s} successes — defense systems activated (+{s} to all detection rolls)."
+
+    # Post system alerts to chat for each message
+    for msg in messages:
+        _post_system_alert(thread, f"🛡 {msg}")
+
     _log_action(thread, actor, "defend", pool, result, outcome,
                 persona_type, persona_id, persona_name, None, gm_modifier)
     return _roll_response("defend", pool_desc, result, outcome)
@@ -869,9 +871,11 @@ def _handle_detect(thread, actor, pool, pool_desc,
                     persona_type, persona_id, persona_name, None, gm_modifier)
         return _roll_response("detect", pool_desc, None, outcome, hide_dice=True)
 
-    # Active detect roll: pool + 2 bonus vs attacker's gain_access successes
-    detect_pool = pool + 2
-    detect_desc = pool_desc.rsplit("=", 1)[0] + f"+ 2 bonus = {detect_pool} dice"
+    # Active detect roll: pool + 2 bonus + thread defense bonus vs attacker's gain_access successes
+    thread_defense = thread.defense_bonus if hasattr(thread, 'defense_bonus') else 0
+    detect_pool = pool + 2 + thread_defense
+    defense_text = f" + defense {thread_defense}" if thread_defense else ""
+    detect_desc = pool_desc.rsplit("=", 1)[0] + f"+ 2 bonus{defense_text} = {detect_pool} dice"
     result = roll_dice(detect_pool)
 
     difficulty = attacker_session.gain_access_successes

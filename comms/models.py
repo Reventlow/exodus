@@ -31,6 +31,14 @@ class Thread(models.Model):
         default=False,
         help_text="Connection closed — no new messages or terminal actions.",
     )
+    defense_bonus = models.IntegerField(
+        default=0,
+        help_text="Defense bonus from Defend action — adds to all detection rolls.",
+    )
+    defense_active = models.BooleanField(
+        default=False,
+        help_text="Whether Defend has been executed on this thread.",
+    )
 
     class Meta:
         ordering = ["-updated_at"]

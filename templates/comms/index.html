@@ -415,6 +415,8 @@ function CyberTerminal({ thread, members, onClose, postingAs }) {
   const [defenderProjects, setDefenderProjects] = useState([]);
   const [targetProjectIdx, setTargetProjectIdx] = useState("");
   const [selectedHelper, setSelectedHelper] = useState("");
+  const [defenseActive, setDefenseActive] = useState(false);
+  const [defenseBonusVal, setDefenseBonusVal] = useState(0);
 
   function refreshStatus() {
     api("/api/comms/threads/" + thread.id + "/cyber/").then(data => {
@@ -425,6 +427,8 @@ function CyberTerminal({ thread, members, onClose, postingAs }) {
       if (data.defenderAgency) setDefenderAgency(data.defenderAgency);
       if (data.defenderBases) setDefenderBases(data.defenderBases);
       if (data.defenderProjects) setDefenderProjects(data.defenderProjects);
+      setDefenseActive(data.defenseActive || false);
+      setDefenseBonusVal(data.defenseBonus || 0);
     });
   }
 
@@ -479,7 +483,7 @@ function CyberTerminal({ thread, members, onClose, postingAs }) {
   const actions = [
     { key: "gain_access", label: "GAIN ACCESS", desc: "Int + Computer" },
     { key: "deploy", label: "DEPLOY", desc: "Wits + Computer", locked: !hasGainedAccess || !session || (!session.hasBackdoor && session.deploysRemaining <= 0) },
-    { key: "defend", label: "DEFEND", desc: "Res + Computer" },
+    { key: "defend", label: defenseActive ? "DEFEND [ACTIVE]" : "DEFEND", desc: defenseActive ? `Defense systems running (+${defenseBonusVal})` : "Res + Computer", locked: defenseActive },
     { key: "detect", label: "DETECT", desc: "Res + Computer" },
   ];
 
