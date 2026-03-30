@@ -1,5 +1,12 @@
 # Changelog
 
+## v0.8.58
+- Cyber Terminal: hacking overlay for characters with Computer 4+ (green terminal UI)
+- Actions: Gain Access (hidden thread surveillance), Deploy (backdoor), Defend (encrypt/sweep), Detect (reveal threats)
+- WoD 2.0 dice roller with exploding 10s, exceptional success, dramatic failure
+- Intercepted channels section shows threads gained via Gain Access
+- GM can set modifier dice and manually manage thread effects
+
 ## v0.8.57
 - Channels list auto-refreshes every 15 seconds to pick up new threads, deletions, and alias changes
 

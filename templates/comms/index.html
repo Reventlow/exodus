@@ -306,7 +306,229 @@ function MemberManager({ thread, users, onClose, onAddMember, onRemoveMember }) 
 
 const GM_PERSONA = { type: "gm", id: 0, name: "GM" };
 
-function MessageInput({ onSend, dossiers, postingAs, onPostingAsChange }) {
+// ---------------------------------------------------------------------------
+// CyberTerminal
+// ---------------------------------------------------------------------------
+
+const termStyle = {
+  overlay: {
+    position: "absolute", top: 0, left: 0, right: 0, bottom: 0,
+    background: "rgba(0,8,0,0.95)", zIndex: 50, display: "flex",
+    flexDirection: "column", fontFamily: "var(--font-mono)",
+  },
+  header: {
+    padding: "0.75rem 1rem", borderBottom: "1px solid #0a3",
+    display: "flex", justifyContent: "space-between", alignItems: "center",
+  },
+  title: { color: "#0f0", fontSize: "0.85rem", letterSpacing: "2px" },
+  closeBtn: {
+    background: "none", border: "1px solid #0a3", color: "#0f0",
+    padding: "0.25rem 0.5rem", cursor: "pointer", fontFamily: "var(--font-mono)",
+    fontSize: "0.75rem",
+  },
+  body: { flex: 1, overflow: "auto", padding: "1rem", color: "#0f0", fontSize: "0.8rem" },
+  actionGrid: {
+    display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0.5rem", marginBottom: "1rem",
+  },
+  actionBtn: {
+    padding: "0.6rem", background: "rgba(0,255,0,0.05)", border: "1px solid #0a3",
+    color: "#0f0", cursor: "pointer", fontFamily: "var(--font-mono)", fontSize: "0.75rem",
+    textAlign: "left", borderRadius: "2px",
+  },
+  actionBtnActive: {
+    padding: "0.6rem", background: "rgba(0,255,0,0.15)", border: "1px solid #0f0",
+    color: "#0f0", cursor: "pointer", fontFamily: "var(--font-mono)", fontSize: "0.75rem",
+    textAlign: "left", borderRadius: "2px",
+  },
+  label: { color: "#0a3", fontSize: "0.7rem", marginBottom: "0.25rem" },
+  select: {
+    width: "100%", padding: "0.4rem", background: "#001a00", border: "1px solid #0a3",
+    color: "#0f0", fontFamily: "var(--font-mono)", fontSize: "0.8rem", marginBottom: "0.75rem",
+  },
+  input: {
+    width: "60px", padding: "0.4rem", background: "#001a00", border: "1px solid #0a3",
+    color: "#0f0", fontFamily: "var(--font-mono)", fontSize: "0.8rem", textAlign: "center",
+  },
+  rollBtn: {
+    padding: "0.6rem 1.5rem", background: "#0a3", border: "none", color: "#000",
+    fontFamily: "var(--font-mono)", fontWeight: "bold", fontSize: "0.85rem",
+    cursor: "pointer", letterSpacing: "1px", marginTop: "0.5rem",
+  },
+  result: {
+    marginTop: "1rem", padding: "0.75rem", border: "1px solid #0a3",
+    background: "rgba(0,255,0,0.03)",
+  },
+  dice: { display: "flex", gap: "4px", flexWrap: "wrap", marginBottom: "0.5rem" },
+  die: {
+    width: 28, height: 28, display: "inline-flex", alignItems: "center",
+    justifyContent: "center", border: "1px solid #0a3", fontSize: "0.75rem",
+    borderRadius: "3px",
+  },
+  dieSuccess: { background: "rgba(0,255,0,0.2)", color: "#0f0", borderColor: "#0f0" },
+  dieFail: { background: "rgba(0,255,0,0.02)", color: "#064" },
+  log: { marginTop: "1rem", borderTop: "1px solid #042", paddingTop: "0.5rem" },
+  logEntry: { padding: "0.25rem 0", borderBottom: "1px solid #021", fontSize: "0.7rem", color: "#0a3" },
+};
+
+function CyberTerminal({ thread, members, onClose, postingAs }) {
+  const [eligible, setEligible] = useState(null);
+  const [action, setAction] = useState(null);
+  const [targetId, setTargetId] = useState("");
+  const [gmMod, setGmMod] = useState(0);
+  const [rolling, setRolling] = useState(false);
+  const [lastResult, setLastResult] = useState(null);
+  const [cyberLog, setCyberLog] = useState([]);
+  const [effects, setEffects] = useState([]);
+
+  useEffect(() => {
+    const params = new URLSearchParams();
+    if (postingAs && postingAs.type === "npc") {
+      params.set("personaType", "npc");
+      params.set("personaId", postingAs.id);
+    }
+    api("/api/comms/cyber/eligible/?" + params).then(setEligible);
+    api("/api/comms/threads/" + thread.id + "/cyber/").then(data => {
+      setCyberLog(data.actions || []);
+      setEffects(data.effects || []);
+    });
+  }, [thread.id]);
+
+  function handleRoll() {
+    if (!action) return;
+    setRolling(true);
+    const payload = {
+      actionType: action,
+      targetUserId: targetId ? parseInt(targetId) : null,
+      personaType: postingAs ? postingAs.type : "",
+      personaId: postingAs ? postingAs.id : null,
+      personaName: postingAs ? postingAs.name : "",
+      gmModifier: gmMod,
+    };
+    api("/api/comms/threads/" + thread.id + "/cyber/roll/", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    }).then(data => {
+      setLastResult(data.action);
+      setRolling(false);
+      // Refresh log
+      api("/api/comms/threads/" + thread.id + "/cyber/").then(d => {
+        setCyberLog(d.actions || []);
+        setEffects(d.effects || []);
+      });
+    }).catch(() => setRolling(false));
+  }
+
+  const actions = [
+    { key: "gain_access", label: "GAIN ACCESS", desc: "Int + Computer" },
+    { key: "deploy", label: "DEPLOY", desc: "Wits + Computer" },
+    { key: "defend", label: "DEFEND", desc: "Res + Computer" },
+    { key: "detect", label: "DETECT", desc: "Res + Computer" },
+  ];
+
+  const needsTarget = action === "gain_access" || action === "deploy";
+
+  return (
+    <div style={termStyle.overlay}>
+      <div style={termStyle.header}>
+        <span style={termStyle.title}>&gt;_ CYBER TERMINAL</span>
+        <button onClick={onClose} style={termStyle.closeBtn}>ESC</button>
+      </div>
+      <div style={termStyle.body}>
+        {eligible && !eligible.eligible && !IS_STAFF && (
+          <div style={{color: "#a33"}}>ACCESS DENIED — {eligible.reason}</div>
+        )}
+
+        {(eligible?.eligible || IS_STAFF) && (
+          <React.Fragment>
+            {effects.length > 0 && (
+              <div style={{marginBottom: "0.75rem"}}>
+                <div style={termStyle.label}>ACTIVE EFFECTS</div>
+                {effects.map(e => (
+                  <div key={e.id} style={{color: "#0a3", fontSize: "0.7rem"}}>
+                    [{e.type.toUpperCase()}] Level {e.level}
+                  </div>
+                ))}
+              </div>
+            )}
+
+            <div style={termStyle.label}>SELECT ACTION</div>
+            <div style={termStyle.actionGrid}>
+              {actions.map(a => (
+                <button key={a.key}
+                  style={action === a.key ? termStyle.actionBtnActive : termStyle.actionBtn}
+                  onClick={() => setAction(a.key)}>
+                  {a.label}<br/><span style={{fontSize: "0.65rem", color: "#064"}}>{a.desc}</span>
+                </button>
+              ))}
+            </div>
+
+            {needsTarget && (
+              <React.Fragment>
+                <div style={termStyle.label}>TARGET</div>
+                <select value={targetId} onChange={e => setTargetId(e.target.value)} style={termStyle.select}>
+                  <option value="">Select target...</option>
+                  {members.filter(m => m.id !== CURRENT_USER_ID).map(m => (
+                    <option key={m.id} value={m.id}>{m.displayName}</option>
+                  ))}
+                </select>
+              </React.Fragment>
+            )}
+
+            {IS_STAFF && (
+              <React.Fragment>
+                <div style={termStyle.label}>GM MODIFIER</div>
+                <input type="number" value={gmMod} onChange={e => setGmMod(parseInt(e.target.value) || 0)}
+                  style={termStyle.input} />
+                <div style={{height: "0.5rem"}} />
+              </React.Fragment>
+            )}
+
+            <button onClick={handleRoll} disabled={!action || rolling || (needsTarget && !targetId)}
+              style={{...termStyle.rollBtn, opacity: (!action || rolling) ? 0.4 : 1}}>
+              {rolling ? "ROLLING..." : "EXECUTE"}
+            </button>
+
+            {lastResult && (
+              <div style={termStyle.result}>
+                <div style={termStyle.label}>{lastResult.actionType.replace("_", " ").toUpperCase()} — {lastResult.poolDescription}</div>
+                <div style={termStyle.dice}>
+                  {lastResult.roll.rolls.map((d, i) => (
+                    <span key={i} style={{...termStyle.die, ...(d >= 8 ? termStyle.dieSuccess : termStyle.dieFail)}}>
+                      {d}
+                    </span>
+                  ))}
+                </div>
+                <div style={{color: lastResult.roll.successes > 0 ? "#0f0" : "#a33", fontWeight: "bold"}}>
+                  {lastResult.roll.successes} SUCCESS{lastResult.roll.successes !== 1 ? "ES" : ""}
+                  {lastResult.roll.isExceptional && " — EXCEPTIONAL"}
+                  {lastResult.roll.isDramaticFailure && " — DRAMATIC FAILURE"}
+                </div>
+                <div style={{marginTop: "0.5rem", whiteSpace: "pre-wrap"}}>{lastResult.outcome}</div>
+              </div>
+            )}
+
+            {cyberLog.length > 0 && (
+              <div style={termStyle.log}>
+                <div style={termStyle.label}>ACTION LOG</div>
+                {cyberLog.map(entry => (
+                  <div key={entry.id} style={termStyle.logEntry}>
+                    [{entry.actionType.replace("_"," ")}] {entry.actorName} — {entry.successes} success(es) — {entry.outcome?.substring(0, 80)}
+                  </div>
+                ))}
+              </div>
+            )}
+          </React.Fragment>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// MessageInput
+// ---------------------------------------------------------------------------
+
+function MessageInput({ onSend, dossiers, postingAs, onPostingAsChange, cyberEligible, onOpenTerminal }) {
   const [text, setText] = useState("");
   const setPostingAs = onPostingAsChange;
   const [pendingImage, setPendingImage] = useState(null);
@@ -395,6 +617,14 @@ function MessageInput({ onSend, dossiers, postingAs, onPostingAsChange }) {
           color: "var(--text-muted)", padding: "0.4rem 0.6rem", cursor: "pointer",
           borderRadius: "4px", fontSize: "1rem", lineHeight: 1,
         }}>&#128247;</button>
+        {cyberEligible && (
+          <button onClick={onOpenTerminal} title="Cyber Terminal" style={{
+            background: "transparent", border: "1px solid #0a3",
+            color: "#0f0", padding: "0.4rem 0.6rem", cursor: "pointer",
+            borderRadius: "4px", fontFamily: "var(--font-mono)", fontSize: "0.8rem",
+            lineHeight: 1,
+          }}>&gt;_</button>
+        )}
         <input ref={fileRef} type="file" accept="image/*"
           onChange={handleFileSelect} style={{ display: "none" }} />
         <textarea
@@ -415,9 +645,10 @@ function MessageInput({ onSend, dossiers, postingAs, onPostingAsChange }) {
 // ThreadView
 // ---------------------------------------------------------------------------
 
-function ThreadView({ thread, onSend, onBack, onOpenMembers, onDeleteThread, dossiers, postingAs, onPostingAsChange }) {
+function ThreadView({ thread, onSend, onBack, onOpenMembers, onDeleteThread, dossiers, postingAs, onPostingAsChange, cyberEligible }) {
   const messagesEndRef = useRef(null);
   const [lightboxImage, setLightboxImage] = useState(null);
+  const [showTerminal, setShowTerminal] = useState(false);
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -505,8 +736,19 @@ function ThreadView({ thread, onSend, onBack, onOpenMembers, onDeleteThread, dos
         <div ref={messagesEndRef} />
       </div>
 
+      {/* Cyber Terminal overlay */}
+      {showTerminal && (
+        <CyberTerminal
+          thread={thread}
+          members={thread.members || []}
+          onClose={() => setShowTerminal(false)}
+          postingAs={postingAs}
+        />
+      )}
+
       {/* Input */}
-      <MessageInput onSend={onSend} dossiers={dossiers} postingAs={postingAs} onPostingAsChange={onPostingAsChange} />
+      <MessageInput onSend={onSend} dossiers={dossiers} postingAs={postingAs} onPostingAsChange={onPostingAsChange}
+        cyberEligible={cyberEligible} onOpenTerminal={() => setShowTerminal(true)} />
 
       {/* Image lightbox */}
       {lightboxImage && ReactDOM.createPortal(
@@ -530,7 +772,7 @@ function ThreadView({ thread, onSend, onBack, onOpenMembers, onDeleteThread, dos
 // ThreadList
 // ---------------------------------------------------------------------------
 
-function ThreadList({ threads, activeId, onSelect, onNewThread }) {
+function ThreadList({ threads, activeId, onSelect, onNewThread, intercepted }) {
   return (
     <div style={S.threadListContainer}>
       <div style={S.threadListHeader}>
@@ -574,6 +816,42 @@ function ThreadList({ threads, activeId, onSelect, onNewThread }) {
             </div>
           );
         })}
+        {intercepted && intercepted.length > 0 && (
+          <React.Fragment>
+            <div style={{padding: "0.75rem 1rem 0.25rem", borderTop: "1px solid #300"}}>
+              <span className="mono-text" style={{color: "#f44", fontSize: "0.7rem", letterSpacing: "1px"}}>
+                INTERCEPTED
+              </span>
+            </div>
+            {intercepted.map(t => {
+              const title = t.title ||
+                t.members.filter(m => m.id !== CURRENT_USER_ID).map(m => m.displayName).join(", ") ||
+                "Channel";
+              const isActive = t.id === activeId;
+              return (
+                <div key={"int-" + t.id}
+                  onClick={() => onSelect(t.id)}
+                  style={Object.assign({}, S.threadItem, {
+                    borderLeft: isActive ? "2px solid #f44" : "2px solid transparent",
+                    background: isActive ? "rgba(255,68,68,0.05)" : "transparent",
+                  })}
+                  onMouseOver={e => { if (!isActive) e.currentTarget.style.background = "rgba(255,68,68,0.03)"; }}
+                  onMouseOut={e => { if (!isActive) e.currentTarget.style.background = "transparent"; }}>
+                  <div style={S.threadItemRow}>
+                    <span style={Object.assign({}, S.threadItemTitle, {color: "#c66"})}>
+                      {title}
+                    </span>
+                  </div>
+                  {t.lastMessage && (
+                    <div style={Object.assign({}, S.threadPreview, {color: "#833"})}>
+                      {t.lastMessage.sender}: {t.lastMessage.content}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </React.Fragment>
+        )}
       </div>
     </div>
   );
@@ -593,6 +871,8 @@ function CommsApp() {
   const [mobileShowThread, setMobileShowThread] = useState(false);
   const [dossiers, setDossiers] = useState([]);
   const [threadPersonas, setThreadPersonas] = useState({});
+  const [cyberEligible, setCyberEligible] = useState(false);
+  const [interceptedThreads, setInterceptedThreads] = useState([]);
 
   useEffect(() => {
     api("/api/comms/threads/").then(setThreads);
@@ -600,6 +880,8 @@ function CommsApp() {
     if (IS_STAFF) {
       api("/api/comms/dossiers/").then(setDossiers).catch(() => {});
     }
+    api("/api/comms/cyber/eligible/").then(d => setCyberEligible(d.eligible)).catch(() => {});
+    api("/api/comms/cyber/intercepted/").then(setInterceptedThreads).catch(() => {});
     // Poll thread list every 15 seconds for changes (new threads, deletions, alias updates)
     const interval = setInterval(() => {
       api("/api/comms/threads/").then(setThreads).catch(() => {});
@@ -783,6 +1065,7 @@ function CommsApp() {
           activeId={activeThreadId}
           onSelect={handleSelectThread}
           onNewThread={() => setShowNewThread(true)}
+          intercepted={interceptedThreads}
         />
       </div>
       <div style={S.mainPanel}>
@@ -810,6 +1093,7 @@ function CommsApp() {
               });
             }
           }}
+          cyberEligible={cyberEligible}
         />
       </div>
       {showNewThread && (
@@ -892,7 +1176,7 @@ const S = {
     flex: 1, display: "flex", alignItems: "center", justifyContent: "center",
     color: "var(--text-muted)", fontFamily: "var(--font-mono)", letterSpacing: "1px",
   },
-  threadViewContainer: { flex: 1, display: "flex", flexDirection: "column", minHeight: 0 },
+  threadViewContainer: { flex: 1, display: "flex", flexDirection: "column", minHeight: 0, position: "relative" },
   threadHeader: {
     display: "flex", alignItems: "center", gap: "0.75rem",
     padding: "0.75rem 1rem", borderBottom: "1px solid var(--border-color)",
