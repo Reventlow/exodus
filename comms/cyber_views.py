@@ -700,16 +700,22 @@ def _resolve_deploy(deploy_action, result, thread, actor,
         return f"{s} successes — permanent backdoor deployed." + (" Exceptional — extremely difficult to detect." if result.is_exceptional else "")
 
     elif deploy_action == "ransomware":
+        # Auto-resolve target agency from the thread's defender (non-attacker NPC member)
+        defender_agency_id = None
+        defender_agency_name = "target"
+        for m in ThreadMembership.objects.filter(thread=thread, hidden=False).exclude(user=actor):
+            if m.alias_type == "npc" and m.alias_id:
+                npc = NPC.objects.filter(pk=m.alias_id).first()
+                if npc and npc.agency_id:
+                    defender_agency_id = npc.agency_id
+                    defender_agency_name = Agency.objects.filter(pk=npc.agency_id).values_list("name", flat=True).first() or "target"
+                    break
         ThreadEffect.objects.create(
             thread=thread, effect_type="locked",
             level=min(s, 3), source_user=actor,
-            target_agency_id=target_agency_id,
+            target_agency_id=defender_agency_id,
         )
-        agency_name = ""
-        if target_agency_id:
-            ag = Agency.objects.filter(pk=target_agency_id).first()
-            agency_name = f" on {ag.name}" if ag else ""
-        return f"{s} successes — ransomware deployed{agency_name}. Systems locked until swept."
+        return f"{s} successes — ransomware deployed on {defender_agency_name}. Systems locked until swept."
 
     elif deploy_action == "bad_deals":
         agency_name = "unknown"
