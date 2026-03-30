@@ -668,18 +668,22 @@ function CyberTerminal({ thread, members, onClose, postingAs }) {
             {lastResult && (
               <div style={termStyle.result}>
                 <div style={termStyle.label}>{lastResult.actionType.replace("_", " ").toUpperCase()} — {lastResult.poolDescription}</div>
-                <div style={termStyle.dice}>
-                  {lastResult.roll.rolls.map((d, i) => (
-                    <span key={i} style={{...termStyle.die, ...(d >= 8 ? termStyle.dieSuccess : termStyle.dieFail)}}>
-                      {d}
-                    </span>
-                  ))}
-                </div>
-                <div style={{color: lastResult.roll.successes > 0 ? "#0f0" : "#a33", fontWeight: "bold"}}>
-                  {lastResult.roll.successes} SUCCESS{lastResult.roll.successes !== 1 ? "ES" : ""}
-                  {lastResult.roll.isExceptional && " — EXCEPTIONAL"}
-                  {lastResult.roll.isDramaticFailure && " — DRAMATIC FAILURE"}
-                </div>
+                {lastResult.roll && lastResult.roll.rolls && lastResult.roll.rolls.length > 0 && (
+                  <React.Fragment>
+                    <div style={termStyle.dice}>
+                      {lastResult.roll.rolls.map((d, i) => (
+                        <span key={i} style={{...termStyle.die, ...(d >= 8 ? termStyle.dieSuccess : termStyle.dieFail)}}>
+                          {d}
+                        </span>
+                      ))}
+                    </div>
+                    <div style={{color: lastResult.roll.successes > 0 ? "#0f0" : "#a33", fontWeight: "bold"}}>
+                      {lastResult.roll.successes} SUCCESS{lastResult.roll.successes !== 1 ? "ES" : ""}
+                      {lastResult.roll.isExceptional && " — EXCEPTIONAL"}
+                      {lastResult.roll.isDramaticFailure && " — DRAMATIC FAILURE"}
+                    </div>
+                  </React.Fragment>
+                )}
                 <div style={{marginTop: "0.5rem", whiteSpace: "pre-wrap"}}>{lastResult.outcome}</div>
               </div>
             )}

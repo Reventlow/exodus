@@ -611,15 +611,18 @@ def _handle_detect(thread, actor, pool, pool_desc,
     ).exclude(attacker=actor).first()
 
     if not attacker_session:
-        # Check for any hidden members or effects
+        # No active session — check for dormant threats (backdoors, hidden members)
         has_threats = (
             ThreadEffect.objects.filter(thread=thread, effect_type="backdoor", is_active=True).exists()
             or ThreadMembership.objects.filter(thread=thread, hidden=True).exists()
         )
-        if has_threats:
-            outcome = "INTRUSION DETECTED"
-        else:
+        if not has_threats:
             outcome = "NO INTRUSION DETECTED"
+        else:
+            # Roll to detect dormant threats — difficulty 3 (moderate)
+            detect_pool = pool + 2
+            result = roll_dice(detect_pool)
+            outcome = "INTRUSION DETECTED" if result.successes >= 3 else "NO INTRUSION DETECTED"
         _log_action(thread, actor, "detect", 0, None, outcome,
                     persona_type, persona_id, persona_name, None, gm_modifier)
         return _roll_response("detect", pool_desc, None, outcome, hide_dice=True)
