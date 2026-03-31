@@ -1,5 +1,8 @@
 # Changelog
 
+## v0.9.81
+- Terminating a chat removes all intercepted threads (hidden memberships) from attackers on that thread
+
 ## v0.9.80
 - Lock icon on terminated chats in channel list
 
