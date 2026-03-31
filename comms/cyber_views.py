@@ -237,6 +237,8 @@ def cyber_eligible(request):
                 active_mods.append({"name": m["name"], "bonus": f"+{bonus_val}", "applies": ", ".join(applicable)})
             else:
                 active_mods.append({"name": m["name"], "bonus": f"+{m.get('rating', 1)}", "applies": ", ".join(applicable)})
+        elif m_name == "distributed consciousness":
+            active_mods.append({"name": m["name"], "bonus": "x2 deploys", "applies": "gain_access"})
 
     for ps in pulling_strings:
         ps_name = (ps.get("name") or "").lower()
@@ -562,9 +564,15 @@ def _handle_gain_access(thread, actor, target_user, pool, pool_desc,
     exceptional = result.is_exceptional  # 5+
 
     # Create session
-    deploys = 0 if not exceptional else s // 2
-    if not exceptional:
-        deploys = s // 2
+    deploys = s // 2
+
+    # Distributed Consciousness doubles deploy actions
+    actor_stats = _get_actor_stats(actor, persona_type, persona_id)
+    if actor_stats:
+        _, _, _, _, _, actor_merits, _, _ = actor_stats
+        has_distributed = any(m.get("name", "").lower() == "distributed consciousness" for m in actor_merits)
+        if has_distributed:
+            deploys *= 2
 
     session = CyberSession.objects.create(
         thread=thread,

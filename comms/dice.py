@@ -103,7 +103,11 @@ ATTR_NAMES = {
 CYBER_MERITS = {
     "computer aptitude":    ("flat", 2, ("gain_access", "deploy", "defend", "detect")),
     "digital infiltration": ("rating", 0, ("gain_access", "deploy")),
-    "digital ghost":        ("flat", 2, ("gain_access", "deploy")),  # Stealth bonus for attacker
+    "digital ghost":        ("flat", 2, ("gain_access", "deploy")),
+    "firewall":             ("rating", 0, ("defend", "detect")),
+    "rapid processing":     ("flat", 2, ("gain_access", "deploy", "defend", "detect")),
+    "network puppet":       ("flat", 2, ("deploy",)),  # Bonus on deploy (especially infrastructure)
+    "overclock":            ("flat", 3, ("gain_access", "deploy")),  # One-time +3, tracked separately
 }
 
 

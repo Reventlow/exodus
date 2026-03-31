@@ -1,5 +1,11 @@
 # Changelog
 
+## v0.9.61
+- AI merits in cyber terminal: Firewall (+rating defend/detect), Rapid Processing (+2 all), Network Puppet (+2 deploy), Overclock (+3 one attack), Distributed Consciousness (x2 deploy actions)
+- Defend messages only shown to executor, attacker detects via Detect roll
+- Action log entries no longer truncated, full multiline display
+- Fixers can select Darknet Identity Broker pulling string
+
 ## v0.9.57
 - Defend rules: one-use per thread, escalating chat alerts, +N to all detection rolls
 
