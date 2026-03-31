@@ -1,5 +1,8 @@
 # Changelog
 
+## v0.9.66
+- Removed old free-text CONDITIONS table from agency page, replaced by structured Cyber Conditions
+
 ## v0.9.65
 - Cyber Conditions UI on agency page: shows active conditions with progress bar, Sweep & Clear button, GM pool allocation and remove controls
 

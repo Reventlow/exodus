@@ -2964,21 +2964,6 @@
                     }}
                 />
 
-                <TableModule
-                    title="CONDITIONS" field="conditions"
-                    items={agency.conditions}
-                    columns={[
-                        { key: 'condition', label: 'CONDITION', width: '1fr' },
-                        { key: 'source', label: 'SOURCE', width: '1fr' },
-                        { key: 'effect', label: 'EFFECT', width: '2fr' },
-                        { key: 'duration', label: 'DURATION', width: '1fr' },
-                    ]}
-                    emptyItem={{ condition: '', source: '', effect: '', duration: '' }}
-                    update={val => updateAgency({ conditions: val })}
-                    onSave={val => saveAgencyQuiet({ conditions: val })}
-                    getFreshItems={() => agencyRef.current.conditions || []}
-                    visibility={vis} onToggleVis={toggleVisibility}
-                />
 
                 {/* Cyber Conditions - structured conditions from deploy actions */}
                 {agency.conditions_cyber && agency.conditions_cyber.length > 0 && (
