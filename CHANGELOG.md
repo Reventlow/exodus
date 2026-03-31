@@ -1,5 +1,8 @@
 # Changelog
 
+## v0.9.83
+- Intercepted threads list auto-refreshes every 15 seconds
+
 ## v0.9.82
 - Fix: terminate removes intercepted threads from ALL past attackers, not just active sessions
 

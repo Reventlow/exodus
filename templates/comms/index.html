@@ -1291,6 +1291,7 @@ function CommsApp() {
     // Poll thread list every 15 seconds for changes (new threads, deletions, alias updates)
     const interval = setInterval(() => {
       api("/api/comms/threads/").then(setThreads).catch(() => {});
+      api("/api/comms/cyber/intercepted/").then(setInterceptedThreads).catch(() => {});
     }, 15000);
     return () => clearInterval(interval);
   }, []);
