@@ -994,15 +994,22 @@ const { Icon, AutoSaveInput, Classified, VisibilityToggle, XpProtester, getCooki
                             </div>
 
                             <div style={{ display: 'flex', gap: '1rem', flexWrap: 'wrap', marginBottom: '0.75rem' }}>
-                                <div style={{ minWidth: '100px' }}>
+                                <div style={{ minWidth: '130px' }}>
                                     <div className="text-muted mono-text" style={{ fontSize: '0.65rem', marginBottom: '0.15rem' }}>PLAYER</div>
-                                    <AutoSaveInput
-                                        defaultValue={p.player || ''}
-                                        onSave={function(val) { updateField(idx, 'player', val); }}
-                                        disabled={!IS_ADMIN}
-                                        placeholder="—"
-                                        style={{ background: 'transparent', border: 'none', borderBottom: '1px solid var(--border-color)', color: 'var(--text-primary)', width: '100%', fontSize: '0.8rem' }}
-                                    />
+                                    {IS_ADMIN ? (
+                                        <select
+                                            value={p.player || ''}
+                                            onChange={function(e) { updateField(idx, 'player', e.target.value); }}
+                                            style={{ background: 'var(--bg-input, #1a1a2e)', border: 'none', borderBottom: '1px solid var(--border-color)', color: 'var(--text-primary)', width: '100%', fontSize: '0.8rem', fontFamily: 'var(--font-mono)', padding: '0.2rem 0' }}
+                                        >
+                                            <option value="">Unassigned</option>
+                                            {(props.characters || []).map(function(c) {
+                                                return <option key={c.id} value={c.name}>{c.name}</option>;
+                                            })}
+                                        </select>
+                                    ) : (
+                                        <span className="mono-text" style={{ fontSize: '0.8rem' }}>{p.player || '—'}</span>
+                                    )}
                                 </div>
                                 <div style={{ minWidth: '70px' }}>
                                     <div className="text-muted mono-text" style={{ fontSize: '0.65rem', marginBottom: '0.15rem' }}>DURATION</div>

@@ -555,6 +555,7 @@ const {
 
                 <ProjectsModule
                     items={agency.projects}
+                    characters={agency.assignableCharacters || []}
                     onSave={val => saveAgencyQuiet({ projects: val })}
                     visibility={vis} onToggleVis={toggleVisibility}
                 />

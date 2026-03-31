@@ -260,7 +260,8 @@ def serialize_agency(agency, user):
 
     # Assignable entities for workspace assignment
     data["assignableCharacters"] = [
-        {"id": c.id, "name": c.name} for c in Character.objects.all().order_by("name").only("id", "name")
+        {"id": c.id, "name": c.name, "username": c.owner.username}
+        for c in Character.objects.select_related("owner").all().order_by("name")
     ]
     data["assignableNpcs"] = [
         {"id": n.id, "name": n.name}
