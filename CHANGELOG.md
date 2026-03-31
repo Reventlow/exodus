@@ -1,5 +1,129 @@
 # Changelog
 
+## v0.9.57
+- Defend rules: one-use per thread, escalating chat alerts, +N to all detection rolls
+
+## v0.9.56
+- Defend reworked: one-time activation adds +success to detection rolls, chat alerts at each level, button greys out after use
+
+## v0.9.55
+- Core stats (Integrity, EXP, Zero-Day Pool) displayed on one line on agency page
+
+## v0.9.54
+- Engineers can only select Bot Farm pulling string (not all AI pulling strings)
+
+## v0.9.53
+- Engineers can select Bot Farm pulling string on NPC and character sheets
+
+## v0.9.52
+- Complete rewrite of terminal rules panel with all systems documented
+
+## v0.9.51
+- Digital Ghost merit adds +2 concealment levels for helpers
+
+## v0.9.50
+- Digital Ghost merit available to engineer class (was AI only), comma-separated class restrictions
+
+## v0.9.49
+- Digital concealment track displayed on NPC sheets with Computer 4+
+
+## v0.9.48
+- Helper list includes personal contacts with Computer 4+ (not just agency dossiers)
+
+## v0.9.47
+- Dossier helper system: agency NPCs and contacts with Computer 4+ can assist in terminal
+- Helper bonus: (Computer + Wits) / 2 dice added to attack rolls
+- Digital concealment track with escalating defender bonus on last 4 levels
+
+## v0.9.46
+- Sabotage project reduces completion points by number of successes (min 0)
+
+## v0.9.45
+- Sabotage project shows picker of declassified projects from defender's agency
+
+## v0.9.44
+- Projects can be classified/declassified, all existing projects marked classified
+- New projects default to classified, checkbox column on agency page
+
+## v0.9.43
+- Deploy targets auto-resolve to defender's agency, base picker shows only defender's bases
+
+## v0.9.42
+- Zero-day checkbox renders immediately on action select (pre-computed variables)
+
+## v0.9.41
+- Fix blank comms page from JSX parsing issue in zero-day block
+
+## v0.9.40
+- Zero-day checkbox shows remaining count, greyed out when pool reaches 0
+
+## v0.9.39
+- Zero-day checkbox only shows when actor has Government Zero-Day Repository pulling string
+
+## v0.9.38
+- Show NPC persona modifiers for GM in cyber terminal
+
+## v0.9.37
+- Active modifiers panel in cyber terminal shows merit bonuses, pulling string effects, specialisations
+
+## v0.9.36
+- Zero-Day Pool displayed and editable on agency page (superuser only)
+
+## v0.9.35
+- Use Zero-Day Exploit checkbox on attack actions, pulling strings listed in rules panel
+
+## v0.9.34
+- Pulling strings affect cyber terminal: Bot Farm, Backdoor Access, Compromise Firmware, Digital Payload, Zero-Day Repository
+- Agency zero_day_pool field added
+
+## v0.9.33
+- Cyber merits affect dice pools: Computer Aptitude, Digital Infiltration, Digital Ghost
+
+## v0.9.32
+- Close Connection requires no roll, no passive detection, silently removes traces
+
+## v0.9.31
+- Replace Corrupt Data with Shut Down Infrastructure (power, water, logistics, transport, media, comms)
+
+## v0.9.30
+- Gain Base Access reveals hidden sections on target base
+
+## v0.9.29
+- Discover Base unhides a random hidden base from defender's agency
+
+## v0.9.28
+- Ransomware can target a specific base via base picker
+
+## v0.9.27
+- Ransomware auto-targets defender's agency
+
+## v0.9.26
+- Deploy locked for everyone when no active session or deploys exhausted
+
+## v0.9.25
+- Deploy button locked when deploys remaining hits 0
+
+## v0.9.24
+- Hide success count for detect in action log
+
+## v0.9.23
+- Fix detect showing no feedback, defensive rendering for missing roll data
+
+## v0.9.22
+- Fix detect finding own sessions/backdoors in NPC-vs-NPC threads
+
+## v0.9.21
+- Fix detect with 0 successes falsely detecting dormant backdoors, hide dice for detect
+
+## v0.9.20
+- Hover tooltip on CLOSE buttons explaining permanent effect
+
+## v0.9.19
+- Close connection button in chat header, CONNECTION CLOSED banner, backend blocks messages
+
+## v0.9.18
+- Updated terminal rules with full session flow
+
 ## v0.9.17
 - Intrusion detection posts a system alert message in the chat (red centered warning)
 - Alert visible to all non-hidden thread members via WebSocket
