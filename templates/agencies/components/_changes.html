@@ -1,0 +1,253 @@
+{% verbatim %}
+<script type="text/babel">
+const { useState, useEffect, useRef, useCallback, useMemo } = React;
+const { Icon, getCookie } = window;
+
+    // --- CHANGE REQUEST PANEL (player agency) ---
+    const ChangeRequestPanel = ({ agencyId }) => {
+        const [requests, setRequests] = useState([]);
+        const [showForm, setShowForm] = useState(false);
+        const [fieldName, setFieldName] = useState('');
+        const [description, setDescription] = useState('');
+        const [submitting, setSubmitting] = useState(false);
+
+        useEffect(() => {
+            fetchRequests();
+        }, []);
+
+        const fetchRequests = async () => {
+            try {
+                const res = await fetch(`/api/agencies/${agencyId}/changes/`);
+                if (res.ok) setRequests(await res.json());
+            } catch (err) {
+                console.error('Failed to fetch change requests:', err);
+            }
+        };
+
+        const submitRequest = async () => {
+            if (!fieldName.trim() || !description.trim()) return;
+            setSubmitting(true);
+            try {
+                const res = await fetch(`/api/agencies/${agencyId}/changes/`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-CSRFToken': getCookie('csrftoken') || CSRF_TOKEN,
+                    },
+                    body: JSON.stringify({
+                        fieldName: fieldName,
+                        description: description,
+                        proposedChanges: {}
+                    }),
+                });
+                if (res.ok) {
+                    setFieldName('');
+                    setDescription('');
+                    setShowForm(false);
+                    fetchRequests();
+                }
+            } catch (err) {
+                console.error('Failed to submit change request:', err);
+            } finally {
+                setSubmitting(false);
+            }
+        };
+
+        const reviewRequest = async (id, action, adminNote = '') => {
+            try {
+                const res = await fetch(`/api/changes/${id}/review/`, {
+                    method: 'PUT',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-CSRFToken': getCookie('csrftoken') || CSRF_TOKEN,
+                    },
+                    body: JSON.stringify({ action, adminNote }),
+                });
+                if (res.ok) fetchRequests();
+            } catch (err) {
+                console.error('Failed to review request:', err);
+            }
+        };
+
+        const pending = requests.filter(r => r.status === 'pending');
+        const reviewed = requests.filter(r => r.status !== 'pending');
+
+        return (
+            <div className="glass-panel" style={{
+                padding: '1.5rem', marginBottom: '1rem',
+                borderLeft: '3px solid var(--accent-warning)'
+            }}>
+                <h3 className="mono-text text-accent" style={{
+                    borderBottom: '1px solid var(--border-color)',
+                    paddingBottom: '0.5rem', marginBottom: '1rem',
+                    display: 'flex', justifyContent: 'space-between', alignItems: 'center'
+                }}>
+                    <span>
+                        CHANGE REQUESTS
+                        {pending.length > 0 && (
+                            <span style={{
+                                background: 'var(--accent-warning)',
+                                color: 'var(--bg-dark)',
+                                borderRadius: '50%', width: '20px', height: '20px',
+                                display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+                                fontSize: '0.7rem', fontWeight: 'bold', marginLeft: '0.5rem'
+                            }}>{pending.length}</span>
+                        )}
+                    </span>
+                    {!IS_ADMIN && (
+                        <button onClick={() => setShowForm(!showForm)} style={{
+                            background: 'transparent', border: '1px solid var(--accent-primary)',
+                            color: 'var(--accent-primary)', padding: '4px 12px',
+                            cursor: 'pointer', fontFamily: 'var(--font-mono)', fontSize: '0.8rem'
+                        }}>
+                            REQUEST CHANGE
+                        </button>
+                    )}
+                </h3>
+
+                {/* Submit form (non-admin) */}
+                {showForm && !IS_ADMIN && (
+                    <div className="tech-border" style={{ padding: '1rem', marginBottom: '1rem', background: 'rgba(0,0,0,0.2)' }}>
+                        <div style={{ marginBottom: '0.5rem' }}>
+                            <label className="text-muted mono-text" style={{ fontSize: '0.8rem' }}>SECTION</label>
+                            <select value={fieldName} onChange={e => setFieldName(e.target.value)}
+                                style={{
+                                    width: '100%', background: 'var(--bg-input, #1a1a2e)',
+                                    border: '1px solid var(--border-color)', color: 'var(--text-primary)',
+                                    padding: '0.25rem'
+                                }}>
+                                <option value="">Select section...</option>
+                                <option value="attributes">Attributes</option>
+                                <option value="specializations">Specializations</option>
+                                <option value="merits">Merits</option>
+                                <option value="flaws">Flaws</option>
+                                <option value="assets">Assets</option>
+                                <option value="fleet">Fleet</option>
+                                <option value="conditions">Conditions</option>
+                                <option value="projects">Projects</option>
+                                <option value="history">History</option>
+                                <option value="other">Other</option>
+                            </select>
+                        </div>
+                        <div style={{ marginBottom: '0.5rem' }}>
+                            <label className="text-muted mono-text" style={{ fontSize: '0.8rem' }}>DESCRIPTION</label>
+                            <textarea value={description} onChange={e => setDescription(e.target.value)}
+                                placeholder="Describe the change you'd like to make..."
+                                style={{
+                                    width: '100%', minHeight: '60px', background: 'transparent',
+                                    border: '1px solid var(--border-color)', color: 'var(--text-primary)',
+                                    padding: '0.5rem', fontFamily: 'inherit', resize: 'vertical'
+                                }} />
+                        </div>
+                        <div style={{ display: 'flex', gap: '0.5rem', justifyContent: 'flex-end' }}>
+                            <button onClick={() => setShowForm(false)} style={{
+                                background: 'transparent', border: '1px solid var(--border-color)',
+                                color: 'var(--text-muted)', padding: '4px 12px', cursor: 'pointer'
+                            }}>CANCEL</button>
+                            <button onClick={submitRequest} disabled={submitting} style={{
+                                background: 'var(--accent-primary)', border: 'none',
+                                color: 'var(--bg-dark)', padding: '4px 12px',
+                                cursor: 'pointer', fontWeight: 'bold'
+                            }}>{submitting ? 'SUBMITTING...' : 'SUBMIT'}</button>
+                        </div>
+                    </div>
+                )}
+
+                {/* Pending requests */}
+                {pending.map(cr => (
+                    <div key={cr.id} className="tech-border" style={{
+                        padding: '0.75rem', marginBottom: '0.5rem',
+                        background: 'rgba(0,0,0,0.2)',
+                        borderLeft: '2px solid var(--accent-warning)'
+                    }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                            <div>
+                                <span className="mono-text text-accent" style={{ fontSize: '0.85rem' }}>
+                                    {cr.fieldName}
+                                </span>
+                                <span className="text-muted" style={{ fontSize: '0.8rem', marginLeft: '0.5rem' }}>
+                                    by {cr.requester}
+                                </span>
+                            </div>
+                            <span className="mono-text" style={{
+                                fontSize: '0.7rem', padding: '2px 6px',
+                                border: '1px solid var(--accent-warning)',
+                                color: 'var(--accent-warning)'
+                            }}>PENDING</span>
+                        </div>
+                        <p className="text-secondary" style={{ fontSize: '0.85rem', marginTop: '0.25rem' }}>
+                            {cr.description}
+                        </p>
+                        {IS_ADMIN && (
+                            <div style={{ display: 'flex', gap: '0.5rem', marginTop: '0.5rem', justifyContent: 'flex-end' }}>
+                                <button
+                                    onClick={() => {
+                                        const note = prompt('Admin note (optional):') || '';
+                                        reviewRequest(cr.id, 'approve', note);
+                                    }}
+                                    style={{
+                                        background: 'var(--accent-success, #00cc66)', border: 'none',
+                                        color: 'var(--bg-dark)', padding: '4px 12px',
+                                        cursor: 'pointer', fontFamily: 'var(--font-mono)',
+                                        fontSize: '0.8rem', fontWeight: 'bold'
+                                    }}>APPROVE</button>
+                                <button
+                                    onClick={() => {
+                                        const note = prompt('Reason for rejection:') || '';
+                                        reviewRequest(cr.id, 'reject', note);
+                                    }}
+                                    style={{
+                                        background: 'var(--accent-danger)', border: 'none',
+                                        color: 'var(--bg-dark)', padding: '4px 12px',
+                                        cursor: 'pointer', fontFamily: 'var(--font-mono)',
+                                        fontSize: '0.8rem', fontWeight: 'bold'
+                                    }}>REJECT</button>
+                            </div>
+                        )}
+                    </div>
+                ))}
+
+                {/* Reviewed requests */}
+                {reviewed.length > 0 && (
+                    <details style={{ marginTop: '0.5rem' }}>
+                        <summary className="text-muted mono-text" style={{ cursor: 'pointer', fontSize: '0.8rem' }}>
+                            HISTORY ({reviewed.length})
+                        </summary>
+                        {reviewed.map(cr => (
+                            <div key={cr.id} style={{
+                                padding: '0.5rem', marginTop: '0.25rem',
+                                borderLeft: `2px solid ${cr.status === 'approved' ? 'var(--accent-success, #00cc66)' : 'var(--accent-danger)'}`,
+                                opacity: 0.7
+                            }}>
+                                <span className="mono-text" style={{ fontSize: '0.8rem' }}>
+                                    {cr.fieldName}
+                                </span>
+                                <span style={{
+                                    fontSize: '0.7rem', marginLeft: '0.5rem',
+                                    color: cr.status === 'approved' ? 'var(--accent-success, #00cc66)' : 'var(--accent-danger)'
+                                }}>
+                                    {cr.status.toUpperCase()}
+                                </span>
+                                {cr.adminNote && (
+                                    <p className="text-muted" style={{ fontSize: '0.8rem', marginTop: '0.25rem' }}>
+                                        Note: {cr.adminNote}
+                                    </p>
+                                )}
+                            </div>
+                        ))}
+                    </details>
+                )}
+
+                {requests.length === 0 && (
+                    <p className="text-muted text-center" style={{ fontSize: '0.8rem', fontStyle: 'italic' }}>
+                        No change requests.
+                    </p>
+                )}
+            </div>
+        );
+    };
+
+// Export to global scope
+window.ChangeRequestPanel = ChangeRequestPanel;
+</script>
+{% endverbatim %}
