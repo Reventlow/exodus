@@ -1,5 +1,10 @@
 # Changelog
 
+## v0.9.70
+- Fix: deploy actions now correctly resolve defender's player agency (conditions show on Bifrost)
+- Fix: passive detection skipped when intrusion already detected — no redundant rolls
+- All deploy handlers use shared _resolve_defender_agency helper
+
 ## v0.9.69
 - Intrusion detected status is now permanent on the thread — red banner stays in terminal forever
 - Thread.intrusion_detected flag set whenever detection succeeds

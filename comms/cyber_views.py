@@ -27,6 +27,24 @@ from .models import (
 # Helpers
 # ---------------------------------------------------------------------------
 
+def _resolve_defender_agency(thread, actor):
+    """Resolve defender's agency ID and name from thread membership."""
+    from agencies.models import Agency
+    for m in ThreadMembership.objects.filter(thread=thread, hidden=False).exclude(user=actor):
+        # Check NPC alias
+        if m.alias_type == "npc" and m.alias_id:
+            npc = NPC.objects.filter(pk=m.alias_id).first()
+            if npc and npc.agency_id:
+                ag = Agency.objects.filter(pk=npc.agency_id).first()
+                if ag:
+                    return ag.id, ag.name
+        # Fall back to user's player agency
+        player_agency = Agency.objects.filter(is_player_agency=True).first()
+        if player_agency:
+            return player_agency.id, player_agency.name
+    return None, "target"
+
+
 def _mark_intrusion_detected(thread):
     """Permanently mark a thread as having had an intrusion detected."""
     if not thread.intrusion_detected:
@@ -629,9 +647,11 @@ def _handle_gain_access(thread, actor, target_user, pool, pool_desc,
             if created:
                 granted += 1
 
-    # Passive detection (only for 1-4 successes)
+    # Passive detection (only for 1-4 successes, skip if already detected)
     detection_msg = ""
-    if not exceptional:
+    if thread.intrusion_detected:
+        detection_msg = " Intrusion already detected."
+    elif not exceptional:
         defender_bonus = ps_flags.get("defender_bonus", 0)
         passive = _passive_detect(thread, actor, s, defender_bonus)
         if passive:
@@ -766,9 +786,9 @@ def _handle_deploy(thread, actor, deploy_action, pool, pool_desc,
         session.detect_stale = False
         session.save(update_fields=["deploys_remaining", "detect_stale"])
 
-    # Passive detection on each deploy
+    # Passive detection on each deploy (skip if already detected)
     detection_msg = ""
-    if session:
+    if session and not thread.intrusion_detected:
         passive = _passive_detect(thread, actor, session.gain_access_successes, ps_flags.get("defender_bonus", 0))
         if passive:
             detected, det_result, def_name = passive
@@ -782,6 +802,8 @@ def _handle_deploy(thread, actor, deploy_action, pool, pool_desc,
                 detection_msg = f" Passive detection by {def_name} — still undetected."
         else:
             detection_msg = " No passive detection (defender unskilled)."
+    elif session and thread.intrusion_detected:
+        detection_msg = " Intrusion already detected."
         session.detect_stale = False
         session.save(update_fields=["detect_stale"])
         # Helper concealment detection on deploy
@@ -999,16 +1021,7 @@ def _resolve_deploy(deploy_action, result, thread, actor,
         return f"{s} successes — permanent backdoor deployed." + (" Exceptional — extremely difficult to detect." if result.is_exceptional else "")
 
     elif deploy_action == "ransomware":
-        # Auto-resolve target agency from the thread's defender
-        defender_agency_id = None
-        defender_agency_name = "target"
-        for m in ThreadMembership.objects.filter(thread=thread, hidden=False).exclude(user=actor):
-            if m.alias_type == "npc" and m.alias_id:
-                npc = NPC.objects.filter(pk=m.alias_id).first()
-                if npc and npc.agency_id:
-                    defender_agency_id = npc.agency_id
-                    defender_agency_name = Agency.objects.filter(pk=npc.agency_id).values_list("name", flat=True).first() or "target"
-                    break
+        defender_agency_id, defender_agency_name = _resolve_defender_agency(thread, actor)
         base_name = ""
         if target_base_id:
             from agencies.models import Base
@@ -1093,43 +1106,27 @@ def _resolve_deploy(deploy_action, result, thread, actor,
 
 
     elif deploy_action == "sabotage":
-        # Resolve defender agency and project, reduce completion points
+        defender_agency_id, defender_agency_name = _resolve_defender_agency(thread, actor)
         project_name = "unknown project"
-        defender_agency_name = "target"
         old_score = 0
         new_score = 0
-        for m in ThreadMembership.objects.filter(thread=thread, hidden=False).exclude(user=actor):
-            if m.alias_type == "npc" and m.alias_id:
-                npc = NPC.objects.filter(pk=m.alias_id).first()
-                if npc and npc.agency_id:
-                    ag = Agency.objects.filter(pk=npc.agency_id).first()
-                    if ag:
-                        defender_agency_name = ag.name
-                        if target_project_index is not None and ag.projects:
-                            try:
-                                idx = int(target_project_index)
-                                if 0 <= idx < len(ag.projects):
-                                    project_name = ag.projects[idx].get("name", f"Project {idx+1}")
-                                    old_score = int(ag.projects[idx].get("completionScore", 0))
-                                    new_score = max(0, old_score - s)
-                                    ag.projects[idx]["completionScore"] = new_score
-                                    ag.save(update_fields=["projects"])
-                            except (ValueError, IndexError):
-                                pass
-                    break
+        if defender_agency_id:
+            ag = Agency.objects.filter(pk=defender_agency_id).first()
+            if ag and target_project_index is not None and ag.projects:
+                try:
+                    idx = int(target_project_index)
+                    if 0 <= idx < len(ag.projects):
+                        project_name = ag.projects[idx].get("name", f"Project {idx+1}")
+                        old_score = int(ag.projects[idx].get("completionScore", 0))
+                        new_score = max(0, old_score - s)
+                        ag.projects[idx]["completionScore"] = new_score
+                        ag.save(update_fields=["projects"])
+                except (ValueError, IndexError):
+                    pass
         return f"{s} successes — '{project_name}' in {defender_agency_name} sabotaged. Completion reduced from {old_score} to {new_score} (-{old_score - new_score})."
 
     elif deploy_action == "shutdown_infra":
-        # Auto-resolve defender agency
-        defender_agency_id = None
-        defender_agency_name = "target"
-        for m in ThreadMembership.objects.filter(thread=thread, hidden=False).exclude(user=actor):
-            if m.alias_type == "npc" and m.alias_id:
-                npc = NPC.objects.filter(pk=m.alias_id).first()
-                if npc and npc.agency_id:
-                    defender_agency_id = npc.agency_id
-                    defender_agency_name = Agency.objects.filter(pk=npc.agency_id).values_list("name", flat=True).first() or "target"
-                    break
+        defender_agency_id, defender_agency_name = _resolve_defender_agency(thread, actor)
         infra_names = {
             "power": "Power Grid", "water": "Water Systems", "logistics": "Logistics Network",
             "transport": "Transport Infrastructure", "media": "Media Channels", "comms": "Communications",
