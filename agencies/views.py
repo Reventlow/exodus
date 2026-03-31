@@ -1413,7 +1413,7 @@ def api_dark_grants(request, pk, project_index):
     for i in range(level):
         die = random.randint(1, 10)
         rolls.append(die)
-        if die <= 3 and npc_agencies:
+        if die <= 2 and npc_agencies:
             # Pick an agency that isn't already linked
             for ag_id, ag_name in npc_agencies:
                 if ag_id not in [la["id"] for la in linked_agencies]:
