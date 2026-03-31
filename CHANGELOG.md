@@ -1,5 +1,12 @@
 # Changelog
 
+## v0.9.77
+- Fix: intrusion detection now per-session — multiple attackers can each be detected independently
+- Fix: tuple unpack crash on Gain Access (Distributed Consciousness check)
+- Fix: helper concealment detection runs on every deploy, not just when already detected
+- Fix: WebSocket auto-reconnects on disconnect — chat messages update in real-time again
+- Removed dead code in _resolve_deploy for close_connection
+
 ## v0.9.76
 - Mental load penalizes all cyber terminal actions and sweep rolls
 - Shown in pool description and active modifiers panel

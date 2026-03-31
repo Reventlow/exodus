@@ -50,24 +50,33 @@ function useCommsSocket(onMessage) {
   onMessageRef.current = onMessage;
 
   useEffect(() => {
-    const proto = location.protocol === "https:" ? "wss:" : "ws:";
-    const ws = new WebSocket(`${proto}//${location.host}/ws/comms/`);
-    wsRef.current = ws;
+    let stopped = false;
 
-    ws.onmessage = (e) => {
-      const data = JSON.parse(e.data);
-      onMessageRef.current(data);
-    };
+    function connect() {
+      if (stopped) return;
+      const proto = location.protocol === "https:" ? "wss:" : "ws:";
+      const ws = new WebSocket(`${proto}//${location.host}/ws/comms/`);
+      wsRef.current = ws;
 
-    ws.onclose = () => {
-      setTimeout(() => {
-        if (wsRef.current === ws) {
-          wsRef.current = null;
+      ws.onmessage = (e) => {
+        const data = JSON.parse(e.data);
+        onMessageRef.current(data);
+      };
+
+      ws.onclose = () => {
+        wsRef.current = null;
+        if (!stopped) {
+          setTimeout(connect, 3000);
         }
-      }, 3000);
-    };
+      };
 
-    return () => ws.close();
+      ws.onerror = () => {
+        ws.close();
+      };
+    }
+
+    connect();
+    return () => { stopped = true; if (wsRef.current) wsRef.current.close(); };
   }, []);
 
   return wsRef;

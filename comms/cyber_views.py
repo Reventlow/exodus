@@ -609,7 +609,7 @@ def _handle_gain_access(thread, actor, target_user, pool, pool_desc,
     # Distributed Consciousness doubles deploy actions
     actor_stats = _get_actor_stats(actor, persona_type, persona_id)
     if actor_stats:
-        _, _, _, _, _, actor_merits, _, _ = actor_stats
+        _, _, _, _, _, actor_merits, _, _, _ = actor_stats
         has_distributed = any(m.get("name", "").lower() == "distributed consciousness" for m in actor_merits)
         if has_distributed:
             deploys *= 2
@@ -650,9 +650,9 @@ def _handle_gain_access(thread, actor, target_user, pool, pool_desc,
             if created:
                 granted += 1
 
-    # Passive detection (only for 1-4 successes, skip if already detected)
+    # Passive detection (only for 1-4 successes, skip if THIS session already detected)
     detection_msg = ""
-    if thread.intrusion_detected:
+    if session.detected:
         detection_msg = " Intrusion already detected."
     elif not exceptional:
         defender_bonus = ps_flags.get("defender_bonus", 0)
@@ -789,9 +789,9 @@ def _handle_deploy(thread, actor, deploy_action, pool, pool_desc,
         session.detect_stale = False
         session.save(update_fields=["deploys_remaining", "detect_stale"])
 
-    # Passive detection on each deploy (skip if already detected)
+    # Passive detection on each deploy (skip if THIS session already detected)
     detection_msg = ""
-    if session and not thread.intrusion_detected:
+    if session and not session.detected:
         passive = _passive_detect(thread, actor, session.gain_access_successes, ps_flags.get("defender_bonus", 0))
         if passive:
             detected, det_result, def_name = passive
@@ -805,11 +805,13 @@ def _handle_deploy(thread, actor, deploy_action, pool, pool_desc,
                 detection_msg = f" Passive detection by {def_name} — still undetected."
         else:
             detection_msg = " No passive detection (defender unskilled)."
-    elif session and thread.intrusion_detected:
+    elif session and session.detected:
         detection_msg = " Intrusion already detected."
+
+    if session:
         session.detect_stale = False
         session.save(update_fields=["detect_stale"])
-        # Helper concealment detection on deploy
+        # Helper concealment detection on every deploy
         if session.helper_npc_id:
             helper_msg = _detect_helper(session, thread, actor)
             if helper_msg:
@@ -1162,23 +1164,7 @@ def _resolve_deploy(deploy_action, result, thread, actor,
             )
         return f"{s} successes — {infra_name} shut down in {defender_agency_name}. Condition created (difficulty {s} to clear)."
 
-    elif deploy_action == "close_connection":
-        removed_hidden = ThreadMembership.objects.filter(
-            thread=thread, user=actor, hidden=True,
-        ).delete()[0]
-        removed_backdoors = ThreadEffect.objects.filter(
-            thread=thread, source_user=actor, effect_type="backdoor", is_active=True,
-        ).update(is_active=False)
-        # Close session
-        CyberSession.objects.filter(
-            thread=thread, attacker=actor, is_active=True,
-        ).update(is_active=False)
-        parts = [f"{s} successes — connection closed cleanly"]
-        if removed_hidden:
-            parts.append(f"{removed_hidden} hidden access(es) removed")
-        if removed_backdoors:
-            parts.append(f"{removed_backdoors} backdoor(s) cleaned")
-        return "; ".join(parts) + ". All traces removed."
+    # close_connection is handled by early return in _handle_deploy, not here
 
     return f"{s} successes — deployed."
 
