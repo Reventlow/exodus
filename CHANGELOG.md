@@ -1,5 +1,10 @@
 # Changelog
 
+## v0.10.0 — Science Expansion
+- Science class can mark projects as "Fringe"
+- Fringe column only visible to science class and GM
+- Non-science players don't see the fringe flag in the API or UI
+
 ## v0.9.86
 - Helper NPC goes "Compromised — Underground" when concealment fills
 - Detected by agency name recorded on the NPC

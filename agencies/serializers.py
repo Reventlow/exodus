@@ -7,6 +7,27 @@ from .models import GlobalFlaw, FTLProject, AgencyFTLProject, CouncilItem, Counc
 CLASSIFIED = "CLASSIFIED"
 
 
+def _serialize_projects(agency, show_all, user, is_field_visible_fn):
+    """Serialize projects with fringe visibility control."""
+    if not is_field_visible_fn(agency, "projects") and not show_all:
+        return CLASSIFIED
+
+    projects = agency.projects or []
+    if not show_all:
+        # Non-admin: filter out classified projects
+        projects = [p for p in projects if isinstance(p, dict) and not p.get("classified", False)]
+
+    # Check if user is science class
+    char = Character.objects.filter(owner=user).first()
+    is_science = user.is_superuser or (char and char.character_class == "science")
+
+    if not is_science:
+        # Strip fringe field from projects
+        projects = [{k: v for k, v in p.items() if k != "fringe"} if isinstance(p, dict) else p for p in projects]
+
+    return projects
+
+
 def _get_sweep_info(agency, user):
     """Calculate sweep roll info for the current user or best NPC dossier."""
     info = {"pool": 0, "parts": ["Intelligence + Computer + merit modifiers"], "merits": []}
@@ -177,10 +198,7 @@ def serialize_agency(agency, user):
         "assets": vis("assets", agency.assets),
         "fleet": vis("fleet", agency.fleet),
         "conditions": vis("conditions", agency.conditions),
-        "projects": vis("projects", agency.projects) if show_all else [
-            p for p in (agency.projects or [])
-            if isinstance(p, dict) and not p.get("classified", False)
-        ] if is_field_visible(agency, "projects") else redact_value(agency.projects),
+        "projects": _serialize_projects(agency, show_all, user, is_field_visible),
         "history": vis("history", agency.history),
     }
 

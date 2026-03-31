@@ -16,6 +16,8 @@
     const AGENCY_ID = {{ agency_id }};
     const IS_ADMIN = {{ is_admin|yesno:"true,false" }};
     const IS_PLAYER_AGENCY = {{ is_player_agency|yesno:"true,false" }};
+    const CHARACTER_CLASS = '{{ character_class }}';
+    const IS_SCIENCE = CHARACTER_CLASS === 'science' || IS_ADMIN;
     const CSRF_TOKEN = '{{ csrf_token }}';
 </script>
 {% verbatim %}
@@ -3091,8 +3093,9 @@
                         { key: 'completionScore', label: 'COMPLETION', width: '80px', type: 'number' },
                         { key: 'notes', label: 'NOTES', width: '2fr' },
                         { key: 'classified', label: 'CLASS.', width: '50px', type: 'boolean' },
+                        ...(IS_SCIENCE ? [{ key: 'fringe', label: 'FRINGE', width: '55px', type: 'boolean' }] : []),
                     ]}
-                    emptyItem={{ name: '', player: '', duration: '', completionScore: 0, notes: '', classified: true }}
+                    emptyItem={{ name: '', player: '', duration: '', completionScore: 0, notes: '', classified: true, fringe: false }}
                     update={val => updateAgency({ projects: val })}
                     onSave={val => saveAgencyQuiet({ projects: val })}
                     getFreshItems={() => agencyRef.current.projects || []}

@@ -102,6 +102,9 @@ def agency_sheet_page(request, pk):
     if agency.is_hidden and not request.user.is_superuser:
         return HttpResponseForbidden("ACCESS DENIED. Agency record not found.")
     is_admin = request.user.is_superuser
+    from characters.models import Character
+    char = Character.objects.filter(owner=request.user).first()
+    char_class = char.character_class if char else ""
     return render(
         request,
         "agencies/sheet.html",
@@ -109,6 +112,7 @@ def agency_sheet_page(request, pk):
             "agency_id": agency.id,
             "is_admin": is_admin,
             "is_player_agency": agency.is_player_agency,
+            "character_class": char_class,
         },
     )
 
