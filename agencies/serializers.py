@@ -7,6 +7,59 @@ from .models import GlobalFlaw, FTLProject, AgencyFTLProject, CouncilItem, Counc
 CLASSIFIED = "CLASSIFIED"
 
 
+def _get_sweep_info(agency, user):
+    """Calculate sweep roll info for the current user or best NPC dossier."""
+    info = {"pool": 0, "parts": [], "merits": []}
+
+    if agency.is_player_agency:
+        # Player agency — use the requesting user's character
+        char = Character.objects.filter(owner=user).first()
+        if not char:
+            return info
+        intelligence = char.attributes.get("power", {}).get("mental", 1)
+        computer = char.skills.get("mental", {}).get("Computer", 0)
+        pool = intelligence + computer
+        parts = [f"Intelligence {intelligence}", f"Computer {computer}"]
+        merits = []
+        for cm in char.character_merits.select_related("merit").all():
+            if cm.merit.name.lower() == "computer aptitude":
+                pool += 2
+                parts.append("Computer Aptitude +2")
+                merits.append(cm.merit.name)
+            elif cm.merit.name.lower() == "rapid processing":
+                pool += 2
+                parts.append("Rapid Processing +2")
+                merits.append(cm.merit.name)
+        info = {"pool": pool, "parts": parts, "merits": merits}
+    else:
+        # NPC agency — find dossier with highest Intelligence + Computer + merits
+        best_pool = 0
+        best_info = info
+        for npc in NPC.objects.filter(agency=agency, is_npc_dossier=True):
+            intelligence = npc.attributes.get("power", {}).get("mental", 1)
+            computer = npc.skills.get("mental", {}).get("Computer", 0)
+            if computer <= 0:
+                continue
+            pool = intelligence + computer
+            parts = [f"{npc.name}: Intelligence {intelligence}", f"Computer {computer}"]
+            merits = []
+            for nm in npc.npc_merits.select_related("merit").all():
+                if nm.merit.name.lower() == "computer aptitude":
+                    pool += 2
+                    parts.append("Computer Aptitude +2")
+                    merits.append(nm.merit.name)
+                elif nm.merit.name.lower() == "rapid processing":
+                    pool += 2
+                    parts.append("Rapid Processing +2")
+                    merits.append(nm.merit.name)
+            if pool > best_pool:
+                best_pool = pool
+                best_info = {"pool": pool, "parts": parts, "merits": merits, "npcName": npc.name}
+        info = best_info
+
+    return info
+
+
 def is_field_visible(agency, field_path):
     """Check if a field is visible on an NPC agency.
 
@@ -74,6 +127,7 @@ def serialize_agency(agency, user):
         "mapColor": agency.map_color,
         "zeroDayPool": agency.zero_day_pool if is_admin else None,
         "sweepPool": agency.sweep_pool,
+        "sweepInfo": _get_sweep_info(agency, user),
         "conditions_cyber": [
             {
                 "id": c.id,

@@ -1,5 +1,9 @@
 # Changelog
 
+## v0.9.72
+- Sweep & Clear explainer: shows dice pool breakdown (Intelligence + Computer + merits) and active merits
+- NPC agencies: GM rolls using best dossier (highest Intelligence + Computer + merit modifier)
+
 ## v0.9.71
 - Sweep pool moved to agency level — shared across all conditions
 - Anyone with Computer skill can sweep, each roll costs 1 from agency pool

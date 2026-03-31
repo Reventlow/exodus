@@ -2989,6 +2989,23 @@
                                 )}
                             </span>
                         </h3>
+                        {agency.sweepInfo && agency.sweepInfo.pool > 0 && (
+                            <div className="tech-border" style={{ padding: '0.75rem', marginBottom: '0.75rem', background: 'rgba(0,0,0,0.2)' }}>
+                                <div className="mono-text text-muted" style={{ fontSize: '0.7rem', marginBottom: '0.25rem' }}>
+                                    SWEEP ROLL: <span style={{ color: 'var(--accent-primary)' }}>{agency.sweepInfo.parts.join(' + ')} = {agency.sweepInfo.pool} dice</span>
+                                </div>
+                                {agency.sweepInfo.merits && agency.sweepInfo.merits.length > 0 && (
+                                    <div className="mono-text text-muted" style={{ fontSize: '0.65rem' }}>
+                                        Active merits: {agency.sweepInfo.merits.join(', ')}
+                                    </div>
+                                )}
+                                {agency.sweepInfo.npcName && (
+                                    <div className="mono-text text-muted" style={{ fontSize: '0.65rem' }}>
+                                        Best dossier: {agency.sweepInfo.npcName}
+                                    </div>
+                                )}
+                            </div>
+                        )}
                         {agency.conditions_cyber.map(c => (
                             <div key={c.id} className="tech-border" style={{
                                 padding: '1rem', marginBottom: '0.5rem',

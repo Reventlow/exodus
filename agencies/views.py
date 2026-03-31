@@ -1259,7 +1259,21 @@ def api_sweep_condition(request, pk, condition_id):
     if not char and not request.user.is_superuser:
         return JsonResponse({"error": "No character found."}, status=400)
 
-    if request.user.is_superuser:
+    if request.user.is_superuser and not agency.is_player_agency:
+        # NPC agency — use best dossier
+        from npcs.models import NPC
+        best_pool = 0
+        for npc in NPC.objects.filter(agency=agency, is_npc_dossier=True):
+            comp = npc.skills.get("mental", {}).get("Computer", 0)
+            if comp <= 0:
+                continue
+            p = npc.attributes.get("power", {}).get("mental", 1) + comp
+            for nm in npc.npc_merits.select_related("merit").all():
+                if nm.merit.name.lower() in ("computer aptitude", "rapid processing"):
+                    p += 2
+            best_pool = max(best_pool, p)
+        pool = best_pool if best_pool > 0 else 10
+    elif request.user.is_superuser:
         pool = 10
     else:
         computer = char.skills.get("mental", {}).get("Computer", 0)
@@ -1268,9 +1282,8 @@ def api_sweep_condition(request, pk, condition_id):
         intelligence = char.attributes.get("power", {}).get("mental", 1)
         pool = intelligence + computer
         for cm in char.character_merits.select_related("merit").all():
-            if cm.merit.name.lower() == "computer aptitude":
+            if cm.merit.name.lower() in ("computer aptitude", "rapid processing"):
                 pool += 2
-                break
 
     result = roll_dice(pool)
     condition.sweep_progress += result.successes
