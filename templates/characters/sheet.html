@@ -779,7 +779,7 @@
         // Filter catalog: general + character's class, exclude already-owned non-linkable
         // Hide linkable entries (Personal NPC) if no unlinked dossiers remain
         const available = catalog.filter(ps =>
-            (ps.category === 'general' || ps.category === characterClass || (characterClass === 'engineer' && ps.name === 'Bot Farm')) &&
+            (ps.category === 'general' || ps.category === characterClass || (characterClass === 'engineer' && ps.name === 'Bot Farm') || (characterClass === 'fixer' && ps.name === 'Darknet Identity Broker')) &&
             (ps.isLinkable ? unlinkedNpcsLeft > 0 : !ownedPsIds.includes(ps.id))
         );
 

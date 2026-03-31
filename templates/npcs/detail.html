@@ -1547,7 +1547,7 @@
                         const charClass = npc.characterClass || '';
                         const available = (psCatalog || []).filter(ps =>
                             !owned.includes(ps.id) &&
-                            (ps.category === 'general' || ps.category === charClass || (charClass === 'engineer' && ps.name === 'Bot Farm'))
+                            (ps.category === 'general' || ps.category === charClass || (charClass === 'engineer' && ps.name === 'Bot Farm') || (charClass === 'fixer' && ps.name === 'Darknet Identity Broker'))
                         );
                         return (
                             <div className="glass-panel" style={{ padding: '1rem', marginBottom: '0.5rem' }}>
