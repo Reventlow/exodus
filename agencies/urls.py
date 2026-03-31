@@ -103,6 +103,12 @@ urlpatterns = [
         views.api_agency_base_detail,
         name="api_agency_base_detail",
     ),
+    # Dark Grants
+    path(
+        "api/agencies/<int:pk>/projects/<int:project_index>/dark-grants/",
+        views.api_dark_grants,
+        name="api_dark_grants",
+    ),
     # Conditions
     path(
         "api/agencies/<int:pk>/conditions/<int:condition_id>/sweep/",

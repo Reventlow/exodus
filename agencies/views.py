@@ -1352,3 +1352,86 @@ def api_condition_detail(request, pk, condition_id):
         return JsonResponse({"status": "ok"})
 
     return JsonResponse({"error": "Method not allowed"}, status=405)
+
+
+@login_required
+@require_http_methods(["POST"])
+def api_dark_grants(request, pk, project_index):
+    """Activate Dark Grants on a fringe project. Science class only."""
+    import random
+
+    agency = get_object_or_404(Agency, pk=pk)
+
+    # Check science class or admin
+    from characters.models import Character
+    char = Character.objects.filter(owner=request.user).first()
+    is_science = request.user.is_superuser or (char and char.character_class == "science")
+    if not is_science:
+        return JsonResponse({"error": "Science class required."}, status=403)
+
+    # Check pulling string
+    has_dark_grants = False
+    if request.user.is_superuser:
+        has_dark_grants = True
+    elif char:
+        for cps in char.character_pulling_strings.select_related("pulling_string").all():
+            if cps.pulling_string.name.lower() == "dark grants":
+                has_dark_grants = True
+                break
+    if not has_dark_grants:
+        return JsonResponse({"error": "Dark Grants pulling string required."}, status=403)
+
+    # Validate project
+    projects = agency.projects or []
+    if project_index < 0 or project_index >= len(projects):
+        return JsonResponse({"error": "Invalid project index."}, status=400)
+
+    project = projects[project_index]
+    if not isinstance(project, dict):
+        return JsonResponse({"error": "Invalid project data."}, status=400)
+    if not project.get("fringe"):
+        return JsonResponse({"error": "Dark Grants can only be activated on fringe projects."}, status=400)
+    if project.get("darkGrantsLevel"):
+        return JsonResponse({"error": "Dark Grants already active on this project."}, status=400)
+
+    try:
+        body = json.loads(request.body)
+    except json.JSONDecodeError:
+        return JsonResponse({"error": "Invalid JSON."}, status=400)
+
+    level = int(body.get("level", 0))
+    if level < 1 or level > 3:
+        return JsonResponse({"error": "Level must be 1-3."}, status=400)
+
+    # Roll for agency involvement: 1d10 per level, each 1-3 = an agency linked
+    linked_agencies = []
+    rolls = []
+    # Get all NPC agencies (excluding player agency)
+    npc_agencies = list(Agency.objects.filter(is_player_agency=False, is_hidden=False).values_list("id", "name"))
+    random.shuffle(npc_agencies)
+
+    for i in range(level):
+        die = random.randint(1, 10)
+        rolls.append(die)
+        if die <= 3 and npc_agencies:
+            # Pick an agency that isn't already linked
+            for ag_id, ag_name in npc_agencies:
+                if ag_id not in [la["id"] for la in linked_agencies]:
+                    linked_agencies.append({"id": ag_id, "name": ag_name})
+                    break
+
+    # Update project
+    project["darkGrantsLevel"] = level
+    project["darkGrantsAgencies"] = linked_agencies
+    projects[project_index] = project
+    agency.projects = projects
+    agency.save(update_fields=["projects"])
+
+    return JsonResponse({
+        "level": level,
+        "bonusDice": level,
+        "rolls": rolls,
+        "linkedAgencies": linked_agencies,
+        "message": f"Dark Grants level {level} activated. +{level} permanent dice to completion rolls."
+            + (f" WARNING: {len(linked_agencies)} agency(ies) now linked to this project: {', '.join(a['name'] for a in linked_agencies)}" if linked_agencies else " No agencies linked — funding is clean."),
+    })

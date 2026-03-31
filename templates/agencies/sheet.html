@@ -3140,6 +3140,55 @@
                     visibility={vis} onToggleVis={toggleVisibility}
                 />
 
+                {/* Dark Grants on fringe projects */}
+                {IS_SCIENCE && (agency.projects || []).filter(p => p.fringe && !p.discarded).map((p, origIdx) => {
+                    // Find original index in the full projects array
+                    const realIdx = (agency.projects || []).indexOf(p);
+                    if (p.darkGrantsLevel) {
+                        return (
+                            <div key={`dg-${realIdx}`} className="tech-border" style={{ padding: '0.75rem', marginBottom: '0.25rem', background: 'rgba(138,43,226,0.05)', borderColor: '#8a2be2' }}>
+                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                    <span className="mono-text" style={{ fontSize: '0.8rem' }}>
+                                        🖐 <span style={{ color: '#8a2be2' }}>{p.name}</span> — Dark Grants Level {p.darkGrantsLevel} (+{p.darkGrantsLevel} dice)
+                                    </span>
+                                    {p.darkGrantsAgencies && p.darkGrantsAgencies.length > 0 && (
+                                        <span className="mono-text" style={{ fontSize: '0.7rem', color: 'var(--accent-danger, #c0392b)' }}>
+                                            Linked: {p.darkGrantsAgencies.map(a => a.name).join(', ')}
+                                        </span>
+                                    )}
+                                </div>
+                            </div>
+                        );
+                    }
+                    return (
+                        <div key={`dg-${realIdx}`} className="tech-border" style={{ padding: '0.75rem', marginBottom: '0.25rem', background: 'rgba(138,43,226,0.03)' }}>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '0.5rem' }}>
+                                <span className="mono-text" style={{ fontSize: '0.8rem' }}>
+                                    🖐 {p.name} — <span className="text-muted">Dark Grants available</span>
+                                </span>
+                                <div style={{ display: 'flex', gap: '0.25rem' }}>
+                                    {[1, 2, 3].map(lvl => (
+                                        <button key={lvl} onClick={() => {
+                                            if (!confirm(`Activate Dark Grants Level ${lvl} on "${p.name}"?\n\n+${lvl} permanent dice to completion rolls.\nRisk: ${lvl}d10 rolled — each 1-3 links a foreign agency.\n\nThis cannot be undone.`)) return;
+                                            fetch(`/api/agencies/${AGENCY_ID}/projects/${realIdx}/dark-grants/`, {
+                                                method: 'POST',
+                                                headers: { 'Content-Type': 'application/json', 'X-CSRFToken': CSRF_TOKEN },
+                                                body: JSON.stringify({ level: lvl }),
+                                            }).then(r => r.json()).then(data => {
+                                                if (data.error) { alert(data.error); return; }
+                                                alert(data.message);
+                                                fetchAgency();
+                                            });
+                                        }} className="btn-cyber" style={{ fontSize: '0.7rem', padding: '0.2rem 0.5rem', background: 'rgba(138,43,226,0.1)', borderColor: '#8a2be2', color: '#8a2be2' }}>
+                                            LVL {lvl}
+                                        </button>
+                                    ))}
+                                </div>
+                            </div>
+                        </div>
+                    );
+                })}
+
                 <FTLProjectsModule
                     ftlProjects={agency.ftlProjects}
                     agencyId={AGENCY_ID}

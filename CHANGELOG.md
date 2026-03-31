@@ -1,5 +1,12 @@
 # Changelog
 
+## v0.10.4
+- Dark Grants: science class activates on fringe projects at level 1-3
+- Permanently adds +level dice to completion rolls
+- Risk: 1d10 per level, each 1-3 links a random NPC agency to the project
+- Linked agencies shown in red, one-time activation per project
+- Requires Dark Grants pulling string
+
 ## v0.10.3
 - Fringe slot limit: max active fringe projects = Science score
 - Slot counter shown above projects table for science class
