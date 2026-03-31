@@ -14,8 +14,8 @@ def _serialize_projects(agency, show_all, user, is_field_visible_fn):
 
     projects = agency.projects or []
     if not show_all:
-        # Non-admin: filter out classified projects
-        projects = [p for p in projects if isinstance(p, dict) and not p.get("classified", False)]
+        # Non-admin: filter out classified and discarded projects
+        projects = [p for p in projects if isinstance(p, dict) and not p.get("classified", False) and not p.get("discarded", False)]
 
     # Check if user is science class
     char = Character.objects.filter(owner=user).first()
@@ -26,6 +26,25 @@ def _serialize_projects(agency, show_all, user, is_field_visible_fn):
         projects = [{k: v for k, v in p.items() if k != "fringe"} if isinstance(p, dict) else p for p in projects]
 
     return projects
+
+
+def _get_fringe_info(agency, user):
+    """Get fringe project slot info for the current user."""
+    char = Character.objects.filter(owner=user).first()
+    is_science = user.is_superuser or (char and char.character_class == "science")
+    if not is_science:
+        return None
+
+    science_score = 99 if user.is_superuser else char.skills.get("mental", {}).get("Science", 0)
+    active_fringe = sum(
+        1 for p in (agency.projects or [])
+        if isinstance(p, dict) and p.get("fringe") and not p.get("discarded")
+    )
+    return {
+        "maxSlots": science_score,
+        "usedSlots": active_fringe,
+        "availableSlots": max(0, science_score - active_fringe),
+    }
 
 
 def _get_sweep_info(agency, user):
@@ -175,6 +194,7 @@ def serialize_agency(agency, user):
         "zeroDayPool": agency.zero_day_pool if is_admin else None,
         "sweepPool": agency.sweep_pool,
         "sweepInfo": _get_sweep_info(agency, user),
+        "fringeInfo": _get_fringe_info(agency, user),
         "conditions_cyber": [
             {
                 "id": c.id,

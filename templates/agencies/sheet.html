@@ -1030,19 +1030,28 @@
                                 const canToggle = isFringe ? IS_SCIENCE : IS_ADMIN;
                                 return (
                                     <div key={col.key} style={{ display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                                        {isFringe ? (
+                                        {isFringe ? (() => {
+                                            const activeFringe = actualItems.filter(it => it.fringe && !it.discarded).length;
+                                            const fringeInfo = typeof agency !== 'undefined' ? agency.fringeInfo : null;
+                                            const maxSlots = fringeInfo ? fringeInfo.maxSlots : 99;
+                                            const slotsLeft = maxSlots - activeFringe;
+                                            const atLimit = !item.fringe && slotsLeft <= 0;
+                                            return (
                                             <button onClick={() => {
-                                                if (!canToggle || item.fringe) return;
-                                                if (!confirm('Mark this project as Fringe Science? This cannot be undone.')) return;
+                                                if (!canToggle || item.fringe || atLimit) return;
+                                                if (!confirm(`Mark as Fringe Science? (${slotsLeft - 1} slots remaining after this) This cannot be undone.`)) return;
                                                 const updated = actualItems.map((it, i) =>
                                                     i === idx ? { ...it, fringe: true } : it
                                                 );
                                                 onSave(updated);
-                                            }} disabled={!canToggle || item.fringe} title={item.fringe ? 'Fringe Science (permanent)' : 'Mark as Fringe Science (irreversible)'}
+                                            }} disabled={!canToggle || item.fringe || atLimit}
+                                            title={item.fringe ? 'Fringe Science (permanent)' : atLimit ? `No fringe slots available (${activeFringe}/${maxSlots})` : `Mark as Fringe Science (${slotsLeft} slots left)`}
                                             style={{
-                                                background: 'transparent', border: 'none', cursor: canToggle ? 'pointer' : 'default',
-                                                fontSize: '1.2rem', opacity: item.fringe ? 1 : 0.2, filter: item.fringe ? 'none' : 'grayscale(1)',
+                                                background: 'transparent', border: 'none', cursor: (canToggle && !item.fringe && !atLimit) ? 'pointer' : 'default',
+                                                fontSize: '1.2rem', opacity: item.fringe ? 1 : atLimit ? 0.1 : 0.2, filter: item.fringe ? 'none' : 'grayscale(1)',
                                             }}>🖐</button>
+                                            );
+                                        })()
                                         ) : (
                                             <input type="checkbox" checked={!!item[col.key]}
                                                 onChange={e => {
@@ -3101,6 +3110,17 @@
                 )}
 
                 <TableModule
+                {IS_SCIENCE && agency.fringeInfo && (
+                    <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: '0.25rem' }}>
+                        <span className="mono-text" style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
+                            FRINGE SLOTS: <span style={{ color: agency.fringeInfo.availableSlots > 0 ? 'var(--accent-primary)' : 'var(--accent-danger, #c0392b)' }}>
+                                {agency.fringeInfo.usedSlots}/{agency.fringeInfo.maxSlots}
+                            </span>
+                        </span>
+                    </div>
+                )}
+
+                <TableModule
                     title="PROJECTS" field="projects"
                     items={agency.projects}
                     columns={[
@@ -3111,8 +3131,9 @@
                         { key: 'notes', label: 'NOTES', width: '2fr' },
                         { key: 'classified', label: 'CLASS.', width: '50px', type: 'boolean' },
                         ...(IS_SCIENCE ? [{ key: 'fringe', label: 'FRINGE', width: '55px', type: 'boolean' }] : []),
+                        ...(IS_ADMIN ? [{ key: 'discarded', label: 'DISC.', width: '45px', type: 'boolean' }] : []),
                     ]}
-                    emptyItem={{ name: '', player: '', duration: '', completionScore: 0, notes: '', classified: true, fringe: false }}
+                    emptyItem={{ name: '', player: '', duration: '', completionScore: 0, notes: '', classified: true, fringe: false, discarded: false }}
                     update={val => updateAgency({ projects: val })}
                     onSave={val => saveAgencyQuiet({ projects: val })}
                     getFreshItems={() => agencyRef.current.projects || []}

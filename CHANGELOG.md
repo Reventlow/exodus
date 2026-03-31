@@ -1,5 +1,12 @@
 # Changelog
 
+## v0.10.3
+- Fringe slot limit: max active fringe projects = Science score
+- Slot counter shown above projects table for science class
+- Fringe button disabled when no slots available
+- Discarded projects free fringe slots and are hidden from non-admin
+- Completed projects also free fringe slots
+
 ## v0.10.2
 - Fringe is permanent — once marked, cannot be undone. Confirmation dialog before marking.
 
