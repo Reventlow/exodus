@@ -600,22 +600,18 @@ function CyberTerminal({ thread, members, onClose, postingAs }) {
                 <span style={{color: "#064"}}>Unskilled penalty:</span> -3 for mental skills at 0, -1 for physical/social skills at 0.
               </div>
 
+              {eligible && eligible.modifiers && eligible.modifiers.length > 0 && (
               <div style={{marginBottom: "0.75rem", borderBottom: "1px solid #042", paddingBottom: "0.5rem"}}>
-                <span style={{color: "#0f0", fontWeight: "bold"}}>MERITS</span><br/>
-                • <span style={{color: "#0f0"}}>Computer Aptitude</span> — +2 dice on all terminal actions<br/>
-                • <span style={{color: "#0f0"}}>Digital Infiltration</span> (AI) — +rating dice on Gain Access and Deploy<br/>
-                • <span style={{color: "#0f0"}}>Digital Ghost</span> (AI/Engineer) — +2 dice on attack, +2 concealment levels for helpers<br/>
-                • <span style={{color: "#0f0"}}>Firewall</span> (AI) — +rating dice on Defend and Detect<br/>
-                • <span style={{color: "#0f0"}}>Rapid Processing</span> (AI) — +2 dice on all terminal actions<br/>
-                • <span style={{color: "#0f0"}}>Network Puppet</span> (AI) — +2 dice on Deploy actions<br/>
-                • <span style={{color: "#0f0"}}>Overclock</span> (AI) — +3 dice on one attack roll per session<br/>
-                • <span style={{color: "#0f0"}}>Distributed Consciousness</span> (AI) — doubles available deploy actions
+                <span style={{color: "#0f0", fontWeight: "bold"}}>YOUR ACTIVE MERITS &amp; PULLING STRINGS</span><br/>
+                {eligible.modifiers.map((m, i) => (
+                  <span key={i}>• <span style={{color: "#0f0"}}>{m.name}</span> — {m.bonus} ({m.applies})<br/></span>
+                ))}
               </div>
+              )}
 
               <div style={{paddingTop: "0.5rem"}}>
                 <span style={{color: "#0f0", fontWeight: "bold"}}>PULLING STRINGS</span><br/>
                 • <span style={{color: "#0f0"}}>Bot Farm</span> — +4 dice on Gain Access, but defender gets +2 to all detection rolls during session<br/>
-                • <span style={{color: "#0f0"}}>Backdoor Access</span> — Shut Down Infrastructure does not cost a deploy action<br/>
                 • <span style={{color: "#0f0"}}>Compromise Firmware / Digital Payload</span> — Sabotage Project does not cost a deploy action, but Close Connection difficulty +4<br/>
                 • <span style={{color: "#0f0"}}>Government Zero-Day Repository</span> — +6 dice on any attack roll, consumes 1 from agency's zero-day pool
                 {IS_STAFF && <span><br/><br/><span style={{color: "#0f0"}}>GM:</span> Modifier field adds bonus/penalty dice to any roll.</span>}

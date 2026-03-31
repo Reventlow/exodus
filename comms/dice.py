@@ -198,11 +198,6 @@ def get_cyber_pool(action_type: str, attributes: dict, skills: dict,
             ps_names.append("Bot Farm +4")
             flags["defender_bonus"] = 2
 
-        # Backdoor Access: free deploy on infrastructure shutdown
-        if "backdoor access" in ps_lower and deploy_action == "shutdown_infra":
-            flags["free_deploy"] = True
-            ps_names.append("Backdoor Access (free action)")
-
         # Compromise Firmware / Digital Payload: free deploy on sabotage, +4 close penalty
         for name in ("compromise firmware", "digital payload"):
             if name in ps_lower and deploy_action == "sabotage":

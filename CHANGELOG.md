@@ -1,5 +1,11 @@
 # Changelog
 
+## v0.9.63
+- Remove Exfiltrate Communications deploy action
+- Remove Backdoor Access pulling string from cyber terminal
+- Merit rules in terminal only show merits the actor's class has access to
+- Pulling string rules section shows only what the actor has
+
 ## v0.9.61
 - AI merits in cyber terminal: Firewall (+rating defend/detect), Rapid Processing (+2 all), Network Puppet (+2 deploy), Overclock (+3 one attack), Distributed Consciousness (x2 deploy actions)
 - Defend messages only shown to executor, attacker detects via Detect roll

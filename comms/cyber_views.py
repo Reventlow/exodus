@@ -244,8 +244,6 @@ def cyber_eligible(request):
         ps_name = (ps.get("name") or "").lower()
         if ps_name == "bot farm":
             active_mods.append({"name": "Bot Farm", "bonus": "+4 gain access", "applies": "defender +2 detect"})
-        elif ps_name == "backdoor access":
-            active_mods.append({"name": "Backdoor Access", "bonus": "free action", "applies": "infrastructure shutdown"})
         elif ps_name in ("compromise firmware", "digital payload"):
             active_mods.append({"name": ps["name"], "bonus": "free action", "applies": "sabotage (+4 close diff)"})
         elif ps_name == "government zero-day repository":
