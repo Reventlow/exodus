@@ -3,6 +3,10 @@
 ## v0.10.6
 - Fix: agency page Babel crash — removed template literals and IIFEs from JSX
 
+## v0.10.16
+- Agency sheet refactored from 3237 lines into 6 component files + 28-line shell
+- Components: _utilities (182), _core_modules (839), _table_ftl (548), _changes (253), _bases (834), _app (617)
+
 ## v0.10.5
 - Fix: agency page crash when projects is CLASSIFIED or null
 
