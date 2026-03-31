@@ -73,7 +73,7 @@ def serialize_agency(agency, user):
         "isHidden": agency.is_hidden,
         "mapColor": agency.map_color,
         "zeroDayPool": agency.zero_day_pool if is_admin else None,
-        "conditions": [
+        "conditions_cyber": [
             {
                 "id": c.id,
                 "type": c.condition_type,

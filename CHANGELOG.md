@@ -1,5 +1,8 @@
 # Changelog
 
+## v0.9.65
+- Cyber Conditions UI on agency page: shows active conditions with progress bar, Sweep & Clear button, GM pool allocation and remove controls
+
 ## v0.9.64
 - Agency Conditions system: ransomware and shutdown deploys create structured conditions on target agency
 - Each condition has difficulty (attacker successes) and Sweep & Clear mechanism

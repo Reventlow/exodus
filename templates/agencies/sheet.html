@@ -2980,6 +2980,104 @@
                     visibility={vis} onToggleVis={toggleVisibility}
                 />
 
+                {/* Cyber Conditions - structured conditions from deploy actions */}
+                {agency.conditions_cyber && agency.conditions_cyber.length > 0 && (
+                    <div className="glass-panel" style={{ padding: '1.5rem', marginBottom: '1rem' }}>
+                        <h3 className="mono-text text-accent" style={{
+                            borderBottom: '1px solid var(--border-color)',
+                            paddingBottom: '0.5rem', marginBottom: '1rem',
+                        }}>CYBER CONDITIONS</h3>
+                        {agency.conditions_cyber.map(c => (
+                            <div key={c.id} className="tech-border" style={{
+                                padding: '1rem', marginBottom: '0.5rem',
+                                background: 'rgba(170,51,51,0.05)',
+                                borderColor: 'var(--accent-danger, #c0392b)',
+                            }}>
+                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
+                                    <span className="mono-text" style={{ color: 'var(--accent-danger, #c0392b)', fontSize: '0.85rem', fontWeight: 'bold' }}>
+                                        {c.typeDisplay}
+                                    </span>
+                                    <span className="mono-text text-muted" style={{ fontSize: '0.7rem' }}>
+                                        Difficulty {c.difficulty}
+                                    </span>
+                                </div>
+                                <div className="text-secondary" style={{ fontSize: '0.8rem', marginBottom: '0.75rem' }}>
+                                    {c.description}
+                                </div>
+                                {/* Sweep progress bar */}
+                                <div style={{ marginBottom: '0.5rem' }}>
+                                    <div className="mono-text text-muted" style={{ fontSize: '0.7rem', marginBottom: '0.25rem' }}>
+                                        SWEEP &amp; CLEAR: {c.sweepProgress} / {c.difficulty}
+                                        {c.sweepPool > 0 && ` (${c.sweepPool} pool remaining)`}
+                                    </div>
+                                    <div style={{ display: 'flex', gap: '2px' }}>
+                                        {Array.from({ length: c.difficulty }, (_, i) => (
+                                            <div key={i} style={{
+                                                flex: 1, height: 8, borderRadius: 2,
+                                                background: i < c.sweepProgress ? 'var(--accent-success, #2ecc71)' : 'rgba(255,255,255,0.1)',
+                                                border: '1px solid var(--border-color)',
+                                            }} />
+                                        ))}
+                                    </div>
+                                </div>
+                                <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+                                    {c.sweepPool > 0 && (
+                                        <button onClick={() => {
+                                            fetch(`/api/agencies/${AGENCY_ID}/conditions/${c.id}/sweep/`, {
+                                                method: 'POST',
+                                                headers: { 'Content-Type': 'application/json', 'X-CSRFToken': CSRF_TOKEN },
+                                            }).then(r => r.json()).then(data => {
+                                                if (data.cleared) {
+                                                    alert(`Condition cleared! ${data.successes} successes.`);
+                                                } else {
+                                                    alert(`Sweep: ${data.successes} successes. Progress: ${data.sweepProgress}/${data.difficulty}`);
+                                                }
+                                                fetchAgency();
+                                            });
+                                        }} className="btn-cyber" style={{ fontSize: '0.75rem', padding: '0.3rem 0.75rem' }}>
+                                            SWEEP &amp; CLEAR
+                                        </button>
+                                    )}
+                                    {c.sweepPool <= 0 && !IS_ADMIN && (
+                                        <span className="mono-text text-muted" style={{ fontSize: '0.7rem' }}>Awaiting GM sweep pool allocation</span>
+                                    )}
+                                    {IS_ADMIN && (
+                                        <button onClick={() => {
+                                            const input = prompt('Set Sweep & Clear pool:');
+                                            if (input === null) return;
+                                            const pool = parseInt(input);
+                                            if (isNaN(pool)) return;
+                                            fetch(`/api/agencies/${AGENCY_ID}/conditions/${c.id}/`, {
+                                                method: 'PUT',
+                                                headers: { 'Content-Type': 'application/json', 'X-CSRFToken': CSRF_TOKEN },
+                                                body: JSON.stringify({ sweepPool: pool }),
+                                            }).then(() => fetchAgency());
+                                        }} className="btn-cyber" style={{ fontSize: '0.75rem', padding: '0.3rem 0.75rem' }}>
+                                            SET POOL
+                                        </button>
+                                    )}
+                                    {IS_ADMIN && (
+                                        <button onClick={() => {
+                                            if (!confirm('Clear this condition?')) return;
+                                            fetch(`/api/agencies/${AGENCY_ID}/conditions/${c.id}/`, {
+                                                method: 'PUT',
+                                                headers: { 'Content-Type': 'application/json', 'X-CSRFToken': CSRF_TOKEN },
+                                                body: JSON.stringify({ isActive: false }),
+                                            }).then(() => fetchAgency());
+                                        }} style={{
+                                            background: 'transparent', border: '1px solid var(--accent-danger, #c0392b)',
+                                            color: 'var(--accent-danger, #c0392b)', fontSize: '0.75rem',
+                                            padding: '0.3rem 0.75rem', cursor: 'pointer', fontFamily: 'var(--font-mono)',
+                                        }}>
+                                            REMOVE
+                                        </button>
+                                    )}
+                                </div>
+                            </div>
+                        ))}
+                    </div>
+                )}
+
                 <TableModule
                     title="PROJECTS" field="projects"
                     items={agency.projects}
