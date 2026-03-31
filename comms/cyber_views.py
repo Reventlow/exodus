@@ -1000,12 +1000,12 @@ def close_connection(request, thread_id):
     thread.is_connection_closed = True
     thread.save(update_fields=["is_connection_closed"])
 
-    # Close all active sessions and remove hidden memberships from intercepted threads
-    sessions = CyberSession.objects.filter(thread=thread, is_active=True)
-    for session in sessions:
-        # Remove all hidden memberships this attacker gained from this thread
-        ThreadMembership.objects.filter(user=session.attacker, hidden=True).delete()
-    sessions.update(is_active=False)
+    # Close all sessions (active and inactive) and remove hidden memberships
+    all_sessions = CyberSession.objects.filter(thread=thread)
+    attacker_ids = set(all_sessions.values_list("attacker_id", flat=True))
+    for attacker_id in attacker_ids:
+        ThreadMembership.objects.filter(user_id=attacker_id, hidden=True).delete()
+    all_sessions.filter(is_active=True).update(is_active=False)
 
     # Notify all parties
     _post_system_alert(thread, "🔒 CONNECTION TERMINATED — This channel has been permanently locked.")

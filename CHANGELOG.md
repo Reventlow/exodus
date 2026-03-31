@@ -1,5 +1,8 @@
 # Changelog
 
+## v0.9.82
+- Fix: terminate removes intercepted threads from ALL past attackers, not just active sessions
+
 ## v0.9.81
 - Terminating a chat removes all intercepted threads (hidden memberships) from attackers on that thread
 
