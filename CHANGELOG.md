@@ -1,5 +1,9 @@
 # Changelog
 
+## v0.9.78
+- Rename CLOSE to TERMINATE (chat) / TERMINATE CHAT (terminal)
+- Fix: terminate stays in chat view instead of jumping out
+
 ## v0.9.77
 - Fix: intrusion detection now per-session — multiple attackers can each be detected independently
 - Fix: tuple unpack crash on Gain Access (Distributed Consciousness check)

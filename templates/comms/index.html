@@ -585,7 +585,7 @@ function CyberTerminal({ thread, members, onClose, postingAs }) {
               </div>
 
               <div style={{marginBottom: "0.75rem", borderBottom: "1px solid #042", paddingBottom: "0.5rem"}}>
-                <span style={{color: "#0f0", fontWeight: "bold"}}>CLOSE CONNECTION</span><br/>
+                <span style={{color: "#0f0", fontWeight: "bold"}}>TERMINATE CHAT</span><br/>
                 Any party can close the connection from the chat header or terminal.
                 Once closed, no new messages can be sent and no terminal actions can be taken.
                 Permanently locks the channel. Close Connection &amp; Remove Traces (deploy action)
@@ -740,7 +740,7 @@ function CyberTerminal({ thread, members, onClose, postingAs }) {
                   });
                 }
               }} title="Closes this connection permanently. No party will be able to add messages or access the terminal on this thread."
-              style={{...termStyle.closeBtn, color: "#a33", borderColor: "#a33", fontSize: "0.65rem"}}>CLOSE CONNECTION</button>
+              style={{...termStyle.closeBtn, color: "#a33", borderColor: "#a33", fontSize: "0.65rem"}}>TERMINATE CHAT</button>
             </div>
             <div style={termStyle.actionGrid}>
               {actions.map(a => (
@@ -1018,7 +1018,7 @@ function MessageInput({ onSend, dossiers, postingAs, onPostingAsChange, cyberEli
 // ThreadView
 // ---------------------------------------------------------------------------
 
-function ThreadView({ thread, onSend, onBack, onOpenMembers, onDeleteThread, dossiers, postingAs, onPostingAsChange, cyberEligible }) {
+function ThreadView({ thread, onSend, onBack, onOpenMembers, onDeleteThread, onRefreshThread, dossiers, postingAs, onPostingAsChange, cyberEligible }) {
   const messagesEndRef = useRef(null);
   const [lightboxImage, setLightboxImage] = useState(null);
   const [showTerminal, setShowTerminal] = useState(false);
@@ -1062,16 +1062,14 @@ function ThreadView({ thread, onSend, onBack, onOpenMembers, onDeleteThread, dos
         <button onClick={onOpenMembers} style={S.rosterBtn}>ROSTER</button>
         {!thread.isConnectionClosed && (
           <button
-            title="Closes this connection permanently. No party will be able to add messages or access the terminal on this thread."
+            title="Terminates this chat permanently. No party will be able to add messages or access the terminal on this thread."
             onClick={() => {
-              if (confirm("Close this connection permanently? No party will be able to add messages or access the terminal on this thread.")) {
+              if (confirm("Terminate this chat permanently? No party will be able to add messages or access the terminal.")) {
                 api("/api/comms/threads/" + thread.id + "/cyber/close/", { method: "POST" }).then(() => {
-                  api("/api/comms/threads/" + thread.id + "/").then(data => {
-                    window.location.reload();
-                  });
+                  if (onRefreshThread) onRefreshThread();
                 });
               }
-            }} style={{...S.rosterBtn, color: "#c0392b", borderColor: "#c0392b"}}>CLOSE</button>
+            }} style={{...S.rosterBtn, color: "#c0392b", borderColor: "#c0392b"}}>TERMINATE</button>
         )}
         {IS_STAFF && (
           <button onClick={() => { if (confirm("Delete this thread and all messages?")) onDeleteThread(thread.id); }} style={S.deleteThreadBtn}>&#10005;</button>
@@ -1482,6 +1480,10 @@ function CommsApp() {
           onBack={() => setMobileShowThread(false)}
           onOpenMembers={() => setShowMembers(true)}
           onDeleteThread={handleDeleteThread}
+          onRefreshThread={() => {
+            api("/api/comms/threads/" + activeThreadId + "/").then(setActiveThread);
+            api("/api/comms/threads/").then(setThreads);
+          }}
           dossiers={dossiers}
           postingAs={activeThreadId ? (threadPersonas[activeThreadId] !== undefined ? threadPersonas[activeThreadId] : (IS_STAFF ? GM_PERSONA : null)) : null}
           onPostingAsChange={persona => {
