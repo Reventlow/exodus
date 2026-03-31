@@ -89,6 +89,8 @@ class Agency(models.Model):
 
 CONDITION_TYPE_CHOICES = [
     ("ransomware", "Ransomware"),
+    ("bad_deals", "Fraudulent Trade Orders"),
+    ("base_access", "Base Systems Compromised"),
     ("shutdown_power", "Shutdown: Power Grid"),
     ("shutdown_water", "Shutdown: Water Systems"),
     ("shutdown_logistics", "Shutdown: Logistics Network"),

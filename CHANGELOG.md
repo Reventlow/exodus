@@ -1,5 +1,9 @@
 # Changelog
 
+## v0.9.75
+- Force Bad Deals and Gain Base Access now create agency conditions with difficulty
+- All deploy actions that affect an agency create trackable conditions with Sweep & Clear
+
 ## v0.9.74
 - Fix: NPC agency sweep info now correctly finds best dossier (was unreachable code)
 

@@ -1041,11 +1041,16 @@ def _resolve_deploy(deploy_action, result, thread, actor,
         return f"{s} successes — ransomware deployed on {defender_agency_name}{base_name}. Condition created (difficulty {s} to clear)."
 
     elif deploy_action == "bad_deals":
-        agency_name = "unknown"
-        if target_agency_id:
-            ag = Agency.objects.filter(pk=target_agency_id).first()
-            agency_name = ag.name if ag else "unknown"
-        return f"{s} successes — fraudulent trade orders placed on the UTC on behalf of {agency_name}. GM determines economic impact."
+        defender_agency_id, defender_agency_name = _resolve_defender_agency(thread, actor)
+        if defender_agency_id:
+            from agencies.models import AgencyCondition
+            AgencyCondition.objects.create(
+                agency_id=defender_agency_id,
+                condition_type="bad_deals",
+                description=f"Fraudulent trade orders placed on the UTC on behalf of {defender_agency_name}",
+                difficulty=s,
+            )
+        return f"{s} successes — fraudulent trade orders placed on the UTC on behalf of {defender_agency_name}. Condition created (difficulty {s} to clear)."
 
     elif deploy_action == "steal_intel":
         if not target_agency_id:
@@ -1087,7 +1092,7 @@ def _resolve_deploy(deploy_action, result, thread, actor,
     elif deploy_action == "base_access":
         if not target_base_id:
             return f"{s} successes — but no target base specified."
-        from agencies.models import Base
+        from agencies.models import Base, AgencyCondition
         base = Base.objects.filter(pk=target_base_id).first()
         if not base:
             return f"{s} successes — target base not found."
@@ -1097,9 +1102,19 @@ def _resolve_deploy(deploy_action, result, thread, actor,
             revealed = list(base.hidden_sections)
             base.hidden_sections = []
             base.save(update_fields=["hidden_sections"])
+        # Create condition on defender agency
+        defender_agency_id, defender_agency_name = _resolve_defender_agency(thread, actor)
+        if defender_agency_id:
+            AgencyCondition.objects.create(
+                agency_id=defender_agency_id,
+                condition_type="base_access",
+                description=f"Base systems compromised: {base.name}",
+                difficulty=s,
+                target_base_id=target_base_id,
+            )
         if revealed:
-            return f"{s} successes — gained access to {base.name}. Revealed sections: {', '.join(revealed)}."
-        return f"{s} successes — gained access to {base.name}. All sections already visible."
+            return f"{s} successes — gained access to {base.name}. Revealed: {', '.join(revealed)}. Condition created (difficulty {s})."
+        return f"{s} successes — gained access to {base.name}. Condition created (difficulty {s})."
 
     elif deploy_action == "plant_intel":
         return f"{s} successes — false intelligence planted. GM determines what the target sees."
