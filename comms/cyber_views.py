@@ -163,6 +163,22 @@ def _detect_helper(session, thread, actor):
     return f" Helper {helper_npc.name}: concealment {session.helper_concealment_damage}/{c_max} — undetected."
 
 
+def _get_defense_messages(successes, actor_name):
+    """Return defense alert messages based on number of successes."""
+    messages = []
+    if successes >= 1:
+        messages.append(f"{actor_name} hardened their encryption")
+    if successes >= 2:
+        messages.append("Rerouting through secure network protocols")
+    if successes >= 3:
+        messages.append("Adding monitoring bots")
+    if successes >= 4:
+        messages.append("Starting honey pots")
+    if successes >= 5:
+        messages.append("Activating machine learning monitoring")
+    return messages
+
+
 def _log_action(thread, actor, action_type, pool, result, outcome,
                 persona_type="", persona_id=None, persona_name="",
                 target_user=None, gm_modifier=0, notes=""):
@@ -802,25 +818,17 @@ def _handle_defend(thread, actor, pool, pool_desc,
     thread.defense_active = True
     thread.save(update_fields=["defense_bonus", "defense_active"])
 
-    # Build outcome with escalating messages
+    # Build outcome with escalating messages (only shown to executor)
     actor_name = persona_name or actor.username
-    messages = []
-    if s >= 1:
-        messages.append(f"{actor_name} hardened their encryption")
-    if s >= 2:
-        messages.append("Rerouting through secure network protocols")
-    if s >= 3:
-        messages.append("Adding monitoring bots")
-    if s >= 4:
-        messages.append("Starting honey pots")
-    if s >= 5:
-        messages.append("Activating machine learning monitoring")
+    defense_messages = _get_defense_messages(s, actor_name)
 
-    outcome = f"{s} successes — defense systems activated (+{s} to all detection rolls)."
+    # At 6+ don't reveal exact score
+    if s >= 6:
+        outcome = "Defense systems fully activated. All countermeasures deployed."
+    else:
+        outcome = f"{s} successes — defense systems activated (+{s} to all detection rolls)."
 
-    # Post system alerts to chat for each message
-    for msg in messages:
-        _post_system_alert(thread, f"🛡 {msg}")
+    outcome += "\n" + "\n".join(f"🛡 {m}" for m in defense_messages)
 
     _log_action(thread, actor, "defend", pool, result, outcome,
                 persona_type, persona_id, persona_name, None, gm_modifier)
@@ -838,6 +846,30 @@ def _handle_detect(thread, actor, pool, pool_desc,
     Only shows 'INTRUSION DETECTED' or 'NO INTRUSION DETECTED'.
     Same result returned if no new attacker action since last detect.
     """
+    # Check if the actor is an attacker trying to detect defense systems
+    own_session = CyberSession.objects.filter(
+        thread=thread, is_active=True,
+    )
+    if persona_name:
+        own_session = own_session.filter(attacker_persona_name=persona_name).first()
+    else:
+        own_session = own_session.filter(attacker=actor).first()
+
+    if own_session and thread.defense_active and thread.defense_bonus > 0:
+        # Attacker is scanning for defense — roll against defense successes
+        detect_pool = pool + 2
+        result = roll_dice(detect_pool)
+        defense_s = thread.defense_bonus
+        if result.successes >= defense_s:
+            # Reveal defense messages up to 5
+            msgs = _get_defense_messages(min(defense_s, 5), "Target")
+            outcome = "DEFENSE SYSTEMS DETECTED:\n" + "\n".join(f"🛡 {m}" for m in msgs)
+        else:
+            outcome = "NO DEFENSE SYSTEMS DETECTED"
+        _log_action(thread, actor, "detect", detect_pool, result, outcome,
+                    persona_type, persona_id, persona_name, None, gm_modifier)
+        return _roll_response("detect", pool_desc, None, outcome, hide_dice=True)
+
     # Find any active attacker session on this thread (not by this persona)
     # For NPC-vs-NPC threads, both sides may be the same user (GM),
     # so exclude by persona name rather than user when a persona is set.
