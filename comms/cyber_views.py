@@ -984,18 +984,23 @@ def _resolve_deploy(deploy_action, result, thread, actor,
                     defender_agency_id = npc.agency_id
                     defender_agency_name = Agency.objects.filter(pk=npc.agency_id).values_list("name", flat=True).first() or "target"
                     break
-        # Resolve target base
         base_name = ""
         if target_base_id:
             from agencies.models import Base
             base = Base.objects.filter(pk=target_base_id).first()
             base_name = f" — base: {base.name}" if base else ""
-        ThreadEffect.objects.create(
-            thread=thread, effect_type="locked",
-            level=min(s, 3), source_user=actor,
-            target_agency_id=defender_agency_id,
-        )
-        return f"{s} successes — ransomware deployed on {defender_agency_name}{base_name}. Systems locked until swept."
+        # Create agency condition
+        if defender_agency_id:
+            from agencies.models import AgencyCondition
+            desc = f"Ransomware attack{base_name} — systems locked"
+            AgencyCondition.objects.create(
+                agency_id=defender_agency_id,
+                condition_type="ransomware",
+                description=desc,
+                difficulty=s,
+                target_base_id=target_base_id,
+            )
+        return f"{s} successes — ransomware deployed on {defender_agency_name}{base_name}. Condition created (difficulty {s} to clear)."
 
     elif deploy_action == "bad_deals":
         agency_name = "unknown"
@@ -1091,11 +1096,13 @@ def _resolve_deploy(deploy_action, result, thread, actor,
 
     elif deploy_action == "shutdown_infra":
         # Auto-resolve defender agency
+        defender_agency_id = None
         defender_agency_name = "target"
         for m in ThreadMembership.objects.filter(thread=thread, hidden=False).exclude(user=actor):
             if m.alias_type == "npc" and m.alias_id:
                 npc = NPC.objects.filter(pk=m.alias_id).first()
                 if npc and npc.agency_id:
+                    defender_agency_id = npc.agency_id
                     defender_agency_name = Agency.objects.filter(pk=npc.agency_id).values_list("name", flat=True).first() or "target"
                     break
         infra_names = {
@@ -1103,7 +1110,17 @@ def _resolve_deploy(deploy_action, result, thread, actor,
             "transport": "Transport Infrastructure", "media": "Media Channels", "comms": "Communications",
         }
         infra_name = infra_names.get(infra_target, infra_target or "unknown system")
-        return f"{s} successes — {infra_name} shut down in {defender_agency_name}. GM determines duration and impact."
+        condition_type = f"shutdown_{infra_target}" if infra_target else "custom"
+        if defender_agency_id:
+            from agencies.models import AgencyCondition
+            AgencyCondition.objects.create(
+                agency_id=defender_agency_id,
+                condition_type=condition_type,
+                description=f"{infra_name} disabled",
+                difficulty=s,
+                infra_type=infra_target,
+            )
+        return f"{s} successes — {infra_name} shut down in {defender_agency_name}. Condition created (difficulty {s} to clear)."
 
     elif deploy_action == "close_connection":
         removed_hidden = ThreadMembership.objects.filter(

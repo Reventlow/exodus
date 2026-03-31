@@ -1236,3 +1236,90 @@ def api_agency_base_detail(request, pk, base_id):
 
     base.save()
     return JsonResponse(serialize_base(base))
+
+
+@login_required
+@require_http_methods(["POST"])
+def api_sweep_condition(request, pk, condition_id):
+    """Sweep & Clear a condition. Player rolls Intelligence + Computer + modifiers."""
+    from agencies.models import AgencyCondition
+    from comms.dice import roll_dice
+
+    condition = get_object_or_404(AgencyCondition, pk=condition_id, agency_id=pk, is_active=True)
+
+    if condition.sweep_pool <= 0 and not request.user.is_superuser:
+        return JsonResponse({"error": "No Sweep & Clear pool available. GM must allocate dice."}, status=400)
+
+    # Get actor's stats
+    from characters.models import Character
+    char = Character.objects.filter(owner=request.user).first()
+    if not char and not request.user.is_superuser:
+        return JsonResponse({"error": "No character found."}, status=400)
+
+    if request.user.is_superuser:
+        pool = 10  # GM base
+    else:
+        intelligence = char.attributes.get("power", {}).get("mental", 1)
+        computer = char.skills.get("mental", {}).get("Computer", 0)
+        pool = intelligence + computer
+        # Add Computer Aptitude merit bonus
+        for cm in char.character_merits.select_related("merit").all():
+            if cm.merit.name.lower() == "computer aptitude":
+                pool += 2
+                break
+
+    result = roll_dice(pool)
+    condition.sweep_progress += result.successes
+    if condition.sweep_pool > 0:
+        condition.sweep_pool -= 1
+
+    cleared = condition.sweep_progress >= condition.difficulty
+    if cleared:
+        condition.is_active = False
+
+    condition.save(update_fields=["sweep_progress", "sweep_pool", "is_active"])
+
+    return JsonResponse({
+        "successes": result.successes,
+        "rolls": result.rolls,
+        "sweepProgress": condition.sweep_progress,
+        "difficulty": condition.difficulty,
+        "cleared": cleared,
+        "sweepPoolRemaining": condition.sweep_pool,
+    })
+
+
+@login_required
+def api_condition_detail(request, pk, condition_id):
+    """GET: condition detail. PUT: GM updates sweep pool."""
+    from agencies.models import AgencyCondition
+
+    condition = get_object_or_404(AgencyCondition, pk=condition_id, agency_id=pk)
+
+    if request.method == "GET":
+        return JsonResponse({
+            "id": condition.id,
+            "type": condition.condition_type,
+            "description": condition.description,
+            "difficulty": condition.difficulty,
+            "sweepPool": condition.sweep_pool,
+            "sweepProgress": condition.sweep_progress,
+            "isActive": condition.is_active,
+        })
+
+    if request.method == "PUT":
+        if not request.user.is_superuser:
+            return JsonResponse({"error": "Forbidden"}, status=403)
+        try:
+            data = json.loads(request.body)
+        except json.JSONDecodeError:
+            return JsonResponse({"error": "Invalid JSON"}, status=400)
+
+        if "sweepPool" in data:
+            condition.sweep_pool = int(data["sweepPool"])
+        if "isActive" in data:
+            condition.is_active = bool(data["isActive"])
+        condition.save(update_fields=["sweep_pool", "is_active"])
+        return JsonResponse({"status": "ok"})
+
+    return JsonResponse({"error": "Method not allowed"}, status=405)

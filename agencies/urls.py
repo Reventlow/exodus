@@ -103,4 +103,15 @@ urlpatterns = [
         views.api_agency_base_detail,
         name="api_agency_base_detail",
     ),
+    # Conditions
+    path(
+        "api/agencies/<int:pk>/conditions/<int:condition_id>/sweep/",
+        views.api_sweep_condition,
+        name="api_sweep_condition",
+    ),
+    path(
+        "api/agencies/<int:pk>/conditions/<int:condition_id>/",
+        views.api_condition_detail,
+        name="api_condition_detail",
+    ),
 ]

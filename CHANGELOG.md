@@ -1,5 +1,12 @@
 # Changelog
 
+## v0.9.64
+- Agency Conditions system: ransomware and shutdown deploys create structured conditions on target agency
+- Each condition has difficulty (attacker successes) and Sweep & Clear mechanism
+- GM allocates sweep pool, players roll Intelligence + Computer to clear
+- Conditions displayed on agency page with progress tracking
+- API endpoints for sweep rolls and GM condition management
+
 ## v0.9.63
 - Remove Exfiltrate Communications deploy action
 - Remove Backdoor Access pulling string from cyber terminal

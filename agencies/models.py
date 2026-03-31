@@ -83,6 +83,58 @@ class Agency(models.Model):
         return f"{tag} {self.name}"
 
 
+CONDITION_TYPE_CHOICES = [
+    ("ransomware", "Ransomware"),
+    ("shutdown_power", "Shutdown: Power Grid"),
+    ("shutdown_water", "Shutdown: Water Systems"),
+    ("shutdown_logistics", "Shutdown: Logistics Network"),
+    ("shutdown_transport", "Shutdown: Transport Infrastructure"),
+    ("shutdown_media", "Shutdown: Media Channels"),
+    ("shutdown_comms", "Shutdown: Communications"),
+    ("backdoor", "Permanent Backdoor"),
+    ("custom", "Custom"),
+]
+
+
+class AgencyCondition(models.Model):
+    """A structured condition on an agency caused by cyber deploy actions."""
+
+    agency = models.ForeignKey(
+        Agency, on_delete=models.CASCADE, related_name="agency_conditions",
+    )
+    condition_type = models.CharField(
+        max_length=30, choices=CONDITION_TYPE_CHOICES, default="custom",
+    )
+    description = models.CharField(max_length=500)
+    difficulty = models.IntegerField(
+        default=1, help_text="Attacker's successes — difficulty to clear.",
+    )
+    sweep_pool = models.IntegerField(
+        default=0, help_text="GM-allocated dice pool for Sweep & Clear.",
+    )
+    sweep_progress = models.IntegerField(
+        default=0, help_text="Accumulated successes toward clearing.",
+    )
+    source_agency_id = models.PositiveIntegerField(
+        null=True, blank=True, help_text="Agency that placed this condition.",
+    )
+    target_base_id = models.PositiveIntegerField(
+        null=True, blank=True, help_text="Specific base affected.",
+    )
+    infra_type = models.CharField(
+        max_length=30, blank=True, default="",
+        help_text="Infrastructure type for shutdown conditions.",
+    )
+    is_active = models.BooleanField(default=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+
+    def __str__(self):
+        return f"{self.get_condition_type_display()} on {self.agency.name} (diff {self.difficulty})"
+
+
 class ChangeRequest(models.Model):
     STATUS_CHOICES = [
         ("pending", "Pending"),

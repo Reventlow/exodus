@@ -73,6 +73,22 @@ def serialize_agency(agency, user):
         "isHidden": agency.is_hidden,
         "mapColor": agency.map_color,
         "zeroDayPool": agency.zero_day_pool if is_admin else None,
+        "conditions": [
+            {
+                "id": c.id,
+                "type": c.condition_type,
+                "typeDisplay": c.get_condition_type_display(),
+                "description": c.description,
+                "difficulty": c.difficulty,
+                "sweepPool": c.sweep_pool,
+                "sweepProgress": c.sweep_progress,
+                "targetBaseId": c.target_base_id,
+                "infraType": c.infra_type,
+                "isActive": c.is_active,
+                "createdAt": c.created_at.isoformat(),
+            }
+            for c in agency.agency_conditions.filter(is_active=True)
+        ],
         "attributes": vis_attributes(agency.attributes),
         "specializations": vis("specializations", agency.specializations),
         "merits": vis("merits", agency.merits),
