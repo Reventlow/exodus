@@ -6,7 +6,7 @@ const {
     getCookie, DEFAULT_AGENCY, XpProtester, _refreshIcons,
     AllianceModule, HeaderModule, NotesModule, IntegrityModule,
     DossiersModule, AttributesModule, GlobalFlawsDisplay, CouncilDisplay,
-    DarkGrantsModule, getWorkspaceConfig, calcTotalBaseExp,
+    DarkGrantsModule, ProjectsModule, getWorkspaceConfig, calcTotalBaseExp,
     TableModule, FTLProjectsModule, FTL_ACCENT,
     ChangeRequestPanel,
     BaseNotesModule, BasesModule, BASE_ACCENT,
@@ -553,21 +553,9 @@ const {
                     </div>
                 )}
 
-                <TableModule
-                    title="PROJECTS" field="projects"
+                <ProjectsModule
                     items={agency.projects}
-                    columns={[
-                        { key: 'name', label: 'NAME', width: '1fr' },
-                        { key: 'player', label: 'PLAYER', width: '1fr' },
-                        { key: 'duration', label: 'DURATION', width: '1fr' },
-                        { key: 'completionScore', label: 'COMPLETION', width: '80px', type: 'number' },
-                        { key: 'notes', label: 'NOTES', width: '2fr' },
-                        { key: 'classified', label: 'CLASS.', width: '50px', type: 'boolean' },
-                    ].concat(IS_SCIENCE ? [{ key: 'fringe', label: 'FRINGE', width: '55px', type: 'boolean' }] : []).concat(IS_ADMIN ? [{ key: 'discarded', label: 'DISC.', width: '45px', type: 'boolean' }] : [])}
-                    emptyItem={{ name: '', player: '', duration: '', completionScore: 0, notes: '', classified: true, fringe: false, discarded: false }}
-                    update={val => updateAgency({ projects: val })}
                     onSave={val => saveAgencyQuiet({ projects: val })}
-                    getFreshItems={() => agencyRef.current.projects || []}
                     visibility={vis} onToggleVis={toggleVisibility}
                 />
 

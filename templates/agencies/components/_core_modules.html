@@ -883,11 +883,193 @@ const { Icon, AutoSaveInput, Classified, VisibilityToggle, XpProtester, getCooki
         );
     };
 
+    // --- PROJECTS MODULE (card-based layout) ---
+    const ProjectsModule = function(props) {
+        var projects = props.items;
+        var onSave = props.onSave;
+        var visibility = props.visibility;
+        var onToggleVis = props.onToggleVis;
+
+        var isClassified = projects === 'CLASSIFIED';
+        if (isClassified && !IS_ADMIN) {
+            return (
+                <div className="glass-panel" style={{ padding: '1.5rem', marginBottom: '1rem' }}>
+                    <h3 className="mono-text text-accent">PROJECTS</h3>
+                    <Classified />
+                </div>
+            );
+        }
+        var items = Array.isArray(projects) ? projects : [];
+
+        var addProject = function() {
+            onSave(items.concat([{ name: '', player: '', duration: '', completionScore: 0, notes: '', classified: true, fringe: false, discarded: false }]));
+        };
+        var removeProject = function(idx) {
+            onSave(items.filter(function(_, i) { return i !== idx; }));
+        };
+        var updateField = function(idx, key, val) {
+            var updated = items.map(function(it, i) {
+                if (i !== idx) return it;
+                var copy = {};
+                for (var k in it) copy[k] = it[k];
+                copy[key] = val;
+                return copy;
+            });
+            onSave(updated);
+        };
+
+        return (
+            <div className="glass-panel" style={{ padding: '1.5rem', marginBottom: '1rem' }}>
+                <h3 className="mono-text text-accent" style={{
+                    borderBottom: '1px solid var(--border-color)',
+                    paddingBottom: '0.5rem', marginBottom: '1rem',
+                    display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+                }}>
+                    <span>
+                        PROJECTS
+                        <VisibilityToggle field="projects" visibility={visibility} onToggle={onToggleVis} />
+                    </span>
+                    {IS_ADMIN ? (
+                        <button onClick={addProject} title="Add Project" style={{
+                            background: 'transparent', border: '1px solid var(--accent-primary)',
+                            color: 'var(--accent-primary)', width: '24px', height: '24px',
+                            borderRadius: '4px', cursor: 'pointer',
+                            display: 'flex', alignItems: 'center', justifyContent: 'center',
+                        }}>
+                            <Icon name="plus" size={14} />
+                        </button>
+                    ) : null}
+                </h3>
+                {items.length === 0 ? (
+                    <div className="text-muted mono-text" style={{ textAlign: 'center', padding: '2rem', fontSize: '0.85rem' }}>No projects</div>
+                ) : null}
+                {items.map(function(p, idx) {
+                    if (!p) return null;
+                    var completion = parseInt(p.completionScore) || 0;
+                    var duration = parseInt(p.duration) || 0;
+                    var pct = duration > 0 ? Math.min(100, Math.round(completion / duration * 100)) : 0;
+                    var isFringed = p.fringe;
+                    var isDiscarded = p.discarded;
+
+                    return (
+                        <div key={idx} className="tech-border" style={{
+                            padding: '1rem', marginBottom: '0.75rem',
+                            background: isDiscarded ? 'rgba(100,100,100,0.05)' : isFringed ? 'rgba(138,43,226,0.04)' : 'rgba(0,0,0,0.2)',
+                            borderColor: isFringed ? '#8a2be2' : 'var(--border-color)',
+                            opacity: isDiscarded ? 0.5 : 1,
+                        }}>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '0.5rem' }}>
+                                <div style={{ flex: 1 }}>
+                                    <AutoSaveInput
+                                        defaultValue={p.name || ''}
+                                        onSave={function(val) { updateField(idx, 'name', val); }}
+                                        disabled={!IS_ADMIN}
+                                        placeholder="Project name"
+                                        style={{ background: 'transparent', border: 'none', borderBottom: '1px solid var(--border-color)', color: 'var(--text-primary)', width: '100%', fontSize: '0.95rem', fontWeight: 'bold', fontFamily: 'var(--font-mono)' }}
+                                    />
+                                </div>
+                                <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', marginLeft: '0.5rem', flexShrink: 0 }}>
+                                    {IS_SCIENCE && !isDiscarded ? (
+                                        <button onClick={function() {
+                                            if (p.fringe) return;
+                                            var activeFringe = items.filter(function(it) { return it.fringe && !it.discarded; }).length;
+                                            var maxSlots = 99;
+                                            try { if (typeof agency !== 'undefined' && agency && agency.fringeInfo) maxSlots = agency.fringeInfo.maxSlots; } catch(e) {}
+                                            if (activeFringe >= maxSlots) { alert('No fringe slots available'); return; }
+                                            if (!confirm('Mark as Fringe Science? This cannot be undone.')) return;
+                                            updateField(idx, 'fringe', true);
+                                        }} disabled={p.fringe}
+                                        title={p.fringe ? 'Fringe Science' : 'Mark as Fringe'}
+                                        style={{ background: 'transparent', border: 'none', cursor: p.fringe ? 'default' : 'pointer', fontSize: '1.2rem', opacity: p.fringe ? 1 : 0.2 }}>
+                                            🖐
+                                        </button>
+                                    ) : null}
+                                    {IS_ADMIN ? (
+                                        <button onClick={function() { removeProject(idx); }} title="Remove" style={{
+                                            background: 'transparent', border: 'none', color: 'var(--accent-danger, #c0392b)',
+                                            cursor: 'pointer', fontSize: '1rem',
+                                        }}>✕</button>
+                                    ) : null}
+                                </div>
+                            </div>
+
+                            <div style={{ display: 'flex', gap: '1rem', flexWrap: 'wrap', marginBottom: '0.75rem' }}>
+                                <div style={{ minWidth: '100px' }}>
+                                    <div className="text-muted mono-text" style={{ fontSize: '0.65rem', marginBottom: '0.15rem' }}>PLAYER</div>
+                                    <AutoSaveInput
+                                        defaultValue={p.player || ''}
+                                        onSave={function(val) { updateField(idx, 'player', val); }}
+                                        disabled={!IS_ADMIN}
+                                        placeholder="—"
+                                        style={{ background: 'transparent', border: 'none', borderBottom: '1px solid var(--border-color)', color: 'var(--text-primary)', width: '100%', fontSize: '0.8rem' }}
+                                    />
+                                </div>
+                                <div style={{ minWidth: '70px' }}>
+                                    <div className="text-muted mono-text" style={{ fontSize: '0.65rem', marginBottom: '0.15rem' }}>DURATION</div>
+                                    <AutoSaveInput
+                                        type="number"
+                                        defaultValue={p.duration || 0}
+                                        onSave={function(val) { updateField(idx, 'duration', parseInt(val) || 0); }}
+                                        disabled={!IS_ADMIN}
+                                        style={{ background: 'transparent', border: 'none', borderBottom: '1px solid var(--border-color)', color: 'var(--text-primary)', width: '100%', fontSize: '0.8rem', textAlign: 'center' }}
+                                    />
+                                </div>
+                                <div style={{ minWidth: '80px' }}>
+                                    <div className="text-muted mono-text" style={{ fontSize: '0.65rem', marginBottom: '0.15rem' }}>COMPLETION</div>
+                                    <AutoSaveInput
+                                        type="number"
+                                        defaultValue={completion}
+                                        onSave={function(val) { updateField(idx, 'completionScore', parseInt(val) || 0); }}
+                                        disabled={!IS_ADMIN}
+                                        style={{ background: 'transparent', border: 'none', borderBottom: '1px solid var(--border-color)', color: 'var(--accent-primary)', width: '100%', fontSize: '0.8rem', textAlign: 'center', fontWeight: 'bold' }}
+                                    />
+                                </div>
+                                {IS_ADMIN ? (
+                                    <div style={{ display: 'flex', gap: '0.75rem', alignItems: 'center' }}>
+                                        <label className="text-muted mono-text" style={{ fontSize: '0.65rem', display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
+                                            <input type="checkbox" checked={!!p.classified} onChange={function(e) { updateField(idx, 'classified', e.target.checked); }} style={{ accentColor: 'var(--accent-primary)' }} />
+                                            CLASS.
+                                        </label>
+                                        <label className="text-muted mono-text" style={{ fontSize: '0.65rem', display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
+                                            <input type="checkbox" checked={!!p.discarded} onChange={function(e) { updateField(idx, 'discarded', e.target.checked); }} style={{ accentColor: 'var(--accent-danger, #c0392b)' }} />
+                                            DISC.
+                                        </label>
+                                    </div>
+                                ) : null}
+                            </div>
+
+                            {duration > 0 ? (
+                                <div style={{ marginBottom: '0.5rem' }}>
+                                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.15rem' }}>
+                                        <span className="text-muted mono-text" style={{ fontSize: '0.6rem' }}>{completion}/{duration}</span>
+                                        <span className="mono-text" style={{ fontSize: '0.6rem', color: pct >= 100 ? 'var(--accent-success, #2ecc71)' : 'var(--text-muted)' }}>{pct}%</span>
+                                    </div>
+                                    <div style={{ height: 4, background: 'rgba(255,255,255,0.1)', borderRadius: 2 }}>
+                                        <div style={{ height: '100%', width: pct + '%', background: pct >= 100 ? 'var(--accent-success, #2ecc71)' : 'var(--accent-primary)', borderRadius: 2, transition: 'width 0.3s' }} />
+                                    </div>
+                                </div>
+                            ) : null}
+
+                            <AutoSaveInput
+                                component="textarea"
+                                defaultValue={p.notes || ''}
+                                onSave={function(val) { updateField(idx, 'notes', val); }}
+                                disabled={!IS_ADMIN}
+                                placeholder="Notes..."
+                                style={{ background: 'transparent', border: 'none', borderBottom: '1px solid var(--border-color)', color: 'var(--text-secondary)', width: '100%', fontSize: '0.75rem', minHeight: '1.5rem', resize: 'vertical', fontFamily: 'inherit' }}
+                            />
+                        </div>
+                    );
+                })}
+            </div>
+        );
+    };
+
 // Export to global scope
 Object.assign(window, {
     AllianceModule, HeaderModule, NotesModule, IntegrityModule,
     DossiersModule, AttributesModule, GlobalFlawsDisplay, CouncilDisplay,
-    DarkGrantsModule, getWorkspaceConfig, calcTotalBaseExp,
+    DarkGrantsModule, ProjectsModule, getWorkspaceConfig, calcTotalBaseExp,
 });
 </script>
 {% endverbatim %}
