@@ -3125,9 +3125,7 @@
                         { key: 'completionScore', label: 'COMPLETION', width: '80px', type: 'number' },
                         { key: 'notes', label: 'NOTES', width: '2fr' },
                         { key: 'classified', label: 'CLASS.', width: '50px', type: 'boolean' },
-                        ...(IS_SCIENCE ? [{ key: 'fringe', label: 'FRINGE', width: '55px', type: 'boolean' }] : []),
-                        ...(IS_ADMIN ? [{ key: 'discarded', label: 'DISC.', width: '45px', type: 'boolean' }] : []),
-                    ]}
+                    ].concat(IS_SCIENCE ? [{ key: 'fringe', label: 'FRINGE', width: '55px', type: 'boolean' }] : []).concat(IS_ADMIN ? [{ key: 'discarded', label: 'DISC.', width: '45px', type: 'boolean' }] : [])}
                     emptyItem={{ name: '', player: '', duration: '', completionScore: 0, notes: '', classified: true, fringe: false, discarded: false }}
                     update={val => updateAgency({ projects: val })}
                     onSave={val => saveAgencyQuiet({ projects: val })}
