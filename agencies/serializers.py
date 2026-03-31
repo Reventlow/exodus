@@ -30,6 +30,9 @@ def _get_sweep_info(agency, user):
                 pool += 2
                 parts.append("Rapid Processing +2")
                 merits.append(cm.merit.name)
+        if char.mental_load > 0:
+            pool -= char.mental_load
+            parts.append(f"Mental Load -{char.mental_load}")
         info = {"pool": pool, "parts": parts, "merits": merits}
         return info
 

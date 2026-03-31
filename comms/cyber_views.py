@@ -96,7 +96,7 @@ def _get_actor_stats(user, persona_type=None, persona_id=None):
                           for nm in npc.npc_merits.select_related("merit").all()]
             npc_ps = [{"name": ps.pulling_string.name}
                       for ps in npc.npc_pulling_strings.select_related("pulling_string").all()]
-            return npc.attributes, npc.skills, npc.specialisations, comp, npc.name, npc_merits, npc_ps, npc.agency_id
+            return npc.attributes, npc.skills, npc.specialisations, comp, npc.name, npc_merits, npc_ps, npc.agency_id, npc.mental_load
         return None
     char = Character.objects.filter(owner=user).first()
     if char:
@@ -105,7 +105,7 @@ def _get_actor_stats(user, persona_type=None, persona_id=None):
                        for cm in char.character_merits.select_related("merit").all()]
         char_ps = [{"name": ps.pulling_string.name}
                    for ps in char.character_pulling_strings.select_related("pulling_string").all()]
-        return char.attributes, char.skills, char.specialisations, comp, char.name, char_merits, char_ps, None
+        return char.attributes, char.skills, char.specialisations, comp, char.name, char_merits, char_ps, None, char.mental_load
     return None
 
 
@@ -248,7 +248,7 @@ def cyber_eligible(request):
             return JsonResponse({"eligible": True, "reason": "GM access", "modifiers": []})
         return JsonResponse({"eligible": False, "reason": "No character found"})
 
-    _, _, specialisations, computer_skill, name, merits, pulling_strings, agency_id = stats
+    _, _, specialisations, computer_skill, name, merits, pulling_strings, agency_id, mental_load = stats
     eligible = computer_skill >= 4 or request.user.is_superuser
 
     # Build active modifiers list
@@ -325,6 +325,8 @@ def cyber_eligible(request):
                 "concealmentMax": get_concealment_max(npc),
             })
             seen_ids.add(npc.id)
+    if mental_load > 0:
+        active_mods.append({"name": "Mental Load", "bonus": f"-{mental_load}", "applies": "all actions"})
     resp["helpers"] = helpers
     return JsonResponse(resp)
 
@@ -503,7 +505,7 @@ def cyber_roll(request, thread_id):
         stats = _get_actor_stats(request.user, persona_type, persona_id)
         if not stats:
             return JsonResponse({"error": "No character found"}, status=400)
-        attributes, skills, specialisations, computer_skill, name, actor_merits, actor_ps, actor_agency_id = stats
+        attributes, skills, specialisations, computer_skill, name, actor_merits, actor_ps, actor_agency_id, actor_mental_load = stats
         if computer_skill < 4 and not request.user.is_superuser:
             return JsonResponse({"error": "Computer skill too low (need 4+)"}, status=403)
         if not persona_name:
@@ -513,6 +515,7 @@ def cyber_roll(request, thread_id):
             action_type, attributes, skills, specialisations, gm_modifier,
             deploy_action=deploy_action, merits=actor_merits,
             pulling_strings=actor_ps, use_zero_day=use_zero_day,
+            mental_load=actor_mental_load,
         )
         # Consume zero-day from agency pool
         if ps_flags.get("zero_day_used") and actor_agency_id:

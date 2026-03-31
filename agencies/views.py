@@ -1284,6 +1284,8 @@ def api_sweep_condition(request, pk, condition_id):
         for cm in char.character_merits.select_related("merit").all():
             if cm.merit.name.lower() in ("computer aptitude", "rapid processing"):
                 pool += 2
+        # Mental load penalty
+        pool -= char.mental_load
 
     result = roll_dice(pool)
     condition.sweep_progress += result.successes

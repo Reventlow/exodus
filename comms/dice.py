@@ -116,7 +116,8 @@ def get_cyber_pool(action_type: str, attributes: dict, skills: dict,
                    deploy_action: str = "",
                    merits: list[dict] | None = None,
                    pulling_strings: list[dict] | None = None,
-                   use_zero_day: bool = False) -> tuple[int, str, dict]:
+                   use_zero_day: bool = False,
+                   mental_load: int = 0) -> tuple[int, str, dict]:
     """Calculate the dice pool for a cyber action.
 
     Args:
@@ -217,6 +218,10 @@ def get_cyber_pool(action_type: str, attributes: dict, skills: dict,
 
     pool += ps_bonus
 
+    # Mental load penalty
+    if mental_load > 0:
+        pool -= mental_load
+
     parts = [f"{attr_name} {attr_value}", f"{skill_name} {skill_value}"]
     if gm_modifier:
         parts.append(f"GM modifier {gm_modifier:+d}")
@@ -226,6 +231,8 @@ def get_cyber_pool(action_type: str, attributes: dict, skills: dict,
         parts.append(mn)
     for pn in ps_names:
         parts.append(pn)
+    if mental_load > 0:
+        parts.append(f"Mental Load -{mental_load}")
     desc = " + ".join(parts) + f" = {pool} dice"
 
     return pool, desc, flags

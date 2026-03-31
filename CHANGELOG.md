@@ -1,5 +1,9 @@
 # Changelog
 
+## v0.9.76
+- Mental load penalizes all cyber terminal actions and sweep rolls
+- Shown in pool description and active modifiers panel
+
 ## v0.9.75
 - Force Bad Deals and Gain Base Access now create agency conditions with difficulty
 - All deploy actions that affect an agency create trackable conditions with Sweep & Clear
