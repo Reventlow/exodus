@@ -1258,6 +1258,11 @@ def cyber_modify(request, thread_id):
         CyberSession.objects.filter(thread=thread, is_active=True).update(is_active=False)
         return JsonResponse({"status": "ok"})
 
+    elif action == "reopen":
+        thread.is_connection_closed = False
+        thread.save(update_fields=["is_connection_closed"])
+        return JsonResponse({"status": "ok"})
+
     return JsonResponse({"error": "Unknown action"}, status=400)
 
 
