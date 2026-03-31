@@ -1,5 +1,9 @@
 # Changelog
 
+## v0.9.69
+- Intrusion detected status is now permanent on the thread — red banner stays in terminal forever
+- Thread.intrusion_detected flag set whenever detection succeeds
+
 ## v0.9.68
 - Fix: deploy crash — target_project_index not passed to _handle_deploy
 

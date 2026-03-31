@@ -417,6 +417,7 @@ function CyberTerminal({ thread, members, onClose, postingAs }) {
   const [selectedHelper, setSelectedHelper] = useState("");
   const [defenseActive, setDefenseActive] = useState(false);
   const [defenseBonusVal, setDefenseBonusVal] = useState(0);
+  const [intrusionDetected, setIntrusionDetected] = useState(false);
 
   function refreshStatus() {
     api("/api/comms/threads/" + thread.id + "/cyber/").then(data => {
@@ -429,6 +430,7 @@ function CyberTerminal({ thread, members, onClose, postingAs }) {
       if (data.defenderProjects) setDefenderProjects(data.defenderProjects);
       setDefenseActive(data.defenseActive || false);
       setDefenseBonusVal(data.defenseBonus || 0);
+      setIntrusionDetected(data.intrusionDetected || false);
     });
   }
 
@@ -629,6 +631,12 @@ function CyberTerminal({ thread, members, onClose, postingAs }) {
 
         {(eligible?.eligible || IS_STAFF) && !connectionClosed && (
           <React.Fragment>
+            {intrusionDetected && (
+              <div style={{padding: "0.5rem 0.75rem", border: "1px solid #a33", background: "rgba(170,51,51,0.15)", marginBottom: "0.75rem", textAlign: "center"}}>
+                <span style={{color: "#f44", fontWeight: "bold", fontSize: "0.8rem", letterSpacing: "1px"}}>⚠ INTRUSION DETECTED</span>
+              </div>
+            )}
+
             {effects.length > 0 && (
               <div style={{marginBottom: "0.75rem"}}>
                 <div style={termStyle.label}>ACTIVE EFFECTS</div>

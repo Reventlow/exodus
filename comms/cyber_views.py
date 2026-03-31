@@ -27,6 +27,13 @@ from .models import (
 # Helpers
 # ---------------------------------------------------------------------------
 
+def _mark_intrusion_detected(thread):
+    """Permanently mark a thread as having had an intrusion detected."""
+    if not thread.intrusion_detected:
+        thread.intrusion_detected = True
+        thread.save(update_fields=["intrusion_detected"])
+
+
 def _post_system_alert(thread, message_text):
     """Post a system alert message to a thread and broadcast via WebSocket."""
     from asgiref.sync import async_to_sync
@@ -426,6 +433,7 @@ def thread_cyber_status(request, thread_id):
         "isConnectionClosed": thread.is_connection_closed,
         "defenseActive": thread.defense_active,
         "defenseBonus": thread.defense_bonus,
+        "intrusionDetected": thread.intrusion_detected,
         "defenderAgency": defender_agency,
         "defenderBases": defender_bases,
         "defenderProjects": defender_projects,
@@ -630,6 +638,7 @@ def _handle_gain_access(thread, actor, target_user, pool, pool_desc,
             detected, det_result, def_name = passive
             if detected:
                 session.detected = True
+                _mark_intrusion_detected(thread)
                 session.save(update_fields=["detected"])
                 detection_msg = f" WARNING: Passive detection by {def_name} succeeded — intrusion detected!"
                 _post_system_alert(thread, "⚠ INTRUSION DETECTED — Unauthorized access to this channel has been identified.")
@@ -765,6 +774,7 @@ def _handle_deploy(thread, actor, deploy_action, pool, pool_desc,
             detected, det_result, def_name = passive
             if detected:
                 session.detected = True
+                _mark_intrusion_detected(thread)
                 session.save(update_fields=["detected"])
                 detection_msg = f" ⚠ Passive detection by {def_name} — INTRUSION DETECTED!"
                 _post_system_alert(thread, "⚠ INTRUSION DETECTED — Unauthorized activity detected on this channel.")
@@ -936,6 +946,7 @@ def _handle_detect(thread, actor, pool, pool_desc,
     if detected:
         outcome = "INTRUSION DETECTED"
         attacker_session.detected = True
+        _mark_intrusion_detected(thread)
     else:
         outcome = "NO INTRUSION DETECTED"
 

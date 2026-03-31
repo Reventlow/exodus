@@ -39,6 +39,10 @@ class Thread(models.Model):
         default=False,
         help_text="Whether Defend has been executed on this thread.",
     )
+    intrusion_detected = models.BooleanField(
+        default=False,
+        help_text="Permanent flag — intrusion was detected on this thread.",
+    )
 
     class Meta:
         ordering = ["-updated_at"]
