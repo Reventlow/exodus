@@ -1,5 +1,8 @@
 # Changelog
 
+## v0.10.5
+- Fix: agency page crash when projects is CLASSIFIED or null
+
 ## v0.10.4
 - Dark Grants: science class activates on fringe projects at level 1-3
 - Permanently adds +level dice to completion rolls

@@ -1032,7 +1032,7 @@
                                     <div key={col.key} style={{ display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                                         {isFringe ? (() => {
                                             const activeFringe = actualItems.filter(it => it.fringe && !it.discarded).length;
-                                            const fringeInfo = typeof agency !== 'undefined' ? agency.fringeInfo : null;
+                                            const fringeInfo = (typeof agency !== 'undefined' && agency) ? agency.fringeInfo : null;
                                             const maxSlots = fringeInfo ? fringeInfo.maxSlots : 99;
                                             const slotsLeft = maxSlots - activeFringe;
                                             const atLimit = !item.fringe && slotsLeft <= 0;
@@ -3141,7 +3141,7 @@
                 />
 
                 {/* Dark Grants on fringe projects */}
-                {IS_SCIENCE && (agency.projects || []).filter(p => p.fringe && !p.discarded).map((p, origIdx) => {
+                {IS_SCIENCE && Array.isArray(agency.projects) && agency.projects.filter(p => p && p.fringe && !p.discarded).map((p, origIdx) => {
                     // Find original index in the full projects array
                     const realIdx = (agency.projects || []).indexOf(p);
                     if (p.darkGrantsLevel) {
