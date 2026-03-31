@@ -1032,12 +1032,13 @@
                                     <div key={col.key} style={{ display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                                         {isFringe ? (
                                             <button onClick={() => {
-                                                if (!canToggle) return;
+                                                if (!canToggle || item.fringe) return;
+                                                if (!confirm('Mark this project as Fringe Science? This cannot be undone.')) return;
                                                 const updated = actualItems.map((it, i) =>
-                                                    i === idx ? { ...it, fringe: !it.fringe } : it
+                                                    i === idx ? { ...it, fringe: true } : it
                                                 );
                                                 onSave(updated);
-                                            }} disabled={!canToggle} title={item.fringe ? 'Fringe Science — click to unmark' : 'Mark as Fringe Science'}
+                                            }} disabled={!canToggle || item.fringe} title={item.fringe ? 'Fringe Science (permanent)' : 'Mark as Fringe Science (irreversible)'}
                                             style={{
                                                 background: 'transparent', border: 'none', cursor: canToggle ? 'pointer' : 'default',
                                                 fontSize: '1.2rem', opacity: item.fringe ? 1 : 0.2, filter: item.fringe ? 'none' : 'grayscale(1)',

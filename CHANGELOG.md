@@ -1,5 +1,8 @@
 # Changelog
 
+## v0.10.2
+- Fringe is permanent — once marked, cannot be undone. Confirmation dialog before marking.
+
 ## v0.10.1
 - Fringe projects shown with 🖐 hand glyph icon (Fringe TV show inspired)
 - Science class can toggle fringe status by clicking the glyph
