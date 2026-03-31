@@ -1411,7 +1411,7 @@ def api_dark_grants(request, pk, project_index):
     random.shuffle(npc_agencies)
 
     for i in range(level):
-        die = random.randint(1, 10)
+        die = random.randint(1, 20)
         rolls.append(die)
         if die <= 2 and npc_agencies:
             # Pick an agency that isn't already linked
