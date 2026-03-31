@@ -78,7 +78,6 @@ DEPLOY_POOLS = {
     "discover_base":  (("power", "mental"),      "mental", "Investigation"), # Intelligence + Investigation
     "base_access":    (("power", "mental"),      "mental", "Computer"),      # Intelligence + Computer
     "plant_intel":    (("finesse", "social"),    "mental", "Computer"),      # Manipulation + Computer
-    "exfil_comms":    (("finesse", "mental"),    "mental", "Computer"),      # Wits + Computer
     "sabotage":       (("finesse", "mental"),    "mental", "Computer"),      # Wits + Computer
     "shutdown_infra":  (("finesse", "mental"),    "mental", "Computer"),      # Wits + Computer
     "close_connection": (("finesse", "mental"),  "mental", "Computer"),      # Wits + Computer

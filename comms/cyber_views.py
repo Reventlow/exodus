@@ -1063,8 +1063,6 @@ def _resolve_deploy(deploy_action, result, thread, actor,
     elif deploy_action == "plant_intel":
         return f"{s} successes — false intelligence planted. GM determines what the target sees."
 
-    elif deploy_action == "exfil_comms":
-        return f"{s} successes — communications exfiltrated. GM applies hidden access to target agency threads."
 
     elif deploy_action == "sabotage":
         # Resolve defender agency and project, reduce completion points

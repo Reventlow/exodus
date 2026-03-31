@@ -545,7 +545,6 @@ function CyberTerminal({ thread, members, onClose, postingAs }) {
                 • <span style={{color: "#0f0"}}>Discover Hidden Base</span> (Intelligence + Investigation) — unhide a random hidden base<br/>
                 • <span style={{color: "#0f0"}}>Gain Base System Access</span> (Intelligence + Computer) — reveal hidden sections of a target base<br/>
                 • <span style={{color: "#0f0"}}>Plant False Intel</span> (Manipulation + Computer) — inject disinformation (GM narrates)<br/>
-                • <span style={{color: "#0f0"}}>Exfiltrate Comms</span> (Wits + Computer) — tap target agency NPC threads<br/>
                 • <span style={{color: "#0f0"}}>Sabotage Project</span> (Wits + Computer) — reduce project completion by successes (min 0)<br/>
                 • <span style={{color: "#0f0"}}>Shut Down Infrastructure</span> (Wits + Computer) — disable power, water, logistics, transport, media, or comms<br/>
                 • <span style={{color: "#0f0"}}>Close Connection &amp; Remove Traces</span> — no roll, removes all backdoors and hidden access silently
@@ -753,7 +752,6 @@ function CyberTerminal({ thread, members, onClose, postingAs }) {
                   <option value="discover_base">Discover Hidden Base (Intelligence + Investigation)</option>
                   <option value="base_access">Gain Base System Access (Intelligence + Computer)</option>
                   <option value="plant_intel">Plant False Intel (Manipulation + Computer)</option>
-                  <option value="exfil_comms">Exfiltrate Communications (Wits + Computer)</option>
                   <option value="sabotage">Sabotage Project (Wits + Computer)</option>
                   <option value="shutdown_infra">Shut Down Infrastructure (Wits + Computer)</option>
                   <option value="close_connection">Close Connection &amp; Remove Traces (Wits + Computer)</option>
@@ -773,7 +771,7 @@ function CyberTerminal({ thread, members, onClose, postingAs }) {
               </React.Fragment>
             )}
 
-            {action === "deploy" && ["bad_deals", "backdoor", "exfil_comms", "steal_intel", "ransomware", "base_access"].includes(deployAction) && defenderAgency && (
+            {action === "deploy" && ["bad_deals", "backdoor", "steal_intel", "ransomware", "base_access"].includes(deployAction) && defenderAgency && (
               <div style={{color: "#0a3", fontSize: "0.7rem", marginBottom: "0.5rem"}}>
                 TARGET: <span style={{color: "#0f0"}}>{defenderAgency.name}</span>
               </div>
