@@ -521,6 +521,7 @@ def cyber_roll(request, thread_id):
             thread, request.user, deploy_action, pool, pool_desc,
             persona_type, persona_id, persona_name, gm_modifier,
             target_agency_id, target_base_id, infra_target, ps_flags,
+            target_project_index=target_project_index,
         )
     elif action_type == "defend":
         return _handle_defend(
@@ -671,7 +672,8 @@ def _handle_gain_access(thread, actor, target_user, pool, pool_desc,
 
 def _handle_deploy(thread, actor, deploy_action, pool, pool_desc,
                    persona_type, persona_id, persona_name, gm_modifier,
-                   target_agency_id, target_base_id, infra_target="", ps_flags=None):
+                   target_agency_id, target_base_id, infra_target="", ps_flags=None,
+                   target_project_index=None):
     """Handle deploy with session tracking and passive detection."""
     from agencies.models import Agency
     ps_flags = ps_flags or {}

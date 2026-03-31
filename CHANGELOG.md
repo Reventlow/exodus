@@ -1,5 +1,8 @@
 # Changelog
 
+## v0.9.68
+- Fix: deploy crash — target_project_index not passed to _handle_deploy
+
 ## v0.9.67
 - Fix: defender agency/bases resolved for player characters (not just NPC aliases), falls back to player agency
 
