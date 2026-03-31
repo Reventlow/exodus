@@ -1,5 +1,9 @@
 # Changelog
 
+## v0.9.84
+- Cyber terminal usable on intercepted channels at -4 penalty to all rolls
+- Orange banner in terminal warns "INTERCEPTED CHANNEL — All rolls at -4 difficulty"
+
 ## v0.9.83
 - Intercepted threads list auto-refreshes every 15 seconds
 

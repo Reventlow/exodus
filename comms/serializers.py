@@ -126,6 +126,7 @@ def serialize_thread_summary(thread: Thread, user: User) -> dict:
         "unreadCount": unread_count,
         "updatedAt": localtime(thread.updated_at).isoformat(),
         "isConnectionClosed": thread.is_connection_closed,
+        "isIntercepted": ThreadMembership.objects.filter(thread=thread, user=user, hidden=True).exists(),
     }
 
 

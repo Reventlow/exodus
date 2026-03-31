@@ -537,7 +537,8 @@ function CyberTerminal({ thread, members, onClose, postingAs }) {
                 Breach target's comm encryption. On success, gain hidden read-only access
                 to all threads the target participates in (excluding direct GM channels).
                 You will not appear in their roster. Intercepted channels appear in a separate
-                section of your channel list.<br/><br/>
+                section of your channel list. You can use the terminal on intercepted channels but
+                all rolls suffer a <span style={{color: "#fa3"}}>-4 penalty</span>.<br/><br/>
                 <span style={{color: "#064"}}>1-4 successes:</span> Access granted. The target gets a passive detection roll
                 (Resolve + Computer) against your successes as difficulty. If they detect you, a system
                 alert appears in the chat. Unskilled defenders (Computer 0) get no passive roll.<br/>
@@ -643,6 +644,12 @@ function CyberTerminal({ thread, members, onClose, postingAs }) {
 
         {(eligible?.eligible || IS_STAFF) && !connectionClosed && (
           <React.Fragment>
+            {thread.isIntercepted && (
+              <div style={{padding: "0.5rem 0.75rem", border: "1px solid #a63", background: "rgba(170,100,51,0.15)", marginBottom: "0.75rem", textAlign: "center"}}>
+                <span style={{color: "#fa3", fontWeight: "bold", fontSize: "0.8rem", letterSpacing: "1px"}}>INTERCEPTED CHANNEL — All rolls at -4 difficulty</span>
+              </div>
+            )}
+
             {intrusionDetected && (
               <div style={{padding: "0.5rem 0.75rem", border: "1px solid #a33", background: "rgba(170,51,51,0.15)", marginBottom: "0.75rem", textAlign: "center"}}>
                 <span style={{color: "#f44", fontWeight: "bold", fontSize: "0.8rem", letterSpacing: "1px"}}>⚠ INTRUSION DETECTED</span>

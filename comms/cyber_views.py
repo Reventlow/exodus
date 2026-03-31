@@ -527,6 +527,14 @@ def cyber_roll(request, thread_id):
             else:
                 return JsonResponse({"error": "No zero-day vulnerabilities remaining in agency pool."}, status=400)
 
+    # Intercepted thread penalty: -4 to all rolls
+    is_intercepted = ThreadMembership.objects.filter(
+        thread=thread, user=request.user, hidden=True,
+    ).exists()
+    if is_intercepted:
+        pool -= 4
+        pool_desc = pool_desc.rsplit("=", 1)[0] + f"+ Intercepted -4 = {pool} dice"
+
     # Apply helper bonus
     helper_bonus_desc = ""
     if helper_npc_id and action_type in ("gain_access", "deploy"):
