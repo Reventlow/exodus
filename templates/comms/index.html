@@ -453,6 +453,9 @@ function CyberTerminal({ thread, members, onClose, postingAs }) {
     api("/api/agencies/").then(data => setAgencies(data.agencies || data || [])).catch(() => {});
     api("/api/agencies/bases/").then(data => setBases(data.bases || data || [])).catch(() => {});
     refreshStatus();
+    // Poll for status changes (connection closed by other party, etc)
+    const statusInterval = setInterval(() => refreshStatus(), 10000);
+    return () => clearInterval(statusInterval);
   }, [thread.id]);
 
   function handleRoll() {

@@ -1003,6 +1003,9 @@ def close_connection(request, thread_id):
     # Close all active sessions
     CyberSession.objects.filter(thread=thread, is_active=True).update(is_active=False)
 
+    # Notify all parties
+    _post_system_alert(thread, "🔒 CONNECTION TERMINATED — This channel has been permanently locked.")
+
     return JsonResponse({"status": "closed"})
 
 

@@ -1,5 +1,9 @@
 # Changelog
 
+## v0.9.79
+- Terminal polls status every 10s — reacts to terminate by other party
+- System alert posted when chat is terminated so both parties see it via WebSocket
+
 ## v0.9.78
 - Rename CLOSE to TERMINATE (chat) / TERMINATE CHAT (terminal)
 - Fix: terminate stays in chat view instead of jumping out
