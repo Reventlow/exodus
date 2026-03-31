@@ -261,6 +261,8 @@ def api_agency_detail(request, pk):
             agency.experience = data["experience"]
         if "zeroDayPool" in data:
             agency.zero_day_pool = data["zeroDayPool"]
+        if "sweepPool" in data:
+            agency.sweep_pool = data["sweepPool"]
 
         # Update booleans
         if "isPlayerAgency" in data:
@@ -1241,28 +1243,30 @@ def api_agency_base_detail(request, pk, base_id):
 @login_required
 @require_http_methods(["POST"])
 def api_sweep_condition(request, pk, condition_id):
-    """Sweep & Clear a condition. Player rolls Intelligence + Computer + modifiers."""
-    from agencies.models import AgencyCondition
+    """Sweep & Clear a condition. Anyone with Computer skill can roll."""
+    from agencies.models import Agency, AgencyCondition
     from comms.dice import roll_dice
 
+    agency = get_object_or_404(Agency, pk=pk)
     condition = get_object_or_404(AgencyCondition, pk=condition_id, agency_id=pk, is_active=True)
 
-    if condition.sweep_pool <= 0 and not request.user.is_superuser:
-        return JsonResponse({"error": "No Sweep & Clear pool available. GM must allocate dice."}, status=400)
+    if agency.sweep_pool <= 0 and not request.user.is_superuser:
+        return JsonResponse({"error": "No Sweep & Clear pool available. GM must allocate."}, status=400)
 
-    # Get actor's stats
+    # Get actor's stats — need Computer skill
     from characters.models import Character
     char = Character.objects.filter(owner=request.user).first()
     if not char and not request.user.is_superuser:
         return JsonResponse({"error": "No character found."}, status=400)
 
     if request.user.is_superuser:
-        pool = 10  # GM base
+        pool = 10
     else:
-        intelligence = char.attributes.get("power", {}).get("mental", 1)
         computer = char.skills.get("mental", {}).get("Computer", 0)
+        if computer <= 0:
+            return JsonResponse({"error": "Computer skill required for Sweep & Clear."}, status=400)
+        intelligence = char.attributes.get("power", {}).get("mental", 1)
         pool = intelligence + computer
-        # Add Computer Aptitude merit bonus
         for cm in char.character_merits.select_related("merit").all():
             if cm.merit.name.lower() == "computer aptitude":
                 pool += 2
@@ -1270,14 +1274,17 @@ def api_sweep_condition(request, pk, condition_id):
 
     result = roll_dice(pool)
     condition.sweep_progress += result.successes
-    if condition.sweep_pool > 0:
-        condition.sweep_pool -= 1
+
+    # Deduct 1 from agency sweep pool
+    if agency.sweep_pool > 0:
+        agency.sweep_pool -= 1
+        agency.save(update_fields=["sweep_pool"])
 
     cleared = condition.sweep_progress >= condition.difficulty
     if cleared:
         condition.is_active = False
 
-    condition.save(update_fields=["sweep_progress", "sweep_pool", "is_active"])
+    condition.save(update_fields=["sweep_progress", "is_active"])
 
     return JsonResponse({
         "successes": result.successes,
@@ -1285,7 +1292,7 @@ def api_sweep_condition(request, pk, condition_id):
         "sweepProgress": condition.sweep_progress,
         "difficulty": condition.difficulty,
         "cleared": cleared,
-        "sweepPoolRemaining": condition.sweep_pool,
+        "sweepPoolRemaining": agency.sweep_pool,
     })
 
 
@@ -1316,10 +1323,13 @@ def api_condition_detail(request, pk, condition_id):
             return JsonResponse({"error": "Invalid JSON"}, status=400)
 
         if "sweepPool" in data:
-            condition.sweep_pool = int(data["sweepPool"])
+            from agencies.models import Agency
+            agency = get_object_or_404(Agency, pk=pk)
+            agency.sweep_pool = int(data["sweepPool"])
+            agency.save(update_fields=["sweep_pool"])
         if "isActive" in data:
             condition.is_active = bool(data["isActive"])
-        condition.save(update_fields=["sweep_pool", "is_active"])
+            condition.save(update_fields=["is_active"])
         return JsonResponse({"status": "ok"})
 
     return JsonResponse({"error": "Method not allowed"}, status=405)

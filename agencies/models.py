@@ -70,6 +70,10 @@ class Agency(models.Model):
         default=0,
         help_text="Available zero-day vulnerabilities. Used by Government Zero-Day Repository pulling string.",
     )
+    sweep_pool = models.IntegerField(
+        default=0,
+        help_text="Shared Sweep & Clear pool — GM allocates, anyone with Computer skill can use to clear conditions.",
+    )
 
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)

@@ -1,5 +1,10 @@
 # Changelog
 
+## v0.9.71
+- Sweep pool moved to agency level — shared across all conditions
+- Anyone with Computer skill can sweep, each roll costs 1 from agency pool
+- GM sets agency sweep pool, visible to all members
+
 ## v0.9.70
 - Fix: deploy actions now correctly resolve defender's player agency (conditions show on Bifrost)
 - Fix: passive detection skipped when intrusion already detected — no redundant rolls
