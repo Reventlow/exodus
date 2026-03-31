@@ -1436,3 +1436,108 @@ def api_dark_grants(request, pk, project_index):
         "message": f"Dark Grants level {level} activated. +{level} permanent dice to completion rolls."
             + (f" WARNING: {len(linked_agencies)} agency(ies) now linked to this project: {', '.join(a['name'] for a in linked_agencies)}" if linked_agencies else " No agencies linked — funding is clean."),
     })
+
+
+@login_required
+@require_http_methods(["POST"])
+def api_live_testing(request, pk, project_index):
+    """Activate live testing on a fringe project. Science class only."""
+    import random
+
+    agency = get_object_or_404(Agency, pk=pk)
+
+    from characters.models import Character
+    char = Character.objects.filter(owner=request.user).first()
+    is_science = request.user.is_superuser or (char and char.character_class == "science")
+    if not is_science:
+        return JsonResponse({"error": "Science class required."}, status=403)
+
+    projects = agency.projects or []
+    if project_index < 0 or project_index >= len(projects):
+        return JsonResponse({"error": "Invalid project index."}, status=400)
+
+    project = projects[project_index]
+    if not isinstance(project, dict):
+        return JsonResponse({"error": "Invalid project data."}, status=400)
+    if not project.get("fringe"):
+        return JsonResponse({"error": "Live testing only on fringe projects."}, status=400)
+    if project.get("liveTestingLevel"):
+        return JsonResponse({"error": "Live testing already active on this project."}, status=400)
+
+    try:
+        body = json.loads(request.body)
+    except json.JSONDecodeError:
+        return JsonResponse({"error": "Invalid JSON."}, status=400)
+
+    level = body.get("level", "")
+    valid_levels = {
+        "small_animals": {"dice": 1, "mental_risk": 5, "integrity_risk": 0, "label": "Small Animals"},
+        "large_animals": {"dice": 2, "mental_risk": 9, "integrity_risk": 0, "label": "Large Animals"},
+        "human":         {"dice": 5, "mental_risk": 23, "integrity_risk": 17, "label": "Human Testing"},
+        "off_books":     {"dice": 5, "mental_risk": 23, "integrity_risk": 0, "label": "Off the Books Human Testing"},
+    }
+
+    if level not in valid_levels:
+        return JsonResponse({"error": "Invalid level. Choose: small_animals, large_animals, human, off_books"}, status=400)
+
+    config = valid_levels[level]
+
+    # Off the books requires the merit
+    if level == "off_books":
+        has_merit = False
+        if request.user.is_superuser:
+            has_merit = True
+        elif char:
+            for cm in char.character_merits.select_related("merit").all():
+                if "off the books" in cm.merit.name.lower():
+                    has_merit = True
+                    break
+        if not has_merit:
+            return JsonResponse({"error": "Off the Books merit required."}, status=403)
+
+    # Roll for consequences
+    mental_roll = random.randint(1, 100)
+    integrity_roll = random.randint(1, 100)
+    mental_damage = mental_roll <= config["mental_risk"]
+    integrity_loss = config["integrity_risk"] > 0 and integrity_roll <= config["integrity_risk"]
+
+    # Find project owner character for mental load
+    owner_name = project.get("player", "")
+    messages = []
+
+    if mental_damage:
+        # Find character by name and add mental load
+        owner_char = Character.objects.filter(name=owner_name).first()
+        if owner_char:
+            owner_char.mental_load = (owner_char.mental_load or 0) + 1
+            owner_char.save(update_fields=["mental_load"])
+            messages.append(owner_name + " takes 1 mental load damage (rolled " + str(mental_roll) + "/" + str(config["mental_risk"]) + "%).")
+        else:
+            messages.append("Mental load damage triggered but could not find character " + owner_name + ".")
+    else:
+        messages.append("No mental load damage (rolled " + str(mental_roll) + ", needed <=" + str(config["mental_risk"]) + "%).")
+
+    if integrity_loss:
+        agency.integrity = max(0, (agency.integrity or 0) - 1)
+        agency.save(update_fields=["integrity"])
+        messages.append("Agency loses 1 integrity point (rolled " + str(integrity_roll) + "/" + str(config["integrity_risk"]) + "%).")
+    elif config["integrity_risk"] > 0:
+        messages.append("No integrity loss (rolled " + str(integrity_roll) + ", needed <=" + str(config["integrity_risk"]) + "%).")
+
+    # Update project
+    project["liveTestingLevel"] = level
+    project["liveTestingLabel"] = config["label"]
+    project["liveTestingDice"] = config["dice"]
+    projects[project_index] = project
+    agency.projects = projects
+    agency.save(update_fields=["projects"])
+
+    return JsonResponse({
+        "level": level,
+        "label": config["label"],
+        "bonusDice": config["dice"],
+        "mentalDamage": mental_damage,
+        "integrityLoss": integrity_loss,
+        "messages": messages,
+        "message": config["label"] + " activated. +" + str(config["dice"]) + " permanent dice.\n" + "\n".join(messages),
+    })
