@@ -1,0 +1,839 @@
+{% verbatim %}
+<script type="text/babel">
+const { useState, useEffect, useRef, useCallback, useMemo } = React;
+const { Icon, AutoSaveInput, Classified, VisibilityToggle, XpProtester, getCookie } = window;
+
+    // --- ALLIANCE MODULE (3-column: countries, companies, organizations) ---
+    const AllianceModule = ({ alliance, agencyRef, update, onSave, visibility, onToggleVis }) => {
+        const isClassified = alliance === 'CLASSIFIED';
+
+        if (isClassified && !IS_ADMIN) return (
+            <div className="glass-panel" style={{ padding: '1.5rem', marginBottom: '1rem' }}>
+                <h3 className="mono-text text-accent" style={{ marginBottom: '1rem' }}>ALLIANCE / BLOC</h3>
+                <Classified />
+            </div>
+        );
+
+        const data = (typeof alliance === 'object' && alliance !== null)
+            ? { countries: [], companies: [], organizations: [], ...alliance }
+            : { countries: [], companies: [], organizations: [] };
+
+        const addItem = (category) => {
+            document.activeElement?.blur();
+            const fresh = agencyRef.current.alliance || { countries: [], companies: [], organizations: [] };
+            update({ ...fresh, [category]: [...(fresh[category] || []), ''] });
+        };
+
+        const removeItem = (category, idx) => {
+            document.activeElement?.blur();
+            const fresh = agencyRef.current.alliance || { countries: [], companies: [], organizations: [] };
+            update({ ...fresh, [category]: fresh[category].filter((_, i) => i !== idx) });
+        };
+
+        const Column = ({ category, title, icon }) => (
+            <div>
+                <h4 className="text-muted mono-text" style={{
+                    fontSize: '0.8rem', marginBottom: '0.75rem',
+                    borderBottom: '1px solid var(--border-color)', paddingBottom: '0.25rem'
+                }}>
+                    {title}
+                    <span className="text-muted" style={{ marginLeft: '0.5rem', fontSize: '0.7rem' }}>
+                        ({data[category].length})
+                    </span>
+                </h4>
+                {data[category].map((item, idx) => (
+                    <div key={idx} style={{
+                        display: 'flex', alignItems: 'center', gap: '0.25rem', marginBottom: '0.25rem'
+                    }}>
+                        <AutoSaveInput
+                            type="text"
+                            defaultValue={item}
+                            placeholder={`Add ${title.toLowerCase().slice(0, -1)}...`}
+                            onSave={val => onSave({
+                                ...data,
+                                [category]: data[category].map((it, i) => i === idx ? val : it)
+                            })}
+                            disabled={!IS_ADMIN}
+                            style={{
+                                background: 'transparent', border: 'none',
+                                borderBottom: '1px solid var(--border-color)',
+                                color: 'var(--text-primary)', flex: 1,
+                                fontSize: '0.85rem', padding: '0.25rem 0'
+                            }}
+                        />
+                        {IS_ADMIN && (
+                            <button onClick={() => removeItem(category, idx)} style={{
+                                background: 'transparent', border: 'none',
+                                color: 'var(--accent-danger)', cursor: 'pointer', padding: '2px'
+                            }}>
+                                <Icon name="x" size={12} />
+                            </button>
+                        )}
+                    </div>
+                ))}
+                {IS_ADMIN && (
+                    <button onClick={() => addItem(category)} style={{
+                        background: 'transparent', border: '1px dashed var(--border-color)',
+                        color: 'var(--text-muted)', width: '100%', padding: '0.25rem',
+                        cursor: 'pointer', fontSize: '0.8rem', marginTop: '0.25rem'
+                    }}>+ Add</button>
+                )}
+                {data[category].length === 0 && !IS_ADMIN && (
+                    <p className="text-muted" style={{ fontSize: '0.8rem', fontStyle: 'italic' }}>None</p>
+                )}
+            </div>
+        );
+
+        return (
+            <div className="glass-panel" style={{ padding: '1.5rem', marginBottom: '1rem' }}>
+                <h3 className="mono-text text-accent" style={{
+                    borderBottom: '1px solid var(--border-color)',
+                    paddingBottom: '0.5rem', marginBottom: '1rem'
+                }}>
+                    ALLIANCE / BLOC
+                    <VisibilityToggle field="alliance" visibility={visibility} onToggle={onToggleVis} />
+                </h3>
+                <div style={{
+                    display: 'grid',
+                    gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))',
+                    gap: '1.5rem'
+                }}>
+                    <Column category="countries" title="COUNTRIES" />
+                    <Column category="companies" title="COMPANIES" />
+                    <Column category="organizations" title="ORGANIZATIONS" />
+                </div>
+            </div>
+        );
+    };
+
+    // --- HEADER MODULE ---
+    const HeaderModule = ({ agency, onSave, visibility, onToggleVis }) => (
+        <div className="glass-panel" style={{
+            padding: '1.5rem', marginBottom: '1rem',
+            display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '1rem'
+        }}>
+            <div>
+                <label className="text-secondary mono-text" style={{ fontSize: '0.8rem' }}>
+                    AGENCY NAME
+                    {IS_ADMIN && agency.isHidden && (
+                        <span className="mono-text" style={{
+                            fontSize: '0.65rem', color: 'var(--accent-danger)',
+                            border: '1px solid var(--accent-danger)',
+                            padding: '0.1rem 0.4rem', borderRadius: 'var(--radius-sm)',
+                            marginLeft: '0.5rem',
+                        }}>HIDDEN</span>
+                    )}
+                </label>
+                <AutoSaveInput type="text" defaultValue={agency.name}
+                    onSave={val => onSave({ name: val })}
+                    disabled={!IS_ADMIN}
+                    style={{
+                        background: 'transparent', border: 'none',
+                        borderBottom: '1px solid var(--accent-primary)',
+                        color: 'var(--text-primary)', width: '100%',
+                        fontSize: '1.2rem', fontFamily: 'var(--font-mono)'
+                    }} />
+                {IS_ADMIN && (
+                    <label style={{
+                        display: 'flex', alignItems: 'center', gap: '0.5rem',
+                        cursor: 'pointer', fontFamily: 'var(--font-mono)',
+                        fontSize: '0.8rem', marginTop: '0.5rem',
+                        color: agency.isHidden ? 'var(--accent-danger)' : 'var(--text-secondary)',
+                    }}>
+                        <input
+                            type="checkbox"
+                            checked={agency.isHidden || false}
+                            onChange={e => onSave({ isHidden: e.target.checked })}
+                            style={{ accentColor: 'var(--accent-danger)' }}
+                        />
+                        HIDDEN (only visible to admins)
+                    </label>
+                )}
+            </div>
+            <div>
+                <label className="text-secondary mono-text" style={{ fontSize: '0.8rem' }}>
+                    MOTTO
+                    <VisibilityToggle field="motto" visibility={visibility} onToggle={onToggleVis} />
+                </label>
+                {agency.motto === 'CLASSIFIED' ? <Classified /> : (
+                    <AutoSaveInput type="text" defaultValue={agency.motto}
+                        onSave={val => onSave({ motto: val })}
+                        disabled={!IS_ADMIN}
+                        style={{
+                            background: 'transparent', border: 'none',
+                            borderBottom: '1px solid var(--border-color)',
+                            color: 'var(--text-primary)', width: '100%'
+                        }} />
+                )}
+            </div>
+            <div>
+                <label className="text-secondary mono-text" style={{ fontSize: '0.8rem' }}>
+                    HEADQUARTERS
+                    <VisibilityToggle field="headquarters" visibility={visibility} onToggle={onToggleVis} />
+                </label>
+                {agency.headquarters === 'CLASSIFIED' ? <Classified /> : (
+                    <AutoSaveInput type="text" defaultValue={agency.headquarters}
+                        onSave={val => onSave({ headquarters: val })}
+                        disabled={!IS_ADMIN}
+                        style={{
+                            background: 'transparent', border: 'none',
+                            borderBottom: '1px solid var(--border-color)',
+                            color: 'var(--text-primary)', width: '100%'
+                        }} />
+                )}
+            </div>
+            {IS_ADMIN && (
+                <div>
+                    <label className="text-secondary mono-text" style={{ fontSize: '0.8rem' }}>MAP COLOR</label>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                        <input type="color"
+                            defaultValue={agency.mapColor || '#00ff88'}
+                            onChange={e => onSave({ mapColor: e.target.value })}
+                            style={{ width: '40px', height: '30px', border: 'none', cursor: 'pointer', background: 'transparent' }}
+                        />
+                        <span className="mono-text text-muted" style={{ fontSize: '0.8rem' }}>
+                            {agency.mapColor || '#00ff88'}
+                        </span>
+                    </div>
+                </div>
+            )}
+        </div>
+    );
+
+    // --- NOTES MODULE ---
+    const NotesModule = ({ notes, onSave, visibility, onToggleVis }) => {
+        const [editing, setEditing] = useState(false);
+        const textareaRef = useRef(null);
+
+        const handleSave = () => {
+            if (textareaRef.current) {
+                onSave({ notes: textareaRef.current.value });
+            }
+            setEditing(false);
+        };
+
+        const renderMarkdown = (text) => {
+            if (!text) return '<p style="color: var(--text-muted); font-style: italic;">No notes recorded.</p>';
+            try { return window.marked.parse(text); } catch { return text; }
+        };
+
+        return (
+            <div className="glass-panel" style={{ padding: '1.5rem', marginBottom: '1rem' }}>
+                <div style={{
+                    display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+                    borderBottom: '1px solid var(--border-color)',
+                    paddingBottom: '0.5rem', marginBottom: '1rem'
+                }}>
+                    <h3 className="mono-text text-accent" style={{ margin: 0 }}>
+                        NOTES
+                        <VisibilityToggle field="notes" visibility={visibility} onToggle={onToggleVis} />
+                    </h3>
+                    {IS_ADMIN && notes !== 'CLASSIFIED' && (
+                        <button onClick={() => editing ? handleSave() : setEditing(true)}
+                            style={{
+                                background: 'transparent',
+                                border: '1px solid var(--accent-primary)',
+                                color: 'var(--accent-primary)',
+                                padding: '0.25rem 0.75rem', cursor: 'pointer',
+                                fontFamily: 'var(--font-mono)', fontSize: '0.8rem',
+                            }}>
+                            {editing ? 'SAVE' : 'EDIT'}
+                        </button>
+                    )}
+                </div>
+                {notes === 'CLASSIFIED' ? <Classified /> : editing ? (
+                    <textarea ref={textareaRef} defaultValue={notes}
+                        placeholder="Write notes in markdown..."
+                        style={{
+                            width: '100%', minHeight: '200px', background: 'var(--bg-input)',
+                            border: '1px solid var(--border-color)', color: 'var(--text-primary)',
+                            padding: '1rem', fontFamily: 'var(--font-mono)', fontSize: '0.9rem',
+                            resize: 'vertical', borderRadius: 'var(--radius-sm)',
+                        }} />
+                ) : (
+                    <div className="dossier-content"
+                        dangerouslySetInnerHTML={{ __html: renderMarkdown(notes) }} />
+                )}
+            </div>
+        );
+    };
+
+    // --- INTEGRITY & EXPERIENCE MODULE ---
+    const getWorkspaceConfig = (baseConfig) => (baseConfig.facilityTypes || []).find(f => f.key === 'workspace');
+
+    const calcTotalBaseExp = (bases, baseConfig) => {
+        if (!bases || !baseConfig) return 0;
+        const getLocationType = (key) => (baseConfig.locationTypes || []).find(lt => lt.key === key);
+        const getMerit = (key) => (baseConfig.locationMerits || []).find(m => m.key === key);
+        const getFacilityType = (key) => (baseConfig.facilityTypes || []).find(f => f.key === key);
+        const getEquipment = (key) => (baseConfig.equipmentTypes || []).find(e => e.key === key);
+        const wsConfig = getWorkspaceConfig(baseConfig);
+        let total = 0;
+        (bases || []).forEach(base => {
+            const loc = getLocationType(base.locationType);
+            if (loc) total += loc.exp;
+            (base.merits || []).forEach(mk => { const m = getMerit(mk); if (m) total += m.exp; });
+            (base.facilities || []).forEach(f => {
+                const ft = getFacilityType(f.key);
+                if (ft) { const lvl = ft.levels.find(l => l.level === f.level); if (lvl) total += lvl.exp; }
+            });
+            (base.workspaces || []).forEach(w => {
+                if (wsConfig) { const lvl = wsConfig.levels.find(l => l.level === w.level); if (lvl) total += lvl.exp; }
+            });
+            (base.equipment || []).forEach(ek => { const eq = getEquipment(ek); if (eq) total += eq.exp; });
+        });
+        return total;
+    };
+
+    const IntegrityModule = ({ agency, update, visibility, onToggleVis }) => {
+        const expPool = typeof agency.experience === 'number' ? agency.experience : 0;
+        const basesExp = calcTotalBaseExp(agency.bases, agency.baseConfig);
+        const available = expPool - basesExp;
+
+        return (
+            <div className="glass-panel" style={{ padding: '1.5rem', marginBottom: '1rem' }}>
+                {available < 0 && (
+                    <div className="xp-protester-zone"><XpProtester /></div>
+                )}
+                <h3 className="mono-text text-accent" style={{
+                    borderBottom: '1px solid var(--border-color)',
+                    paddingBottom: '0.5rem', marginBottom: '1rem'
+                }}>CORE STATS</h3>
+                <div style={{ display: 'flex', gap: '1rem', justifyContent: 'center', flexWrap: 'wrap' }}>
+                    <div className="tech-border text-center" style={{ padding: '1rem', minWidth: '120px', flex: '1 1 0' }}>
+                        <div className="text-secondary mono-text" style={{ fontSize: '0.8rem' }}>
+                            INTEGRITY
+                            <VisibilityToggle field="integrity" visibility={visibility} onToggle={onToggleVis} />
+                        </div>
+                        {agency.integrity === 'CLASSIFIED' ? <Classified /> : (
+                            <input type="number" value={agency.integrity}
+                                onChange={e => update({ integrity: parseInt(e.target.value) || 0 })}
+                                disabled={!IS_ADMIN}
+                                style={{
+                                    background: 'transparent', border: 'none',
+                                    color: 'var(--accent-primary)', width: '100%',
+                                    textAlign: 'center', fontSize: '2rem',
+                                    fontFamily: 'var(--font-mono)'
+                                }} />
+                        )}
+                    </div>
+                    <div className="tech-border text-center" style={{ padding: '1rem', minWidth: '120px', flex: '1 1 0' }}>
+                        <div className="text-secondary mono-text" style={{ fontSize: '0.8rem' }}>
+                            AVAILABLE EXP
+                            <VisibilityToggle field="experience" visibility={visibility} onToggle={onToggleVis} />
+                        </div>
+                        {agency.experience === 'CLASSIFIED' ? <Classified /> : (
+                            <>
+                                <div style={{
+                                    color: available < 0 ? 'var(--accent-danger)' : 'var(--accent-primary)',
+                                    fontSize: '2rem', fontFamily: 'var(--font-mono)',
+                                }}>
+                                    {available}
+                                </div>
+                                <div style={{
+                                    marginTop: '0.25rem', fontFamily: 'var(--font-mono)',
+                                    color: 'var(--text-muted)', fontSize: '0.8rem',
+                                }}>
+                                    {basesExp} used / {expPool} total
+                                </div>
+                                {IS_ADMIN && (
+                                    <button
+                                        onClick={() => {
+                                            const input = prompt('Add EXP amount (use negative to subtract):');
+                                            if (input === null) return;
+                                            const amount = parseInt(input);
+                                            if (isNaN(amount)) return;
+                                            update({ experience: expPool + amount });
+                                        }}
+                                        className="btn-cyber"
+                                        style={{ marginTop: '0.5rem', fontSize: '0.75rem', padding: '0.25rem 0.75rem' }}
+                                    >
+                                        + ADD EXP
+                                    </button>
+                                )}
+                            </>
+                        )}
+                    </div>
+                    {IS_ADMIN && (
+                    <div className="tech-border text-center" style={{ padding: '1rem', minWidth: '120px', flex: '1 1 0' }}>
+                        <div className="text-secondary mono-text" style={{ fontSize: '0.8rem' }}>
+                            ZERO-DAY POOL
+                        </div>
+                        <input type="number" value={agency.zeroDayPool || 0}
+                            onChange={e => update({ zeroDayPool: parseInt(e.target.value) || 0 })}
+                            style={{
+                                background: 'transparent', border: 'none',
+                                color: '#0f0', width: '100%',
+                                textAlign: 'center', fontSize: '2rem',
+                                fontFamily: 'var(--font-mono)'
+                            }} />
+                        <div style={{
+                            marginTop: '0.25rem', fontFamily: 'var(--font-mono)',
+                            color: 'var(--text-muted)', fontSize: '0.7rem',
+                        }}>
+                            Gov Zero-Day Repository
+                        </div>
+                    </div>
+                    )}
+                </div>
+
+                {/* XP Transfer Log */}
+                {(agency.xpTransfers || []).length > 0 && (
+                    <div style={{
+                        marginTop: '1rem', paddingTop: '0.75rem',
+                        borderTop: '1px solid var(--border-color)'
+                    }}>
+                        <div className="text-muted mono-text" style={{
+                            fontSize: '0.7rem', marginBottom: '0.5rem', textAlign: 'center'
+                        }}>OPERATIVE CONTRIBUTIONS</div>
+                        <div style={{ maxHeight: '200px', overflowY: 'auto' }}>
+                            {(agency.xpTransfers || []).map((t, i) => (
+                                <div key={i} style={{
+                                    display: 'flex', justifyContent: 'space-between',
+                                    fontSize: '0.75rem', color: 'var(--text-secondary)',
+                                    padding: '0.2rem 0.5rem',
+                                    background: i % 2 === 0 ? 'rgba(0,0,0,0.1)' : 'transparent',
+                                }}>
+                                    <span>
+                                        <span style={{ color: 'var(--text-primary)' }}>{t.characterName}</span>
+                                        <span className="text-muted"> ({t.playerName})</span>
+                                    </span>
+                                    <span>
+                                        <span className="text-accent mono-text">+{t.agencyReceived} XP</span>
+                                        <span className="text-muted" style={{ fontSize: '0.65rem', marginLeft: '0.5rem' }}>
+                                            {new Date(t.date).toLocaleDateString()}
+                                        </span>
+                                    </span>
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+                )}
+            </div>
+        );
+    };
+
+    // --- DOSSIERS MODULE ---
+    const DossiersModule = ({ dossiers }) => {
+        if (!dossiers || dossiers.length === 0) return null;
+        return (
+            <div className="glass-panel" style={{ padding: '1.5rem', marginBottom: '1rem' }}>
+                <h3 className="mono-text text-accent" style={{
+                    borderBottom: '1px solid var(--border-color)',
+                    paddingBottom: '0.5rem', marginBottom: '1rem'
+                }}>LINKED DOSSIERS</h3>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem' }}>
+                    {dossiers.map(d => (
+                        <a key={`${d.type}-${d.id}`}
+                            href={d.type === 'character' ? `/character/${d.id}/` : `/npcs/${d.id}/`}
+                            className="btn-cyber mono-text"
+                            style={{
+                                textDecoration: 'none', fontSize: '0.85rem',
+                                padding: '0.4rem 0.75rem',
+                                display: 'inline-flex', alignItems: 'center', gap: '0.5rem',
+                            }}>
+                            <span style={{
+                                fontSize: '0.6rem', opacity: 0.7,
+                                border: '1px solid currentColor',
+                                padding: '0.1rem 0.3rem', borderRadius: '2px',
+                            }}>{d.type === 'character' ? 'PC' : 'NPC'}</span>
+                            {d.name}
+                        </a>
+                    ))}
+                </div>
+            </div>
+        );
+    };
+
+    // --- ATTRIBUTES MODULE ---
+    const AttributesModule = ({ attributes, update, visibility, onToggleVis }) => {
+        const isClassified = attributes === 'CLASSIFIED';
+        if (isClassified && !IS_ADMIN) return (
+            <div className="glass-panel" style={{ padding: '1.5rem', marginBottom: '1rem' }}>
+                <h3 className="mono-text text-accent" style={{ marginBottom: '1rem' }}>ATTRIBUTES</h3>
+                <Classified />
+            </div>
+        );
+
+        const updateAttr = (cat, skill, val) => {
+            const updated = { ...attributes, [cat]: { ...attributes[cat], [skill]: val } };
+            update(updated);
+        };
+
+        const addCustomSkill = (category) => {
+            const name = prompt('Enter new skill name:');
+            if (name && name.trim()) {
+                const updated = { ...attributes, [category]: { ...attributes[category], [name.trim()]: 0 } };
+                update(updated);
+            }
+        };
+
+        const CategorySection = ({ category, title }) => {
+            const skills = attributes[category] || {};
+            return (
+                <div>
+                    <h4 className="text-center text-muted mono-text" style={{
+                        marginBottom: '1rem', textTransform: 'uppercase',
+                        borderBottom: '1px solid var(--border-color)', paddingBottom: '0.25rem'
+                    }}>{title}</h4>
+                    {Object.entries(skills).map(([skill, val]) => {
+                        const fieldPath = `attributes.${category}.${skill}`;
+                        const classified = val === 'CLASSIFIED';
+                        return (
+                            <div key={skill} style={{
+                                display: 'flex', justifyContent: 'space-between',
+                                alignItems: 'center', marginBottom: '0.5rem'
+                            }}>
+                                <span style={{ fontSize: '0.9rem', color: 'var(--text-primary)' }}>
+                                    {skill}
+                                    <VisibilityToggle field={fieldPath} visibility={visibility} onToggle={onToggleVis} />
+                                </span>
+                                {classified ? <Classified /> : (
+                                    <input type="number" value={val}
+                                        onChange={e => updateAttr(category, skill, parseInt(e.target.value) || 0)}
+                                        disabled={!IS_ADMIN}
+                                        style={{
+                                            width: '60px', textAlign: 'center',
+                                            background: 'transparent',
+                                            border: '1px solid var(--border-color)',
+                                            color: 'var(--accent-primary)',
+                                            fontFamily: 'var(--font-mono)'
+                                        }} />
+                                )}
+                            </div>
+                        );
+                    })}
+                    {IS_ADMIN && (
+                        <button onClick={() => addCustomSkill(category)} style={{
+                            background: 'transparent', border: '1px dashed var(--border-color)',
+                            color: 'var(--text-muted)', width: '100%', padding: '0.25rem',
+                            cursor: 'pointer', fontSize: '0.8rem', marginTop: '0.5rem'
+                        }}>+ Add Skill</button>
+                    )}
+                </div>
+            );
+        };
+
+        return (
+            <div className="glass-panel" style={{ padding: '1.5rem', marginBottom: '1rem' }}>
+                <h3 className="mono-text text-accent" style={{
+                    borderBottom: '1px solid var(--border-color)',
+                    paddingBottom: '0.5rem', marginBottom: '1rem'
+                }}>ATTRIBUTES</h3>
+                <div style={{
+                    display: 'grid',
+                    gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))',
+                    gap: '2rem'
+                }}>
+                    <CategorySection category="power" title="Power" />
+                    <CategorySection category="finesse" title="Finesse" />
+                    <CategorySection category="resistance" title="Resistance" />
+                </div>
+            </div>
+        );
+    };
+
+    // --- GLOBAL FLAWS DISPLAY (read-only, shown on every agency) ---
+    const GlobalFlawsDisplay = ({ globalFlaws }) => {
+        if (!globalFlaws || globalFlaws.length === 0) return null;
+
+        return (
+            <div className="glass-panel" style={{
+                padding: '1.5rem', marginTop: '0.5rem',
+                borderLeft: '3px solid var(--accent-warning)'
+            }}>
+                <h3 className="mono-text" style={{
+                    borderBottom: '1px solid var(--border-color)',
+                    paddingBottom: '0.5rem', marginBottom: '1rem',
+                    color: 'var(--accent-warning)', fontSize: '0.95rem'
+                }}>
+                    GLOBAL FLAWS
+                    <span className="text-muted" style={{ fontSize: '0.7rem', marginLeft: '0.5rem' }}>
+                        (SYSTEM-WIDE // READ ONLY)
+                    </span>
+                </h3>
+                <div style={{
+                    display: 'grid',
+                    gridTemplateColumns: 'minmax(120px, 1.5fr) 60px minmax(120px, 2fr)',
+                    gap: '0.5rem', marginBottom: '0.5rem', padding: '0 0.5rem'
+                }}>
+                    <span className="text-muted mono-text" style={{ fontSize: '0.7rem' }}>NAME</span>
+                    <span className="text-muted mono-text" style={{ fontSize: '0.7rem' }}>VALUE</span>
+                    <span className="text-muted mono-text" style={{ fontSize: '0.7rem' }}>DESCRIPTION</span>
+                </div>
+                {globalFlaws.map(flaw => (
+                    <div key={flaw.id} className="tech-border" style={{
+                        display: 'grid',
+                        gridTemplateColumns: 'minmax(120px, 1.5fr) 60px minmax(120px, 2fr)',
+                        gap: '0.5rem', padding: '0.5rem', marginBottom: '0.25rem',
+                        background: 'rgba(234, 179, 8, 0.05)', alignItems: 'center'
+                    }}>
+                        <span style={{ color: 'var(--text-primary)', fontSize: '0.85rem' }}>
+                            {flaw.name}
+                        </span>
+                        <span className="mono-text" style={{ color: 'var(--accent-warning)', fontSize: '0.85rem' }}>
+                            {flaw.value}
+                        </span>
+                        <span style={{ color: 'var(--text-secondary)', fontSize: '0.85rem' }}>
+                            {flaw.description}
+                        </span>
+                    </div>
+                ))}
+            </div>
+        );
+    };
+
+    // --- COUNCIL ITEMS DISPLAY (read-only, shown on every agency) ---
+    const CouncilDisplay = ({ councilItems, isCouncilMember, isCouncilChairman, onToggleMembership }) => {
+        const COUNCIL_ACCENT = '#a855f7';
+
+        const statusColors = {
+            proposed: '#facc15',
+            voting: '#f97316',
+            active: 'var(--accent-primary)',
+            suspended: 'var(--accent-warning)',
+            repealed: 'var(--accent-danger)',
+        };
+
+        const typeLabels = {
+            agreement: 'AGREEMENT',
+            initiative: 'INITIATIVE',
+            law: 'LAW',
+        };
+
+        // Show active, proposed, and voting items on agency sheets
+        const visibleItems = (councilItems || []).filter(i => ['active', 'proposed', 'voting'].includes(i.status));
+        const votingItems = visibleItems.filter(i => i.status === 'voting');
+        const otherItems = visibleItems.filter(i => i.status !== 'voting');
+
+        return (
+            <div className="glass-panel" style={{
+                padding: '1.5rem', marginTop: '1rem',
+                borderLeft: `3px solid ${COUNCIL_ACCENT}`
+            }}>
+                <h3 className="mono-text" style={{
+                    borderBottom: '1px solid var(--border-color)',
+                    paddingBottom: '0.5rem', marginBottom: '1rem',
+                    color: COUNCIL_ACCENT, fontSize: '0.95rem',
+                    display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+                }}>
+                    <span>
+                        UNITED INTERSTELLAR COUNCIL
+                        <span className="text-muted" style={{ fontSize: '0.7rem', marginLeft: '0.5rem' }}>
+                            (COUNCIL RECORD // READ ONLY)
+                        </span>
+                    </span>
+                    {isCouncilChairman && (
+                        <span className="mono-text" style={{
+                            fontSize: '0.7rem', padding: '2px 8px',
+                            background: COUNCIL_ACCENT, color: 'var(--bg-dark)',
+                            borderRadius: 'var(--radius-sm)', fontWeight: 'bold',
+                        }}>
+                            CHAIRMAN
+                        </span>
+                    )}
+                </h3>
+
+                {/* Council Membership Toggle */}
+                {IS_ADMIN && (
+                    <div style={{
+                        display: 'flex', alignItems: 'center', gap: '0.5rem',
+                        marginBottom: '1rem', padding: '0.5rem 0.75rem',
+                        background: 'rgba(168, 85, 247, 0.08)',
+                        borderRadius: 'var(--radius-sm)',
+                        border: '1px solid rgba(168, 85, 247, 0.2)',
+                    }}>
+                        <input
+                            type="checkbox"
+                            id="council-member-toggle"
+                            checked={isCouncilMember}
+                            onChange={(e) => onToggleMembership(e.target.checked)}
+                            style={{ cursor: 'pointer', accentColor: COUNCIL_ACCENT }}
+                        />
+                        <label htmlFor="council-member-toggle" className="mono-text" style={{
+                            fontSize: '0.8rem', color: 'var(--text-primary)', cursor: 'pointer',
+                        }}>
+                            COUNCIL MEMBER
+                        </label>
+                        {isCouncilMember && isCouncilChairman && (
+                            <span className="mono-text text-muted" style={{ fontSize: '0.7rem', marginLeft: '0.5rem' }}>
+                                (Designated Chairman)
+                            </span>
+                        )}
+                    </div>
+                )}
+                {/* Voting items — highlighted section */}
+                {votingItems.length > 0 && (
+                    <div style={{
+                        border: '1px solid #f97316',
+                        borderRadius: 'var(--radius-sm)',
+                        padding: '0.75rem',
+                        marginBottom: '0.75rem',
+                        background: 'rgba(249, 115, 22, 0.08)',
+                    }}>
+                        <h4 className="mono-text" style={{
+                            color: '#f97316', fontSize: '0.8rem',
+                            marginBottom: '0.5rem', letterSpacing: '1px',
+                        }}>
+                            CURRENTLY IN VOTE
+                        </h4>
+                        {votingItems.map(item => (
+                            <div key={item.id} className="tech-border" style={{
+                                padding: '0.75rem', marginBottom: '0.5rem',
+                                background: 'rgba(249, 115, 22, 0.05)',
+                                borderLeft: '3px solid #f97316',
+                            }}>
+                                <div style={{
+                                    display: 'flex', justifyContent: 'space-between',
+                                    alignItems: 'center', marginBottom: '0.25rem'
+                                }}>
+                                    <span className="mono-text" style={{ color: 'var(--text-primary)', fontSize: '0.9rem', fontWeight: 'bold' }}>
+                                        {item.name}
+                                    </span>
+                                    <span className="mono-text" style={{
+                                        fontSize: '0.65rem', padding: '2px 6px',
+                                        border: `1px solid ${COUNCIL_ACCENT}`,
+                                        color: COUNCIL_ACCENT,
+                                    }}>
+                                        {typeLabels[item.itemType] || item.itemType.toUpperCase()}
+                                    </span>
+                                </div>
+                                {item.proposedBy && (
+                                    <p className="text-muted mono-text" style={{ fontSize: '0.75rem', marginBottom: '0.25rem' }}>
+                                        Proposed by: {item.proposedBy}
+                                    </p>
+                                )}
+                                {item.description && (
+                                    <p className="text-secondary" style={{ fontSize: '0.85rem', marginTop: '0.25rem' }}>
+                                        {item.description}
+                                    </p>
+                                )}
+                            </div>
+                        ))}
+                    </div>
+                )}
+
+                {/* Active and proposed items */}
+                {otherItems.map(item => (
+                    <div key={item.id} className="tech-border" style={{
+                        padding: '0.75rem', marginBottom: '0.5rem',
+                        background: 'rgba(168, 85, 247, 0.05)',
+                    }}>
+                        <div style={{
+                            display: 'flex', justifyContent: 'space-between',
+                            alignItems: 'center', marginBottom: '0.25rem'
+                        }}>
+                            <span className="mono-text" style={{ color: 'var(--text-primary)', fontSize: '0.9rem', fontWeight: 'bold' }}>
+                                {item.name}
+                            </span>
+                            <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+                                <span className="mono-text" style={{
+                                    fontSize: '0.65rem', padding: '2px 6px',
+                                    border: `1px solid ${COUNCIL_ACCENT}`,
+                                    color: COUNCIL_ACCENT,
+                                }}>
+                                    {typeLabels[item.itemType] || item.itemType.toUpperCase()}
+                                </span>
+                                <span className="mono-text" style={{
+                                    fontSize: '0.65rem', padding: '2px 6px',
+                                    border: `1px solid ${statusColors[item.status] || 'var(--text-muted)'}`,
+                                    color: statusColors[item.status] || 'var(--text-muted)',
+                                }}>
+                                    {item.status.toUpperCase()}
+                                </span>
+                            </div>
+                        </div>
+                        {item.proposedBy && (
+                            <p className="text-muted mono-text" style={{ fontSize: '0.75rem', marginBottom: '0.25rem' }}>
+                                Proposed by: {item.proposedBy}
+                            </p>
+                        )}
+                        {item.description && (
+                            <p className="text-secondary" style={{ fontSize: '0.85rem', marginTop: '0.25rem' }}>
+                                {item.description}
+                            </p>
+                        )}
+                    </div>
+                ))}
+            </div>
+        );
+    };
+
+    // --- GENERIC TABLE MODULE ---
+    const DarkGrantsModule = ({ agency, fetchAgency }) => {
+        if (!IS_SCIENCE) return null;
+        var projects = agency.projects;
+        if (!Array.isArray(projects)) return null;
+        var fringeProjects = projects.filter(function(p) { return p && p.fringe && !p.discarded; });
+        if (fringeProjects.length === 0) return null;
+
+        var fringeInfo = agency.fringeInfo;
+        return (
+            <div>
+                {fringeInfo ? (
+                    <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: '0.25rem' }}>
+                        <span className="mono-text" style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
+                            FRINGE SLOTS: {fringeInfo.usedSlots}/{fringeInfo.maxSlots}
+                        </span>
+                    </div>
+                ) : null}
+                {fringeProjects.map(function(p) {
+                    var realIdx = projects.indexOf(p);
+                    if (p.darkGrantsLevel) {
+                        return (
+                            <div key={'dg-' + realIdx} className="tech-border" style={{ padding: '0.75rem', marginBottom: '0.25rem', background: 'rgba(138,43,226,0.05)', borderColor: '#8a2be2' }}>
+                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                    <span className="mono-text" style={{ fontSize: '0.8rem' }}>
+                                        🖐 <span style={{ color: '#8a2be2' }}>{p.name}</span> — Dark Grants Level {p.darkGrantsLevel} (+{p.darkGrantsLevel} dice)
+                                    </span>
+                                    {p.darkGrantsAgencies && p.darkGrantsAgencies.length > 0 ? (
+                                        <span className="mono-text" style={{ fontSize: '0.7rem', color: 'var(--accent-danger, #c0392b)' }}>
+                                            Linked: {p.darkGrantsAgencies.map(function(a) { return a.name; }).join(', ')}
+                                        </span>
+                                    ) : null}
+                                </div>
+                            </div>
+                        );
+                    }
+                    return (
+                        <div key={'dg-' + realIdx} className="tech-border" style={{ padding: '0.75rem', marginBottom: '0.25rem', background: 'rgba(138,43,226,0.03)' }}>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '0.5rem' }}>
+                                <span className="mono-text" style={{ fontSize: '0.8rem' }}>
+                                    🖐 {p.name} — <span className="text-muted">Dark Grants available</span>
+                                </span>
+                                <div style={{ display: 'flex', gap: '0.25rem' }}>
+                                    {[1, 2, 3].map(function(lvl) {
+                                        return (
+                                            <button key={lvl} onClick={function() {
+                                                if (!confirm('Activate Dark Grants Level ' + lvl + ' on "' + p.name + '"?\n\n+' + lvl + ' permanent dice.\nRisk: ' + lvl + 'd10 rolled.\n\nThis cannot be undone.')) return;
+                                                fetch('/api/agencies/' + AGENCY_ID + '/projects/' + realIdx + '/dark-grants/', {
+                                                    method: 'POST',
+                                                    headers: { 'Content-Type': 'application/json', 'X-CSRFToken': CSRF_TOKEN },
+                                                    body: JSON.stringify({ level: lvl }),
+                                                }).then(function(r) { return r.json(); }).then(function(data) {
+                                                    if (data.error) { alert(data.error); return; }
+                                                    alert(data.message);
+                                                    fetchAgency();
+                                                });
+                                            }} className="btn-cyber" style={{ fontSize: '0.7rem', padding: '0.2rem 0.5rem', background: 'rgba(138,43,226,0.1)', borderColor: '#8a2be2', color: '#8a2be2' }}>
+                                                LVL {lvl}
+                                            </button>
+                                        );
+                                    })}
+                                </div>
+                            </div>
+                        </div>
+                    );
+                })}
+            </div>
+        );
+    };
+
+// Export to global scope
+Object.assign(window, {
+    AllianceModule, HeaderModule, NotesModule, IntegrityModule,
+    DossiersModule, AttributesModule, GlobalFlawsDisplay, CouncilDisplay,
+    DarkGrantsModule, getWorkspaceConfig, calcTotalBaseExp,
+});
+</script>
+{% endverbatim %}
