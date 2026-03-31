@@ -640,6 +640,17 @@ function CyberTerminal({ thread, members, onClose, postingAs }) {
               </div>
             )}
 
+            {defenseActive && (
+              <div style={{marginBottom: "0.75rem"}}>
+                <div style={termStyle.label}>DEFENSE SYSTEMS ACTIVE (+{defenseBonusVal})</div>
+                {defenseBonusVal >= 1 && <div style={{color: "#0a3", fontSize: "0.7rem"}}>🛡 Hardened encryption</div>}
+                {defenseBonusVal >= 2 && <div style={{color: "#0a3", fontSize: "0.7rem"}}>🛡 Secure network protocols</div>}
+                {defenseBonusVal >= 3 && <div style={{color: "#0a3", fontSize: "0.7rem"}}>🛡 Monitoring bots</div>}
+                {defenseBonusVal >= 4 && <div style={{color: "#0a3", fontSize: "0.7rem"}}>🛡 Honey pots</div>}
+                {defenseBonusVal >= 5 && <div style={{color: "#0a3", fontSize: "0.7rem"}}>🛡 Machine learning monitoring</div>}
+              </div>
+            )}
+
             {session && (
               <div style={{marginBottom: "0.75rem", padding: "0.5rem", border: "1px solid #042", background: "rgba(0,255,0,0.02)"}}>
                 <div style={termStyle.label}>ACTIVE SESSION</div>
@@ -857,7 +868,8 @@ function CyberTerminal({ thread, members, onClose, postingAs }) {
                 <div style={termStyle.label}>ACTION LOG</div>
                 {cyberLog.map(entry => (
                   <div key={entry.id} style={termStyle.logEntry}>
-                    [{entry.actionType.replace("_"," ")}] {entry.actorName}{entry.actionType !== "detect" ? ` — ${entry.successes} success(es)` : ""} — {entry.outcome?.substring(0, 80)}
+                    <div>[{entry.actionType.replace("_"," ")}] {entry.actorName}{entry.actionType !== "detect" ? ` — ${entry.successes} success(es)` : ""}</div>
+                    <div style={{whiteSpace: "pre-wrap", marginTop: "0.15rem"}}>{entry.outcome}</div>
                   </div>
                 ))}
               </div>
