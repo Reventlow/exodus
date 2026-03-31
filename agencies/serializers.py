@@ -55,31 +55,30 @@ def _get_sweep_info(agency, user):
                 best_info = {"pool": pool, "parts": parts, "merits": merits, "characterName": char.name}
         return best_info
 
-    # NPC agency:
-        # NPC agency — find dossier with highest Intelligence + Computer + merits
-        best_pool = 0
-        best_info = info
-        for npc in NPC.objects.filter(agency=agency, is_npc_dossier=True):
-            intelligence = npc.attributes.get("power", {}).get("mental", 1)
-            computer = npc.skills.get("mental", {}).get("Computer", 0)
-            if computer <= 0:
-                continue
-            pool = intelligence + computer
-            parts = [f"{npc.name}: Intelligence {intelligence}", f"Computer {computer}"]
-            merits = []
-            for nm in npc.npc_merits.select_related("merit").all():
-                if nm.merit.name.lower() == "computer aptitude":
-                    pool += 2
-                    parts.append("Computer Aptitude +2")
-                    merits.append(nm.merit.name)
-                elif nm.merit.name.lower() == "rapid processing":
-                    pool += 2
-                    parts.append("Rapid Processing +2")
-                    merits.append(nm.merit.name)
-            if pool > best_pool:
-                best_pool = pool
-                best_info = {"pool": pool, "parts": parts, "merits": merits, "npcName": npc.name}
-        info = best_info
+    # NPC agency — find dossier with highest Intelligence + Computer + merits
+    best_pool = 0
+    best_info = info
+    for npc in NPC.objects.filter(agency=agency, is_npc_dossier=True):
+        intelligence = npc.attributes.get("power", {}).get("mental", 1)
+        computer = npc.skills.get("mental", {}).get("Computer", 0)
+        if computer <= 0:
+            continue
+        pool = intelligence + computer
+        parts = [f"{npc.name}: Intelligence {intelligence}", f"Computer {computer}"]
+        merits = []
+        for nm in npc.npc_merits.select_related("merit").all():
+            if nm.merit.name.lower() == "computer aptitude":
+                pool += 2
+                parts.append("Computer Aptitude +2")
+                merits.append(nm.merit.name)
+            elif nm.merit.name.lower() == "rapid processing":
+                pool += 2
+                parts.append("Rapid Processing +2")
+                merits.append(nm.merit.name)
+        if pool > best_pool:
+            best_pool = pool
+            best_info = {"pool": pool, "parts": parts, "merits": merits, "npcName": npc.name}
+    info = best_info
 
     return info
 

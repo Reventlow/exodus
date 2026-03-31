@@ -1,5 +1,8 @@
 # Changelog
 
+## v0.9.74
+- Fix: NPC agency sweep info now correctly finds best dossier (was unreachable code)
+
 ## v0.9.73
 - Fix: sweep info shows for GM viewing player agency — finds best player character
 - Sweep explainer always visible when conditions exist
