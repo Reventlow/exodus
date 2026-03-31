@@ -1026,18 +1026,34 @@
                     }}>
                         {columns.map(col => {
                             if (col.type === 'boolean') {
+                                const isFringe = col.key === 'fringe';
+                                const canToggle = isFringe ? IS_SCIENCE : IS_ADMIN;
                                 return (
                                     <div key={col.key} style={{ display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                                        <input type="checkbox" checked={!!item[col.key]}
-                                            onChange={e => {
+                                        {isFringe ? (
+                                            <button onClick={() => {
+                                                if (!canToggle) return;
                                                 const updated = actualItems.map((it, i) =>
-                                                    i === idx ? { ...it, [col.key]: e.target.checked } : it
+                                                    i === idx ? { ...it, fringe: !it.fringe } : it
                                                 );
                                                 onSave(updated);
-                                            }}
-                                            disabled={!IS_ADMIN}
-                                            style={{ accentColor: 'var(--accent-primary)' }}
-                                        />
+                                            }} disabled={!canToggle} title={item.fringe ? 'Fringe Science — click to unmark' : 'Mark as Fringe Science'}
+                                            style={{
+                                                background: 'transparent', border: 'none', cursor: canToggle ? 'pointer' : 'default',
+                                                fontSize: '1.2rem', opacity: item.fringe ? 1 : 0.2, filter: item.fringe ? 'none' : 'grayscale(1)',
+                                            }}>🖐</button>
+                                        ) : (
+                                            <input type="checkbox" checked={!!item[col.key]}
+                                                onChange={e => {
+                                                    const updated = actualItems.map((it, i) =>
+                                                        i === idx ? { ...it, [col.key]: e.target.checked } : it
+                                                    );
+                                                    onSave(updated);
+                                                }}
+                                                disabled={!IS_ADMIN}
+                                                style={{ accentColor: 'var(--accent-primary)' }}
+                                            />
+                                        )}
                                     </div>
                                 );
                             }

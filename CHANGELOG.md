@@ -1,5 +1,10 @@
 # Changelog
 
+## v0.10.1
+- Fringe projects shown with 🖐 hand glyph icon (Fringe TV show inspired)
+- Science class can toggle fringe status by clicking the glyph
+- Faded when not fringe, bright when marked
+
 ## v0.10.0 — Science Expansion
 - Science class can mark projects as "Fringe"
 - Fringe column only visible to science class and GM
