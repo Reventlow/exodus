@@ -9,9 +9,9 @@ CLASSIFIED = "CLASSIFIED"
 
 def _get_sweep_info(agency, user):
     """Calculate sweep roll info for the current user or best NPC dossier."""
-    info = {"pool": 0, "parts": [], "merits": []}
+    info = {"pool": 0, "parts": ["Intelligence + Computer + merit modifiers"], "merits": []}
 
-    if agency.is_player_agency:
+    if agency.is_player_agency and not user.is_superuser:
         # Player agency — use the requesting user's character
         char = Character.objects.filter(owner=user).first()
         if not char:
@@ -31,7 +31,31 @@ def _get_sweep_info(agency, user):
                 parts.append("Rapid Processing +2")
                 merits.append(cm.merit.name)
         info = {"pool": pool, "parts": parts, "merits": merits}
-    else:
+        return info
+
+    if agency.is_player_agency and user.is_superuser:
+        # GM viewing player agency — show all player characters' sweep pools
+        best_pool = 0
+        best_info = info
+        for char in Character.objects.all():
+            intelligence = char.attributes.get("power", {}).get("mental", 1)
+            computer = char.skills.get("mental", {}).get("Computer", 0)
+            if computer <= 0:
+                continue
+            pool = intelligence + computer
+            parts = [f"{char.name}: Intelligence {intelligence}", f"Computer {computer}"]
+            merits = []
+            for cm in char.character_merits.select_related("merit").all():
+                if cm.merit.name.lower() in ("computer aptitude", "rapid processing"):
+                    pool += 2
+                    parts.append(f"{cm.merit.name} +2")
+                    merits.append(cm.merit.name)
+            if pool > best_pool:
+                best_pool = pool
+                best_info = {"pool": pool, "parts": parts, "merits": merits, "characterName": char.name}
+        return best_info
+
+    # NPC agency:
         # NPC agency — find dossier with highest Intelligence + Computer + merits
         best_pool = 0
         best_info = info

@@ -1,5 +1,9 @@
 # Changelog
 
+## v0.9.73
+- Fix: sweep info shows for GM viewing player agency — finds best player character
+- Sweep explainer always visible when conditions exist
+
 ## v0.9.72
 - Sweep & Clear explainer: shows dice pool breakdown (Intelligence + Computer + merits) and active merits
 - NPC agencies: GM rolls using best dossier (highest Intelligence + Computer + merit modifier)
