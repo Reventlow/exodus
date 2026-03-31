@@ -1,5 +1,8 @@
 # Changelog
 
+## v0.9.80
+- Lock icon on terminated chats in channel list
+
 ## v0.9.79
 - Terminal polls status every 10s — reacts to terminate by other party
 - System alert posted when chat is terminated so both parties see it via WebSocket

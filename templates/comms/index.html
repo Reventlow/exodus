@@ -1191,9 +1191,10 @@ function ThreadList({ threads, activeId, onSelect, onNewThread, intercepted }) {
           <div className="text-muted" style={S.noThreads}>No active channels</div>
         )}
         {threads.map(t => {
-          const title = t.title ||
+          const rawTitle = t.title ||
             t.members.filter(m => m.id !== CURRENT_USER_ID).map(m => m.displayName).join(", ") ||
             "Channel";
+          const title = (t.isConnectionClosed ? "🔒 " : "") + rawTitle;
           const isActive = t.id === activeId;
           const itemStyle = Object.assign({}, S.threadItem, {
             borderLeft: isActive ? "2px solid var(--accent-primary)" : "2px solid transparent",
