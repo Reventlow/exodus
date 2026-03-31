@@ -1030,28 +1030,23 @@
                                 const canToggle = isFringe ? IS_SCIENCE : IS_ADMIN;
                                 return (
                                     <div key={col.key} style={{ display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                                        {isFringe ? (() => {
-                                            const activeFringe = actualItems.filter(it => it.fringe && !it.discarded).length;
-                                            const fringeInfo = (typeof agency !== 'undefined' && agency) ? agency.fringeInfo : null;
-                                            const maxSlots = fringeInfo ? fringeInfo.maxSlots : 99;
-                                            const slotsLeft = maxSlots - activeFringe;
-                                            const atLimit = !item.fringe && slotsLeft <= 0;
-                                            return (
+                                        {isFringe ? (
                                             <button onClick={() => {
-                                                if (!canToggle || item.fringe || atLimit) return;
-                                                if (!confirm(`Mark as Fringe Science? (${slotsLeft - 1} slots remaining after this) This cannot be undone.`)) return;
-                                                const updated = actualItems.map((it, i) =>
-                                                    i === idx ? { ...it, fringe: true } : it
-                                                );
+                                                if (!canToggle || item.fringe) return;
+                                                var activeFringe = actualItems.filter(function(it) { return it.fringe && !it.discarded; }).length;
+                                                var maxSlots = 99;
+                                                try { if (typeof agency !== 'undefined' && agency && agency.fringeInfo) maxSlots = agency.fringeInfo.maxSlots; } catch(e) {}
+                                                if (activeFringe >= maxSlots) { alert('No fringe slots available (' + activeFringe + '/' + maxSlots + ')'); return; }
+                                                if (!confirm('Mark as Fringe Science? This cannot be undone.')) return;
+                                                var updated = actualItems.map(function(it, i) { return i === idx ? Object.assign({}, it, {fringe: true}) : it; });
                                                 onSave(updated);
-                                            }} disabled={!canToggle || item.fringe || atLimit}
-                                            title={item.fringe ? 'Fringe Science (permanent)' : atLimit ? `No fringe slots available (${activeFringe}/${maxSlots})` : `Mark as Fringe Science (${slotsLeft} slots left)`}
+                                            }} disabled={!canToggle || item.fringe}
+                                            title={item.fringe ? 'Fringe Science (permanent)' : 'Mark as Fringe Science'}
                                             style={{
-                                                background: 'transparent', border: 'none', cursor: (canToggle && !item.fringe && !atLimit) ? 'pointer' : 'default',
-                                                fontSize: '1.2rem', opacity: item.fringe ? 1 : atLimit ? 0.1 : 0.2, filter: item.fringe ? 'none' : 'grayscale(1)',
+                                                background: 'transparent', border: 'none', cursor: (canToggle && !item.fringe) ? 'pointer' : 'default',
+                                                fontSize: '1.2rem', opacity: item.fringe ? 1 : 0.2, filter: item.fringe ? 'none' : 'grayscale(1)',
                                             }}>🖐</button>
-                                            );
-                                        })()
+                                        )
                                         ) : (
                                             <input type="checkbox" checked={!!item[col.key]}
                                                 onChange={e => {
@@ -3169,7 +3164,7 @@
                                 <div style={{ display: 'flex', gap: '0.25rem' }}>
                                     {[1, 2, 3].map(lvl => (
                                         <button key={lvl} onClick={() => {
-                                            if (!confirm(`Activate Dark Grants Level ${lvl} on "${p.name}"?\n\n+${lvl} permanent dice to completion rolls.\nRisk: ${lvl}d10 rolled — each 1-3 links a foreign agency.\n\nThis cannot be undone.`)) return;
+                                            if (!confirm('Activate Dark Grants Level ' + lvl + ' on "' + p.name + '"?\n\n+' + lvl + ' permanent dice.\nRisk: ' + lvl + 'd10 — each 1-3 links an agency.\n\nThis cannot be undone.')) return;
                                             fetch(`/api/agencies/${AGENCY_ID}/projects/${realIdx}/dark-grants/`, {
                                                 method: 'POST',
                                                 headers: { 'Content-Type': 'application/json', 'X-CSRFToken': CSRF_TOKEN },

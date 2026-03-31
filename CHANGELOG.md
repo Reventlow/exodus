@@ -1,5 +1,8 @@
 # Changelog
 
+## v0.10.6
+- Fix: agency page Babel crash — removed template literals and IIFEs from JSX
+
 ## v0.10.5
 - Fix: agency page crash when projects is CLASSIFIED or null
 
