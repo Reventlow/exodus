@@ -1,5 +1,8 @@
 # Changelog
 
+## v0.9.85
+- Terminal rules updated: intercepted channels section, terminate vs close connection distinction, lock icon mention
+
 ## v0.9.84
 - Cyber terminal usable on intercepted channels at -4 penalty to all rolls
 - Orange banner in terminal warns "INTERCEPTED CHANNEL — All rolls at -4 difficulty"

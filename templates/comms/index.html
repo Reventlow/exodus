@@ -590,10 +590,20 @@ function CyberTerminal({ thread, members, onClose, postingAs }) {
 
               <div style={{marginBottom: "0.75rem", borderBottom: "1px solid #042", paddingBottom: "0.5rem"}}>
                 <span style={{color: "#0f0", fontWeight: "bold"}}>TERMINATE CHAT</span><br/>
-                Any party can close the connection from the chat header or terminal.
-                Once closed, no new messages can be sent and no terminal actions can be taken.
-                Permanently locks the channel. Close Connection &amp; Remove Traces (deploy action)
-                silently removes your backdoors and hidden access without triggering detection.
+                Any party can terminate from the chat header or terminal.
+                Once terminated, no new messages can be sent and no terminal actions can be taken.
+                Permanently locks the channel (shown with 🔒 in channel list).<br/>
+                Terminating removes all intercepted thread access from attackers who operated on this channel.<br/>
+                <span style={{color: "#0f0"}}>Close Connection &amp; Remove Traces</span> (deploy action) is different — it
+                silently removes your backdoors and hidden access without triggering detection or locking the channel.
+              </div>
+
+              <div style={{marginBottom: "0.75rem", borderBottom: "1px solid #042", paddingBottom: "0.5rem"}}>
+                <span style={{color: "#fa3", fontWeight: "bold"}}>INTERCEPTED CHANNELS</span><br/>
+                Threads gained via Gain Access appear in the <span style={{color: "#f44"}}>INTERCEPTED</span> section of the channel list.
+                You have read-only access to messages and can use the terminal, but all rolls suffer a
+                <span style={{color: "#fa3"}}>-4 penalty</span>. This represents operating through a compromised, indirect connection.<br/>
+                Intercepted access is lost when the source thread is terminated or when you use Close Connection &amp; Remove Traces.
               </div>
 
               <div style={{marginBottom: "0.75rem", borderBottom: "1px solid #042", paddingBottom: "0.5rem"}}>
