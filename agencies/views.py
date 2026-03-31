@@ -1410,10 +1410,11 @@ def api_dark_grants(request, pk, project_index):
     npc_agencies = list(Agency.objects.filter(is_player_agency=False, is_hidden=False).values_list("id", "name"))
     random.shuffle(npc_agencies)
 
+    thresholds = {1: 9, 2: 14, 3: 23}
     for i in range(level):
-        die = random.randint(1, 20)
+        die = random.randint(1, 100)
         rolls.append(die)
-        if die <= 2 and npc_agencies:
+        if die <= thresholds.get(level, 9) and npc_agencies:
             # Pick an agency that isn't already linked
             for ag_id, ag_name in npc_agencies:
                 if ag_id not in [la["id"] for la in linked_agencies]:
