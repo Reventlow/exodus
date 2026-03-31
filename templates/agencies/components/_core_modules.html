@@ -769,58 +769,112 @@ const { Icon, AutoSaveInput, Classified, VisibilityToggle, XpProtester, getCooki
 
         var fringeInfo = agency.fringeInfo;
         return (
-            <div>
-                {fringeInfo ? (
-                    <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: '0.25rem' }}>
-                        <span className="mono-text" style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
-                            FRINGE SLOTS: {fringeInfo.usedSlots}/{fringeInfo.maxSlots}
+            <div className="glass-panel" style={{ padding: '1.5rem', marginBottom: '1rem' }}>
+                <h3 className="mono-text text-accent" style={{
+                    borderBottom: '1px solid #8a2be2',
+                    paddingBottom: '0.5rem', marginBottom: '1rem',
+                    display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+                    color: '#8a2be2',
+                }}>
+                    <span>🖐 FRINGE SCIENCE</span>
+                    {fringeInfo ? (
+                        <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
+                            Slots: {fringeInfo.usedSlots}/{fringeInfo.maxSlots}
                         </span>
-                    </div>
-                ) : null}
+                    ) : null}
+                </h3>
                 {fringeProjects.map(function(p) {
                     var realIdx = projects.indexOf(p);
                     if (p.darkGrantsLevel) {
                         return (
-                            <div key={'dg-' + realIdx} className="tech-border" style={{ padding: '0.75rem', marginBottom: '0.25rem', background: 'rgba(138,43,226,0.05)', borderColor: '#8a2be2' }}>
-                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                                    <span className="mono-text" style={{ fontSize: '0.8rem' }}>
-                                        🖐 <span style={{ color: '#8a2be2' }}>{p.name}</span> — Dark Grants Level {p.darkGrantsLevel} (+{p.darkGrantsLevel} dice)
+                            <div key={'dg-' + realIdx} className="tech-border" style={{
+                                padding: '1rem', marginBottom: '0.75rem',
+                                background: 'rgba(138,43,226,0.08)', borderColor: '#8a2be2',
+                            }}>
+                                <div style={{ marginBottom: '0.5rem' }}>
+                                    <span className="mono-text" style={{ fontSize: '0.9rem', color: '#8a2be2', fontWeight: 'bold' }}>
+                                        {p.name}
                                     </span>
-                                    {p.darkGrantsAgencies && p.darkGrantsAgencies.length > 0 ? (
-                                        <span className="mono-text" style={{ fontSize: '0.7rem', color: 'var(--accent-danger, #c0392b)' }}>
-                                            Linked: {p.darkGrantsAgencies.map(function(a) { return a.name; }).join(', ')}
-                                        </span>
-                                    ) : null}
                                 </div>
+                                <div style={{ display: 'flex', gap: '1rem', flexWrap: 'wrap', alignItems: 'center' }}>
+                                    <span className="mono-text" style={{ fontSize: '0.8rem', color: 'var(--text-primary)' }}>
+                                        Dark Grants Level {p.darkGrantsLevel}
+                                    </span>
+                                    <span className="mono-text" style={{
+                                        fontSize: '0.75rem', padding: '0.2rem 0.5rem',
+                                        background: 'rgba(138,43,226,0.2)', borderRadius: '3px', color: '#c084fc',
+                                    }}>
+                                        +{p.darkGrantsLevel} dice to completion
+                                    </span>
+                                </div>
+                                {p.darkGrantsAgencies && p.darkGrantsAgencies.length > 0 ? (
+                                    <div style={{ marginTop: '0.75rem', padding: '0.5rem', background: 'rgba(170,51,51,0.1)', borderLeft: '2px solid var(--accent-danger, #c0392b)', borderRadius: '2px' }}>
+                                        <div className="mono-text" style={{ fontSize: '0.7rem', color: 'var(--accent-danger, #c0392b)', marginBottom: '0.25rem' }}>
+                                            LINKED AGENCIES
+                                        </div>
+                                        {p.darkGrantsAgencies.map(function(a) {
+                                            return (
+                                                <div key={a.id} className="mono-text" style={{ fontSize: '0.8rem', color: 'var(--text-primary)', padding: '0.1rem 0' }}>
+                                                    {a.name}
+                                                </div>
+                                            );
+                                        })}
+                                    </div>
+                                ) : (
+                                    <div style={{ marginTop: '0.5rem' }}>
+                                        <span className="mono-text" style={{ fontSize: '0.7rem', color: 'var(--accent-success, #2ecc71)' }}>
+                                            Funding is clean — no agency linkage
+                                        </span>
+                                    </div>
+                                )}
                             </div>
                         );
                     }
                     return (
-                        <div key={'dg-' + realIdx} className="tech-border" style={{ padding: '0.75rem', marginBottom: '0.25rem', background: 'rgba(138,43,226,0.03)' }}>
-                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '0.5rem' }}>
-                                <span className="mono-text" style={{ fontSize: '0.8rem' }}>
-                                    🖐 {p.name} — <span className="text-muted">Dark Grants available</span>
+                        <div key={'dg-' + realIdx} className="tech-border" style={{
+                            padding: '1rem', marginBottom: '0.75rem',
+                            background: 'rgba(138,43,226,0.03)', borderColor: 'var(--border-color)',
+                        }}>
+                            <div style={{ marginBottom: '0.75rem' }}>
+                                <span className="mono-text" style={{ fontSize: '0.9rem', fontWeight: 'bold' }}>
+                                    {p.name}
                                 </span>
-                                <div style={{ display: 'flex', gap: '0.25rem' }}>
-                                    {[1, 2, 3].map(function(lvl) {
-                                        return (
-                                            <button key={lvl} onClick={function() {
-                                                if (!confirm('Activate Dark Grants Level ' + lvl + ' on "' + p.name + '"?\n\n+' + lvl + ' permanent dice.\nRisk: ' + lvl + 'd10 rolled.\n\nThis cannot be undone.')) return;
-                                                fetch('/api/agencies/' + AGENCY_ID + '/projects/' + realIdx + '/dark-grants/', {
-                                                    method: 'POST',
-                                                    headers: { 'Content-Type': 'application/json', 'X-CSRFToken': CSRF_TOKEN },
-                                                    body: JSON.stringify({ level: lvl }),
-                                                }).then(function(r) { return r.json(); }).then(function(data) {
-                                                    if (data.error) { alert(data.error); return; }
-                                                    alert(data.message);
-                                                    fetchAgency();
-                                                });
-                                            }} className="btn-cyber" style={{ fontSize: '0.7rem', padding: '0.2rem 0.5rem', background: 'rgba(138,43,226,0.1)', borderColor: '#8a2be2', color: '#8a2be2' }}>
-                                                LVL {lvl}
-                                            </button>
-                                        );
-                                    })}
-                                </div>
+                                <span className="text-muted mono-text" style={{ fontSize: '0.75rem', marginLeft: '0.5rem' }}>
+                                    Dark Grants available
+                                </span>
+                            </div>
+                            <div className="mono-text text-muted" style={{ fontSize: '0.7rem', marginBottom: '0.75rem', lineHeight: '1.5' }}>
+                                Choose funding level. Higher levels grant more dice but risk agency linkage.
+                                Each level rolls 1d10 — results of 1-3 link a foreign agency to this project.
+                            </div>
+                            <div style={{ display: 'flex', gap: '0.5rem' }}>
+                                {[1, 2, 3].map(function(lvl) {
+                                    var riskPct = lvl === 1 ? '30%' : lvl === 2 ? '51%' : '66%';
+                                    return (
+                                        <button key={lvl} onClick={function() {
+                                            if (!confirm('Activate Dark Grants Level ' + lvl + ' on "' + p.name + '"?\n\n+' + lvl + ' permanent dice to completion rolls.\nRisk: ' + lvl + 'd10 rolled — each 1-3 links an agency (' + riskPct + ' chance of at least one).\n\nThis cannot be undone.')) return;
+                                            fetch('/api/agencies/' + AGENCY_ID + '/projects/' + realIdx + '/dark-grants/', {
+                                                method: 'POST',
+                                                headers: { 'Content-Type': 'application/json', 'X-CSRFToken': CSRF_TOKEN },
+                                                body: JSON.stringify({ level: lvl }),
+                                            }).then(function(r) { return r.json(); }).then(function(data) {
+                                                if (data.error) { alert(data.error); return; }
+                                                alert(data.message);
+                                                fetchAgency();
+                                            });
+                                        }} style={{
+                                            flex: 1, padding: '0.75rem', cursor: 'pointer',
+                                            background: 'rgba(138,43,226,0.08)', border: '1px solid #8a2be2',
+                                            borderRadius: '4px', fontFamily: 'var(--font-mono)',
+                                            color: '#c084fc', textAlign: 'center',
+                                        }}>
+                                            <div style={{ fontSize: '1.1rem', fontWeight: 'bold' }}>+{lvl}</div>
+                                            <div style={{ fontSize: '0.65rem', color: 'var(--text-muted)', marginTop: '0.25rem' }}>
+                                                {lvl}d10 risk ({riskPct})
+                                            </div>
+                                        </button>
+                                    );
+                                })}
                             </div>
                         </div>
                     );
