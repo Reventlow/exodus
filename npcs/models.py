@@ -9,6 +9,7 @@ class NPC(models.Model):
         ("leave", "Leave"),
         ("medical_leave", "Medical Leave"),
         ("missing", "Missing"),
+        ("compromised", "Compromised — Underground"),
         ("deceased", "Deceased"),
     ]
 
@@ -35,6 +36,10 @@ class NPC(models.Model):
     nationality = models.CharField(max_length=100, blank=True, default="")
     occupation = models.CharField(max_length=200, blank=True, default="")
     state = models.CharField(max_length=20, choices=STATE_CHOICES, default="active")
+    detected_by_agency = models.CharField(
+        max_length=200, blank=True, default="",
+        help_text="Agency that detected this NPC during cyber operations. Set when compromised.",
+    )
     bio = models.TextField(blank=True, default="")
     assigned_to = models.ForeignKey(
         User, on_delete=models.CASCADE, related_name="assigned_npcs",

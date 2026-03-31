@@ -36,6 +36,7 @@ def serialize_npc(npc, is_admin=False, is_assigned=False):
         "nationality": npc.nationality,
         "occupation": npc.occupation,
         "state": npc.state,
+        "detectedByAgency": npc.detected_by_agency,
         "bio": npc.bio,
         "assignedTo": npc.assigned_to.username if npc.assigned_to else None,
         "assignedToId": npc.assigned_to.id if npc.assigned_to else None,

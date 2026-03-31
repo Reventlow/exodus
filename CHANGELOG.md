@@ -1,5 +1,11 @@
 # Changelog
 
+## v0.9.86
+- Helper NPC goes "Compromised — Underground" when concealment fills
+- Detected by agency name recorded on the NPC
+- Banner on dossier page shows compromised status and detecting agency
+- GM decides when the operative resurfaces
+
 ## v0.9.85
 - Terminal rules updated: intercepted channels section, terminate vs close connection distinction, lock icon mention
 

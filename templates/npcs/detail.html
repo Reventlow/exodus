@@ -2231,6 +2231,20 @@
 
                 <StateModule npc={npc} onSave={updateNPC} />
 
+                {npc.state === 'compromised' && (
+                    <div className="glass-panel" style={{ padding: '1rem', marginBottom: '1rem', borderLeft: '3px solid var(--accent-danger, #c0392b)' }}>
+                        <h4 className="mono-text" style={{ color: 'var(--accent-danger, #c0392b)', fontSize: '0.85rem', marginBottom: '0.5rem' }}>
+                            ⚠ COMPROMISED — UNDERGROUND
+                        </h4>
+                        <div className="text-secondary" style={{ fontSize: '0.8rem' }}>
+                            Detected by: <span className="mono-text text-accent">{npc.detectedByAgency || 'Unknown'}</span>
+                        </div>
+                        <div className="text-muted" style={{ fontSize: '0.75rem', marginTop: '0.25rem' }}>
+                            This operative has gone underground and is unavailable until the GM decides they resurface.
+                        </div>
+                    </div>
+                )}
+
                 <AgencyModule npc={npc} onSave={updateNPC} />
 
                 <BioModule npc={npc} onSave={saveNPCQuiet} />

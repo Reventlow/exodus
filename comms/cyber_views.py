@@ -180,8 +180,29 @@ def _detect_helper(session, thread, actor):
         if session.helper_concealment_damage >= c_max:
             session.detected = True
             session.save(update_fields=["detected"])
-            _post_system_alert(thread, f"⚠ INTRUSION DETECTED — Helper operative {helper_npc.name} compromised!")
-            return f" ⚠ Helper {helper_npc.name}: EXPOSED! Concealment {session.helper_concealment_damage}/{c_max} — intrusion detected!"
+            _mark_intrusion_detected(thread)
+            # Compromise the helper NPC — goes underground
+            defender_agency_name = "unknown"
+            for m in ThreadMembership.objects.filter(thread=thread, hidden=False).exclude(user=session.attacker):
+                if m.alias_type == "npc" and m.alias_id:
+                    npc_def = NPC.objects.filter(pk=m.alias_id).first()
+                    if npc_def and npc_def.agency_id:
+                        from agencies.models import Agency
+                        ag = Agency.objects.filter(pk=npc_def.agency_id).first()
+                        if ag:
+                            defender_agency_name = ag.name
+                        break
+                else:
+                    from agencies.models import Agency
+                    player_ag = Agency.objects.filter(is_player_agency=True).first()
+                    if player_ag:
+                        defender_agency_name = player_ag.name
+                    break
+            helper_npc.state = "compromised"
+            helper_npc.detected_by_agency = defender_agency_name
+            helper_npc.save(update_fields=["state", "detected_by_agency"])
+            _post_system_alert(thread, f"⚠ INTRUSION DETECTED — Helper operative {helper_npc.name} compromised by {defender_agency_name}! Going underground.")
+            return f" ⚠ Helper {helper_npc.name}: EXPOSED by {defender_agency_name}! Concealment {session.helper_concealment_damage}/{c_max} — compromised and going underground."
         new_bonus = get_concealment_defender_bonus(session.helper_concealment_damage, c_max)
         bonus_text = f" (defender +{new_bonus})" if new_bonus > 0 else ""
         return f" Helper {helper_npc.name}: concealment {session.helper_concealment_damage}/{c_max}{bonus_text}."
