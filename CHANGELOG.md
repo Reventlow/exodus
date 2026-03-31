@@ -1,5 +1,8 @@
 # Changelog
 
+## v0.9.67
+- Fix: defender agency/bases resolved for player characters (not just NPC aliases), falls back to player agency
+
 ## v0.9.66
 - Removed old free-text CONDITIONS table from agency page, replaced by structured Cyber Conditions
 

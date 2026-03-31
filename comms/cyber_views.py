@@ -381,19 +381,31 @@ def thread_cyber_status(request, thread_id):
     # Resolve defender's agency and bases for target pickers
     defender_agency = None
     defender_bases = []
+    from agencies.models import Agency, Base
     for m in ThreadMembership.objects.filter(thread=thread, hidden=False).exclude(user=request.user):
+        agency_id = None
+        # Check NPC alias first
         if m.alias_type == "npc" and m.alias_id:
             npc = NPC.objects.filter(pk=m.alias_id).first()
             if npc and npc.agency_id:
-                from agencies.models import Agency, Base
-                ag = Agency.objects.filter(pk=npc.agency_id).first()
-                if ag:
-                    defender_agency = {"id": ag.id, "name": ag.name}
-                    defender_bases = [
-                        {"id": b.id, "name": b.name}
-                        for b in Base.objects.filter(agency=ag, is_hidden=False)
-                    ]
-                break
+                agency_id = npc.agency_id
+        # Fall back to user's character agency
+        if not agency_id:
+            char = Character.objects.filter(owner=m.user).first()
+            if char:
+                # Character doesn't have agency_id directly — find via player agency
+                player_agency = Agency.objects.filter(is_player_agency=True).first()
+                if player_agency:
+                    agency_id = player_agency.id
+        if agency_id:
+            ag = Agency.objects.filter(pk=agency_id).first()
+            if ag:
+                defender_agency = {"id": ag.id, "name": ag.name}
+                defender_bases = [
+                    {"id": b.id, "name": b.name}
+                    for b in Base.objects.filter(agency=ag, is_hidden=False)
+                ]
+            break
 
     # Declassified projects from defender's agency
     defender_projects = []
