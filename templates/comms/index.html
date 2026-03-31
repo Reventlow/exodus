@@ -553,9 +553,17 @@ function CyberTerminal({ thread, members, onClose, postingAs }) {
 
               <div style={{marginBottom: "0.75rem", borderBottom: "1px solid #042", paddingBottom: "0.5rem"}}>
                 <span style={{color: "#0f0", fontWeight: "bold"}}>DEFEND</span> — <span style={{color: "#064"}}>Resolve + Computer</span><br/>
-                Strengthen this channel's encryption and sweep for threats. Removes
-                active backdoors, expels hidden intruders, terminates active hacker sessions,
-                and raises the encryption level making future breaches harder.
+                Activate defense systems on this channel. Can only be executed <span style={{color: "#0f0"}}>once per thread</span>.
+                Each success adds +1 to ALL detection rolls (passive and active) on this thread
+                until the channel is locked.<br/><br/>
+                <span style={{color: "#064"}}>Escalating alerts posted to chat:</span><br/>
+                • 1 success: Hardened encryption<br/>
+                • 2 successes: Rerouting through secure network protocols<br/>
+                • 3 successes: Adding monitoring bots<br/>
+                • 4 successes: Starting honey pots<br/>
+                • 5 successes: Activating machine learning monitoring<br/><br/>
+                After activation, the Defend button is disabled — defense systems remain running
+                for the lifetime of the channel.
               </div>
 
               <div style={{marginBottom: "0.75rem", borderBottom: "1px solid #042", paddingBottom: "0.5rem"}}>
