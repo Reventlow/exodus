@@ -110,6 +110,16 @@ urlpatterns = [
         name="api_dark_grants",
     ),
     path(
+        "api/agencies/<int:pk>/projects/<int:project_index>/stimulants/",
+        views.api_stimulants,
+        name="api_stimulants",
+    ),
+    path(
+        "api/agencies/<int:pk>/projects/<int:project_index>/stimulants/unlock/",
+        views.api_stimulants_unlock,
+        name="api_stimulants_unlock",
+    ),
+    path(
         "api/agencies/<int:pk>/projects/<int:project_index>/live-testing/",
         views.api_live_testing,
         name="api_live_testing",

@@ -7,6 +7,13 @@
 - Agency sheet refactored from 3237 lines into 6 component files + 28-line shell
 - Components: _utilities (182), _core_modules (839), _table_ftl (548), _changes (253), _bases (834), _app (617)
 
+## v0.10.25
+- Stimulant cocktails for fringe projects: Modified Cocaine (+2), LSD (+3), Shrooms (+2), Exotic Animal Venom (+4)
+- Stacking penalty: +10% risk per additional substance
+- Only science class and GM see results; project owner sees "Stimulant Cocktail Active"
+- Project locked until GM unlocks after completion roll
+- Side effects: mental load, bashing damage, completion loss (applied to project owner)
+
 ## v0.10.23
 - Live Testing on fringe projects: Small Animals (+1, 5% ML), Large Animals (+2, 9% ML), Human (+5, 23% ML + 17% integrity), Off the Books (+5, 23% ML, requires merit)
 - Project player field as character dropdown with data migration

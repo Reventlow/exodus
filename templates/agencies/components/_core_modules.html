@@ -842,6 +842,127 @@ const { Icon, AutoSaveInput, Classified, VisibilityToggle, XpProtester, getCooki
                             </div>
                         );
                     };
+                    var StimulantBlock = function() {
+                        var realI = projects.indexOf(p);
+                        if (p.stimulantLocked) {
+                            return (
+                                <div style={{ marginTop: '0.75rem', padding: '0.5rem', background: 'rgba(59,130,246,0.08)', borderLeft: '2px solid #3b82f6', borderRadius: '2px' }}>
+                                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                        <div>
+                                            <div className="mono-text" style={{ fontSize: '0.7rem', color: '#3b82f6', marginBottom: '0.15rem' }}>
+                                                STIMULANT COCKTAIL ACTIVE
+                                            </div>
+                                            <span className="mono-text" style={{ fontSize: '0.75rem', padding: '0.15rem 0.4rem', background: 'rgba(59,130,246,0.15)', borderRadius: '3px', color: '#60a5fa' }}>
+                                                +{p.stimulantDice} dice (next roll)
+                                            </span>
+                                            {IS_SCIENCE ? (
+                                                <div className="mono-text" style={{ fontSize: '0.65rem', color: 'var(--text-muted)', marginTop: '0.35rem' }}>
+                                                    {(p.stimulantResults || []).map(function(r) {
+                                                        return r.label + (r.failed ? ' [SIDE EFFECT: ' + (r.effects || []).join(', ') + ']' : ' [clean]');
+                                                    }).join(' | ')}
+                                                </div>
+                                            ) : null}
+                                        </div>
+                                        {IS_ADMIN ? (
+                                            <button onClick={function() {
+                                                if (!confirm('Unlock this project? Stimulant cocktail will be cleared.')) return;
+                                                fetch('/api/agencies/' + AGENCY_ID + '/projects/' + realI + '/stimulants/unlock/', {
+                                                    method: 'POST',
+                                                    headers: { 'Content-Type': 'application/json', 'X-CSRFToken': CSRF_TOKEN },
+                                                }).then(function(r) { return r.json(); }).then(function(data) {
+                                                    if (data.error) { alert(data.error); return; }
+                                                    fetchAgency();
+                                                });
+                                            }} className="btn-cyber" style={{ fontSize: '0.65rem', padding: '0.2rem 0.5rem' }}>
+                                                UNLOCK
+                                            </button>
+                                        ) : null}
+                                    </div>
+                                </div>
+                            );
+                        }
+                        if (!IS_SCIENCE) return null;
+                        return (
+                            <div style={{ marginTop: '0.75rem' }}>
+                                <div className="mono-text text-muted" style={{ fontSize: '0.7rem', marginBottom: '0.5rem' }}>
+                                    STIMULANTS — select substances for the cocktail:
+                                </div>
+                                {(function() {
+                                    var stims = [
+                                        {key: 'cocaine', label: 'Modified Cocaine', dice: 2, risk: '15%'},
+                                        {key: 'lsd', label: 'Modified LSD', dice: 3, risk: '20%'},
+                                        {key: 'shrooms', label: 'Modified Shrooms', dice: 2, risk: '10%'},
+                                        {key: 'venom', label: 'Modified Exotic Animal Venom', dice: 4, risk: '25%'},
+                                    ];
+                                    var selectedRef = React.useRef([]);
+                                    var forceRef = React.useRef(0);
+                                    var dummy = React.useState(0);
+                                    var toggle = function(key) {
+                                        var arr = selectedRef.current;
+                                        var idx = arr.indexOf(key);
+                                        if (idx >= 0) arr.splice(idx, 1); else arr.push(key);
+                                        selectedRef.current = arr.slice();
+                                        dummy[1](function(x) { return x + 1; });
+                                    };
+                                    var sel = selectedRef.current;
+                                    var stackPen = Math.max(0, sel.length - 1) * 10;
+                                    return (
+                                        <div>
+                                            <div style={{ display: 'flex', gap: '0.4rem', flexWrap: 'wrap', marginBottom: '0.5rem' }}>
+                                                {stims.map(function(s) {
+                                                    var isOn = sel.indexOf(s.key) >= 0;
+                                                    var adjRisk = parseInt(s.risk) + stackPen;
+                                                    return (
+                                                        <button key={s.key} onClick={function() { toggle(s.key); }}
+                                                            style={{
+                                                                flex: 1, minWidth: '110px', padding: '0.5rem', cursor: 'pointer',
+                                                                background: isOn ? 'rgba(59,130,246,0.15)' : 'rgba(59,130,246,0.03)',
+                                                                border: isOn ? '2px solid #3b82f6' : '1px solid var(--border-color)',
+                                                                borderRadius: '4px', fontFamily: 'var(--font-mono)', color: isOn ? '#60a5fa' : 'var(--text-muted)', textAlign: 'center',
+                                                            }}>
+                                                            <div style={{ fontSize: '0.85rem', fontWeight: 'bold' }}>+{s.dice}</div>
+                                                            <div style={{ fontSize: '0.55rem', marginTop: '0.1rem' }}>{s.label}</div>
+                                                            <div style={{ fontSize: '0.5rem', color: '#ef4444', marginTop: '0.1rem' }}>
+                                                                Risk: {adjRisk}%{stackPen > 0 && isOn ? ' (+' + stackPen + ')' : ''}
+                                                            </div>
+                                                        </button>
+                                                    );
+                                                })}
+                                            </div>
+                                            {sel.length > 0 ? (
+                                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                                    <span className="mono-text" style={{ fontSize: '0.7rem', color: '#60a5fa' }}>
+                                                        Total: +{stims.filter(function(s) { return sel.indexOf(s.key) >= 0; }).reduce(function(a, s) { return a + s.dice; }, 0)} dice
+                                                        {sel.length > 1 ? ' (stacking penalty +' + stackPen + '% to all risks)' : ''}
+                                                    </span>
+                                                    <button onClick={function() {
+                                                        var totalDice = stims.filter(function(s) { return sel.indexOf(s.key) >= 0; }).reduce(function(a, s) { return a + s.dice; }, 0);
+                                                        if (!confirm('Administer cocktail: ' + sel.length + ' substances, +' + totalDice + ' dice.\nThe project owner will only see "Stimulant Cocktail Active".\nSide effects are hidden from them.\n\nProceed?')) return;
+                                                        fetch('/api/agencies/' + AGENCY_ID + '/projects/' + realI + '/stimulants/', {
+                                                            method: 'POST',
+                                                            headers: { 'Content-Type': 'application/json', 'X-CSRFToken': CSRF_TOKEN },
+                                                            body: JSON.stringify({ stimulants: sel }),
+                                                        }).then(function(r) { return r.json(); }).then(function(data) {
+                                                            if (data.error) { alert(data.error); return; }
+                                                            alert(data.message);
+                                                            selectedRef.current = [];
+                                                            fetchAgency();
+                                                        });
+                                                    }} style={{
+                                                        padding: '0.4rem 1rem', background: '#3b82f6', border: 'none',
+                                                        color: 'white', fontFamily: 'var(--font-mono)', fontWeight: 'bold',
+                                                        fontSize: '0.75rem', cursor: 'pointer', borderRadius: '4px',
+                                                    }}>
+                                                        ADMINISTER
+                                                    </button>
+                                                </div>
+                                            ) : null}
+                                        </div>
+                                    );
+                                })()}
+                            </div>
+                        );
+                    };
                     var realIdx = projects.indexOf(p);
                     if (p.darkGrantsLevel) {
                         return (
@@ -886,6 +1007,7 @@ const { Icon, AutoSaveInput, Classified, VisibilityToggle, XpProtester, getCooki
                                     </div>
                                 )}
                                 <LiveTestingBlock />
+                                <StimulantBlock />
                             </div>
                         );
                     }
@@ -936,6 +1058,7 @@ const { Icon, AutoSaveInput, Classified, VisibilityToggle, XpProtester, getCooki
                                 })}
                             </div>
                             <LiveTestingBlock />
+                                <StimulantBlock />
                         </div>
                     );
                 })}

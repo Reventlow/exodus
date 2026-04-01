@@ -1541,3 +1541,163 @@ def api_live_testing(request, pk, project_index):
         "messages": messages,
         "message": config["label"] + " activated. +" + str(config["dice"]) + " permanent dice.\n" + "\n".join(messages),
     })
+
+
+@login_required
+@require_http_methods(["POST"])
+def api_stimulants(request, pk, project_index):
+    """Administer stimulant cocktail to a fringe project. Science class only."""
+    import random
+
+    agency = get_object_or_404(Agency, pk=pk)
+
+    from characters.models import Character
+    char = Character.objects.filter(owner=request.user).first()
+    is_science = request.user.is_superuser or (char and char.character_class == "science")
+    if not is_science:
+        return JsonResponse({"error": "Science class required."}, status=403)
+
+    projects = agency.projects or []
+    if project_index < 0 or project_index >= len(projects):
+        return JsonResponse({"error": "Invalid project index."}, status=400)
+
+    project = projects[project_index]
+    if not isinstance(project, dict):
+        return JsonResponse({"error": "Invalid project data."}, status=400)
+    if not project.get("fringe"):
+        return JsonResponse({"error": "Stimulants only on fringe projects."}, status=400)
+    if project.get("stimulantLocked"):
+        return JsonResponse({"error": "Stimulant cocktail already active. GM must unlock first."}, status=400)
+
+    try:
+        body = json.loads(request.body)
+    except json.JSONDecodeError:
+        return JsonResponse({"error": "Invalid JSON."}, status=400)
+
+    selected = body.get("stimulants", [])
+    if not selected or not isinstance(selected, list):
+        return JsonResponse({"error": "Select at least one stimulant."}, status=400)
+
+    STIMULANTS = {
+        "cocaine":  {"dice": 2, "base_risk": 15, "label": "Modified Cocaine",
+                     "fail_mental": 1, "fail_bashing": 0, "fail_completion": 0},
+        "lsd":      {"dice": 3, "base_risk": 20, "label": "Modified LSD",
+                     "fail_mental": 2, "fail_bashing": 0, "fail_completion": 0},
+        "shrooms":  {"dice": 2, "base_risk": 10, "label": "Modified Shrooms",
+                     "fail_mental": 1, "fail_bashing": 0, "fail_completion": -1},
+        "venom":    {"dice": 4, "base_risk": 25, "label": "Modified Exotic Animal Venom",
+                     "fail_mental": 2, "fail_bashing": 1, "fail_completion": 0},
+    }
+
+    valid = [s for s in selected if s in STIMULANTS]
+    if not valid:
+        return JsonResponse({"error": "No valid stimulants selected."}, status=400)
+
+    stack_penalty = (len(valid) - 1) * 10  # +10% per extra substance
+    total_dice = 0
+    results = []
+    total_mental = 0
+    total_bashing = 0
+    total_completion_loss = 0
+
+    for stim_key in valid:
+        cfg = STIMULANTS[stim_key]
+        total_dice += cfg["dice"]
+        risk = cfg["base_risk"] + stack_penalty
+        roll = random.randint(1, 100)
+        failed = roll <= risk
+
+        result = {
+            "stimulant": stim_key,
+            "label": cfg["label"],
+            "dice": cfg["dice"],
+            "risk": risk,
+            "roll": roll,
+            "failed": failed,
+        }
+
+        if failed:
+            total_mental += cfg["fail_mental"]
+            total_bashing += cfg["fail_bashing"]
+            total_completion_loss += abs(cfg["fail_completion"])
+            result["effects"] = []
+            if cfg["fail_mental"]:
+                result["effects"].append("Mental load +" + str(cfg["fail_mental"]))
+            if cfg["fail_bashing"]:
+                result["effects"].append("Bashing damage +" + str(cfg["fail_bashing"]))
+            if cfg["fail_completion"]:
+                result["effects"].append("Completion -" + str(abs(cfg["fail_completion"])))
+
+        results.append(result)
+
+    # Apply effects to project owner
+    owner_name = project.get("player", "")
+    owner_char = Character.objects.filter(name=owner_name).first()
+    effect_messages = []
+
+    if total_mental > 0 and owner_char:
+        owner_char.mental_load = (owner_char.mental_load or 0) + total_mental
+        owner_char.save(update_fields=["mental_load"])
+        effect_messages.append(owner_name + " takes " + str(total_mental) + " mental load.")
+
+    if total_bashing > 0 and owner_char:
+        health = owner_char.health or {"bashing": 0, "lethal": 0, "aggravated": 0}
+        health["bashing"] = health.get("bashing", 0) + total_bashing
+        owner_char.health = health
+        owner_char.save(update_fields=["health"])
+        effect_messages.append(owner_name + " takes " + str(total_bashing) + " bashing damage.")
+
+    if total_completion_loss > 0:
+        old_score = int(project.get("completionScore", 0))
+        project["completionScore"] = max(0, old_score - total_completion_loss)
+        effect_messages.append("Completion reduced by " + str(total_completion_loss) + ".")
+
+    # Lock the project with stimulant state
+    project["stimulants"] = valid
+    project["stimulantDice"] = total_dice
+    project["stimulantLocked"] = True
+    project["stimulantResults"] = results
+    projects[project_index] = project
+    agency.projects = projects
+    agency.save(update_fields=["projects"])
+
+    any_failed = any(r["failed"] for r in results)
+
+    return JsonResponse({
+        "totalDice": total_dice,
+        "stimulants": [STIMULANTS[s]["label"] for s in valid],
+        "stackPenalty": stack_penalty,
+        "results": results,
+        "effects": effect_messages,
+        "anyFailed": any_failed,
+        "message": "Stimulant cocktail administered. +" + str(total_dice) + " dice for next completion roll."
+            + (" Side effects occurred." if any_failed else " No side effects.")
+            + " Project locked until GM unlocks.",
+    })
+
+
+@login_required
+@require_http_methods(["POST"])
+def api_stimulants_unlock(request, pk, project_index):
+    """GM unlocks a stimulant-locked project after completion roll."""
+    if not request.user.is_superuser:
+        return JsonResponse({"error": "GM only."}, status=403)
+
+    agency = get_object_or_404(Agency, pk=pk)
+    projects = agency.projects or []
+    if project_index < 0 or project_index >= len(projects):
+        return JsonResponse({"error": "Invalid project index."}, status=400)
+
+    project = projects[project_index]
+    if not isinstance(project, dict):
+        return JsonResponse({"error": "Invalid project data."}, status=400)
+
+    project.pop("stimulants", None)
+    project.pop("stimulantDice", None)
+    project.pop("stimulantLocked", None)
+    project.pop("stimulantResults", None)
+    projects[project_index] = project
+    agency.projects = projects
+    agency.save(update_fields=["projects"])
+
+    return JsonResponse({"status": "unlocked"})
