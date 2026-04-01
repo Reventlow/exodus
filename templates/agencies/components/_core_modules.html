@@ -937,7 +937,7 @@ const { Icon, AutoSaveInput, Classified, VisibilityToggle, XpProtester, getCooki
                                                     </span>
                                                     <button onClick={function() {
                                                         var totalDice = stims.filter(function(s) { return sel.indexOf(s.key) >= 0; }).reduce(function(a, s) { return a + s.dice; }, 0);
-                                                        if (!confirm('Administer cocktail: ' + sel.length + ' substances, +' + totalDice + ' dice.\nThe project owner will only see "Stimulant Cocktail Active".\nSide effects are hidden from them.\n\nProceed?')) return;
+                                                        if (!confirm('Synthesize stimulant: ' + sel.length + ' substances, +' + totalDice + ' dice.\nThe project owner will only see "Stimulant Cocktail Active".\nSide effects are hidden from them.\n\nProceed?')) return;
                                                         fetch('/api/agencies/' + AGENCY_ID + '/projects/' + realI + '/stimulants/', {
                                                             method: 'POST',
                                                             headers: { 'Content-Type': 'application/json', 'X-CSRFToken': CSRF_TOKEN },
@@ -953,7 +953,7 @@ const { Icon, AutoSaveInput, Classified, VisibilityToggle, XpProtester, getCooki
                                                         color: 'white', fontFamily: 'var(--font-mono)', fontWeight: 'bold',
                                                         fontSize: '0.75rem', cursor: 'pointer', borderRadius: '4px',
                                                     }}>
-                                                        ADMINISTER
+                                                        SYNTHESIZE STIMULANT
                                                     </button>
                                                 </div>
                                             ) : null}
