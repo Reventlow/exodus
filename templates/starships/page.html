@@ -28,20 +28,29 @@
 </style>
 
 <div class="ship-layout">
-    <!-- SIDEBAR — class list -->
+    <!-- SIDEBAR — list (tab-aware) -->
     <div class="ship-sidebar">
-        <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 0.75rem;">
-            <h3 class="mono-text" style="color: var(--accent-primary); font-size: 0.85rem; letter-spacing: 1px; margin: 0;">CLASSES</h3>
-            <button class="btn-primary" onclick="createClass()">NEW</button>
+        <div id="sidebar-classes" style="display: block;">
+            <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 0.75rem;">
+                <h3 class="mono-text" style="color: var(--accent-primary); font-size: 0.85rem; letter-spacing: 1px; margin: 0;">CLASSES</h3>
+                <button class="btn-primary" onclick="createClass()">NEW</button>
+            </div>
+            <div id="class-list"><span class="mono-text text-muted" style="font-size: 0.75rem;">Loading…</span></div>
         </div>
-        <div id="class-list"><span class="mono-text text-muted" style="font-size: 0.75rem;">Loading…</span></div>
+        <div id="sidebar-ships" style="display: none;">
+            <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 0.75rem;">
+                <h3 class="mono-text" style="color: var(--accent-primary); font-size: 0.85rem; letter-spacing: 1px; margin: 0;">SHIPS</h3>
+                <button class="btn-primary" onclick="buildHullFromPrompt()">BUILD</button>
+            </div>
+            <div id="ship-list"><span class="mono-text text-muted" style="font-size: 0.75rem;">Loading…</span></div>
+        </div>
     </div>
 
     <!-- MAIN — editor -->
     <div class="ship-main">
         <div style="display: flex; gap: 0.5rem; margin-bottom: 1rem;">
-            <button class="ship-tab active" data-tab="classes">CLASSES</button>
-            <button class="ship-tab" data-tab="ships" disabled title="Release D">SHIPS</button>
+            <button class="ship-tab active" data-tab="classes" onclick="switchTab('classes')">CLASSES</button>
+            <button class="ship-tab" data-tab="ships" onclick="switchTab('ships')">SHIPS</button>
             <button class="ship-tab" data-tab="fleets" disabled title="Release E">FLEETS</button>
         </div>
         <div id="class-editor">
@@ -49,15 +58,33 @@
                 Select a class from the sidebar, or press NEW to design one.
             </div>
         </div>
+        <div id="ship-editor" style="display: none;">
+            <div class="mono-text text-muted" style="font-size: 0.85rem; text-align: center; padding: 3rem 1rem;">
+                Select a ship from the sidebar.
+            </div>
+        </div>
     </div>
 </div>
 
 <script>
 const IS_SUPERUSER = {{ is_superuser|yesno:"true,false" }};
+var CURRENT_TAB = 'classes';
 var CURRENT_CLASS_ID = null;
+var CURRENT_SHIP_ID = null;
 var CLASSES_CACHE = [];
+var SHIPS_CACHE = [];
 var SHIP_TYPES = [];
 var SHIP_MODULES = [];
+var STAR_SYSTEMS_CACHE = null;  // lazy-loaded for the location dropdown
+
+var STATUS_COLORS = {
+    under_construction: '#f59e0b',
+    active: '#22c55e',
+    damaged: '#ef4444',
+    in_dock: '#06b6d4',
+    decommissioned: 'var(--text-muted)',
+    lost: '#9ca3af',
+};
 
 function csrfToken() {
     return document.querySelector('[name=csrfmiddlewaretoken]')?.value
@@ -97,6 +124,249 @@ function loadClasses() {
         CLASSES_CACHE = classes;
         renderClassList();
     });
+}
+
+function loadShips() {
+    return api('/api/starships/ships/').then(function(ships) {
+        SHIPS_CACHE = ships;
+        renderShipList();
+    });
+}
+
+function loadStarSystems() {
+    if (STAR_SYSTEMS_CACHE) return Promise.resolve(STAR_SYSTEMS_CACHE);
+    return fetch('/api/starmap/systems/').then(function(r) {
+        return r.ok ? r.json() : [];
+    }).then(function(data) {
+        STAR_SYSTEMS_CACHE = data || [];
+        return STAR_SYSTEMS_CACHE;
+    }).catch(function() {
+        STAR_SYSTEMS_CACHE = [];
+        return STAR_SYSTEMS_CACHE;
+    });
+}
+
+function switchTab(tab) {
+    CURRENT_TAB = tab;
+    // Tab buttons
+    document.querySelectorAll('.ship-tab').forEach(function(btn) {
+        btn.classList.toggle('active', btn.dataset.tab === tab);
+    });
+    // Sidebar panels
+    document.getElementById('sidebar-classes').style.display = tab === 'classes' ? 'block' : 'none';
+    document.getElementById('sidebar-ships').style.display = tab === 'ships' ? 'block' : 'none';
+    // Main editors
+    document.getElementById('class-editor').style.display = tab === 'classes' ? 'block' : 'none';
+    document.getElementById('ship-editor').style.display = tab === 'ships' ? 'block' : 'none';
+    if (tab === 'ships') loadShips();
+}
+
+function renderShipList() {
+    var byStatus = {};
+    SHIPS_CACHE.forEach(function(s) {
+        (byStatus[s.status] = byStatus[s.status] || []).push(s);
+    });
+    var order = ['under_construction', 'active', 'damaged', 'in_dock', 'decommissioned', 'lost'];
+    var html = '';
+    order.forEach(function(st) {
+        var ships = byStatus[st];
+        if (!ships || !ships.length) return;
+        var label = ships[0].status_label.toUpperCase();
+        html += '<div class="mono-text text-muted" style="font-size: 0.58rem; letter-spacing: 1px; margin: 0.6rem 0 0.3rem 0;">' + label + '</div>';
+        ships.forEach(function(s) {
+            var selected = s.id === CURRENT_SHIP_ID ? 'selected' : '';
+            var col = STATUS_COLORS[s.status] || 'var(--text-muted)';
+            html += '<div class="class-row ' + selected + '" onclick="selectShip(' + s.id + ')">' +
+                '<div class="ship-class-name mono-text">' +
+                '<span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:' + col + ';margin-right:0.4rem;"></span>' +
+                escapeHtml(s.name) + (s.hull_number ? ' <span class="mono-text text-muted" style="font-size:0.6rem;">(' + escapeHtml(s.hull_number) + ')</span>' : '') +
+                '</div>' +
+                '<div class="ship-class-meta mono-text">' + escapeHtml(s.starship_class_name) + ' \u00B7 ' + escapeHtml(s.agency_name || '') + '</div>' +
+                '</div>';
+        });
+    });
+    if (!SHIPS_CACHE.length) html = '<span class="mono-text text-muted" style="font-size: 0.75rem;">No ships yet. Press BUILD to commission one from a class.</span>';
+    document.getElementById('ship-list').innerHTML = html;
+}
+
+function selectShip(id) {
+    CURRENT_SHIP_ID = id;
+    renderShipList();
+    // Load star systems in parallel so the location dropdown is ready.
+    Promise.all([
+        api('/api/starships/ships/' + id + '/'),
+        loadStarSystems(),
+    ]).then(function(results) { renderShipEditor(results[0]); });
+}
+
+function renderShipEditor(ship) {
+    if (!ship) {
+        document.getElementById('ship-editor').innerHTML =
+            '<div class="mono-text text-muted" style="font-size: 0.85rem; text-align: center; padding: 3rem 1rem;">Select a ship from the sidebar.</div>';
+        return;
+    }
+    var readOnly = !IS_SUPERUSER && false;  // players can edit their own agency's ships
+    var statusColor = STATUS_COLORS[ship.status] || 'var(--text-muted)';
+    var html = '';
+
+    // Header
+    html += '<div style="display: flex; align-items: flex-start; gap: 0.75rem; margin-bottom: 0.75rem; flex-wrap: wrap;">';
+    html += '<div style="flex: 1 1 320px;">';
+    html += '<input data-shipfield="name" value="' + escapeHtml(ship.name) + '" class="mono-input" style="width: 100%; font-size: 1rem; padding: 0.5rem;">';
+    html += '<div style="display: flex; gap: 0.5rem; align-items: center; margin-top: 0.4rem;">';
+    html += '<input data-shipfield="hull_number" placeholder="hull #" value="' + escapeHtml(ship.hull_number || '') + '" class="mono-input" style="width: 120px;">';
+    html += '<span class="mono-text text-muted" style="font-size: 0.65rem;">' + escapeHtml(ship.starship_class_name) + ' \u00B7 ' + escapeHtml(ship.ship_type_name) + ' \u00B7 ' + escapeHtml(ship.agency_name || '') + '</span>';
+    html += '</div>';
+    html += '</div>';
+    html += '<div style="display: flex; gap: 0.5rem;">';
+    html += '<button onclick="saveShipHeader()" class="btn-primary">SAVE</button>';
+    html += '<button onclick="deleteShip()" class="btn-danger" style="padding: 0.3rem 0.6rem;">DELETE</button>';
+    html += '</div>';
+    html += '</div>';
+
+    // Status + stats row
+    html += '<div style="display: flex; gap: 0.4rem; flex-wrap: wrap; margin-bottom: 0.6rem;">';
+    // Status pill with colour
+    html += '<span class="stat-pill" style="color:' + statusColor + ';border-color:' + statusColor + ';">' +
+        '<span class="mono-text">STATUS</span> ' + escapeHtml(ship.status_label.toUpperCase()) + '</span>';
+    html += '<span class="stat-pill"><span class="mono-text text-muted">CREW</span> ' + ship.current_crew + '/' + ship.required_crew + '</span>';
+    html += '<span class="stat-pill"><span class="mono-text text-muted">MAINT</span> ' + ship.maintenance_state + '%</span>';
+    if (ship.status === 'under_construction') {
+        html += '<span class="stat-pill"><span class="mono-text text-muted">BUILD</span> ' + ship.current_successes + '/' + ship.build_required_successes + '</span>';
+    }
+    if (ship.commissioned_at) {
+        html += '<span class="stat-pill"><span class="mono-text text-muted">COMMISSIONED</span> ' + ship.commissioned_at.slice(0, 10) + '</span>';
+    }
+    html += '</div>';
+
+    // Construction progress bar + roll input
+    if (ship.status === 'under_construction') {
+        var pct = Math.min(100, Math.round((ship.current_successes / Math.max(1, ship.build_required_successes)) * 100));
+        html += '<div class="slot-bar" style="margin-bottom: 0.5rem;">';
+        html += '<div class="slot-bar-fill" style="width: ' + pct + '%; background: #f59e0b;"></div>';
+        html += '</div>';
+        html += '<div style="display: flex; gap: 0.5rem; align-items: flex-end; margin-bottom: 0.8rem;">';
+        html += '<div style="display: flex; flex-direction: column; gap: 0.15rem;">';
+        html += '<label class="text-muted mono-text" style="font-size: 0.58rem;">ADD SUCCESSES</label>';
+        html += '<input type="number" id="construction-successes" value="1" min="1" class="mono-input" style="width: 100px;">';
+        html += '</div>';
+        html += '<button onclick="rollConstruction()" class="btn-primary">RECORD BUILD ROLL</button>';
+        html += '<span class="mono-text text-muted" style="font-size: 0.65rem;">Auto-commissions on reaching ' + ship.build_required_successes + ' successes.</span>';
+        html += '</div>';
+    }
+
+    // Editable fields grid
+    html += '<div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 0.5rem; margin-bottom: 0.8rem;">';
+    // Status select
+    html += '<div style="display: flex; flex-direction: column; gap: 0.15rem;">';
+    html += '<label class="text-muted mono-text" style="font-size: 0.58rem;">STATUS</label>';
+    html += '<select data-shipfield="status" class="mono-input">';
+    ['under_construction','active','damaged','in_dock','decommissioned','lost'].forEach(function(s) {
+        var label = { under_construction:'Under Construction', active:'Active', damaged:'Damaged', in_dock:'In Dock', decommissioned:'Decommissioned', lost:'Lost' }[s];
+        html += '<option value="' + s + '"' + (ship.status === s ? ' selected' : '') + '>' + label + '</option>';
+    });
+    html += '</select></div>';
+    // Crew
+    html += '<div style="display: flex; flex-direction: column; gap: 0.15rem;">';
+    html += '<label class="text-muted mono-text" style="font-size: 0.58rem;">CURRENT CREW</label>';
+    html += '<input type="number" data-shipfield="current_crew" value="' + ship.current_crew + '" class="mono-input">';
+    html += '</div>';
+    // Maintenance
+    html += '<div style="display: flex; flex-direction: column; gap: 0.15rem;">';
+    html += '<label class="text-muted mono-text" style="font-size: 0.58rem;">MAINTENANCE %</label>';
+    html += '<input type="number" data-shipfield="maintenance_state" value="' + ship.maintenance_state + '" min="0" max="100" class="mono-input">';
+    html += '</div>';
+    // Location (star system)
+    html += '<div style="display: flex; flex-direction: column; gap: 0.15rem;">';
+    html += '<label class="text-muted mono-text" style="font-size: 0.58rem;">LOCATION</label>';
+    html += '<select data-shipfield="location_id" class="mono-input">';
+    html += '<option value="">— none —</option>';
+    (STAR_SYSTEMS_CACHE || []).forEach(function(sys) {
+        html += '<option value="' + sys.id + '"' + (sys.id === ship.location_id ? ' selected' : '') + '>' + escapeHtml(sys.name) + '</option>';
+    });
+    html += '</select></div>';
+    // Notes spans two columns
+    html += '<div style="grid-column: span 2; display: flex; flex-direction: column; gap: 0.15rem;">';
+    html += '<label class="text-muted mono-text" style="font-size: 0.58rem;">NOTES</label>';
+    html += '<textarea data-shipfield="notes" rows="2" class="mono-input" style="resize: vertical;">' + escapeHtml(ship.notes || '') + '</textarea>';
+    html += '</div>';
+    html += '</div>';
+
+    document.getElementById('ship-editor').innerHTML = html;
+}
+
+function saveShipHeader() {
+    if (CURRENT_SHIP_ID == null) return;
+    var editor = document.getElementById('ship-editor');
+    var payload = {};
+    editor.querySelectorAll('[data-shipfield]').forEach(function(el) {
+        var v = el.value;
+        if (el.type === 'number') v = parseInt(v, 10);
+        if (el.dataset.shipfield === 'location_id') v = v ? parseInt(v, 10) : null;
+        payload[el.dataset.shipfield] = v;
+    });
+    api('/api/starships/ships/' + CURRENT_SHIP_ID + '/', {
+        method: 'PUT', body: JSON.stringify(payload),
+    }).then(function(ship) {
+        renderShipEditor(ship);
+        loadShips();
+    });
+}
+
+function deleteShip() {
+    if (CURRENT_SHIP_ID == null) return;
+    if (!confirm('Delete this ship permanently?')) return;
+    api('/api/starships/ships/' + CURRENT_SHIP_ID + '/', { method: 'DELETE' }).then(function() {
+        CURRENT_SHIP_ID = null;
+        loadShips().then(function() { renderShipEditor(null); });
+    });
+}
+
+function rollConstruction() {
+    var s = parseInt(document.getElementById('construction-successes').value, 10) || 0;
+    if (s <= 0) return;
+    api('/api/starships/ships/' + CURRENT_SHIP_ID + '/construction-roll/', {
+        method: 'POST', body: JSON.stringify({ successes: s }),
+    }).then(function(result) {
+        if (result.completed) alert('Construction complete — ship is now ACTIVE.');
+        renderShipEditor(result.ship);
+        loadShips();
+    });
+}
+
+function buildHullFromClass(classId) {
+    if (!classId) return;
+    var cls = CLASSES_CACHE.find(function(c) { return c.id === classId; });
+    if (!cls) return;
+    var name = prompt('Hull name for this ' + cls.name + ':');
+    if (!name) return;
+    var hullNumber = prompt('Hull number (optional, can leave blank):') || '';
+    api('/api/starships/ships/', {
+        method: 'POST',
+        body: JSON.stringify({
+            starship_class_id: classId,
+            name: name,
+            hull_number: hullNumber,
+        }),
+    }).then(function(ship) {
+        CURRENT_SHIP_ID = ship.id;
+        switchTab('ships');
+        return loadShips().then(function() { selectShip(ship.id); });
+    });
+}
+
+function buildHullFromPrompt() {
+    if (!CLASSES_CACHE.length) {
+        alert('No classes available. Design a class first in the CLASSES tab.');
+        return;
+    }
+    var list = CLASSES_CACHE.map(function(c, i) {
+        return (i + 1) + ') ' + c.name + ' (' + c.ship_type_name + (c.is_shared ? ', shared' : '') + ')';
+    }).join('\n');
+    var pick = prompt('Which class to build?\n\n' + list + '\n\nEnter number:');
+    var idx = parseInt(pick, 10) - 1;
+    if (isNaN(idx) || idx < 0 || idx >= CLASSES_CACHE.length) return;
+    buildHullFromClass(CLASSES_CACHE[idx].id);
 }
 
 function renderClassList() {
@@ -190,6 +460,7 @@ function renderClassEditor(cls) {
     html += '<input type="number" data-field="size" value="' + cls.size + '" ' + (readOnly ? 'disabled' : '') + ' class="mono-input">';
     html += '</div>';
     html += '<button onclick="saveClassHeader()" ' + (readOnly ? 'disabled' : '') + ' class="btn-primary">SAVE</button>';
+    html += '<button onclick="buildHullFromClass(' + cls.id + ')" class="btn-ghost" title="Create an under-construction hull from this class">BUILD HULL</button>';
     if (IS_SUPERUSER) {
         html += '<button onclick="toggleLock()" class="btn-ghost">' + (cls.is_locked ? 'UNLOCK' : 'LOCK') + '</button>';
     }

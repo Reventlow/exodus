@@ -1,5 +1,15 @@
 # Changelog
 
+## v0.13.3
+- Starship instance build flow and SHIPS tab shipped (Release D of 7)
+- BUILD HULL button on each class creates an under_construction hull
+- SHIPS tab sidebar groups hulls by status (Under Construction, Active, Damaged, In Dock, Decommissioned, Lost) with status-coloured dot
+- Ship editor: name, hull number, status transitions, current crew vs class-required, maintenance %, location (StarSystem picker), commissioned date, notes
+- Construction progress bar for under_construction ships with RECORD BUILD ROLL input — auto-promotes to Active and stamps commissioned_at when successes hit the class threshold
+- api_ships list/create/detail/delete; api_ship_construction_roll endpoint handles progress rolls server-side
+- Visibility: superuser sees every hull; players see only their own agency's
+- Star systems list lazy-loaded into the location dropdown on first ship selection
+
 ## v0.13.2
 - Starship class editor shipped as a standalone /starships/ page (Release C of 7)
 - New STARSHIPS link in the main nav, visible to all authenticated users

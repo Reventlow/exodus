@@ -12,7 +12,7 @@ from django.http import HttpResponseForbidden, JsonResponse
 from django.shortcuts import get_object_or_404, render
 from django.views.decorators.http import require_GET, require_http_methods
 
-from .models import ClassModule, ShipModule, ShipType, StarshipClass
+from .models import ClassModule, ShipModule, ShipType, Starship, StarshipClass
 
 
 # ---------------------------------------------------------------------------
@@ -631,11 +631,265 @@ def api_class_module_detail(request, pk, cm_id):
 # Standalone page
 # ---------------------------------------------------------------------------
 
+# ---------------------------------------------------------------------------
+# Starship instances (Release D)
+# ---------------------------------------------------------------------------
+
+def _visible_ships(user):
+    """Ships the user may see. Superuser sees everything; players see
+    hulls owned by their agency."""
+    qs = Starship.objects.select_related(
+        "starship_class", "starship_class__ship_type", "agency",
+        "fleet", "build_assigned_base", "location",
+    )
+    if user.is_superuser:
+        return qs
+    agency = _user_agency(user)
+    if agency is None:
+        return qs.none()
+    return qs.filter(agency=agency)
+
+
+def _can_edit_ship(user, ship):
+    if user.is_superuser:
+        return True
+    agency = _user_agency(user)
+    return agency is not None and agency.id == ship.agency_id
+
+
+def _serialize_ship(ship):
+    cls = ship.starship_class
+    stats = compute_class_stats(cls)
+    return {
+        "id": ship.id,
+        "name": ship.name,
+        "hull_number": ship.hull_number,
+        "status": ship.status,
+        "status_label": ship.get_status_display(),
+        "current_crew": ship.current_crew,
+        "required_crew": stats["required_crew"],
+        "maintenance_state": ship.maintenance_state,
+        "current_successes": ship.current_successes,
+        "build_required_successes": cls.build_required_successes,
+        "starship_class_id": cls.id,
+        "starship_class_name": cls.name,
+        "ship_type_name": cls.ship_type.name,
+        "agency_id": ship.agency_id,
+        "agency_name": ship.agency.name if ship.agency else None,
+        "fleet_id": ship.fleet_id,
+        "fleet_name": ship.fleet.name if ship.fleet else None,
+        "build_assigned_base_id": ship.build_assigned_base_id,
+        "build_assigned_base_name": (
+            ship.build_assigned_base.name if ship.build_assigned_base else None
+        ),
+        "location_id": ship.location_id,
+        "location_name": ship.location.name if ship.location else None,
+        "commissioned_at": ship.commissioned_at.isoformat() if ship.commissioned_at else None,
+        "notes": ship.notes,
+        "created_at": ship.created_at.isoformat() if ship.created_at else None,
+        "updated_at": ship.updated_at.isoformat() if ship.updated_at else None,
+    }
+
+
+@login_required
+@require_http_methods(["GET", "POST"])
+def api_ships(request):
+    if request.method == "GET":
+        qs = _visible_ships(request.user).order_by("agency", "name")
+        return JsonResponse(
+            [_serialize_ship(s) for s in qs], safe=False,
+        )
+
+    # POST — build a new hull from a class
+    try:
+        body = json.loads(request.body)
+    except json.JSONDecodeError:
+        return JsonResponse({"error": "Invalid JSON"}, status=400)
+
+    class_id = body.get("starship_class_id")
+    if not class_id:
+        return JsonResponse({"error": "starship_class_id required"}, status=400)
+    try:
+        cls = StarshipClass.objects.select_related("ship_type").get(pk=class_id)
+    except StarshipClass.DoesNotExist:
+        return JsonResponse({"error": "class not found"}, status=404)
+
+    # Visibility check — same rules as class list
+    if not request.user.is_superuser:
+        agency = _user_agency(request.user)
+        if cls.created_by_id is not None and (agency is None or agency.id != cls.created_by_id):
+            return JsonResponse({"error": "Class not visible"}, status=403)
+    else:
+        agency = _user_agency(request.user)
+
+    # Determine owning agency: explicit override (GM only) or the user's agency
+    from agencies.models import Agency, Base
+    agency_id = body.get("agency_id")
+    if agency_id and request.user.is_superuser:
+        try:
+            agency = Agency.objects.get(pk=agency_id)
+        except Agency.DoesNotExist:
+            return JsonResponse({"error": "agency not found"}, status=400)
+    if agency is None:
+        return JsonResponse(
+            {"error": "No owning agency resolvable for user"}, status=400,
+        )
+
+    name = (body.get("name") or "").strip()
+    if not name:
+        return JsonResponse({"error": "name required"}, status=400)
+
+    ship = Starship(
+        name=name,
+        hull_number=body.get("hull_number", ""),
+        starship_class=cls,
+        agency=agency,
+        status="under_construction",
+    )
+    # Optional base assignment (must belong to the owning agency)
+    base_id = body.get("build_assigned_base_id")
+    if base_id:
+        try:
+            base = Base.objects.get(pk=base_id, agency=agency)
+            ship.build_assigned_base = base
+        except Base.DoesNotExist:
+            return JsonResponse(
+                {"error": "base not found or not owned by agency"}, status=400,
+            )
+    ship.save()
+    return JsonResponse(_serialize_ship(ship), status=201)
+
+
+@login_required
+@require_http_methods(["GET", "PUT", "DELETE"])
+def api_ship_detail(request, pk):
+    ship = get_object_or_404(
+        Starship.objects.select_related(
+            "starship_class", "starship_class__ship_type", "agency",
+            "fleet", "build_assigned_base", "location",
+        ),
+        pk=pk,
+    )
+
+    # View permission
+    if not request.user.is_superuser:
+        agency = _user_agency(request.user)
+        if agency is None or agency.id != ship.agency_id:
+            return JsonResponse({"error": "Not visible"}, status=404)
+
+    if request.method == "GET":
+        return JsonResponse(_serialize_ship(ship))
+
+    if not _can_edit_ship(request.user, ship):
+        return JsonResponse({"error": "Permission denied"}, status=403)
+
+    if request.method == "DELETE":
+        ship.delete()
+        return JsonResponse({"ok": True})
+
+    # PUT
+    try:
+        body = json.loads(request.body)
+    except json.JSONDecodeError:
+        return JsonResponse({"error": "Invalid JSON"}, status=400)
+
+    for field in ("name", "hull_number", "notes"):
+        if field in body:
+            setattr(ship, field, body[field])
+    for field in ("current_crew", "maintenance_state", "current_successes"):
+        if field in body:
+            try:
+                setattr(ship, field, int(body[field]))
+            except (TypeError, ValueError):
+                return JsonResponse({"error": f"{field} must be an integer"}, status=400)
+    if "status" in body:
+        valid = {k for k, _ in Starship.STATUS_CHOICES}
+        if body["status"] not in valid:
+            return JsonResponse({"error": "invalid status"}, status=400)
+        ship.status = body["status"]
+    # Location FK
+    if "location_id" in body:
+        if body["location_id"] in (None, "", 0):
+            ship.location = None
+        else:
+            from starmap.models import StarSystem
+            try:
+                ship.location = StarSystem.objects.get(pk=body["location_id"])
+            except StarSystem.DoesNotExist:
+                return JsonResponse({"error": "location not found"}, status=400)
+    # Build base FK
+    if "build_assigned_base_id" in body:
+        if body["build_assigned_base_id"] in (None, "", 0):
+            ship.build_assigned_base = None
+        else:
+            from agencies.models import Base
+            try:
+                ship.build_assigned_base = Base.objects.get(
+                    pk=body["build_assigned_base_id"], agency=ship.agency,
+                )
+            except Base.DoesNotExist:
+                return JsonResponse(
+                    {"error": "base not found or not owned by agency"}, status=400,
+                )
+    ship.save()
+    return JsonResponse(_serialize_ship(ship))
+
+
+@login_required
+@require_http_methods(["POST"])
+def api_ship_construction_roll(request, pk):
+    """Record construction progress against an under_construction hull.
+
+    Body: {successes: int}. Auto-promotes to active when the class's
+    build_required_successes is reached and sets commissioned_at to
+    the current time.
+    """
+    from django.utils import timezone
+
+    ship = get_object_or_404(
+        Starship.objects.select_related("starship_class"), pk=pk,
+    )
+    if not _can_edit_ship(request.user, ship):
+        return JsonResponse({"error": "Permission denied"}, status=403)
+    if ship.status != "under_construction":
+        return JsonResponse(
+            {"error": "Ship is not under construction"}, status=400,
+        )
+    try:
+        body = json.loads(request.body)
+    except json.JSONDecodeError:
+        return JsonResponse({"error": "Invalid JSON"}, status=400)
+    try:
+        successes = int(body.get("successes", 0))
+    except (TypeError, ValueError):
+        return JsonResponse({"error": "successes must be an integer"}, status=400)
+    if successes < 0:
+        return JsonResponse({"error": "successes cannot be negative"}, status=400)
+
+    ship.current_successes += successes
+    required = ship.starship_class.build_required_successes
+    completed = False
+    if ship.current_successes >= required:
+        ship.current_successes = required
+        ship.status = "active"
+        ship.commissioned_at = timezone.now()
+        completed = True
+    ship.save()
+    return JsonResponse({
+        "ship": _serialize_ship(ship),
+        "completed": completed,
+    })
+
+
+# ---------------------------------------------------------------------------
+# Standalone page
+# ---------------------------------------------------------------------------
+
 @login_required
 @require_GET
 def starships_page(request):
-    """Standalone starships hub — classes editor for now; ships and
-    fleets tabs will land in Releases D and E."""
+    """Standalone starships hub — classes editor (Release C) +
+    instance build/management (Release D). Fleets land in Release E."""
     return render(request, "starships/page.html", {
         "is_superuser": request.user.is_superuser,
     })
