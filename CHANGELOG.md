@@ -1,5 +1,17 @@
 # Changelog
 
+## v0.13.9
+- Ship module sections: tiered families of modules with 5 fixed levels
+- New ShipModuleSection model + section FK/level field on ShipModule
+- Seeded 5 sections with 5 tiered modules each: Fighter Guns (Single Auto Cannon → Twin Auto Cannons → Gatling Gun → Twin Gatling Guns → Vengeance Cannon), Main Guns, Shields, Armour Plating, Sensor Suites
+- One module per section per class — installing any tier atomically replaces the existing tier in that section (single-click upgrade/downgrade)
+- Class editor shows section name + level pill on installed modules and adds ◀ ▶ tier swap buttons per section row
+- Add-module dropdown groups sections (tier families) at the top with optgroups, then standalone modules by category
+- Settings → Starships gains a SHIP MODULE SECTIONS catalogue editor (reorder/add/edit/delete)
+- Ship Module editor exposes a section dropdown + level input for manual catalogue authoring
+- API: GET/POST /api/starships/module-sections/, PUT/DELETE /api/starships/module-sections/<id>/
+- Module serializer + class module serializer both expose section_id/section_name/level
+
 ## v0.13.8
 - Settings → Map Visibility now has a STARSHIPS toggle controlling whether players can see the starships page
 - Staff always see the STARSHIPS nav link; players only when the toggle is on

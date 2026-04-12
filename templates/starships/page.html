@@ -784,13 +784,27 @@ function renderClassEditor(cls) {
     cls.modules.forEach(function(cm) {
         html += '<div class="module-row">';
         html += '<span class="pill-cat mono-text">' + (cm.module_category_label || cm.module_category) + '</span>';
+        // Section + tier pill when the module belongs to a family
+        if (cm.section_name) {
+            html += '<span class="mono-text" style="font-size: 0.55rem; color: #c084fc; border: 1px solid #c084fc; padding: 0.05rem 0.3rem;">' +
+                escapeHtml(cm.section_name) + ' L' + cm.level +
+                '</span>';
+        }
         html += '<span class="mono-text" style="font-size: 0.8rem; flex: 1; color: var(--text-primary);">' + escapeHtml(cm.module_name) + '</span>';
         html += '<span class="mono-text text-muted" style="font-size: 0.6rem;">' + (cm.slot_cost * cm.quantity) + ' slots</span>';
         html += '<span class="mono-text text-muted" style="font-size: 0.6rem;">crew ' + (cm.crew_delta >= 0 ? '+' : '') + (cm.crew_delta * cm.quantity) + '</span>';
         if (cm.provides_sublight) html += '<span class="stat-pill" style="font-size: 0.55rem;">SUB</span>';
         if (cm.provides_ftl) html += '<span class="stat-pill" style="font-size: 0.55rem;">FTL</span>';
         if (!readOnly) {
-            html += '<input type="number" value="' + cm.quantity + '" min="0" onchange="updateQty(' + cm.id + ', this.value)" class="mono-input" style="width: 56px; padding: 0.2rem;">';
+            // Tier swap buttons for sectioned modules
+            if (cm.section_id) {
+                var canDown = cm.level > 1;
+                var canUp = cm.level < 5;
+                html += '<button onclick="swapTier(' + cm.section_id + ',' + (cm.level - 1) + ')" ' + (canDown ? '' : 'disabled') + ' class="btn-ghost" title="Downgrade tier" style="padding: 0.2rem 0.4rem;' + (canDown ? '' : 'opacity:0.3;cursor:not-allowed;') + '">\u25C0</button>';
+                html += '<button onclick="swapTier(' + cm.section_id + ',' + (cm.level + 1) + ')" ' + (canUp ? '' : 'disabled') + ' class="btn-ghost" title="Upgrade tier" style="padding: 0.2rem 0.4rem;' + (canUp ? '' : 'opacity:0.3;cursor:not-allowed;') + '">\u25B6</button>';
+            } else {
+                html += '<input type="number" value="' + cm.quantity + '" min="0" onchange="updateQty(' + cm.id + ', this.value)" class="mono-input" style="width: 56px; padding: 0.2rem;">';
+            }
             html += '<button onclick="removeModule(' + cm.id + ')" class="btn-danger">X</button>';
         } else {
             html += '<span class="mono-text text-muted" style="font-size: 0.65rem;">x' + cm.quantity + '</span>';
@@ -799,19 +813,40 @@ function renderClassEditor(cls) {
     });
     html += '</div>';
 
-    // Add module panel
+    // Add module panel — sections first (tier families), then standalone by category
     if (!readOnly) {
         html += '<div style="display: flex; gap: 0.4rem; margin-top: 0.75rem; align-items: center; flex-wrap: wrap;">';
         html += '<select id="add-module-select" class="mono-input">';
-        var byCat = {};
-        SHIP_MODULES.forEach(function(m) { (byCat[m.category_label] = byCat[m.category_label] || []).push(m); });
-        Object.keys(byCat).forEach(function(cat) {
+
+        var sectionBuckets = {};
+        var standaloneByCat = {};
+        SHIP_MODULES.forEach(function(m) {
+            if (m.section_id) {
+                (sectionBuckets[m.section_name] = sectionBuckets[m.section_name] || []).push(m);
+            } else {
+                (standaloneByCat[m.category_label] = standaloneByCat[m.category_label] || []).push(m);
+            }
+        });
+        // Section optgroups — sort each bucket by level so L1 → L5
+        Object.keys(sectionBuckets).sort().forEach(function(sectionName) {
+            html += '<optgroup label="\u2692 ' + sectionName + '">';
+            sectionBuckets[sectionName]
+                .slice()
+                .sort(function(a, b) { return (a.level || 0) - (b.level || 0); })
+                .forEach(function(m) {
+                    html += '<option value="' + m.id + '">L' + m.level + ' \u2014 ' + m.name + ' (' + m.slot_cost + ' slots)</option>';
+                });
+            html += '</optgroup>';
+        });
+        // Standalone modules grouped by category
+        Object.keys(standaloneByCat).forEach(function(cat) {
             html += '<optgroup label="' + cat + '">';
-            byCat[cat].forEach(function(m) {
+            standaloneByCat[cat].forEach(function(m) {
                 html += '<option value="' + m.id + '">' + m.name + ' (' + m.slot_cost + ' slots)</option>';
             });
             html += '</optgroup>';
         });
+
         html += '</select>';
         html += '<input type="number" id="add-module-qty" value="1" min="1" class="mono-input" style="width: 60px;">';
         html += '<button onclick="addModule()" class="btn-primary">ADD MODULE</button>';
@@ -898,6 +933,23 @@ function updateQty(cmId, value) {
 function removeModule(cmId) {
     api('/api/starships/classes/' + CURRENT_CLASS_ID + '/modules/' + cmId + '/', {
         method: 'DELETE',
+    }).then(function() { selectClass(CURRENT_CLASS_ID); });
+}
+
+function swapTier(sectionId, targetLevel) {
+    // Find the ShipModule with (section_id == sectionId, level == targetLevel)
+    // and install it. The backend auto-replaces any existing module
+    // from the same section, so this is a one-shot call.
+    var target = SHIP_MODULES.find(function(m) {
+        return m.section_id === sectionId && m.level === targetLevel;
+    });
+    if (!target) {
+        alert('No module defined for tier ' + targetLevel + ' of this section.');
+        return;
+    }
+    api('/api/starships/classes/' + CURRENT_CLASS_ID + '/modules/', {
+        method: 'POST',
+        body: JSON.stringify({ module_id: target.id, quantity: 1 }),
     }).then(function() { selectClass(CURRENT_CLASS_ID); });
 }
 

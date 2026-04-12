@@ -23,6 +23,16 @@ urlpatterns = [
         views.api_ship_module_detail,
         name="api-module-detail",
     ),
+    path(
+        "api/starships/module-sections/",
+        views.api_ship_module_sections,
+        name="api-module-sections",
+    ),
+    path(
+        "api/starships/module-sections/<int:pk>/",
+        views.api_ship_module_section_detail,
+        name="api-module-section-detail",
+    ),
 
     # Release C — classes + class modules
     path("api/starships/classes/", views.api_classes, name="api-classes"),

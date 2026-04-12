@@ -47,6 +47,26 @@ class ShipType(models.Model):
         return self.name
 
 
+class ShipModuleSection(models.Model):
+    """A tiered family of ship modules (e.g. Fighter Guns L1–L5).
+
+    Sections enforce one-module-per-class: installing a level-3
+    Gatling Gun into a class that already has a level-1 Single Auto
+    Cannon atomically replaces the old one. Levels are fixed at 1-5.
+    """
+
+    key = models.CharField(max_length=60, unique=True)
+    name = models.CharField(max_length=120)
+    description = models.TextField(blank=True, default="")
+    order = models.IntegerField(default=0)
+
+    class Meta:
+        ordering = ["order", "name"]
+
+    def __str__(self):
+        return self.name
+
+
 class ShipModule(models.Model):
     """A single module that can be installed in a starship class.
 
@@ -105,6 +125,19 @@ class ShipModule(models.Model):
     xp_cost = models.IntegerField(
         default=0,
         help_text="Research/unlock cost for this module (one-off).",
+    )
+    # Tiered family grouping — sectioned modules are mutually exclusive
+    # within a class (installing one replaces the current level).
+    section = models.ForeignKey(
+        ShipModuleSection,
+        on_delete=models.SET_NULL,
+        null=True, blank=True,
+        related_name="modules",
+        help_text="Optional tier family. Null = standalone module.",
+    )
+    level = models.IntegerField(
+        default=0,
+        help_text="Tier within the section (1-5). Ignored when section is null.",
     )
     order = models.IntegerField(default=0)
 

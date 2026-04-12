@@ -16,6 +16,7 @@ from .models import (
     ClassModule,
     Fleet,
     ShipModule,
+    ShipModuleSection,
     ShipType,
     Starship,
     StarshipClass,
@@ -60,7 +61,21 @@ def _serialize_ship_module(m):
         "restricted_to_types": m.restricted_to_types or [],
         "build_cost_xp_delta": m.build_cost_xp_delta,
         "xp_cost": m.xp_cost,
+        "section_id": m.section_id,
+        "section_key": m.section.key if m.section else None,
+        "section_name": m.section.name if m.section else None,
+        "level": m.level,
         "order": m.order,
+    }
+
+
+def _serialize_ship_module_section(s):
+    return {
+        "id": s.id,
+        "key": s.key,
+        "name": s.name,
+        "description": s.description,
+        "order": s.order,
     }
 
 
@@ -75,7 +90,7 @@ INT_FIELDS_SHIP_TYPE = (
 
 INT_FIELDS_SHIP_MODULE = (
     "slot_cost", "crew_delta", "energy_delta", "maintenance_delta",
-    "min_hull_size", "build_cost_xp_delta", "xp_cost", "order",
+    "min_hull_size", "build_cost_xp_delta", "xp_cost", "level", "order",
 )
 
 
@@ -187,6 +202,12 @@ def api_ship_modules(request):
         provides_ftl=bool(body.get("provides_ftl", False)),
         restricted_to_types=body.get("restricted_to_types") or [],
     )
+    section_id = body.get("section_id")
+    if section_id:
+        try:
+            m.section = ShipModuleSection.objects.get(pk=section_id)
+        except ShipModuleSection.DoesNotExist:
+            return JsonResponse({"error": "section_id not found"}, status=400)
     err = _apply_int_fields(m, body, INT_FIELDS_SHIP_MODULE)
     if err:
         return err
@@ -227,11 +248,74 @@ def api_ship_module_detail(request, pk):
                 {"error": "restricted_to_types must be a list"}, status=400,
             )
         m.restricted_to_types = val
+    if "section_id" in body:
+        if body["section_id"] in (None, "", 0):
+            m.section = None
+        else:
+            try:
+                m.section = ShipModuleSection.objects.get(pk=body["section_id"])
+            except ShipModuleSection.DoesNotExist:
+                return JsonResponse({"error": "section_id not found"}, status=400)
     err = _apply_int_fields(m, body, INT_FIELDS_SHIP_MODULE)
     if err:
         return err
     m.save()
     return JsonResponse(_serialize_ship_module(m))
+
+
+# ---------------------------------------------------------------------------
+# Ship Module Sections
+# ---------------------------------------------------------------------------
+
+@login_required
+@require_http_methods(["GET", "POST"])
+def api_ship_module_sections(request):
+    if request.method == "GET":
+        return JsonResponse(
+            [_serialize_ship_module_section(s) for s in ShipModuleSection.objects.all()],
+            safe=False,
+        )
+    if not request.user.is_superuser:
+        return JsonResponse({"error": "Permission denied"}, status=403)
+    try:
+        body = json.loads(request.body)
+    except json.JSONDecodeError:
+        return JsonResponse({"error": "Invalid JSON"}, status=400)
+    key = (body.get("key") or "").lower().strip().replace(" ", "_")
+    name = (body.get("name") or "").strip()
+    if not key or not name:
+        return JsonResponse({"error": "key and name required"}, status=400)
+    section = ShipModuleSection.objects.create(
+        key=key, name=name,
+        description=body.get("description", ""),
+        order=int(body.get("order", 0) or 0),
+    )
+    return JsonResponse(_serialize_ship_module_section(section), status=201)
+
+
+@login_required
+@require_http_methods(["PUT", "DELETE"])
+def api_ship_module_section_detail(request, pk):
+    if not request.user.is_superuser:
+        return JsonResponse({"error": "Permission denied"}, status=403)
+    section = get_object_or_404(ShipModuleSection, pk=pk)
+    if request.method == "DELETE":
+        section.delete()
+        return JsonResponse({"ok": True})
+    try:
+        body = json.loads(request.body)
+    except json.JSONDecodeError:
+        return JsonResponse({"error": "Invalid JSON"}, status=400)
+    for field in ("key", "name", "description"):
+        if field in body:
+            setattr(section, field, body[field])
+    if "order" in body:
+        try:
+            section.order = int(body["order"])
+        except (TypeError, ValueError):
+            return JsonResponse({"error": "order must be an integer"}, status=400)
+    section.save()
+    return JsonResponse(_serialize_ship_module_section(section))
 
 
 # ---------------------------------------------------------------------------
@@ -396,20 +480,25 @@ def compute_class_stats(cls):
 
 
 def _serialize_class_module(cm):
+    m = cm.module
     return {
         "id": cm.id,
         "module_id": cm.module_id,
-        "module_key": cm.module.key,
-        "module_name": cm.module.name,
-        "module_category": cm.module.category,
-        "module_category_label": cm.module.get_category_display(),
-        "slot_cost": cm.module.slot_cost,
-        "crew_delta": cm.module.crew_delta,
-        "energy_delta": cm.module.energy_delta,
-        "maintenance_delta": cm.module.maintenance_delta,
-        "provides_sublight": cm.module.provides_sublight,
-        "provides_ftl": cm.module.provides_ftl,
-        "build_cost_xp_delta": cm.module.build_cost_xp_delta,
+        "module_key": m.key,
+        "module_name": m.name,
+        "module_category": m.category,
+        "module_category_label": m.get_category_display(),
+        "slot_cost": m.slot_cost,
+        "crew_delta": m.crew_delta,
+        "energy_delta": m.energy_delta,
+        "maintenance_delta": m.maintenance_delta,
+        "provides_sublight": m.provides_sublight,
+        "provides_ftl": m.provides_ftl,
+        "build_cost_xp_delta": m.build_cost_xp_delta,
+        "section_id": m.section_id,
+        "section_key": m.section.key if m.section else None,
+        "section_name": m.section.name if m.section else None,
+        "level": m.level,
         "quantity": cm.quantity,
         "notes": cm.notes,
         "position": cm.position,
@@ -599,10 +688,27 @@ def api_class_add_module(request, pk):
     if not module_id:
         return JsonResponse({"error": "module_id required"}, status=400)
     try:
-        module = ShipModule.objects.get(pk=module_id)
+        module = ShipModule.objects.select_related("section").get(pk=module_id)
     except ShipModule.DoesNotExist:
         return JsonResponse({"error": "module_id not found"}, status=400)
-    position = cls.class_modules.count()
+
+    # Sectioned modules are one-per-class: installing any tier in the
+    # section atomically replaces the existing tier so upgrading a
+    # Gatling Gun to a Vengeance Cannon is a single click, not a
+    # remove-then-add dance.
+    replaced_position = None
+    if module.section_id is not None:
+        existing_qs = cls.class_modules.filter(module__section_id=module.section_id)
+        existing = existing_qs.first()
+        if existing is not None:
+            replaced_position = existing.position
+            existing.delete()
+
+    position = (
+        replaced_position
+        if replaced_position is not None
+        else cls.class_modules.count()
+    )
     cm = ClassModule.objects.create(
         starship_class=cls,
         module=module,

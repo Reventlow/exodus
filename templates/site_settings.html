@@ -515,6 +515,17 @@
                 </div>
             </div>
 
+            <!-- Module Sections -->
+            <div style="margin-bottom: 2rem;">
+                <div class="mono-text text-muted" style="font-size: 0.7rem; margin-bottom: 0.75rem; letter-spacing: 1px;">SHIP MODULE SECTIONS <span style="text-transform: none;">(tier families — 1 per class)</span></div>
+                <div id="module-section-list"></div>
+                <div style="display: flex; gap: 0.5rem; margin-top: 0.75rem; flex-wrap: wrap;">
+                    <input type="text" id="sec-key" placeholder="key" style="width: 140px; background: var(--bg-input); border: 1px solid var(--border-color); color: var(--text-primary); padding: 0.4rem; font-family: var(--font-mono); font-size: 0.75rem;">
+                    <input type="text" id="sec-name" placeholder="Display Name" style="flex: 1; min-width: 160px; background: var(--bg-input); border: 1px solid var(--border-color); color: var(--text-primary); padding: 0.4rem; font-family: var(--font-mono); font-size: 0.75rem;">
+                    <button type="button" onclick="addModuleSection()" class="mono-text" style="background: var(--accent-primary); border: none; color: var(--bg-dark); padding: 0.4rem 0.75rem; cursor: pointer; font-size: 0.75rem; font-weight: bold;">ADD SECTION</button>
+                </div>
+            </div>
+
             <!-- Ship Modules -->
             <div>
                 <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 0.75rem; gap: 0.5rem;">
@@ -963,6 +974,123 @@ function moveShipType(id, delta) {
 
 loadShipTypes();
 
+// --- Module Sections ---
+var MS_CACHE = [];
+var MS_OPEN = {};
+
+function loadModuleSections() {
+    return fetch('/api/starships/module-sections/').then(function(r) { return r.json(); }).then(function(sections) {
+        MS_CACHE = sections.slice();
+        renderModuleSectionList();
+        // Re-render modules since the filter dropdown depends on this
+        if (SM_CACHE.length) loadShipModules();
+    });
+}
+
+function renderModuleSectionList() {
+    var html = '';
+    MS_CACHE.forEach(function(s, idx) {
+        var open = !!MS_OPEN[s.id];
+        var isFirst = idx === 0;
+        var isLast = idx === MS_CACHE.length - 1;
+        var arrowBase = 'background: transparent; border: 1px solid var(--border-color); color: var(--text-primary); padding: 0.1rem 0.35rem; cursor: pointer; font-size: 0.65rem; line-height: 1;';
+        var disabledStyle = 'opacity: 0.3; cursor: not-allowed;';
+
+        html += '<div style="border-bottom: 1px solid var(--border-color);">';
+        html += '<div style="display: flex; align-items: center; gap: 0.5rem; padding: 0.4rem 0;">';
+        html += '<div style="display: flex; flex-direction: column; gap: 0.1rem;">';
+        html += '<button type="button" onclick="moveModuleSection(' + s.id + ',-1)" ' + (isFirst ? 'disabled' : '') + ' class="mono-text" style="' + arrowBase + (isFirst ? disabledStyle : '') + '">\u25B2</button>';
+        html += '<button type="button" onclick="moveModuleSection(' + s.id + ',1)" ' + (isLast ? 'disabled' : '') + ' class="mono-text" style="' + arrowBase + (isLast ? disabledStyle : '') + '">\u25BC</button>';
+        html += '</div>';
+        html += '<span class="mono-text" style="font-size: 0.8rem; color: var(--text-primary); flex: 1;">' + s.name + '</span>';
+        html += '<span class="mono-text text-muted" style="font-size: 0.65rem;">' + s.key + '</span>';
+        html += '<button type="button" onclick="toggleModuleSection(' + s.id + ')" class="mono-text" style="background: transparent; border: 1px solid var(--border-color); color: var(--text-primary); padding: 0.15rem 0.4rem; cursor: pointer; font-size: 0.6rem;">' + (open ? 'HIDE' : 'EDIT') + '</button>';
+        html += '<button type="button" onclick="deleteModuleSection(' + s.id + ')" class="mono-text" style="background: transparent; border: 1px solid var(--accent-danger); color: var(--accent-danger); padding: 0.15rem 0.4rem; cursor: pointer; font-size: 0.6rem;">X</button>';
+        html += '</div>';
+
+        if (open) {
+            html += '<div data-ms-edit="' + s.id + '" style="padding: 0.6rem 0.5rem 0.9rem 1.4rem; display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 0.55rem;">';
+            html += stField(s, 'name', 'DISPLAY NAME', 'text');
+            html += stField(s, 'key', 'KEY', 'text');
+            html += stField(s, 'order', 'ORDER', 'number');
+            html += '<div style="grid-column: 1 / -1;">' +
+                '<label class="text-muted mono-text" style="font-size: 0.58rem; letter-spacing: 0.5px;">DESCRIPTION</label>' +
+                '<textarea data-field="description" rows="2" style="width: 100%; background: var(--bg-input); border: 1px solid var(--border-color); color: var(--text-primary); padding: 0.35rem; font-family: var(--font-mono); font-size: 0.72rem; resize: vertical;">' + (s.description || '') + '</textarea>' +
+                '</div>';
+            html += '<div style="grid-column: 1 / -1; display: flex; justify-content: flex-end;">';
+            html += '<button type="button" onclick="saveModuleSection(' + s.id + ')" class="mono-text" style="background: var(--accent-primary); border: none; color: var(--bg-dark); padding: 0.35rem 0.9rem; cursor: pointer; font-size: 0.72rem; font-weight: bold; letter-spacing: 1px;">SAVE</button>';
+            html += '</div>';
+            html += '</div>';
+        }
+        html += '</div>';
+    });
+    if (!MS_CACHE.length) html = '<span class="mono-text text-muted" style="font-size: 0.8rem;">No sections defined. Add one to start grouping modules into tier families.</span>';
+    document.getElementById('module-section-list').innerHTML = html;
+}
+
+function toggleModuleSection(id) { MS_OPEN[id] = !MS_OPEN[id]; renderModuleSectionList(); }
+
+function saveModuleSection(id) {
+    var panel = document.querySelector('[data-ms-edit="' + id + '"]');
+    if (!panel) return;
+    var payload = {};
+    panel.querySelectorAll('[data-field]').forEach(function(input) {
+        payload[input.dataset.field] = input.value;
+    });
+    fetch('/api/starships/module-sections/' + id + '/', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json', 'X-CSRFToken': getCsrf() },
+        body: JSON.stringify(payload),
+    }).then(function(r) { return r.json(); }).then(function(d) {
+        if (d.error) { alert(d.error); return; }
+        loadModuleSections();
+    });
+}
+
+function addModuleSection() {
+    var key = document.getElementById('sec-key').value.trim();
+    var name = document.getElementById('sec-name').value.trim();
+    if (!key || !name) { alert('Key and name required.'); return; }
+    fetch('/api/starships/module-sections/', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'X-CSRFToken': getCsrf() },
+        body: JSON.stringify({ key: key, name: name }),
+    }).then(function(r) { return r.json(); }).then(function(d) {
+        if (d.error) { alert(d.error); return; }
+        document.getElementById('sec-key').value = '';
+        document.getElementById('sec-name').value = '';
+        if (d.id) MS_OPEN[d.id] = true;
+        loadModuleSections();
+    });
+}
+
+function deleteModuleSection(id) {
+    if (!confirm('Delete this section? Modules in it will become standalone (their section FK set to null).')) return;
+    fetch('/api/starships/module-sections/' + id + '/', {
+        method: 'DELETE', headers: { 'X-CSRFToken': getCsrf() },
+    }).then(function() { delete MS_OPEN[id]; loadModuleSections(); });
+}
+
+function moveModuleSection(id, delta) {
+    var idx = MS_CACHE.findIndex(function(s) { return s.id === id; });
+    if (idx < 0) return;
+    var targetIdx = idx + delta;
+    if (targetIdx < 0 || targetIdx >= MS_CACHE.length) return;
+    var reordered = MS_CACHE.slice();
+    var moved = reordered.splice(idx, 1)[0];
+    reordered.splice(targetIdx, 0, moved);
+    Promise.all(reordered.map(function(s, i) {
+        if (s.order === i) return Promise.resolve();
+        return fetch('/api/starships/module-sections/' + s.id + '/', {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json', 'X-CSRFToken': getCsrf() },
+            body: JSON.stringify({ order: i }),
+        });
+    })).then(function() { loadModuleSections(); });
+}
+
+loadModuleSections();
+
 // --- Ship Modules ---
 function loadShipModules() {
     var filter = document.getElementById('sm-filter-category').value;
@@ -984,7 +1112,9 @@ function loadShipModules() {
             html += '<button type="button" onclick="moveShipModule(' + m.id + ',1)" ' + (isLast ? 'disabled' : '') + ' class="mono-text" style="' + arrowBase + (isLast ? disabledStyle : '') + '" title="Move down">\u25BC</button>';
             html += '</div>';
             html += '<span class="mono-text" style="font-size: 0.65rem; color: var(--accent-primary); border: 1px solid var(--accent-primary); padding: 0.05rem 0.3rem; min-width: 5.5rem; text-align: center;">' + (m.category_label || m.category) + '</span>';
-            html += '<span class="mono-text" style="font-size: 0.8rem; color: var(--text-primary); flex: 1;">' + m.name + '</span>';
+            html += '<span class="mono-text" style="font-size: 0.8rem; color: var(--text-primary); flex: 1;">' + m.name +
+                (m.section_name ? ' <span class="mono-text text-muted" style="font-size: 0.6rem;">\u00B7 ' + m.section_name + ' L' + m.level + '</span>' : '') +
+                '</span>';
             html += '<span class="mono-text text-muted" style="font-size: 0.65rem;">slots ' + m.slot_cost + '</span>';
             html += '<span class="mono-text text-muted" style="font-size: 0.65rem;">crew ' + (m.crew_delta >= 0 ? '+' : '') + m.crew_delta + '</span>';
             html += '<span class="mono-text text-muted" style="font-size: 0.65rem;">pwr ' + (m.energy_delta >= 0 ? '+' : '') + m.energy_delta + '</span>';
@@ -1006,6 +1136,16 @@ function loadShipModules() {
                         return '<option value="' + cat + '"' + (m.category === cat ? ' selected' : '') + '>' + cat + '</option>';
                     }).join('') +
                     '</select></div>';
+                // Section select (tier family) + level number
+                html += '<div style="display: flex; flex-direction: column; gap: 0.15rem;">' +
+                    '<label class="text-muted mono-text" style="font-size: 0.58rem; letter-spacing: 0.5px;">SECTION</label>' +
+                    '<select data-field="section_id" style="background: var(--bg-input); border: 1px solid var(--border-color); color: var(--text-primary); padding: 0.35rem; font-family: var(--font-mono); font-size: 0.72rem;">' +
+                    '<option value="">— standalone —</option>' +
+                    MS_CACHE.map(function(s) {
+                        return '<option value="' + s.id + '"' + (m.section_id === s.id ? ' selected' : '') + '>' + s.name + '</option>';
+                    }).join('') +
+                    '</select></div>';
+                html += stField(m, 'level', 'LEVEL', 'number', '1\u20135 when sectioned');
                 html += stField(m, 'slot_cost', 'SLOT COST', 'number');
                 html += stField(m, 'crew_delta', 'CREW \u0394', 'number');
                 html += stField(m, 'energy_delta', 'ENERGY \u0394', 'number');
