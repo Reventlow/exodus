@@ -74,6 +74,14 @@ class Agency(models.Model):
         default=0,
         help_text="Shared Sweep & Clear pool — GM allocates, anyone with Computer skill can use to clear conditions.",
     )
+    is_nuclear_power = models.BooleanField(
+        default=False,
+        help_text="Agency has council approval to build nuclear reactors.",
+    )
+    project_rolls = models.JSONField(
+        default=dict,
+        help_text='Roll allocations: {"_global": {"free": N, "spare": N}, "CharName": {"free": N, "spare": N}}',
+    )
 
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
@@ -234,6 +242,13 @@ class AgencyFTLProject(models.Model):
         FTLProject, on_delete=models.CASCADE, related_name="agency_assignments"
     )
     current_successes = models.IntegerField(default=0)
+    player = models.CharField(max_length=200, blank=True, default="")
+    base_id = models.IntegerField(null=True, blank=True)
+    base_name = models.CharField(max_length=200, blank=True, default="")
+    metadata = models.JSONField(
+        default=dict,
+        help_text="Project metadata: dicePoolConfig, fringe, fringe effects, assignedNpcs, completionEffects, etc.",
+    )
     assigned_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
@@ -241,6 +256,44 @@ class AgencyFTLProject(models.Model):
 
     def __str__(self):
         return f"{self.agency.name} — {self.ftl_project.name} ({self.current_successes})"
+
+
+class ProjectRollLog(models.Model):
+    """Log of a dice roll on an FTL project."""
+
+    agency = models.ForeignKey(
+        Agency,
+        on_delete=models.CASCADE,
+        related_name="project_roll_logs",
+        null=True,
+    )
+    assignment = models.ForeignKey(
+        AgencyFTLProject,
+        on_delete=models.CASCADE,
+        related_name="roll_logs",
+        null=True,
+        blank=True,
+    )
+    project_index = models.IntegerField(null=True, blank=True)
+    project_name = models.CharField(max_length=200, blank=True, default="")
+    character_name = models.CharField(max_length=200)
+    roll_type = models.CharField(max_length=20)  # "free" or "spare"
+    pool = models.IntegerField()
+    rolls = models.JSONField(default=list)  # Individual die results
+    successes = models.IntegerField(default=0)
+    auto_successes = models.IntegerField(default=0)
+    auto_merit = models.CharField(max_length=200, blank=True, default="")
+    mental_damage = models.BooleanField(default=False)
+    old_score = models.IntegerField(default=0)
+    new_score = models.IntegerField(default=0)
+    message = models.TextField(blank=True, default="")
+    rolled_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-rolled_at"]
+
+    def __str__(self):
+        return f"{self.character_name} — {self.successes}s on {self.assignment}"
 
 
 class CouncilItem(models.Model):
@@ -281,6 +334,10 @@ class CouncilItem(models.Model):
     vote_record = models.JSONField(
         default=dict, blank=True,
         help_text="Frozen vote snapshot when vote concludes or is emergency suspended.",
+    )
+    predicted_votes = models.JSONField(
+        default=dict, blank=True,
+        help_text='GM-only predicted votes: {"agencyName": "for|against|abstain|undecided", ...}',
     )
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
@@ -327,6 +384,7 @@ def default_base_location_types():
             "space": 20,
             "description": "An official government building.",
             "included": "",
+            "required_class": "general",
         },
         {
             "key": "estate",
@@ -335,6 +393,7 @@ def default_base_location_types():
             "space": 14,
             "description": "A luxury place, built for the good life style.",
             "included": "Built-in gym, pool, four car garage and 10 high-end bedrooms at no extra cost.",
+            "required_class": "fixer",
         },
         {
             "key": "military_base",
@@ -343,6 +402,7 @@ def default_base_location_types():
             "space": 30,
             "description": "A full military installation.",
             "included": "Includes barracks, armory, brig, and shooting range at no extra cost.",
+            "required_class": "soldier",
         },
         {
             "key": "black_site",
@@ -351,6 +411,7 @@ def default_base_location_types():
             "space": 8,
             "description": "A small secret base.",
             "included": "Includes armory, medical room and barracks for 12 people.",
+            "required_class": "soldier",
         },
     ]
 
@@ -364,6 +425,7 @@ def default_base_location_merits():
             "exp": 5,
             "extraSpace": 0,
             "description": "Armored to withstand outside assault. Has external checkpoints and built with security in mind.",
+            "required_class": "soldier",
         },
         {
             "key": "underwater",
@@ -371,6 +433,7 @@ def default_base_location_merits():
             "exp": 10,
             "extraSpace": 0,
             "description": "The base is built under water.",
+            "required_class": "engineer",
         },
         {
             "key": "underground",
@@ -378,6 +441,7 @@ def default_base_location_merits():
             "exp": 15,
             "extraSpace": 0,
             "description": "A covert constructed underground base.",
+            "required_class": "engineer",
         },
         {
             "key": "extra_large",
@@ -385,6 +449,7 @@ def default_base_location_merits():
             "exp": 10,
             "extraSpace": 10,
             "description": "Grants extra 10 space.",
+            "required_class": "general",
         },
         {
             "key": "super_large",
@@ -392,6 +457,7 @@ def default_base_location_merits():
             "exp": 20,
             "extraSpace": 20,
             "description": "Grants extra 20 space.",
+            "required_class": "general",
         },
         {
             "key": "front",
@@ -399,6 +465,7 @@ def default_base_location_merits():
             "exp": 7,
             "extraSpace": 0,
             "description": "The location disguises as a front for something else.",
+            "required_class": "fixer",
         },
     ]
 
@@ -409,6 +476,7 @@ def default_base_facility_types():
         {
             "key": "aviation",
             "name": "Aviation Facility",
+            "required_class": "soldier",
             "levels": [
                 {"level": 1, "name": "Airstrip", "exp": 6, "size": 8, "description": "An airstrip with control tower and hangars."},
                 {"level": 2, "name": "Airstrip + Helipad", "exp": 7, "size": 10, "description": "Includes level 1 and also houses a fleet of choppers."},
@@ -418,6 +486,7 @@ def default_base_facility_types():
         {
             "key": "auditorium",
             "name": "High Tech Auditorium",
+            "required_class": "fixer",
             "levels": [
                 {"level": 1, "name": "Auditorium", "exp": 3, "size": 1, "description": "A high tech auditorium with the entire works."},
             ],
@@ -425,6 +494,7 @@ def default_base_facility_types():
         {
             "key": "barracks",
             "name": "Barracks",
+            "required_class": "soldier",
             "levels": [
                 {"level": 1, "name": "Standard", "exp": 2, "size": 3, "description": "Standard soldiers and military police."},
                 {"level": 2, "name": "Special Forces", "exp": 4, "size": 5, "description": "Includes level 1 and low-tier special forces."},
@@ -435,6 +505,7 @@ def default_base_facility_types():
         {
             "key": "armory",
             "name": "Armory",
+            "required_class": "soldier",
             "levels": [
                 {"level": 1, "name": "Small Arms", "exp": 2, "size": 1, "description": "Small arms and infantry weapons."},
                 {"level": 2, "name": "Vehicle Ordnance", "exp": 4, "size": 3, "description": "Includes level 1 and weapons ordnance for tanks and transport vehicles."},
@@ -447,6 +518,7 @@ def default_base_facility_types():
         {
             "key": "brig",
             "name": "Brig",
+            "required_class": "soldier",
             "levels": [
                 {"level": 1, "name": "Standard Detention", "exp": 1, "size": 3, "description": "Standard detention center."},
                 {"level": 2, "name": "Max Security", "exp": 2, "size": 4, "description": "Includes level 1 and max security detention."},
@@ -457,6 +529,7 @@ def default_base_facility_types():
         {
             "key": "medical",
             "name": "Medical",
+            "required_class": "science",
             "levels": [
                 {"level": 1, "name": "Field Hospital", "exp": 2, "size": 2, "description": "Field hospital with staff."},
                 {"level": 2, "name": "Medical Hospital", "exp": 8, "size": 5, "description": "Full medical hospital with staff."},
@@ -466,6 +539,7 @@ def default_base_facility_types():
         {
             "key": "computer_core",
             "name": "Computer Core",
+            "required_class": "engineer",
             "levels": [
                 {"level": 1, "name": "Small Data Center", "exp": 4, "size": 1, "description": "Small data center."},
                 {"level": 2, "name": "Huge Data Center", "exp": 8, "size": 12, "description": "Huge data center."},
@@ -475,6 +549,7 @@ def default_base_facility_types():
         {
             "key": "storage",
             "name": "Storage Area",
+            "required_class": "general",
             "levels": [
                 {"level": 1, "name": "Small Storage", "exp": 1, "size": 1, "description": "Small storage area."},
                 {"level": 2, "name": "Large Storage", "exp": 3, "size": 8, "description": "Large storage area."},
@@ -484,6 +559,7 @@ def default_base_facility_types():
         {
             "key": "workspace",
             "name": "Workspace",
+            "required_class": "engineer",
             "levels": [
                 {"level": 1, "name": "Normal", "exp": 0, "size": 1, "description": "Normal workspace."},
                 {"level": 2, "name": "Good (+1)", "exp": 1, "size": 1, "description": "Good workspace (+1 to rolls)."},
@@ -494,6 +570,7 @@ def default_base_facility_types():
         {
             "key": "hr_offboarding",
             "name": "HR Off-boarding Office Suite 55",
+            "required_class": "fixer",
             "levels": [
                 {"level": 1, "name": "Suite 55", "exp": 5, "size": 2, "description": "HR off-boarding office suite 55."},
             ],
@@ -501,6 +578,7 @@ def default_base_facility_types():
         {
             "key": "engineering_project",
             "name": "Engineering Build Project Site",
+            "required_class": "engineer",
             "levels": [
                 {"level": 1, "name": "Minor Project", "exp": 1, "size": 2, "description": "A small-scale engineering build project — prototyping, component fabrication, or minor construction."},
                 {"level": 2, "name": "Standard Project", "exp": 2, "size": 4, "description": "A moderate engineering project — vehicle assembly, facility expansion, or systems integration."},
@@ -512,12 +590,21 @@ def default_base_facility_types():
         {
             "key": "science_project",
             "name": "Science Research Project Site",
+            "required_class": "science",
             "levels": [
                 {"level": 1, "name": "Minor Research", "exp": 1, "size": 1, "description": "A small-scale research project — literature review, sample analysis, or proof-of-concept study."},
                 {"level": 2, "name": "Standard Research", "exp": 2, "size": 2, "description": "A moderate research project — experimental trials, field studies, or technology validation."},
                 {"level": 3, "name": "Major Research", "exp": 3, "size": 4, "description": "A large-scale research programme — multi-team studies, prototype testing, or theoretical breakthrough attempts."},
                 {"level": 4, "name": "Grand Research", "exp": 4, "size": 6, "description": "A massive research undertaking — FTL theory validation, exotic materials research, or cross-agency scientific collaboration."},
                 {"level": 5, "name": "Monumental Research", "exp": 5, "size": 10, "description": "A civilisation-defining scientific endeavour — fundamental physics breakthroughs, consciousness research, or reality-altering experimentation."},
+            ],
+        },
+        {
+            "key": "fringe_lab",
+            "name": "Fringe Science Lab",
+            "required_class": "science",
+            "levels": [
+                {"level": 1, "name": "Fringe Lab", "exp": 15, "size": 5, "description": "A laboratory operating on the bleeding edge of science — experimental physics, alternate biology, consciousness research. Required to enable fringe effects on projects assigned to this base. Requires the Fringe Science Labs pulling string to build."},
             ],
         },
     ]
@@ -532,6 +619,7 @@ def default_base_equipment_types():
             "exp": 4,
             "category": "Aviation Units",
             "requires": "Requires aviation facility and armory.",
+            "required_class": "soldier",
         },
         {
             "key": "helicopters",
@@ -539,6 +627,7 @@ def default_base_equipment_types():
             "exp": 2,
             "category": "Aviation Units",
             "requires": "Requires aviation facility and armory.",
+            "required_class": "soldier",
         },
         {
             "key": "long_range_planes",
@@ -546,6 +635,7 @@ def default_base_equipment_types():
             "exp": 8,
             "category": "Aviation Units",
             "requires": "Requires aviation facility and armory.",
+            "required_class": "soldier",
         },
         {
             "key": "orbital_vehicles",
@@ -553,6 +643,7 @@ def default_base_equipment_types():
             "exp": 14,
             "category": "Aviation Units",
             "requires": "Requires aviation facility and armory.",
+            "required_class": "soldier",
         },
         {
             "key": "internal_security",
@@ -560,6 +651,7 @@ def default_base_equipment_types():
             "exp": 1,
             "category": "Base Defenses",
             "requires": "",
+            "required_class": "general",
         },
         {
             "key": "segmented_security",
@@ -567,6 +659,7 @@ def default_base_equipment_types():
             "exp": 4,
             "category": "Base Defenses",
             "requires": "",
+            "required_class": "soldier",
         },
         {
             "key": "high_level_monitoring",
@@ -574,6 +667,7 @@ def default_base_equipment_types():
             "exp": 8,
             "category": "Base Defenses",
             "requires": "",
+            "required_class": "soldier",
         },
         {
             "key": "external_defense",
@@ -581,6 +675,7 @@ def default_base_equipment_types():
             "exp": 3,
             "category": "Base Defenses",
             "requires": "",
+            "required_class": "soldier",
         },
         {
             "key": "sam_ssm",
@@ -588,8 +683,39 @@ def default_base_equipment_types():
             "exp": 6,
             "category": "Base Defenses",
             "requires": "",
+            "required_class": "soldier",
         },
     ]
+
+
+# Available department types for bases.
+# linked_class determines which character class benefits from the department's thrive score.
+# "general" means all classes benefit.
+BASE_DEPARTMENTS = [
+    {"key": "military", "name": "Military", "linked_class": "soldier"},
+    {"key": "intelligence", "name": "Intelligence", "linked_class": "fixer"},
+    {"key": "engineering_ops", "name": "Engineering Ops", "linked_class": "engineer"},
+    {"key": "science_ops", "name": "Science Ops", "linked_class": "science"},
+    {"key": "diplomatic_corps", "name": "Diplomatic Corps", "linked_class": "fixer"},
+    {"key": "admin", "name": "Admin", "linked_class": "general"},
+    {"key": "criminal_org", "name": "Criminal Org", "linked_class": "fixer"},
+    {"key": "mercenaries", "name": "Mercenaries", "linked_class": "soldier"},
+]
+
+# Thrive score → dice modifier: (thrive - 5) // 2
+# 1-2: -2, 3-4: -1, 5-6: 0, 7-8: +1, 9-10: +2
+THRIVE_LABELS = {
+    1: "Collapsing",
+    2: "Critical",
+    3: "Struggling",
+    4: "Strained",
+    5: "Stable",
+    6: "Functional",
+    7: "Thriving",
+    8: "Flourishing",
+    9: "Exemplary",
+    10: "Pinnacle",
+}
 
 
 class BaseConfig(models.Model):
@@ -639,6 +765,7 @@ class Base(models.Model):
     facilities = models.JSONField(default=list)  # [{key, level}]
     workspaces = models.JSONField(default=list)  # [{level, assignedTo, assignedType}]
     equipment = models.JSONField(default=list)  # [equipment_key, ...]
+    departments = models.JSONField(default=list)  # [{key, thrive}]
     notes = models.TextField(blank=True, default="")
     is_hidden = models.BooleanField(
         default=False,
@@ -659,3 +786,50 @@ class Base(models.Model):
 
     def __str__(self):
         return f"{self.name} ({self.agency.name})"
+
+
+class BaseXpLog(models.Model):
+    """Log of XP changes related to bases (e.g. facility destruction from fringe effects)."""
+
+    agency = models.ForeignKey(
+        Agency, on_delete=models.CASCADE, related_name="base_xp_logs",
+    )
+    base = models.ForeignKey(
+        Base, on_delete=models.SET_NULL, null=True, blank=True, related_name="xp_logs",
+    )
+    amount = models.IntegerField(help_text="XP amount (negative = cost/loss).")
+    reason = models.CharField(max_length=300)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+
+    def __str__(self):
+        return f"{self.agency.name}: {self.amount} XP — {self.reason}"
+
+
+class AgencyStatLog(models.Model):
+    """Log of changes to agency attributes and integrity from project completions etc."""
+
+    STAT_TYPE_CHOICES = [
+        ("attribute", "Attribute"),
+        ("integrity", "Integrity"),
+    ]
+
+    agency = models.ForeignKey(
+        Agency, on_delete=models.CASCADE, related_name="stat_logs",
+    )
+    stat_type = models.CharField(max_length=20, choices=STAT_TYPE_CHOICES)
+    stat_path = models.CharField(
+        max_length=100,
+        help_text="e.g. 'power.Science' for attributes, 'integrity' for integrity.",
+    )
+    amount = models.IntegerField(help_text="Change amount (positive or negative).")
+    reason = models.CharField(max_length=500)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+
+    def __str__(self):
+        return f"{self.agency.name}: {self.stat_path} {self.amount:+d} — {self.reason}"

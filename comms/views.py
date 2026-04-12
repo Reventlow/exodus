@@ -125,12 +125,24 @@ def thread_list(request):
 
 
 @login_required
-@require_GET
+@require_http_methods(["GET", "PUT"])
 def thread_detail(request, thread_id):
-    """Get thread detail with messages."""
+    """Get thread detail with messages, or update title (superuser PUT)."""
     thread = get_object_or_404(Thread, pk=thread_id)
     if not _can_view_thread(request.user, thread):
         return JsonResponse({"error": "Forbidden"}, status=403)
+
+    if request.method == "PUT":
+        if not request.user.is_superuser:
+            return JsonResponse({"error": "Forbidden"}, status=403)
+        try:
+            body = json.loads(request.body)
+        except json.JSONDecodeError:
+            return JsonResponse({"error": "Invalid JSON"}, status=400)
+        if "title" in body:
+            thread.title = body["title"]
+            thread.save(update_fields=["title"])
+        return JsonResponse(serialize_thread_detail(thread, request.user))
 
     data = serialize_thread_detail(thread, request.user)
     return JsonResponse(data)
@@ -192,6 +204,10 @@ def send_message(request, thread_id):
         return JsonResponse({"error": "Forbidden"}, status=403)
     if thread.is_connection_closed:
         return JsonResponse({"error": "Connection closed"}, status=400)
+    if not request.user.is_superuser:
+        from exodus.models import SiteSettings
+        if SiteSettings.load().lock_comms:
+            return JsonResponse({"error": "Comms are locked between sessions."}, status=403)
 
     # Support both JSON and multipart (for image uploads)
     image = None

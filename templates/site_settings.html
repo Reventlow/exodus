@@ -3,12 +3,101 @@
 {% block title %}SITE SETTINGS // BLACKLOG.NET{% endblock %}
 
 {% block content %}
-<div style="max-width: 500px; margin: 2rem auto;">
-    <div class="glass-panel" style="padding: 2rem;">
-        <h2 class="mono-text text-accent" style="margin-bottom: 0.5rem; letter-spacing: 2px;">
-            SITE SETTINGS
-        </h2>
+<style>
+    .settings-layout {
+        display: flex; gap: 0; max-width: 900px; margin: 2rem auto;
+        min-height: calc(100vh - 160px);
+    }
+    .settings-sidebar {
+        width: 200px; flex-shrink: 0; padding: 1.5rem 0;
+        border-right: 1px solid var(--border-color);
+        position: sticky; top: 80px; align-self: flex-start;
+    }
+    .settings-content {
+        flex: 1; padding: 1.5rem 2rem; min-width: 0;
+    }
+    .sidebar-group {
+        margin-bottom: 1.5rem;
+    }
+    .sidebar-group-label {
+        font-family: var(--font-mono); font-size: 0.6rem;
+        color: var(--text-muted); letter-spacing: 2px;
+        text-transform: uppercase; padding: 0 1rem; margin-bottom: 0.5rem;
+    }
+    .sidebar-group-label.danger { color: var(--accent-danger); }
+    .sidebar-item {
+        display: block; padding: 0.4rem 1rem; cursor: pointer;
+        font-family: var(--font-mono); font-size: 0.8rem;
+        color: var(--text-muted); text-decoration: none;
+        border-left: 2px solid transparent; transition: all 0.15s;
+        background: none; border-top: none; border-bottom: none; border-right: none;
+        width: 100%; text-align: left;
+    }
+    .sidebar-item:hover { color: var(--text-primary); }
+    .sidebar-item.active {
+        color: var(--accent-primary);
+        border-left-color: var(--accent-primary);
+    }
+    .sidebar-item.danger { color: var(--accent-danger); }
+    .sidebar-item.danger.active { border-left-color: var(--accent-danger); }
 
+    .settings-section { display: none; }
+    .settings-section.active { display: block; }
+
+    .settings-section h3 {
+        font-family: var(--font-mono); font-size: 1rem;
+        color: var(--accent-primary); letter-spacing: 2px;
+        margin-bottom: 1.5rem; padding-bottom: 0.5rem;
+        border-bottom: 1px solid var(--border-color);
+    }
+    .settings-section h3.danger { color: var(--accent-danger); }
+
+    @media (max-width: 768px) {
+        .settings-layout { flex-direction: column; }
+        .settings-sidebar {
+            width: 100%; position: static; border-right: none;
+            border-bottom: 1px solid var(--border-color);
+            padding: 0.5rem 0; display: flex; flex-wrap: wrap; gap: 0;
+        }
+        .sidebar-group { margin-bottom: 0; display: flex; flex-wrap: wrap; }
+        .sidebar-group-label { display: none; }
+        .sidebar-item {
+            border-left: none; border-bottom: 2px solid transparent;
+            padding: 0.5rem 0.75rem; font-size: 0.7rem;
+        }
+        .sidebar-item.active { border-bottom-color: var(--accent-primary); border-left: none; }
+        .settings-content { padding: 1rem; }
+    }
+</style>
+
+<div class="settings-layout">
+    <!-- Sidebar -->
+    <div class="settings-sidebar">
+        <div class="sidebar-group">
+            <div class="sidebar-group-label">SESSION</div>
+            <button class="sidebar-item active" onclick="showSection('game-date', this)">Game Date</button>
+            <button class="sidebar-item" onclick="showSection('comms-lock', this)">Comms Lock</button>
+        </div>
+        <div class="sidebar-group">
+            <div class="sidebar-group-label">INTERFACE</div>
+            <button class="sidebar-item" onclick="showSection('map-vis', this)">Map Visibility</button>
+            <button class="sidebar-item" onclick="showSection('council', this)">Council</button>
+            <button class="sidebar-item" onclick="showSection('nav-labels', this)">Nav Labels</button>
+        </div>
+        <div class="sidebar-group">
+            <div class="sidebar-group-label">MAPS</div>
+            <button class="sidebar-item" onclick="showSection('city-maps', this)">City Maps</button>
+            <button class="sidebar-item" onclick="showSection('starmap-config', this)">Star Map</button>
+        </div>
+        <div class="sidebar-group">
+            <div class="sidebar-group-label danger">ADMIN</div>
+            <button class="sidebar-item" onclick="showSection('impersonate', this)">View As Player</button>
+            <button class="sidebar-item danger" onclick="showSection('transfer', this)">Transfer Player</button>
+        </div>
+    </div>
+
+    <!-- Content -->
+    <div class="settings-content">
         {% if messages %}
         <div style="margin-bottom: 1rem;">
             {% for message in messages %}
@@ -20,32 +109,738 @@
         {% endif %}
 
         <form method="post">
-            {% csrf_token %}
-            <div style="margin-bottom: 2rem;">
+        {% csrf_token %}
+
+        <!-- Game Date -->
+        <div id="sec-game-date" class="settings-section active">
+            <h3>GAME DATE</h3>
+            <div style="margin-bottom: 1.5rem;">
                 <label class="text-secondary mono-text" style="font-size: 0.8rem; display: block; margin-bottom: 0.25rem;">NEXT GAME DATE</label>
-                <input type="date" name="next_game_date"
-                    value="{{ settings_obj.next_game_date|date:'Y-m-d' }}"
+                <input type="date" name="next_game_date" value="{{ settings_obj.next_game_date|date:'Y-m-d' }}"
                     style="width: 100%; background: var(--bg-input); border: 1px solid var(--border-color); color: var(--text-primary); padding: 0.75rem; font-family: var(--font-mono); font-size: 1rem;">
                 <span class="text-muted mono-text" style="font-size: 0.7rem;">Leave blank to hide from navbar.</span>
             </div>
-            <div style="margin-bottom: 2rem;">
-                <label class="text-secondary mono-text" style="font-size: 0.8rem; display: block; margin-bottom: 0.25rem;">UIC CHARTER <span class="text-muted" style="font-size: 0.7rem;">(MARKDOWN)</span></label>
-                <textarea name="charter_text" rows="20"
-                    style="width: 100%; background: var(--bg-input); border: 1px solid var(--border-color); color: var(--text-primary); padding: 0.75rem; font-family: var(--font-mono); font-size: 0.85rem; resize: vertical; box-sizing: border-box;"
-                >{{ settings_obj.charter_text }}</textarea>
-                <span class="text-muted mono-text" style="font-size: 0.7rem;">Rendered as Markdown on the council charter page.</span>
-            </div>
-            <button type="submit"
-                style="width: 100%; background: var(--accent-primary); color: var(--bg-dark); border: none; padding: 0.75rem; font-family: var(--font-mono); font-size: 1rem; font-weight: bold; cursor: pointer; letter-spacing: 1px;">
-                SAVE SETTINGS
-            </button>
-        </form>
-    </div>
+            <button type="submit" class="mono-text" style="width: 100%; background: var(--accent-primary); color: var(--bg-dark); border: none; padding: 0.6rem; cursor: pointer; font-weight: bold; font-size: 0.9rem; letter-spacing: 1px;">SAVE</button>
+        </div>
 
-    <div style="text-align: center; margin-top: 1.5rem;">
-        <a href="/" class="text-accent mono-text" style="font-size: 0.85rem; text-decoration: none;">
-            &lt; RETURN TO DATABASE
-        </a>
+        <!-- Comms Lock -->
+        <div id="sec-comms-lock" class="settings-section">
+            <h3>COMMS & CYBER TERMINAL</h3>
+            <div style="margin-bottom: 1.5rem; padding: 1rem; border: 1px solid var(--border-color); border-radius: var(--radius-sm);">
+                <label style="display: flex; align-items: center; gap: 0.75rem; cursor: pointer;">
+                    <input type="checkbox" name="lock_comms" {% if not settings_obj.lock_comms %}checked{% endif %}
+                        style="width: 20px; height: 20px; accent-color: var(--accent-primary);">
+                    <span class="mono-text" style="font-size: 0.9rem; color: var(--text-primary);">COMMS & CYBER TERMINAL UNLOCKED</span>
+                </label>
+                <span class="text-muted mono-text" style="font-size: 0.7rem; display: block; margin-top: 0.5rem; padding-left: 2.75rem;">
+                    {% if settings_obj.lock_comms %}
+                        STATUS: <span style="color: var(--accent-danger);">LOCKED</span> — Players cannot send messages or use the cyber terminal.
+                    {% else %}
+                        STATUS: <span style="color: var(--accent-primary);">UNLOCKED</span> — Players can communicate and use the cyber terminal.
+                    {% endif %}
+                </span>
+            </div>
+            <button type="submit" class="mono-text" style="width: 100%; background: var(--accent-primary); color: var(--bg-dark); border: none; padding: 0.6rem; cursor: pointer; font-weight: bold; font-size: 0.9rem; letter-spacing: 1px;">SAVE</button>
+        </div>
+
+        <!-- Map Visibility -->
+        <div id="sec-map-vis" class="settings-section">
+            <h3>MAP VISIBILITY</h3>
+            <div style="margin-bottom: 1.5rem; padding: 1rem; border: 1px solid var(--border-color); border-radius: var(--radius-sm);">
+                <label style="display: flex; align-items: center; gap: 0.75rem; cursor: pointer; margin-bottom: 0.5rem;">
+                    <input type="checkbox" name="show_world_map" {% if settings_obj.show_world_map %}checked{% endif %}
+                        style="width: 20px; height: 20px; accent-color: var(--accent-primary);">
+                    <span class="mono-text" style="font-size: 0.9rem; color: var(--text-primary);">WORLD MAP</span>
+                </label>
+                <label style="display: flex; align-items: center; gap: 0.75rem; cursor: pointer;">
+                    <input type="checkbox" name="show_star_map" {% if settings_obj.show_star_map %}checked{% endif %}
+                        style="width: 20px; height: 20px; accent-color: var(--accent-primary);">
+                    <span class="mono-text" style="font-size: 0.9rem; color: var(--text-primary);">STAR MAP</span>
+                </label>
+                <span class="text-muted mono-text" style="font-size: 0.7rem; display: block; margin-top: 0.5rem; padding-left: 2.75rem;">
+                    Controls which maps are visible to players in the nav bar. Staff always sees both.
+                </span>
+            </div>
+            <button type="submit" class="mono-text" style="width: 100%; background: var(--accent-primary); color: var(--bg-dark); border: none; padding: 0.6rem; cursor: pointer; font-weight: bold; font-size: 0.9rem; letter-spacing: 1px;">SAVE</button>
+        </div>
+
+        <!-- Council -->
+        <div id="sec-council" class="settings-section">
+            <h3>COUNCIL</h3>
+            <div style="margin-bottom: 1.5rem; padding: 1rem; border: 1px solid var(--border-color); border-radius: var(--radius-sm);">
+                <label style="display: flex; align-items: center; gap: 0.75rem; cursor: pointer; margin-bottom: 0.5rem;">
+                    <input type="checkbox" name="show_council" {% if settings_obj.show_council %}checked{% endif %}
+                        style="width: 20px; height: 20px; accent-color: var(--accent-primary);">
+                    <span class="mono-text" style="font-size: 0.9rem; color: var(--text-primary);">COUNCIL ENABLED</span>
+                </label>
+                <div style="margin-top: 0.5rem;">
+                    <label class="text-secondary mono-text" style="font-size: 0.8rem; display: block; margin-bottom: 0.25rem;">COUNCIL MODE</label>
+                    <select name="council_mode" style="width: 100%; background: var(--bg-input); border: 1px solid var(--border-color); color: var(--text-primary); padding: 0.5rem; font-family: var(--font-mono);">
+                        <option value="agency" {% if settings_obj.council_mode == "agency" %}selected{% endif %}>Agency / Group Based</option>
+                        <option value="player" {% if settings_obj.council_mode == "player" %}selected{% endif %}>Player / NPC Based</option>
+                    </select>
+                </div>
+            </div>
+            <button type="submit" class="mono-text" style="width: 100%; background: var(--accent-primary); color: var(--bg-dark); border: none; padding: 0.6rem; cursor: pointer; font-weight: bold; font-size: 0.9rem; letter-spacing: 1px;">SAVE</button>
+        </div>
+
+        <!-- Nav Labels -->
+        <div id="sec-nav-labels" class="settings-section">
+            <h3>NAV BAR LABELS</h3>
+            <span class="text-muted mono-text" style="font-size: 0.7rem; display: block; margin-bottom: 1rem;">
+                Customise the names shown in the navigation bar.
+            </span>
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.75rem; margin-bottom: 1.5rem;">
+                <div>
+                    <label class="text-muted mono-text" style="font-size: 0.65rem;">DISPATCH</label>
+                    <input type="text" name="label_dispatch" value="{{ settings_obj.label_dispatch }}" style="width: 100%; background: var(--bg-input); border: 1px solid var(--border-color); color: var(--text-primary); padding: 0.4rem; font-family: var(--font-mono); font-size: 0.8rem;">
+                </div>
+                <div>
+                    <label class="text-muted mono-text" style="font-size: 0.65rem;">PLAYERS</label>
+                    <input type="text" name="label_players" value="{{ settings_obj.label_players }}" style="width: 100%; background: var(--bg-input); border: 1px solid var(--border-color); color: var(--text-primary); padding: 0.4rem; font-family: var(--font-mono); font-size: 0.8rem;">
+                </div>
+                <div>
+                    <label class="text-muted mono-text" style="font-size: 0.65rem;">AGENCIES</label>
+                    <input type="text" name="label_agencies" value="{{ settings_obj.label_agencies }}" style="width: 100%; background: var(--bg-input); border: 1px solid var(--border-color); color: var(--text-primary); padding: 0.4rem; font-family: var(--font-mono); font-size: 0.8rem;">
+                </div>
+                <div>
+                    <label class="text-muted mono-text" style="font-size: 0.65rem;">COUNCIL</label>
+                    <input type="text" name="label_council" value="{{ settings_obj.label_council }}" style="width: 100%; background: var(--bg-input); border: 1px solid var(--border-color); color: var(--text-primary); padding: 0.4rem; font-family: var(--font-mono); font-size: 0.8rem;">
+                </div>
+                <div>
+                    <label class="text-muted mono-text" style="font-size: 0.65rem;">NPC'S</label>
+                    <input type="text" name="label_npcs" value="{{ settings_obj.label_npcs }}" style="width: 100%; background: var(--bg-input); border: 1px solid var(--border-color); color: var(--text-primary); padding: 0.4rem; font-family: var(--font-mono); font-size: 0.8rem;">
+                </div>
+                <div>
+                    <label class="text-muted mono-text" style="font-size: 0.65rem;">COMMS</label>
+                    <input type="text" name="label_comms" value="{{ settings_obj.label_comms }}" style="width: 100%; background: var(--bg-input); border: 1px solid var(--border-color); color: var(--text-primary); padding: 0.4rem; font-family: var(--font-mono); font-size: 0.8rem;">
+                </div>
+            </div>
+            <button type="submit" class="mono-text" style="width: 100%; background: var(--accent-primary); color: var(--bg-dark); border: none; padding: 0.6rem; cursor: pointer; font-weight: bold; font-size: 0.9rem; letter-spacing: 1px;">SAVE</button>
+        </div>
+
+        </form>
+
+        <!-- City Maps -->
+        <div id="sec-city-maps" class="settings-section">
+            <h3>CITY MAPS</h3>
+            <div style="display: flex; gap: 0.5rem; margin-bottom: 1rem;">
+                <input type="text" id="city-search-input" placeholder="Search city..."
+                    style="flex: 1; background: var(--bg-input); border: 1px solid var(--border-color); color: var(--text-primary); padding: 0.5rem; font-family: var(--font-mono); font-size: 0.85rem;">
+                <button onclick="addCityMap()" class="mono-text"
+                    style="background: var(--accent-primary); border: none; color: var(--bg-dark); padding: 0.5rem 1rem; cursor: pointer; font-family: var(--font-mono); font-size: 0.85rem; font-weight: bold; letter-spacing: 1px;">ADD</button>
+            </div>
+            <div id="city-search-result" style="margin-bottom: 1rem; display: none;"></div>
+            <div id="city-list"></div>
+        </div>
+
+        <!-- Star Map Config -->
+        <div id="sec-starmap-config" class="settings-section">
+            <h3>STAR MAP CONFIGURATION</h3>
+
+            <!-- Resource Types -->
+            <div style="margin-bottom: 2rem;">
+                <div class="mono-text text-muted" style="font-size: 0.7rem; margin-bottom: 0.75rem; letter-spacing: 1px;">RESOURCE TYPES</div>
+                <div id="resource-type-list"></div>
+                <div style="display: flex; gap: 0.5rem; margin-top: 0.75rem;">
+                    <input type="text" id="rt-key" placeholder="key" style="width: 80px; background: var(--bg-input); border: 1px solid var(--border-color); color: var(--text-primary); padding: 0.4rem; font-family: var(--font-mono); font-size: 0.75rem;">
+                    <input type="text" id="rt-name" placeholder="Display Name" style="flex: 1; background: var(--bg-input); border: 1px solid var(--border-color); color: var(--text-primary); padding: 0.4rem; font-family: var(--font-mono); font-size: 0.75rem;">
+                    <input type="color" id="rt-color" value="#00ff88" style="width: 36px; height: 32px; border: 1px solid var(--border-color); background: var(--bg-input); cursor: pointer;">
+                    <input type="text" id="rt-icon" placeholder="icon" style="width: 40px; background: var(--bg-input); border: 1px solid var(--border-color); color: var(--text-primary); padding: 0.4rem; font-family: var(--font-mono); font-size: 0.75rem;">
+                    <button onclick="addResourceType()" class="mono-text" style="background: var(--accent-primary); border: none; color: var(--bg-dark); padding: 0.4rem 0.75rem; cursor: pointer; font-size: 0.75rem; font-weight: bold;">ADD</button>
+                </div>
+            </div>
+
+            <!-- Civilisations -->
+            <div>
+                <div class="mono-text text-muted" style="font-size: 0.7rem; margin-bottom: 0.75rem; letter-spacing: 1px;">CIVILISATIONS</div>
+                <div id="civ-list"></div>
+                <div style="margin-top: 0.75rem; padding: 0.75rem; border: 1px solid var(--border-color); border-radius: var(--radius-sm);">
+                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.5rem; margin-bottom: 0.5rem;">
+                        <div>
+                            <label class="text-muted mono-text" style="font-size: 0.6rem;">NAME</label>
+                            <input type="text" id="civ-name" style="width: 100%; background: var(--bg-input); border: 1px solid var(--border-color); color: var(--text-primary); padding: 0.4rem; font-family: var(--font-mono); font-size: 0.75rem;">
+                        </div>
+                        <div>
+                            <label class="text-muted mono-text" style="font-size: 0.6rem;">TECH LEVEL</label>
+                            <select id="civ-tech" style="width: 100%; background: var(--bg-input); border: 1px solid var(--border-color); color: var(--text-primary); padding: 0.4rem; font-family: var(--font-mono); font-size: 0.75rem;">
+                                <option value="type_0">Type 0 — Sub-planetary</option>
+                                <option value="type_i">Type I — Planetary</option>
+                                <option value="type_ii">Type II — Stellar</option>
+                                <option value="type_iii">Type III — Galactic</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label class="text-muted mono-text" style="font-size: 0.6rem;">DISPOSITION</label>
+                            <select id="civ-disp" style="width: 100%; background: var(--bg-input); border: 1px solid var(--border-color); color: var(--text-primary); padding: 0.4rem; font-family: var(--font-mono); font-size: 0.75rem;">
+                                <option value="unknown">Unknown</option>
+                                <option value="friendly">Friendly</option>
+                                <option value="neutral">Neutral</option>
+                                <option value="cautious">Cautious</option>
+                                <option value="hostile">Hostile</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label class="text-muted mono-text" style="font-size: 0.6rem;">HIDDEN</label>
+                            <label style="display: flex; align-items: center; gap: 0.5rem; margin-top: 0.25rem; cursor: pointer;">
+                                <input type="checkbox" id="civ-hidden" checked style="accent-color: var(--accent-primary);">
+                                <span class="mono-text text-muted" style="font-size: 0.7rem;">GM ONLY</span>
+                            </label>
+                        </div>
+                    </div>
+                    <div style="margin-bottom: 0.5rem;">
+                        <label class="text-muted mono-text" style="font-size: 0.6rem;">DESCRIPTION</label>
+                        <textarea id="civ-desc" rows="2" style="width: 100%; background: var(--bg-input); border: 1px solid var(--border-color); color: var(--text-primary); padding: 0.4rem; font-family: var(--font-mono); font-size: 0.75rem; resize: vertical;"></textarea>
+                    </div>
+                    <button onclick="addCivilisation()" class="mono-text" style="background: var(--accent-primary); border: none; color: var(--bg-dark); padding: 0.4rem 1rem; cursor: pointer; font-size: 0.8rem; font-weight: bold; letter-spacing: 1px;">ADD CIVILISATION</button>
+                </div>
+            </div>
+
+            <!-- Planets of Interest -->
+            <div style="margin-top: 2rem;">
+                <div class="mono-text text-muted" style="font-size: 0.7rem; margin-bottom: 0.75rem; letter-spacing: 1px;">PLANETS OF INTEREST</div>
+
+                <div style="margin-bottom: 0.75rem;">
+                    <label class="text-muted mono-text" style="font-size: 0.65rem;">SELECT STAR SYSTEM</label>
+                    <select id="planet-star-select" onchange="loadPlanets()" style="width: 100%; background: var(--bg-input); border: 1px solid var(--border-color); color: var(--text-primary); padding: 0.5rem; font-family: var(--font-mono); font-size: 0.8rem;">
+                        <option value="">-- Select star system --</option>
+                    </select>
+                </div>
+
+                <div id="star-resources" style="display: none; margin-bottom: 0.75rem; padding: 0.5rem; border: 1px solid var(--border-color); border-radius: var(--radius-sm);"></div>
+                <div id="planet-list"></div>
+
+                <div id="planet-add-form" style="display: none; margin-top: 0.75rem; padding: 0.75rem; border: 1px solid var(--border-color); border-radius: var(--radius-sm);">
+                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.5rem; margin-bottom: 0.5rem;">
+                        <div>
+                            <label class="text-muted mono-text" style="font-size: 0.6rem;">NAME</label>
+                            <input type="text" id="pl-name" placeholder="e.g. Proxima b" style="width: 100%; background: var(--bg-input); border: 1px solid var(--border-color); color: var(--text-primary); padding: 0.4rem; font-family: var(--font-mono); font-size: 0.75rem;">
+                        </div>
+                        <div>
+                            <label class="text-muted mono-text" style="font-size: 0.6rem;">ORBITAL POSITION</label>
+                            <input type="number" id="pl-orbit" value="1" min="1" style="width: 100%; background: var(--bg-input); border: 1px solid var(--border-color); color: var(--text-primary); padding: 0.4rem; font-family: var(--font-mono); font-size: 0.75rem;">
+                        </div>
+                        <div>
+                            <label class="text-muted mono-text" style="font-size: 0.6rem;">TYPE</label>
+                            <select id="pl-type" style="width: 100%; background: var(--bg-input); border: 1px solid var(--border-color); color: var(--text-primary); padding: 0.4rem; font-family: var(--font-mono); font-size: 0.75rem;">
+                                <option value="terrestrial">Terrestrial</option>
+                                <option value="gas_giant">Gas Giant</option>
+                                <option value="ice_giant">Ice Giant</option>
+                                <option value="ocean_world">Ocean World</option>
+                                <option value="dwarf">Dwarf Planet</option>
+                                <option value="lava_world">Lava World</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label class="text-muted mono-text" style="font-size: 0.6rem;">ATMOSPHERE</label>
+                            <select id="pl-atmo" style="width: 100%; background: var(--bg-input); border: 1px solid var(--border-color); color: var(--text-primary); padding: 0.4rem; font-family: var(--font-mono); font-size: 0.75rem;">
+                                <option value="unknown">Unknown</option>
+                                <option value="none">None</option>
+                                <option value="oxygen">Oxygen-based</option>
+                                <option value="methane">Methane-based</option>
+                                <option value="argon">Argon-based</option>
+                                <option value="nitrogen">Nitrogen-based</option>
+                                <option value="co2">Carbon Dioxide</option>
+                                <option value="hydrogen">Hydrogen-Helium</option>
+                                <option value="ammonia">Ammonia</option>
+                                <option value="toxic">Toxic Mix</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label class="text-muted mono-text" style="font-size: 0.6rem;">ATMOSPHERE DETAILS</label>
+                            <input type="text" id="pl-atmo-detail" placeholder="e.g. 78% N2, 21% O2" style="width: 100%; background: var(--bg-input); border: 1px solid var(--border-color); color: var(--text-primary); padding: 0.4rem; font-family: var(--font-mono); font-size: 0.75rem;">
+                        </div>
+                        <div>
+                            <label class="text-muted mono-text" style="font-size: 0.6rem;">LIFE TYPE</label>
+                            <select id="pl-life" style="width: 100%; background: var(--bg-input); border: 1px solid var(--border-color); color: var(--text-primary); padding: 0.4rem; font-family: var(--font-mono); font-size: 0.75rem;">
+                                <option value="none">No Life Detected</option>
+                                <option value="prebiotic">Prebiotic Chemistry</option>
+                                <option value="bacterial">Bacterial / Microbial</option>
+                                <option value="cellular">Cellular Organisms</option>
+                                <option value="plant">Plant Life</option>
+                                <option value="animal">Animal Life</option>
+                                <option value="intelligent">Intelligent Life</option>
+                                <option value="unknown">Unknown</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label class="text-muted mono-text" style="font-size: 0.6rem;">TEMPERATURE RANGE</label>
+                            <input type="text" id="pl-temp" placeholder="e.g. -20°C to 45°C" style="width: 100%; background: var(--bg-input); border: 1px solid var(--border-color); color: var(--text-primary); padding: 0.4rem; font-family: var(--font-mono); font-size: 0.75rem;">
+                        </div>
+                        <div>
+                            <label class="text-muted mono-text" style="font-size: 0.6rem;">GRAVITY</label>
+                            <input type="text" id="pl-grav" placeholder="e.g. 0.9g" style="width: 100%; background: var(--bg-input); border: 1px solid var(--border-color); color: var(--text-primary); padding: 0.4rem; font-family: var(--font-mono); font-size: 0.75rem;">
+                        </div>
+                        <div>
+                            <label class="text-muted mono-text" style="font-size: 0.6rem;">SCAN LEVEL REQUIRED</label>
+                            <select id="pl-scan" style="width: 100%; background: var(--bg-input); border: 1px solid var(--border-color); color: var(--text-primary); padding: 0.4rem; font-family: var(--font-mono); font-size: 0.75rem;">
+                                <option value="1">1 — Survey</option>
+                                <option value="2" selected>2 — Focused</option>
+                                <option value="3">3 — Deep</option>
+                            </select>
+                        </div>
+                        <div style="display: flex; gap: 1rem; align-items: end;">
+                            <label style="display: flex; align-items: center; gap: 0.3rem; cursor: pointer;">
+                                <input type="checkbox" id="pl-water" style="accent-color: #06b6d4;">
+                                <span class="mono-text text-muted" style="font-size: 0.65rem;">WATER</span>
+                            </label>
+                            <label style="display: flex; align-items: center; gap: 0.3rem; cursor: pointer;">
+                                <input type="checkbox" id="pl-hab" style="accent-color: #22c55e;">
+                                <span class="mono-text text-muted" style="font-size: 0.65rem;">HABITABLE</span>
+                            </label>
+                            <label style="display: flex; align-items: center; gap: 0.3rem; cursor: pointer;">
+                                <input type="checkbox" id="pl-hidden" checked style="accent-color: var(--accent-primary);">
+                                <span class="mono-text text-muted" style="font-size: 0.65rem;">HIDDEN</span>
+                            </label>
+                        </div>
+                    </div>
+                    <div style="margin-bottom: 0.5rem;">
+                        <label class="text-muted mono-text" style="font-size: 0.6rem;">NOTES</label>
+                        <textarea id="pl-notes" rows="2" style="width: 100%; background: var(--bg-input); border: 1px solid var(--border-color); color: var(--text-primary); padding: 0.4rem; font-family: var(--font-mono); font-size: 0.75rem; resize: vertical;"></textarea>
+                    </div>
+                    <button onclick="addPlanet()" class="mono-text" style="background: var(--accent-primary); border: none; color: var(--bg-dark); padding: 0.4rem 1rem; cursor: pointer; font-size: 0.8rem; font-weight: bold; letter-spacing: 1px;">ADD PLANET</button>
+                </div>
+            </div>
+
+            <!-- Seed Star Systems -->
+            <div style="margin-top: 2rem; padding: 1rem; border: 1px solid var(--accent-danger); border-radius: var(--radius-sm); background: rgba(239, 68, 68, 0.03);">
+                <div class="mono-text" style="font-size: 0.75rem; color: var(--accent-danger); letter-spacing: 1px; margin-bottom: 0.75rem;">SEED STAR SYSTEMS</div>
+                <span class="text-muted mono-text" style="font-size: 0.65rem; display: block; margin-bottom: 1rem;">
+                    Generates resources, planets, and civilisations for all star systems. This will OVERWRITE all existing data.
+                </span>
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.5rem; margin-bottom: 1rem;">
+                    <div>
+                        <label class="text-muted mono-text" style="font-size: 0.6rem;">RESOURCE RICHNESS</label>
+                        <select id="seed-res" style="width: 100%; background: var(--bg-input); border: 1px solid var(--border-color); color: var(--text-primary); padding: 0.4rem; font-family: var(--font-mono); font-size: 0.75rem;">
+                            <option value="1">Very Common</option>
+                            <option value="2" selected>Common</option>
+                            <option value="3">Uncommon</option>
+                            <option value="4">Rare</option>
+                            <option value="5">Really Rare</option>
+                            <option value="6">Extremely Rare</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="text-muted mono-text" style="font-size: 0.6rem;">PLANET FREQUENCY</label>
+                        <select id="seed-planet" style="width: 100%; background: var(--bg-input); border: 1px solid var(--border-color); color: var(--text-primary); padding: 0.4rem; font-family: var(--font-mono); font-size: 0.75rem;">
+                            <option value="1">Very Common</option>
+                            <option value="2">Common</option>
+                            <option value="3" selected>Uncommon</option>
+                            <option value="4">Rare</option>
+                            <option value="5">Really Rare</option>
+                            <option value="6">Extremely Rare</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="text-muted mono-text" style="font-size: 0.6rem;">LIFE FREQUENCY</label>
+                        <select id="seed-life" style="width: 100%; background: var(--bg-input); border: 1px solid var(--border-color); color: var(--text-primary); padding: 0.4rem; font-family: var(--font-mono); font-size: 0.75rem;">
+                            <option value="0">None</option>
+                            <option value="1">Very Common</option>
+                            <option value="2">Common</option>
+                            <option value="3">Uncommon</option>
+                            <option value="4" selected>Rare</option>
+                            <option value="5">Really Rare</option>
+                            <option value="6">Extremely Rare</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="text-muted mono-text" style="font-size: 0.6rem;">CIVILISATION FREQUENCY</label>
+                        <select id="seed-civ" style="width: 100%; background: var(--bg-input); border: 1px solid var(--border-color); color: var(--text-primary); padding: 0.4rem; font-family: var(--font-mono); font-size: 0.75rem;">
+                            <option value="0">None</option>
+                            <option value="1">Very Common</option>
+                            <option value="2">Common</option>
+                            <option value="3">Uncommon</option>
+                            <option value="4">Rare</option>
+                            <option value="5" selected>Really Rare</option>
+                            <option value="6">Extremely Rare</option>
+                        </select>
+                    </div>
+                </div>
+                <div id="seed-result" style="margin-bottom: 0.75rem; display: none;"></div>
+                <button onclick="seedSystems()" class="mono-text"
+                    style="width: 100%; background: var(--accent-danger); color: var(--bg-dark); border: none; padding: 0.6rem; cursor: pointer; font-weight: bold; font-size: 0.85rem; letter-spacing: 1px;">
+                    SEED ALL SYSTEMS
+                </button>
+            </div>
+        </div>
+
+        <!-- Impersonate -->
+        <div id="sec-impersonate" class="settings-section">
+            <h3>VIEW AS PLAYER</h3>
+            <span class="text-muted mono-text" style="font-size: 0.7rem; display: block; margin-bottom: 1rem;">
+                Switch to a player's view to see exactly what they see. Use RETURN TO GM to switch back.
+            </span>
+            <form method="post" action="{% url 'impersonate-user' %}">
+                {% csrf_token %}
+                <div style="display: flex; gap: 0.5rem; flex-wrap: wrap;">
+                    {% for u in users %}
+                        {% if not u.is_superuser %}
+                        <button type="submit" name="user_id" value="{{ u.id }}" class="mono-text"
+                            style="background: transparent; border: 1px solid var(--border-color); color: var(--text-secondary); padding: 0.5rem 1rem; cursor: pointer; font-family: var(--font-mono); font-size: 0.85rem; letter-spacing: 1px; transition: all 0.2s;"
+                            onmouseover="this.style.borderColor='var(--accent-primary)';this.style.color='var(--accent-primary)'"
+                            onmouseout="this.style.borderColor='var(--border-color)';this.style.color='var(--text-secondary)'">
+                            {{ u.username|upper }}
+                        </button>
+                        {% endif %}
+                    {% endfor %}
+                </div>
+            </form>
+        </div>
+
+        <!-- Transfer Player -->
+        <div id="sec-transfer" class="settings-section">
+            <h3 class="danger">TRANSFER PLAYER TO AGENCY</h3>
+            <div style="padding: 1rem; border: 1px solid var(--accent-danger); border-radius: var(--radius-sm); margin-bottom: 1.5rem; background: rgba(239, 68, 68, 0.05);">
+                <span class="mono-text" style="font-size: 0.75rem; color: var(--accent-danger); display: block; margin-bottom: 0.5rem;">
+                    WARNING: This converts the player character to an NPC dossier, moves all assigned NPCs, and optionally transfers XP and merits. This action is PERMANENT and cannot be undone.
+                </span>
+            </div>
+
+            <div style="margin-bottom: 1rem;">
+                <label class="text-secondary mono-text" style="font-size: 0.8rem; display: block; margin-bottom: 0.25rem;">SOURCE PLAYER</label>
+                <select id="transfer-source-user" style="width: 100%; background: var(--bg-input); border: 1px solid var(--border-color); color: var(--text-primary); padding: 0.5rem; font-family: var(--font-mono);">
+                    <option value="">-- Select player --</option>
+                    {% for u in users %}{% if not u.is_superuser %}<option value="{{ u.id }}">{{ u.username }}</option>{% endif %}{% endfor %}
+                </select>
+            </div>
+            <div style="margin-bottom: 1rem;">
+                <label class="text-secondary mono-text" style="font-size: 0.8rem; display: block; margin-bottom: 0.25rem;">TARGET AGENCY</label>
+                <select id="transfer-target-agency" style="width: 100%; background: var(--bg-input); border: 1px solid var(--border-color); color: var(--text-primary); padding: 0.5rem; font-family: var(--font-mono);">
+                    <option value="">-- Select agency --</option>
+                    {% for a in npc_agencies %}<option value="{{ a.id }}">{{ a.name }}</option>{% endfor %}
+                </select>
+            </div>
+            <div style="margin-bottom: 1rem;">
+                <label style="display: flex; align-items: center; gap: 0.5rem; cursor: pointer;">
+                    <input type="checkbox" id="transfer-xp-check" style="width: 16px; height: 16px; accent-color: var(--accent-danger);">
+                    <span class="mono-text text-secondary" style="font-size: 0.8rem;">TRANSFER XP & MERITS FROM:</span>
+                </label>
+                <select id="transfer-source-agency" style="width: 100%; margin-top: 0.25rem; background: var(--bg-input); border: 1px solid var(--border-color); color: var(--text-primary); padding: 0.5rem; font-family: var(--font-mono);">
+                    {% for a in player_agencies %}<option value="{{ a.id }}">{{ a.name }}</option>{% endfor %}
+                </select>
+            </div>
+            <div id="transfer-result" style="margin-bottom: 1rem; display: none;"></div>
+            <button onclick="executeTransfer()" class="mono-text"
+                style="width: 100%; background: var(--accent-danger); color: var(--bg-dark); border: none; padding: 0.75rem; font-family: var(--font-mono); font-size: 1rem; font-weight: bold; cursor: pointer; letter-spacing: 1px;">TRANSFER</button>
+        </div>
+
+        <div style="text-align: center; margin-top: 2rem;">
+            <a href="/" class="text-accent mono-text" style="font-size: 0.85rem; text-decoration: none;">&lt; RETURN TO DATABASE</a>
+        </div>
     </div>
 </div>
+
+<script>
+// Tab switching with URL hash
+function showSection(id, btn) {
+    document.querySelectorAll('.settings-section').forEach(function(s) { s.classList.remove('active'); });
+    document.querySelectorAll('.sidebar-item').forEach(function(b) { b.classList.remove('active'); });
+    var el = document.getElementById('sec-' + id);
+    if (el) el.classList.add('active');
+    if (btn) btn.classList.add('active');
+    history.replaceState(null, '', '#' + id);
+}
+
+// Restore from URL hash on load
+(function() {
+    var hash = location.hash.replace('#', '');
+    if (hash) {
+        var btn = null;
+        document.querySelectorAll('.sidebar-item').forEach(function(b) {
+            if (b.getAttribute('onclick') && b.getAttribute('onclick').indexOf("'" + hash + "'") !== -1) btn = b;
+        });
+        if (btn) showSection(hash, btn);
+    }
+})();
+
+// CSRF helper
+function getCsrf() {
+    var v = null;
+    if (document.cookie) { document.cookie.split(';').forEach(function(c) { var t = c.trim(); if (t.startsWith('csrftoken=')) v = t.substring(10); }); }
+    return v;
+}
+
+// City maps
+function addCityMap() {
+    var query = document.getElementById('city-search-input').value.trim();
+    if (!query) return;
+    var resultDiv = document.getElementById('city-search-result');
+    resultDiv.style.display = 'block';
+    resultDiv.innerHTML = '<span class="mono-text text-muted" style="font-size: 0.8rem;">Searching...</span>';
+    fetch('/api/citymaps/', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-CSRFToken': getCsrf() }, body: JSON.stringify({ query: query }) })
+    .then(function(r) { return r.json(); }).then(function(d) {
+        if (d.error) { resultDiv.innerHTML = '<span class="mono-text" style="color: var(--accent-danger); font-size: 0.8rem;">' + d.error + '</span>'; }
+        else { resultDiv.innerHTML = '<span class="mono-text" style="color: var(--accent-primary); font-size: 0.8rem;">Added: ' + d.name + '</span>'; document.getElementById('city-search-input').value = ''; loadCityList(); }
+    });
+}
+var cityInput = document.getElementById('city-search-input');
+if (cityInput) cityInput.addEventListener('keypress', function(e) { if (e.key === 'Enter') { e.preventDefault(); addCityMap(); } });
+
+function loadCityList() {
+    fetch('/api/citymaps/').then(function(r) { return r.json(); }).then(function(cities) {
+        var html = '';
+        cities.forEach(function(c) {
+            html += '<div style="display: flex; align-items: center; gap: 0.75rem; padding: 0.5rem 0; border-bottom: 1px solid var(--border-color);">';
+            html += '<a href="/citymap/' + c.id + '/" class="mono-text text-accent" style="font-size: 0.85rem; text-decoration: none; flex: 1;">' + c.name + '</a>';
+            html += '<label style="display:flex;align-items:center;gap:0.3rem;cursor:pointer;"><input type="checkbox" ' + (c.enabled ? 'checked' : '') + ' onchange="toggleCity(' + c.id + ',\'enabled\',this.checked)" style="accent-color:var(--accent-primary);"><span class="mono-text text-muted" style="font-size:0.7rem;">ON</span></label>';
+            html += '<label style="display:flex;align-items:center;gap:0.3rem;cursor:pointer;"><input type="checkbox" ' + (c.visibleToPlayers ? 'checked' : '') + ' onchange="toggleCity(' + c.id + ',\'visibleToPlayers\',this.checked)" style="accent-color:var(--accent-primary);"><span class="mono-text text-muted" style="font-size:0.7rem;">PLAYERS</span></label>';
+            html += '<button onclick="deleteCity(' + c.id + ')" class="mono-text" style="background:transparent;border:1px solid var(--accent-danger);color:var(--accent-danger);padding:0.2rem 0.5rem;cursor:pointer;font-size:0.65rem;font-family:var(--font-mono);">X</button>';
+            html += '</div>';
+        });
+        if (!cities.length) html = '<span class="mono-text text-muted" style="font-size: 0.8rem;">No city maps yet.</span>';
+        document.getElementById('city-list').innerHTML = html;
+    });
+}
+function toggleCity(id, field, value) { var b = {}; b[field] = value; fetch('/api/citymaps/' + id + '/', { method: 'PUT', headers: { 'Content-Type': 'application/json', 'X-CSRFToken': getCsrf() }, body: JSON.stringify(b) }); }
+function deleteCity(id) { if (!confirm('Delete this city map?')) return; fetch('/api/citymaps/' + id + '/', { method: 'DELETE', headers: { 'X-CSRFToken': getCsrf() } }).then(function() { loadCityList(); }); }
+loadCityList();
+
+// Resource types
+function loadResourceTypes() {
+    fetch('/api/starmap/resource-types/').then(function(r) { return r.json(); }).then(function(types) {
+        var html = '';
+        types.forEach(function(t) {
+            html += '<div style="display: flex; align-items: center; gap: 0.5rem; padding: 0.4rem 0; border-bottom: 1px solid var(--border-color);">';
+            html += '<span style="display: inline-block; width: 12px; height: 12px; border-radius: 50%; background: ' + t.color + ';"></span>';
+            html += '<span class="mono-text" style="font-size: 0.8rem; color: var(--text-primary); flex: 1;">' + (t.icon ? t.icon + ' ' : '') + t.name + '</span>';
+            html += '<span class="mono-text text-muted" style="font-size: 0.65rem;">' + t.key + '</span>';
+            html += '<button onclick="deleteResourceType(' + t.id + ')" class="mono-text" style="background: transparent; border: 1px solid var(--accent-danger); color: var(--accent-danger); padding: 0.15rem 0.4rem; cursor: pointer; font-size: 0.6rem;">X</button>';
+            html += '</div>';
+        });
+        if (!types.length) html = '<span class="mono-text text-muted" style="font-size: 0.8rem;">No resource types defined.</span>';
+        document.getElementById('resource-type-list').innerHTML = html;
+    });
+}
+function addResourceType() {
+    var key = document.getElementById('rt-key').value.trim();
+    var name = document.getElementById('rt-name').value.trim();
+    if (!key || !name) { alert('Key and name required.'); return; }
+    fetch('/api/starmap/resource-types/', {
+        method: 'POST', headers: { 'Content-Type': 'application/json', 'X-CSRFToken': getCsrf() },
+        body: JSON.stringify({ key: key, name: name, color: document.getElementById('rt-color').value, icon: document.getElementById('rt-icon').value }),
+    }).then(function(r) { return r.json(); }).then(function(d) {
+        if (d.error) { alert(d.error); return; }
+        document.getElementById('rt-key').value = ''; document.getElementById('rt-name').value = ''; document.getElementById('rt-icon').value = '';
+        loadResourceTypes();
+    });
+}
+function deleteResourceType(id) {
+    if (!confirm('Delete this resource type?')) return;
+    fetch('/api/starmap/resource-types/' + id + '/', { method: 'DELETE', headers: { 'X-CSRFToken': getCsrf() } }).then(function() { loadResourceTypes(); });
+}
+loadResourceTypes();
+
+// Civilisations
+var TECH_LABELS = { type_0: 'Type 0', type_i: 'Type I', type_ii: 'Type II', type_iii: 'Type III' };
+var DISP_COLORS = { unknown: 'var(--text-muted)', friendly: '#22c55e', neutral: '#06b6d4', cautious: '#f59e0b', hostile: '#ef4444' };
+
+function loadCivilisations() {
+    fetch('/api/starmap/civilisations/').then(function(r) { return r.json(); }).then(function(civs) {
+        var html = '';
+        civs.forEach(function(c) {
+            var techLabel = TECH_LABELS[c.techLevel] || c.techLevel;
+            var dispColor = DISP_COLORS[c.disposition] || 'var(--text-muted)';
+            html += '<div style="display: flex; align-items: center; gap: 0.75rem; padding: 0.5rem 0; border-bottom: 1px solid var(--border-color);">';
+            html += '<span class="mono-text" style="font-size: 0.85rem; color: var(--text-primary); flex: 1;">' + c.name + '</span>';
+            html += '<span class="mono-text" style="font-size: 0.65rem; color: var(--accent-primary); border: 1px solid var(--accent-primary); padding: 0.1rem 0.3rem;">' + techLabel + '</span>';
+            html += '<span class="mono-text" style="font-size: 0.65rem; color: ' + dispColor + ';">' + c.disposition.toUpperCase() + '</span>';
+            html += '<label style="display:flex;align-items:center;gap:0.2rem;cursor:pointer;"><input type="checkbox" ' + (c.isHidden ? '' : 'checked') + ' onchange="toggleCivHidden(' + c.id + ',!this.checked)" style="accent-color:var(--accent-primary);"><span class="mono-text text-muted" style="font-size:0.6rem;">VIS</span></label>';
+            html += '<button onclick="deleteCivilisation(' + c.id + ')" class="mono-text" style="background:transparent;border:1px solid var(--accent-danger);color:var(--accent-danger);padding:0.15rem 0.4rem;cursor:pointer;font-size:0.6rem;">X</button>';
+            html += '</div>';
+        });
+        if (!civs.length) html = '<span class="mono-text text-muted" style="font-size: 0.8rem;">No civilisations defined.</span>';
+        document.getElementById('civ-list').innerHTML = html;
+    });
+}
+function addCivilisation() {
+    var name = document.getElementById('civ-name').value.trim();
+    if (!name) { alert('Name required.'); return; }
+    fetch('/api/starmap/civilisations/', {
+        method: 'POST', headers: { 'Content-Type': 'application/json', 'X-CSRFToken': getCsrf() },
+        body: JSON.stringify({
+            name: name, techLevel: document.getElementById('civ-tech').value,
+            disposition: document.getElementById('civ-disp').value,
+            description: document.getElementById('civ-desc').value,
+            isHidden: document.getElementById('civ-hidden').checked,
+        }),
+    }).then(function(r) { return r.json(); }).then(function(d) {
+        if (d.error) { alert(d.error); return; }
+        document.getElementById('civ-name').value = ''; document.getElementById('civ-desc').value = '';
+        loadCivilisations();
+    });
+}
+function toggleCivHidden(id, hidden) {
+    fetch('/api/starmap/civilisations/' + id + '/', { method: 'PUT', headers: { 'Content-Type': 'application/json', 'X-CSRFToken': getCsrf() }, body: JSON.stringify({ isHidden: hidden }) });
+}
+function deleteCivilisation(id) {
+    if (!confirm('Delete this civilisation?')) return;
+    fetch('/api/starmap/civilisations/' + id + '/', { method: 'DELETE', headers: { 'X-CSRFToken': getCsrf() } }).then(function() { loadCivilisations(); });
+}
+loadCivilisations();
+
+// Planets
+var LIFE_COLORS = { none: 'var(--text-muted)', prebiotic: '#a855f7', bacterial: '#06b6d4', cellular: '#22c55e', plant: '#16a34a', animal: '#f59e0b', intelligent: '#ef4444', unknown: 'var(--text-muted)' };
+var ATMO_LABELS = { none: 'None', oxygen: 'O₂', methane: 'CH₄', argon: 'Ar', nitrogen: 'N₂', co2: 'CO₂', hydrogen: 'H₂/He', ammonia: 'NH₃', toxic: 'Toxic', unknown: '?' };
+
+// Load star systems for planet dropdown
+fetch('/api/starmap/systems/').then(function(r) { return r.json(); }).then(function(stars) {
+    var sel = document.getElementById('planet-star-select');
+    if (!sel) return;
+    stars.forEach(function(s) {
+        var opt = document.createElement('option');
+        opt.value = s.id;
+        opt.textContent = s.name + ' (' + s.dist.toFixed(1) + ' ly)';
+        sel.appendChild(opt);
+    });
+});
+
+function loadPlanets() {
+    var starId = document.getElementById('planet-star-select').value;
+    var listDiv = document.getElementById('planet-list');
+    var formDiv = document.getElementById('planet-add-form');
+    var resDiv = document.getElementById('star-resources');
+    if (!starId) { listDiv.innerHTML = ''; formDiv.style.display = 'none'; resDiv.style.display = 'none'; return; }
+    formDiv.style.display = 'block';
+
+    // Load star resources
+    fetch('/api/starmap/systems/' + starId + '/').then(function(r) { return r.json(); }).then(function(star) {
+        var res = star.resources || {};
+        var keys = Object.keys(res);
+        if (keys.length === 0) {
+            resDiv.style.display = 'none';
+            return;
+        }
+        resDiv.style.display = 'block';
+        var html = '<div class="mono-text text-muted" style="font-size: 0.6rem; letter-spacing: 1px; margin-bottom: 0.4rem;">RESOURCES — ' + star.name + '</div>';
+        html += '<div style="display: flex; flex-wrap: wrap; gap: 0.5rem;">';
+        keys.forEach(function(k) {
+            var val = res[k];
+            var barColor = '#00ff88';
+            // Try to match resource type color
+            html += '<div style="min-width: 100px; flex: 1;">';
+            html += '<div style="display: flex; justify-content: space-between; margin-bottom: 0.15rem;">';
+            html += '<span class="mono-text" style="font-size: 0.65rem; color: var(--text-muted);">' + k + '</span>';
+            html += '<span class="mono-text" style="font-size: 0.65rem; color: var(--text-primary);">' + val + '%</span>';
+            html += '</div>';
+            html += '<div style="height: 4px; background: rgba(255,255,255,0.08); border-radius: 2px; overflow: hidden;">';
+            html += '<div style="width: ' + Math.max(2, val) + '%; height: 100%; background: var(--accent-primary); border-radius: 2px;"></div>';
+            html += '</div></div>';
+        });
+        html += '</div>';
+        if (star.planets !== undefined) {
+            html += '<div class="mono-text text-muted" style="font-size: 0.6rem; margin-top: 0.4rem;">Planets: ' + star.planets + ' · Spectral: ' + (star.spectral || '?') + ' · ' + (star.dist || 0).toFixed(1) + ' ly</div>';
+        }
+        resDiv.innerHTML = html;
+    });
+
+    fetch('/api/starmap/systems/' + starId + '/planets/').then(function(r) { return r.json(); }).then(function(planets) {
+        var html = '';
+        planets.forEach(function(p) {
+            var lifeColor = LIFE_COLORS[p.lifeType] || 'var(--text-muted)';
+            var atmoLabel = ATMO_LABELS[p.atmosphere] || p.atmosphere;
+            html += '<div style="display: flex; align-items: center; gap: 0.5rem; padding: 0.5rem 0; border-bottom: 1px solid var(--border-color); flex-wrap: wrap;">';
+            html += '<span class="mono-text" style="font-size: 0.85rem; color: var(--text-primary); min-width: 120px;">' + p.name + '</span>';
+            html += '<span class="mono-text" style="font-size: 0.65rem; color: var(--text-muted);">' + p.planetType + '</span>';
+            html += '<span class="mono-text" style="font-size: 0.65rem; color: #06b6d4; border: 1px solid #06b6d4; padding: 0.05rem 0.3rem;">' + atmoLabel + '</span>';
+            html += '<span class="mono-text" style="font-size: 0.65rem; color: ' + lifeColor + ';">' + (p.lifeType === 'none' ? '—' : p.lifeType.toUpperCase()) + '</span>';
+            if (p.water) html += '<span class="mono-text" style="font-size: 0.6rem; color: #06b6d4;">💧</span>';
+            if (p.habitable) html += '<span class="mono-text" style="font-size: 0.6rem; color: #22c55e;">🌍</span>';
+            if (p.isHidden) html += '<span class="mono-text" style="font-size: 0.55rem; color: var(--accent-danger);">HIDDEN</span>';
+            html += '<button onclick="deletePlanet(' + starId + ',' + p.id + ')" class="mono-text" style="margin-left: auto; background: transparent; border: 1px solid var(--accent-danger); color: var(--accent-danger); padding: 0.15rem 0.4rem; cursor: pointer; font-size: 0.6rem;">X</button>';
+            html += '</div>';
+        });
+        if (!planets.length) html = '<span class="mono-text text-muted" style="font-size: 0.8rem;">No planets registered for this system.</span>';
+        listDiv.innerHTML = html;
+    });
+}
+
+function addPlanet() {
+    var starId = document.getElementById('planet-star-select').value;
+    if (!starId) return;
+    var name = document.getElementById('pl-name').value.trim();
+    if (!name) { alert('Planet name required.'); return; }
+
+    fetch('/api/starmap/systems/' + starId + '/planets/', {
+        method: 'POST', headers: { 'Content-Type': 'application/json', 'X-CSRFToken': getCsrf() },
+        body: JSON.stringify({
+            name: name,
+            orbitalPosition: parseInt(document.getElementById('pl-orbit').value) || 1,
+            planetType: document.getElementById('pl-type').value,
+            atmosphere: document.getElementById('pl-atmo').value,
+            atmosphereDetails: document.getElementById('pl-atmo-detail').value,
+            lifeType: document.getElementById('pl-life').value,
+            temperatureRange: document.getElementById('pl-temp').value,
+            gravity: document.getElementById('pl-grav').value,
+            water: document.getElementById('pl-water').checked,
+            habitable: document.getElementById('pl-hab').checked,
+            isHidden: document.getElementById('pl-hidden').checked,
+            scanLevelRequired: parseInt(document.getElementById('pl-scan').value) || 2,
+            notes: document.getElementById('pl-notes').value,
+        }),
+    }).then(function(r) { return r.json(); }).then(function(d) {
+        if (d.error) { alert(d.error); return; }
+        document.getElementById('pl-name').value = '';
+        document.getElementById('pl-atmo-detail').value = '';
+        document.getElementById('pl-temp').value = '';
+        document.getElementById('pl-grav').value = '';
+        document.getElementById('pl-notes').value = '';
+        loadPlanets();
+    });
+}
+
+function deletePlanet(starId, planetId) {
+    if (!confirm('Delete this planet?')) return;
+    fetch('/api/starmap/systems/' + starId + '/planets/' + planetId + '/', {
+        method: 'DELETE', headers: { 'X-CSRFToken': getCsrf() },
+    }).then(function() { loadPlanets(); });
+}
+
+// Seed star systems
+function seedSystems() {
+    if (!confirm('This will OVERWRITE all resources, planets, and civilisations on ALL star systems. This cannot be undone. Continue?')) return;
+    var resultDiv = document.getElementById('seed-result');
+    resultDiv.style.display = 'block';
+    resultDiv.innerHTML = '<span class="mono-text text-muted" style="font-size: 0.8rem;">Seeding...</span>';
+
+    fetch('/api/starmap/admin/seed/', {
+        method: 'POST', headers: { 'Content-Type': 'application/json', 'X-CSRFToken': getCsrf() },
+        body: JSON.stringify({
+            resourceScarcity: parseInt(document.getElementById('seed-res').value),
+            planetScarcity: parseInt(document.getElementById('seed-planet').value),
+            lifeScarcity: parseInt(document.getElementById('seed-life').value),
+            civScarcity: parseInt(document.getElementById('seed-civ').value),
+        }),
+    }).then(function(r) { return r.json(); }).then(function(d) {
+        if (d.error) {
+            resultDiv.innerHTML = '<span class="mono-text" style="color: var(--accent-danger); font-size: 0.8rem;">' + d.error + '</span>';
+        } else {
+            resultDiv.innerHTML = '<span class="mono-text" style="color: var(--accent-primary); font-size: 0.8rem;">'
+                + 'Seeded ' + d.systemsSeeded + ' systems · '
+                + d.planetsCreated + ' planets · '
+                + d.civilisationsPlaced + ' civilisations</span>';
+        }
+    }).catch(function(e) {
+        resultDiv.innerHTML = '<span class="mono-text" style="color: var(--accent-danger);">Seed failed: ' + e + '</span>';
+    });
+}
+
+// Transfer
+function executeTransfer() {
+    var sourceUserId = document.getElementById('transfer-source-user').value;
+    var targetAgencyId = document.getElementById('transfer-target-agency').value;
+    var transferXp = document.getElementById('transfer-xp-check').checked;
+    var sourceAgencyId = document.getElementById('transfer-source-agency').value;
+    var resultDiv = document.getElementById('transfer-result');
+    if (!sourceUserId || !targetAgencyId) { alert('Select both a source player and target agency.'); return; }
+    if (!confirm('PERMANENT: Convert character to NPC, move NPCs, optionally transfer resources. Cannot be undone. Continue?')) return;
+    var payload = { sourceUserId: parseInt(sourceUserId), targetAgencyId: parseInt(targetAgencyId) };
+    if (transferXp && sourceAgencyId) { payload.transferXp = true; payload.sourceAgencyId = parseInt(sourceAgencyId); }
+    fetch('/api/transfer-player-to-agency/', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-CSRFToken': getCsrf() }, body: JSON.stringify(payload) })
+    .then(function(r) { return r.json(); }).then(function(d) {
+        resultDiv.style.display = 'block';
+        if (d.error) { resultDiv.innerHTML = '<div class="mono-text" style="color:var(--accent-danger);font-size:0.85rem;padding:0.5rem;border-left:2px solid var(--accent-danger);">' + d.error + '</div>'; }
+        else { resultDiv.innerHTML = '<div class="mono-text" style="color:var(--accent-primary);font-size:0.85rem;padding:0.5rem;border-left:2px solid var(--accent-primary);">Transferred: ' + d.character + ' → ' + d.targetAgency + '<br>NPC ID: ' + d.npcDossierId + ' · NPCs: ' + d.npcsMoved + ' · XP: ' + d.xpTransferred + '</div>'; }
+    }).catch(function(e) { resultDiv.style.display = 'block'; resultDiv.innerHTML = '<div class="mono-text" style="color:var(--accent-danger);">Failed: ' + e + '</div>'; });
+}
+</script>
 {% endblock %}

@@ -62,8 +62,9 @@
     </style>
 </head>
 <body>
-    <!-- Navigation Bar -->
-    <nav class="nav-bar">
+    <!-- Navigation Bar — Two-Row Command Interface -->
+    <nav class="nav-bar" style="flex-wrap: wrap; padding-bottom: 0;">
+        <!-- Command Row -->
         <a href="/" class="mono-text text-accent" style="text-decoration: none; font-size: 1.1rem; letter-spacing: 2px;">
             BLACKLOG.NET <span class="text-muted">//</span> EXODUS
         </a>
@@ -72,43 +73,92 @@
             NEXT SESSION <span class="text-accent">// {{ NEXT_GAME_DATE|date:"D d M" }}</span>
         </span>
         {% endif %}
-        <button class="nav-burger" onclick="document.querySelector('.nav-links').classList.toggle('nav-open')" aria-label="Menu">
+        {% if user.is_authenticated %}
+        <div class="nav-cmd" style="display: flex; gap: 1rem; align-items: center;">
+            <a href="/comms/" class="mono-text" style="position: relative; text-decoration: none; color: var(--text-secondary); font-size: 0.9rem;">
+                {{ NAV_COMMS }}
+                <span id="comms-badge" style="
+                    position: absolute; top: -6px; right: -10px;
+                    background: var(--accent-primary); color: var(--bg-dark);
+                    font-size: 0.65rem; font-weight: bold; min-width: 16px; height: 16px;
+                    border-radius: 8px; display: {% if COMMS_UNREAD > 0 %}inline-flex{% else %}none{% endif %};
+                    align-items: center; justify-content: center; padding: 0 4px;
+                    font-family: var(--font-mono);
+                ">{{ COMMS_UNREAD }}</span>
+            </a>
+            <a href="{% url 'accounts:profile' %}" class="mono-text" style="text-decoration: none; color: var(--text-secondary); font-size: 0.9rem;">PROFILE</a>
+            <form method="post" action="{% url 'accounts:logout' %}" style="display: inline;">
+                {% csrf_token %}
+                <button type="submit" class="mono-text" style="background: none; border: none; color: var(--text-secondary); cursor: pointer; font-size: 0.9rem; font-family: var(--font-mono);">LOGOUT</button>
+            </form>
+        </div>
+        {% endif %}
+        <button class="nav-burger" onclick="document.querySelector('.nav-subsystem').classList.toggle('nav-open')" aria-label="Menu">
             <span></span><span></span><span></span>
         </button>
-        <div class="nav-links">
+        <!-- Subsystem Row -->
+        <div class="nav-subsystem nav-links" style="
+            width: 100%; display: flex; gap: 0.75rem; align-items: center;
+            padding: 0.4rem 0 0.5rem 0; margin-top: 0.25rem;
+            border-top: 1px solid var(--border-color);
+            flex-wrap: wrap;
+        ">
             {% if user.is_authenticated %}
-                <a href="/">OPERATIVES</a>
-                <a href="/agencies/">AGENCIES</a>
-                <a href="/agencies/map/">MAP</a>
-                <a href="/agencies/council/">COUNCIL</a>
-                <a href="/npcs/">DOSSIERS</a>
-                <a href="/comms/" style="position: relative;">
-                    COMMS
-                    <span id="comms-badge" style="
-                        position: absolute; top: -6px; right: -10px;
-                        background: var(--accent-primary); color: var(--bg-dark);
-                        font-size: 0.65rem; font-weight: bold; min-width: 16px; height: 16px;
-                        border-radius: 8px; display: {% if COMMS_UNREAD > 0 %}inline-flex{% else %}none{% endif %};
-                        align-items: center; justify-content: center; padding: 0 4px;
-                        font-family: var(--font-mono);
-                    ">{{ COMMS_UNREAD }}</span>
-                </a>
-                <a href="{% url 'accounts:profile' %}">PROFILE</a>
-                <a href="{% url 'pulling-strings-page' %}">PULL STRINGS</a>
-                <a href="{% url 'merits-page' %}">MERITS</a>
-                {% if user.is_staff %}
-                    <a href="{% url 'site-settings' %}">SETTINGS</a>
-                    <a href="{% url 'admin:index' %}">ADMIN</a>
+                <a href="/" style="font-size: 0.8rem; color: var(--text-muted);">{{ NAV_DISPATCH }}</a>
+                <a href="/characters/" style="font-size: 0.8rem; color: var(--text-muted);">{{ NAV_PLAYERS }}</a>
+                <a href="/agencies/" style="font-size: 0.8rem; color: var(--text-muted);">{{ NAV_AGENCIES }}</a>
+                {% if SHOW_COUNCIL or user.is_staff %}
+                <a href="/agencies/council/" style="font-size: 0.8rem; color: var(--text-muted);">{{ NAV_COUNCIL }}</a>
                 {% endif %}
-                <form method="post" action="{% url 'accounts:logout' %}" style="display: inline;">
-                    {% csrf_token %}
-                    <button type="submit">LOGOUT</button>
-                </form>
+                <a href="/npcs/" style="font-size: 0.8rem; color: var(--text-muted);">{{ NAV_NPCS }}</a>
+                {% if SHOW_WORLD_MAP or user.is_staff %}
+                    <span class="mono-text" style="color: var(--border-color); font-size: 0.8rem;">|</span>
+                    <a href="/agencies/map/" style="font-size: 0.8rem; color: var(--text-muted);">WORLD MAP</a>
+                {% endif %}
+                {% if SHOW_STAR_MAP or user.is_staff %}
+                    <a href="{% url 'starmap:page' %}" style="font-size: 0.8rem; color: var(--text-muted);">STAR MAP</a>
+                {% endif %}
+                {% for cm in CITY_MAPS %}
+                    <a href="{% url 'starmap:citymap' cm.id %}" style="font-size: 0.8rem; color: var(--text-muted);">{{ cm.name|upper }}</a>
+                {% endfor %}
+                <span class="mono-text" style="color: var(--border-color); font-size: 0.8rem;">|</span>
+                <a href="{% url 'pulling-strings-page' %}" style="font-size: 0.8rem; color: var(--text-muted);">PULL STRINGS</a>
+                <a href="{% url 'merits-page' %}" style="font-size: 0.8rem; color: var(--text-muted);">MERITS</a>
+                {% if user.is_staff %}
+                    <span class="mono-text" style="color: var(--border-color); font-size: 0.8rem;">|</span>
+                    <a href="{% url 'site-settings' %}" style="font-size: 0.8rem; color: var(--text-muted);">SETTINGS</a>
+                    <a href="{% url 'admin:index' %}" style="font-size: 0.8rem; color: var(--text-muted);">ADMIN</a>
+                {% endif %}
             {% else %}
-                <a href="{% url 'accounts:login' %}">LOGIN</a>
+                <a href="{% url 'accounts:login' %}" style="font-size: 0.8rem; color: var(--text-muted);">LOGIN</a>
             {% endif %}
         </div>
     </nav>
+
+    <!-- Impersonation Banner -->
+    {% if IS_IMPERSONATING %}
+    <div style="
+        background: var(--accent-warning); color: var(--bg-dark);
+        padding: 0.5rem 1rem; text-align: center;
+        font-family: var(--font-mono); font-size: 0.85rem;
+        font-weight: bold; letter-spacing: 1px;
+        display: flex; align-items: center; justify-content: center; gap: 1rem;
+    ">
+        VIEWING AS {{ user.username|upper }}
+        <form method="post" action="{% url 'stop-impersonation' %}" style="display: inline;">
+            {% csrf_token %}
+            <button type="submit" style="
+                background: var(--bg-dark); color: var(--accent-warning);
+                border: none; padding: 0.3rem 0.75rem;
+                cursor: pointer; font-family: var(--font-mono);
+                font-size: 0.75rem; font-weight: bold;
+                letter-spacing: 1px; border-radius: var(--radius-sm);
+            ">
+                RETURN TO GM
+            </button>
+        </form>
+    </div>
+    {% endif %}
 
     <!-- Django Messages -->
     {% if messages %}

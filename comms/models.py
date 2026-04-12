@@ -76,6 +76,14 @@ class ThreadMembership(models.Model):
         default=False,
         help_text="Hidden members have read-only shadow access (from Gain Access cyber action).",
     )
+    defense_bonus = models.IntegerField(
+        default=0,
+        help_text="Per-user defense bonus from Defend action.",
+    )
+    defense_active = models.BooleanField(
+        default=False,
+        help_text="Whether this user has activated Defend on this thread.",
+    )
 
     class Meta:
         unique_together = ("thread", "user")

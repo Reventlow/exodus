@@ -114,6 +114,9 @@ class Character(models.Model):
     # Willpower tracking
     willpower_current = models.IntegerField(default=0)
 
+    # Auto-success merit usage tracking per session: {"merit_name": uses_spent}
+    merit_uses = models.JSONField(default=dict, blank=True)
+
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 

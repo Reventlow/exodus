@@ -10,7 +10,7 @@ from django.contrib.auth.decorators import login_required
 from django.views.decorators.http import require_http_methods
 from django.utils import timezone
 
-from .models import Agency, ChangeRequest, GlobalFlaw, FTLProject, AgencyFTLProject, CouncilItem, CouncilVote, BaseConfig, Base
+from .models import Agency, ChangeRequest, GlobalFlaw, FTLProject, AgencyFTLProject, CouncilItem, CouncilVote, BaseConfig, Base, AgencyStatLog, ProjectRollLog
 from .serializers import (
     serialize_agency,
     serialize_agency_summary,
@@ -27,6 +27,25 @@ from .serializers import (
 COUNCIL_GROUP = "council_votes"
 
 
+def _is_fixer(user):
+    """Check if the user's character has the fixer class."""
+    from characters.models import Character
+    char = Character.objects.filter(owner=user).first()
+    return char and char.character_class == "fixer"
+
+
+def _require_fixer(user):
+    """Return a 403 JsonResponse if the user is not a fixer, or None if OK."""
+    if user.is_superuser:
+        return None
+    if not _is_fixer(user):
+        return JsonResponse(
+            {"error": "ACCESS DENIED. Council actions require Fixer clearance."},
+            status=403,
+        )
+    return None
+
+
 def _broadcast_council_item(ci):
     """Broadcast an updated council item to all WebSocket clients."""
     channel_layer = get_channel_layer()
@@ -34,7 +53,7 @@ def _broadcast_council_item(ci):
         COUNCIL_GROUP,
         {
             "type": "council_update",
-            "item": serialize_council_item(ci),
+            "item": serialize_council_item(ci, request.user),
         },
     )
 
@@ -171,6 +190,7 @@ def council_page(request):
             "user_agency_id": user_agency.id if user_agency else 0,
             "user_agency_name": user_agency.name if user_agency else "",
             "is_chairman": is_chairman,
+            "is_fixer": _is_fixer(request.user),
             "agencies_json": json.dumps(
                 [{"id": a[0], "name": a[1]} for a in agencies]
             ),
@@ -267,6 +287,8 @@ def api_agency_detail(request, pk):
             agency.zero_day_pool = data["zeroDayPool"]
         if "sweepPool" in data:
             agency.sweep_pool = data["sweepPool"]
+        if "isNuclearPower" in data:
+            agency.is_nuclear_power = bool(data["isNuclearPower"])
 
         # Update booleans
         if "isPlayerAgency" in data:
@@ -293,9 +315,43 @@ def api_agency_detail(request, pk):
         if "conditions" in data:
             agency.conditions = data["conditions"]
         if "projects" in data:
-            agency.projects = data["projects"]
+            # Log completion changes by superuser
+            old_projects = agency.projects or []
+            new_projects = data["projects"]
+            for idx, new_p in enumerate(new_projects):
+                if not isinstance(new_p, dict):
+                    continue
+                old_p = old_projects[idx] if idx < len(old_projects) and isinstance(old_projects[idx], dict) else {}
+                old_score = int(old_p.get("completionScore", 0))
+                new_score = int(new_p.get("completionScore", 0))
+                if old_score != new_score:
+                    try:
+                        ProjectRollLog.objects.create(
+                            agency=agency,
+                            project_index=idx,
+                            project_name=new_p.get("name", ""),
+                            character_name="GM",
+                            roll_type="manual",
+                            pool=0,
+                            rolls=[],
+                            successes=new_score - old_score,
+                            auto_successes=0,
+                            mental_damage=False,
+                            old_score=old_score,
+                            new_score=new_score,
+                            message=f"GM adjusted completion: {old_score} → {new_score}.",
+                        )
+                    except Exception:
+                        pass
+            # Strip computed fields before persisting
+            agency.projects = [
+                {k: v for k, v in p.items() if k != "computedPool"} if isinstance(p, dict) else p
+                for p in new_projects
+            ]
         if "history" in data:
             agency.history = data["history"]
+        if "projectRolls" in data:
+            agency.project_rolls = data["projectRolls"]
         if "isHidden" in data:
             agency.is_hidden = bool(data["isHidden"])
         if "mapColor" in data:
@@ -651,8 +707,27 @@ def api_agency_ftl_detail(request, pk, assignment_id):
         return JsonResponse({"error": "Invalid data stream."}, status=400)
 
     if "currentSuccesses" in data:
+        old_score = afp.current_successes
         afp.current_successes = data["currentSuccesses"]
         afp.save(update_fields=["current_successes"])
+        if old_score != afp.current_successes:
+            try:
+                ProjectRollLog.objects.create(
+                    agency=afp.agency,
+                    assignment=afp,
+                    character_name="GM",
+                    roll_type="manual",
+                    pool=0,
+                    rolls=[],
+                    successes=afp.current_successes - old_score,
+                    auto_successes=0,
+                    mental_damage=False,
+                    old_score=old_score,
+                    new_score=afp.current_successes,
+                    message=f"GM adjusted progress: {old_score} → {afp.current_successes}.",
+                )
+            except Exception:
+                pass
 
     return JsonResponse(serialize_agency_ftl_project(afp))
 
@@ -668,10 +743,13 @@ def api_council_list(request):
     """GET: list all council items. POST: create a new one (admin only)."""
     if request.method == "GET":
         items = CouncilItem.objects.all()
-        data = [serialize_council_item(ci) for ci in items]
+        data = [serialize_council_item(ci, request.user) for ci in items]
         return JsonResponse(data, safe=False)
 
-    # POST — admin or any logged-in user with an agency
+    # POST — fixer class required
+    denied = _require_fixer(request.user)
+    if denied:
+        return denied
     if not request.user.is_superuser:
         # Check the user has an agency (via character workspace assignment)
         char_ids = set(
@@ -717,7 +795,7 @@ def api_council_list(request):
         notes=body.get("notes", ""),
         order=body.get("order", 0),
     )
-    return JsonResponse(serialize_council_item(ci), status=201)
+    return JsonResponse(serialize_council_item(ci, request.user), status=201)
 
 
 @login_required
@@ -725,6 +803,14 @@ def api_council_list(request):
 def api_council_detail(request, pk):
     """GET/PUT/DELETE a single council item."""
     ci = get_object_or_404(CouncilItem, pk=pk)
+
+    if request.method == "GET":
+        return JsonResponse(serialize_council_item(ci, request.user))
+
+    # PUT/DELETE — fixer class required
+    denied = _require_fixer(request.user)
+    if denied:
+        return denied
 
     # Non-admin: players can edit/delete own proposals, chairman can change status
     if not request.user.is_superuser:
@@ -769,14 +855,14 @@ def api_council_detail(request, pk):
                     ci.status = "voting"
                     ci.save()
                     _broadcast_council_item(ci)
-                    return JsonResponse(serialize_council_item(ci))
+                    return JsonResponse(serialize_council_item(ci, request.user))
                 # voting → emergency_suspended
                 if ci.status == "voting" and new_status == "emergency_suspended":
                     ci.vote_record = build_vote_record(ci)
                     ci.status = "emergency_suspended"
                     ci.save()
                     _broadcast_council_item(ci)
-                    return JsonResponse(serialize_council_item(ci))
+                    return JsonResponse(serialize_council_item(ci, request.user))
 
             # Own proposal editing (proposed status only)
             if (
@@ -793,7 +879,7 @@ def api_council_detail(request, pk):
                     if field in data:
                         setattr(ci, attr, data[field])
                 ci.save()
-                return JsonResponse(serialize_council_item(ci))
+                return JsonResponse(serialize_council_item(ci, request.user))
 
             return JsonResponse(
                 {"error": "ACCESS DENIED."},
@@ -815,7 +901,7 @@ def api_council_detail(request, pk):
             )
 
     if request.method == "GET":
-        return JsonResponse(serialize_council_item(ci))
+        return JsonResponse(serialize_council_item(ci, request.user))
 
     if request.method == "PUT":
         try:
@@ -837,10 +923,12 @@ def api_council_detail(request, pk):
             ci.notes = data["notes"]
         if "order" in data:
             ci.order = data["order"]
+        if "predictedVotes" in data and request.user.is_superuser:
+            ci.predicted_votes = data["predictedVotes"]
 
         ci.save()
         _broadcast_council_item(ci)
-        return JsonResponse(serialize_council_item(ci))
+        return JsonResponse(serialize_council_item(ci, request.user))
 
     if request.method == "DELETE":
         ci.delete()
@@ -850,7 +938,10 @@ def api_council_detail(request, pk):
 @login_required
 @require_http_methods(["PUT"])
 def api_council_reorder(request):
-    """Bulk reorder council items. Admin or chairman agency player."""
+    """Bulk reorder council items. Admin or chairman fixer player."""
+    denied = _require_fixer(request.user)
+    if denied:
+        return denied
     if not request.user.is_superuser:
         # Check the user's agency is chairman
         char_ids = set(
@@ -889,7 +980,7 @@ def api_council_reorder(request):
 
     all_items = CouncilItem.objects.all()
     return JsonResponse(
-        [serialize_council_item(ci) for ci in all_items], safe=False
+        [serialize_council_item(ci, request.user) for ci in all_items], safe=False
     )
 
 
@@ -899,9 +990,12 @@ def api_council_vote(request, pk):
     """Cast or update a vote on a council item. Body: {agencyId, vote}.
 
     Admin can vote for any council member agency.
-    Players can only vote for their own agency.
+    Players can only vote for their own agency (fixer class required).
     Item must be in 'voting' status.
     """
+    denied = _require_fixer(request.user)
+    if denied:
+        return denied
     ci = get_object_or_404(CouncilItem, pk=pk)
     if ci.status != "voting":
         return JsonResponse(
@@ -974,7 +1068,7 @@ def api_council_vote(request, pk):
     # Return updated item with votes and broadcast to all clients
     ci.refresh_from_db()
     _broadcast_council_item(ci)
-    return JsonResponse(serialize_council_item(ci))
+    return JsonResponse(serialize_council_item(ci, request.user))
 
 
 # ---------------------------------------------------------------------------
@@ -1025,7 +1119,10 @@ def api_council_set_chairman(request, pk):
 @login_required
 @require_http_methods(["POST"])
 def api_council_toggle_presence(request, pk):
-    """Toggle an agency's council presence. Chairman or admin only."""
+    """Toggle an agency's council presence. Chairman fixer or admin only."""
+    denied = _require_fixer(request.user)
+    if denied:
+        return denied
     if not request.user.is_superuser:
         # Check if user is chairman
         char_ids = set(
@@ -1192,56 +1289,162 @@ def api_agency_base_list(request, pk):
 @login_required
 @require_http_methods(["GET", "PUT", "DELETE"])
 def api_agency_base_detail(request, pk, base_id):
-    """GET/PUT/DELETE a single base. Admin only for PUT/DELETE."""
+    """GET/PUT/DELETE a single base.
+
+    Players can PUT additive changes (add facilities, merits, equipment, set location type).
+    Only superusers can remove items, delete bases, or change admin fields.
+    """
     base = get_object_or_404(Base, pk=base_id, agency_id=pk)
+    is_admin = request.user.is_superuser
 
     if request.method == "GET":
-        if base.is_hidden and not request.user.is_superuser:
+        if base.is_hidden and not is_admin:
             return JsonResponse(
                 {"error": "ACCESS DENIED. Base record not found."}, status=404
             )
-        return JsonResponse(serialize_base(base, is_admin=request.user.is_superuser))
-
-    if not request.user.is_superuser:
-        return JsonResponse(
-            {"error": "ACCESS DENIED. Administrator clearance required."}, status=403
-        )
+        return JsonResponse(serialize_base(base, is_admin=is_admin))
 
     if request.method == "DELETE":
+        if not is_admin:
+            return JsonResponse({"error": "ACCESS DENIED."}, status=403)
         base.delete()
         return JsonResponse({"status": "Base record terminated."})
 
-    # PUT
+    # PUT — players can add, only admin can remove
     try:
         data = json.loads(request.body)
     except json.JSONDecodeError:
         return JsonResponse({"error": "Invalid data stream."}, status=400)
 
-    if "name" in data:
-        base.name = data["name"]
-    if "locationType" in data:
-        base.location_type = data["locationType"]
-    if "merits" in data:
-        base.merits = data["merits"]
-    if "facilities" in data:
-        base.facilities = data["facilities"]
-    if "workspaces" in data:
-        base.workspaces = data["workspaces"]
-    if "equipment" in data:
-        base.equipment = data["equipment"]
-    if "notes" in data:
-        base.notes = data["notes"]
-    if "isHidden" in data:
-        base.is_hidden = bool(data["isHidden"])
-    if "hiddenSections" in data:
-        base.hidden_sections = data["hiddenSections"]
-    if "latitude" in data:
-        base.latitude = data["latitude"] if data["latitude"] is not None else None
-    if "longitude" in data:
-        base.longitude = data["longitude"] if data["longitude"] is not None else None
+    if is_admin:
+        # Admin can do anything
+        if "name" in data:
+            base.name = data["name"]
+        if "locationType" in data:
+            base.location_type = data["locationType"]
+        if "merits" in data:
+            base.merits = data["merits"]
+        if "facilities" in data:
+            base.facilities = data["facilities"]
+        if "workspaces" in data:
+            base.workspaces = data["workspaces"]
+        if "equipment" in data:
+            base.equipment = data["equipment"]
+        if "departments" in data:
+            base.departments = data["departments"]
+        if "notes" in data:
+            base.notes = data["notes"]
+        if "isHidden" in data:
+            base.is_hidden = bool(data["isHidden"])
+        if "hiddenSections" in data:
+            base.hidden_sections = data["hiddenSections"]
+        if "latitude" in data:
+            base.latitude = data["latitude"] if data["latitude"] is not None else None
+        if "longitude" in data:
+            base.longitude = data["longitude"] if data["longitude"] is not None else None
+    else:
+        # Player: additive only — new items must be a superset of existing
+        # Also validate XP budget and space capacity
+        config = BaseConfig.load()
+        lt_by_key = {lt["key"]: lt for lt in (config.location_types or [])}
+        merit_by_key = {m["key"]: m for m in (config.location_merits or [])}
+        ft_by_key = {ft["key"]: ft for ft in (config.facility_types or [])}
+        eq_by_key = {eq["key"]: eq for eq in (config.equipment_types or [])}
+
+        def calc_base_costs(b_loc, b_merits, b_facilities, b_workspaces, b_equipment):
+            """Calculate total EXP and space for a base state."""
+            total_exp = 0
+            total_space = 0
+            used_space = 0
+            lt = lt_by_key.get(b_loc)
+            if lt:
+                total_exp += lt.get("exp", 0)
+                total_space += lt.get("space", 0)
+            for mk in (b_merits or []):
+                m = merit_by_key.get(mk)
+                if m:
+                    total_exp += m.get("exp", 0)
+                    total_space += m.get("extraSpace", 0)
+            for f in (b_facilities or []):
+                ft = ft_by_key.get(f.get("key"))
+                if ft:
+                    lvl = next((l for l in ft.get("levels", []) if l["level"] == f.get("level")), None)
+                    if lvl:
+                        total_exp += lvl.get("exp", 0)
+                        used_space += lvl.get("size", 0)
+            ws_ft = ft_by_key.get("workspace")
+            for w in (b_workspaces or []):
+                if ws_ft:
+                    lvl = next((l for l in ws_ft.get("levels", []) if l["level"] == w.get("level")), None)
+                    if lvl:
+                        total_exp += lvl.get("exp", 0)
+                        used_space += lvl.get("size", 0)
+            for ek in (b_equipment or []):
+                eq = eq_by_key.get(ek)
+                if eq:
+                    total_exp += eq.get("exp", 0)
+            return total_exp, total_space, used_space
+
+        # Build proposed new state
+        new_loc = base.location_type
+        new_merits = list(base.merits or [])
+        new_facilities = list(base.facilities or [])
+        new_workspaces = list(base.workspaces or [])
+        new_equipment = list(base.equipment or [])
+
+        if "locationType" in data:
+            if not base.location_type and data["locationType"]:
+                new_loc = data["locationType"]
+        if "merits" in data:
+            existing = set(base.merits or [])
+            proposed = set(data["merits"])
+            if existing.issubset(proposed):
+                new_merits = data["merits"]
+        if "facilities" in data:
+            existing = {(f["key"], f["level"]) for f in (base.facilities or [])}
+            proposed = {(f["key"], f["level"]) for f in data["facilities"]}
+            if existing.issubset(proposed):
+                new_facilities = data["facilities"]
+        if "workspaces" in data:
+            if len(data["workspaces"]) >= len(base.workspaces or []):
+                new_workspaces = data["workspaces"]
+        if "equipment" in data:
+            existing = set(base.equipment or [])
+            proposed = set(data["equipment"])
+            if existing.issubset(proposed):
+                new_equipment = data["equipment"]
+
+        # Calculate costs for proposed state
+        new_exp, new_total_space, new_used_space = calc_base_costs(
+            new_loc, new_merits, new_facilities, new_workspaces, new_equipment
+        )
+        old_exp, _, _ = calc_base_costs(
+            base.location_type, base.merits, base.facilities, base.workspaces, base.equipment
+        )
+        exp_increase = new_exp - old_exp
+
+        # Check agency XP budget: total base EXP across ALL bases can't exceed agency XP
+        if exp_increase > 0:
+            agency = base.agency
+            other_bases_exp = sum(
+                calc_base_costs(b.location_type, b.merits, b.facilities, b.workspaces, b.equipment)[0]
+                for b in agency.bases.exclude(pk=base.pk)
+            )
+            if other_bases_exp + new_exp > (agency.experience or 0):
+                return JsonResponse({"error": "Not enough agency XP. Need " + str(other_bases_exp + new_exp) + " but agency has " + str(agency.experience or 0) + "."}, status=400)
+
+        # Check space: used can't exceed total (but skip if no space-consuming items were added)
+        if new_used_space > new_total_space and new_total_space > 0:
+            return JsonResponse({"error": "Not enough space. Used " + str(new_used_space) + " of " + str(new_total_space) + " available."}, status=400)
+
+        base.location_type = new_loc
+        base.merits = new_merits
+        base.facilities = new_facilities
+        base.workspaces = new_workspaces
+        base.equipment = new_equipment
 
     base.save()
-    return JsonResponse(serialize_base(base))
+    return JsonResponse(serialize_base(base, is_admin=is_admin))
 
 
 @login_required
@@ -1701,3 +1904,1124 @@ def api_stimulants_unlock(request, pk, project_index):
     agency.save(update_fields=["projects"])
 
     return JsonResponse({"status": "unlocked"})
+
+
+@login_required
+@require_http_methods(["POST"])
+def api_fringe_effect(request, pk, project_index):
+    """Activate a new fringe effect on a fringe project. Science class only."""
+    import random
+
+    agency = get_object_or_404(Agency, pk=pk)
+
+    from characters.models import Character
+    char = Character.objects.filter(owner=request.user).first()
+    is_science = request.user.is_superuser or (char and char.character_class == "science")
+    if not is_science:
+        return JsonResponse({"error": "Science class required."}, status=403)
+
+    projects = agency.projects or []
+    if project_index < 0 or project_index >= len(projects):
+        return JsonResponse({"error": "Invalid project index."}, status=400)
+
+    project = projects[project_index]
+    if not isinstance(project, dict):
+        return JsonResponse({"error": "Invalid project data."}, status=400)
+    if not project.get("fringe"):
+        return JsonResponse({"error": "Fringe effects only on fringe projects."}, status=400)
+
+    try:
+        body = json.loads(request.body)
+    except json.JSONDecodeError:
+        return JsonResponse({"error": "Invalid JSON."}, status=400)
+
+    effect = body.get("effect", "")
+
+    # --- BLACK MARKET TECH (+2 dice, 15% tracker → agency linkage) ---
+    if effect == "black_market_tech":
+        if project.get("blackMarketTech"):
+            return JsonResponse({"error": "Black Market Tech already active."}, status=400)
+
+        roll = random.randint(1, 100)
+        linked_agencies = []
+        if roll <= 15:
+            npc_agencies = list(Agency.objects.filter(
+                is_player_agency=False, is_hidden=False
+            ).values_list("id", "name"))
+            random.shuffle(npc_agencies)
+            if npc_agencies:
+                linked_agencies.append({"id": npc_agencies[0][0], "name": npc_agencies[0][1]})
+
+        project["blackMarketTech"] = True
+        project["blackMarketTechDice"] = 2
+        project["blackMarketTechAgencies"] = linked_agencies
+        projects[project_index] = project
+        agency.projects = projects
+        agency.save(update_fields=["projects"])
+
+        msg = "Black Market Tech activated. +2 permanent dice."
+        if linked_agencies:
+            msg += " WARNING: Equipment came with a tracker! " + linked_agencies[0]["name"] + " is now linked."
+        else:
+            msg += " Equipment is clean — no trackers detected."
+
+        return JsonResponse({
+            "dice": 2, "roll": roll, "linkedAgencies": linked_agencies, "message": msg,
+        })
+
+    # --- GENE MANIPULATION (+3 dice, 18% containment breach) ---
+    elif effect == "gene_manipulation":
+        if project.get("geneManipulation"):
+            return JsonResponse({"error": "Gene Manipulation already active."}, status=400)
+
+        roll = random.randint(1, 100)
+        breach = roll <= 18
+
+        project["geneManipulation"] = True
+        project["geneManipulationDice"] = 3
+        project["geneManipulationBreach"] = breach
+        projects[project_index] = project
+        agency.projects = projects
+        agency.save(update_fields=["projects"])
+
+        msg = "Gene Manipulation activated. +3 permanent dice."
+        if breach:
+            msg += " CONTAINMENT BREACH! (rolled " + str(roll) + "/18%). GM determines narrative consequences."
+        else:
+            msg += " Containment held (rolled " + str(roll) + ", needed <=18%)."
+
+        return JsonResponse({
+            "dice": 3, "roll": roll, "breach": breach, "message": msg,
+        })
+
+    # --- NEURAL INTERFACE (+4 dice, 30% ML+2, 5% permanent -1 mental attribute) ---
+    elif effect == "neural_interface":
+        if project.get("neuralInterface"):
+            return JsonResponse({"error": "Neural Interface already active for this roll."}, status=400)
+
+        ml_roll = random.randint(1, 100)
+        attr_roll = random.randint(1, 100)
+        ml_damage = ml_roll <= 30
+        attr_damage = attr_roll <= 5
+
+        messages = []
+        owner_name = project.get("player", "")
+        owner_char = Character.objects.filter(name=owner_name).first()
+
+        if ml_damage and owner_char:
+            owner_char.mental_load = (owner_char.mental_load or 0) + 2
+            owner_char.save(update_fields=["mental_load"])
+            messages.append(owner_name + " takes 2 mental load (rolled " + str(ml_roll) + "/30%).")
+        elif ml_damage:
+            messages.append("Mental load triggered but could not find " + owner_name + ".")
+        else:
+            messages.append("No mental load (rolled " + str(ml_roll) + ", needed <=30%).")
+
+        attr_damaged = None
+        if attr_damage and owner_char:
+            attrs = owner_char.attributes or {}
+            attr_options = []
+            power_mental = attrs.get("power", {}).get("mental", 1)
+            finesse_mental = attrs.get("finesse", {}).get("mental", 1)
+            resistance_mental = attrs.get("resistance", {}).get("mental", 1)
+            if power_mental > 1:
+                attr_options.append(("power", "mental", "Intelligence"))
+            if finesse_mental > 1:
+                attr_options.append(("finesse", "mental", "Wits"))
+            if resistance_mental > 1:
+                attr_options.append(("resistance", "mental", "Resolve"))
+
+            if attr_options:
+                chosen = random.choice(attr_options)
+                attrs[chosen[0]][chosen[1]] = attrs[chosen[0]].get(chosen[1], 1) - 1
+                owner_char.attributes = attrs
+                owner_char.save(update_fields=["attributes"])
+                attr_damaged = chosen[2]
+                messages.append("PERMANENT DAMAGE: " + owner_name + "'s " + chosen[2] + " reduced by 1 (rolled " + str(attr_roll) + "/5%).")
+            else:
+                messages.append("Attribute damage triggered but all mental attributes at minimum.")
+        elif attr_damage:
+            messages.append("Attribute damage triggered but could not find " + owner_name + ".")
+        else:
+            messages.append("No permanent attribute damage (rolled " + str(attr_roll) + ", needed <=5%).")
+
+        project["neuralInterface"] = True
+        project["neuralInterfaceDice"] = 4
+        project["neuralInterfaceMlDamage"] = 2 if ml_damage else 0
+        project["neuralInterfaceAttrDamage"] = attr_damaged
+        projects[project_index] = project
+        agency.projects = projects
+        agency.save(update_fields=["projects"])
+
+        return JsonResponse({
+            "dice": 4, "mlRoll": ml_roll, "attrRoll": attr_roll,
+            "mlDamage": ml_damage, "attrDamage": attr_damaged,
+            "messages": messages,
+            "message": "Neural Interface activated. +4 permanent dice.\n" + "\n".join(messages),
+        })
+
+    # --- SLEEP DEPRIVATION MARATHON (+2 dice, 30% ML+1 to project owner) ---
+    elif effect == "sleep_deprivation":
+        if project.get("sleepDeprivation"):
+            return JsonResponse({"error": "Sleep Deprivation Marathon already active for this roll."}, status=400)
+
+        roll = random.randint(1, 100)
+        ml_damage = roll <= 30
+        messages = []
+
+        if ml_damage:
+            owner_name = project.get("player", "")
+            owner_char = Character.objects.filter(name=owner_name).first()
+            if owner_char:
+                owner_char.mental_load = (owner_char.mental_load or 0) + 1
+                owner_char.save(update_fields=["mental_load"])
+                messages.append(owner_name + " takes 1 mental load (rolled " + str(roll) + "/30%).")
+            else:
+                messages.append("Mental load triggered but could not find " + owner_name + ".")
+            messages.append("GM: Apply ML +1 to all other team members on this project.")
+        else:
+            messages.append("No mental load damage (rolled " + str(roll) + ", needed <=30%).")
+
+        project["sleepDeprivation"] = True
+        project["sleepDeprivationDice"] = 2
+        project["sleepDeprivationMlDamage"] = ml_damage
+        projects[project_index] = project
+        agency.projects = projects
+        agency.save(update_fields=["projects"])
+
+        return JsonResponse({
+            "dice": 2, "roll": roll, "mlDamage": ml_damage,
+            "messages": messages,
+            "message": "Sleep Deprivation Marathon activated. +2 permanent dice.\n" + "\n".join(messages),
+        })
+
+    # --- OVERCLOCKED EQUIPMENT (+3 dice, 25% facility level loss, select base) ---
+    elif effect == "overclocked_equipment":
+        if project.get("overclockedEquipment"):
+            return JsonResponse({"error": "Overclocked Equipment already active."}, status=400)
+
+        base_id = body.get("baseId")
+        if not base_id:
+            return JsonResponse({"error": "Select a base."}, status=400)
+
+        base = Base.objects.filter(id=base_id, agency=agency).first()
+        if not base:
+            return JsonResponse({"error": "Base not found."}, status=400)
+
+        # Verify the project owner has a workspace at this base
+        owner_name = project.get("player", "")
+        owner_char = Character.objects.filter(name=owner_name).first()
+        has_workspace = False
+        if owner_char:
+            has_workspace = any(
+                w.get("assignedType") == "character" and w.get("assignedTo") == owner_char.id
+                for w in (base.workspaces or [])
+            )
+        if not has_workspace and not request.user.is_superuser:
+            return JsonResponse({"error": "Project owner must have a workspace at this base."}, status=400)
+
+        roll = random.randint(1, 100)
+        destroyed = roll <= 25
+        destroyed_info = None
+
+        xp_lost = 0
+        if destroyed:
+            facilities = base.facilities or []
+            if facilities:
+                fac_idx = random.randint(0, len(facilities) - 1)
+                fac = facilities[fac_idx]
+                fac_key = fac.get("key", "unknown")
+                old_level = fac.get("level", 1)
+                if old_level > 1:
+                    facilities[fac_idx]["level"] = old_level - 1
+                    destroyed_info = {"baseName": base.name, "facilityKey": fac_key, "oldLevel": old_level, "newLevel": old_level - 1}
+                else:
+                    facilities.pop(fac_idx)
+                    destroyed_info = {"baseName": base.name, "facilityKey": fac_key, "oldLevel": old_level, "newLevel": 0, "removed": True}
+                base.facilities = facilities
+                base.save(update_fields=["facilities"])
+
+                # XP penalty: 3-7 XP subtracted from agency
+                xp_lost = random.randint(3, 7)
+                agency.experience = (agency.experience or 0) - xp_lost
+
+                # Log the XP loss
+                from .models import BaseXpLog
+                BaseXpLog.objects.create(
+                    agency=agency,
+                    base=base,
+                    amount=-xp_lost,
+                    reason="Overclocked Equipment destroyed " + fac_key + " at " + base.name + " (fringe project: " + project.get("name", "") + ")",
+                )
+
+        project["overclockedEquipment"] = True
+        project["overclockedEquipmentDice"] = 3
+        project["overclockedEquipmentDestroyed"] = destroyed_info
+        project["overclockedEquipmentBase"] = base.name
+        project["overclockedEquipmentXpLost"] = xp_lost
+        projects[project_index] = project
+        agency.projects = projects
+        save_fields = ["projects"]
+        if xp_lost:
+            save_fields.append("experience")
+        agency.save(update_fields=save_fields)
+
+        msg = "Overclocked Equipment activated. +3 permanent dice."
+        if destroyed_info:
+            msg += " EQUIPMENT DESTROYED: " + destroyed_info["facilityKey"] + " at " + base.name
+            if destroyed_info.get("removed"):
+                msg += " completely destroyed!"
+            else:
+                msg += " reduced from level " + str(destroyed_info["oldLevel"]) + " to " + str(destroyed_info["newLevel"]) + "."
+            msg += " Agency loses " + str(xp_lost) + " XP."
+        else:
+            msg += " Equipment held (rolled " + str(roll) + ", needed <=25%)."
+
+        return JsonResponse({
+            "dice": 3, "roll": roll, "destroyed": destroyed_info, "xpLost": xp_lost, "message": msg,
+        })
+
+    # --- CHILD PRODIGY RECRUITMENT (+1 permanent, 15% integrity loss, costs 2 XP, creates NPC) ---
+    elif effect == "child_prodigy":
+        if project.get("childProdigy"):
+            return JsonResponse({"error": "Child Prodigy already recruited."}, status=400)
+
+        if agency.experience < 2:
+            return JsonResponse({"error": "Insufficient XP. Need 2, have " + str(agency.experience) + "."}, status=400)
+
+        roll = random.randint(1, 100)
+        integrity_loss = roll <= 15
+
+        # Deduct XP
+        agency.experience -= 2
+
+        if integrity_loss:
+            agency.integrity = max(0, (agency.integrity or 0) - 1)
+
+        # Create NPC dossier tagged as child prodigy
+        from npcs.models import NPC
+        npc = NPC.objects.create(
+            agency=agency,
+            name="Child Prodigy (" + project.get("name", "Unknown") + ")",
+            is_npc_dossier=True,
+            is_child_prodigy=True,
+            state="active",
+            created_by=request.user,
+        )
+
+        project["childProdigy"] = True
+        project["childProdigyDice"] = 1
+        project["childProdigyNpcId"] = npc.id
+        project["childProdigyIntegrityLoss"] = integrity_loss
+        projects[project_index] = project
+        agency.projects = projects
+        save_fields = ["projects", "experience"]
+        if integrity_loss:
+            save_fields.append("integrity")
+        agency.save(update_fields=save_fields)
+
+        msg = "Child Prodigy recruited. +1 permanent dice. 2 XP spent."
+        if integrity_loss:
+            msg += " Integrity loss! (rolled " + str(roll) + "/15%)."
+        else:
+            msg += " No integrity loss (rolled " + str(roll) + ", needed <=15%)."
+        msg += " NPC '" + npc.name + "' added to dossier."
+
+        return JsonResponse({
+            "dice": 1, "roll": roll, "integrityLoss": integrity_loss,
+            "npcId": npc.id, "npcName": npc.name, "message": msg,
+        })
+
+    # --- ASSIGN CHILD PRODIGY to a fringe project (+2 dice) ---
+    elif effect == "assign_prodigy":
+        if project.get("assignedProdigyId"):
+            return JsonResponse({"error": "A prodigy is already assigned to this project."}, status=400)
+
+        npc_id = body.get("npcId")
+        if not npc_id:
+            return JsonResponse({"error": "Select a child prodigy."}, status=400)
+
+        from npcs.models import NPC
+        npc = NPC.objects.filter(id=npc_id, agency=agency, is_child_prodigy=True).first()
+        if not npc:
+            return JsonResponse({"error": "Child prodigy not found."}, status=400)
+
+        # Check prodigy isn't already assigned to another project
+        for i, proj in enumerate(projects):
+            if isinstance(proj, dict) and proj.get("assignedProdigyId") == npc_id and i != project_index:
+                return JsonResponse({"error": npc.name + " is already assigned to " + proj.get("name", "another project") + "."}, status=400)
+
+        project["assignedProdigyId"] = npc.id
+        project["assignedProdigyName"] = npc.name
+        project["assignedProdigyDice"] = 2
+        projects[project_index] = project
+        agency.projects = projects
+        agency.save(update_fields=["projects"])
+
+        return JsonResponse({
+            "dice": 2, "npcId": npc.id, "npcName": npc.name,
+            "message": npc.name + " assigned to " + project.get("name", "") + ". +2 dice to completion rolls.",
+        })
+
+    # --- UNASSIGN CHILD PRODIGY from a project ---
+    elif effect == "unassign_prodigy":
+        if not project.get("assignedProdigyId"):
+            return JsonResponse({"error": "No prodigy assigned to this project."}, status=400)
+
+        name = project.get("assignedProdigyName", "Prodigy")
+        project.pop("assignedProdigyId", None)
+        project.pop("assignedProdigyName", None)
+        project.pop("assignedProdigyDice", None)
+        projects[project_index] = project
+        agency.projects = projects
+        agency.save(update_fields=["projects"])
+
+        return JsonResponse({"message": name + " unassigned from project."})
+
+    return JsonResponse({"error": "Unknown effect: " + effect}, status=400)
+
+
+@login_required
+@require_http_methods(["POST"])
+def api_complete_project(request, pk, project_index):
+    """Complete a project: apply attribute effects and integrity modifier, log changes."""
+    if not request.user.is_superuser:
+        return JsonResponse({"error": "GM only."}, status=403)
+
+    agency = get_object_or_404(Agency, pk=pk)
+    projects = agency.projects or []
+    if project_index < 0 or project_index >= len(projects):
+        return JsonResponse({"error": "Invalid project index."}, status=400)
+
+    project = projects[project_index]
+    if not isinstance(project, dict):
+        return JsonResponse({"error": "Invalid project data."}, status=400)
+    if project.get("completed"):
+        return JsonResponse({"error": "Project already completed."}, status=400)
+
+    effects = project.get("completionEffects") or {}
+    messages = []
+
+    # Apply attribute changes
+    attrs = agency.attributes or {}
+    for change in (effects.get("attributeChanges") or []):
+        cat = change.get("category", "")
+        name = change.get("name", "")
+        amount = int(change.get("value", 0))
+        if not cat or not name or amount == 0:
+            continue
+        if cat not in attrs:
+            attrs[cat] = {}
+        old_val = attrs[cat].get(name, 0)
+        attrs[cat][name] = old_val + amount
+        AgencyStatLog.objects.create(
+            agency=agency,
+            stat_type="attribute",
+            stat_path=cat + "." + name,
+            amount=amount,
+            reason="Project '" + project.get("name", "") + "' completed",
+        )
+        messages.append(name + " " + ("{:+d}".format(amount)) + " (was " + str(old_val) + ", now " + str(old_val + amount) + ")")
+
+    agency.attributes = attrs
+
+    # Apply integrity change
+    integrity_change = int(effects.get("integrityChange", 0))
+    if integrity_change != 0:
+        old_int = agency.integrity or 0
+        agency.integrity = old_int + integrity_change
+        AgencyStatLog.objects.create(
+            agency=agency,
+            stat_type="integrity",
+            stat_path="integrity",
+            amount=integrity_change,
+            reason="Project '" + project.get("name", "") + "' completed",
+        )
+        messages.append("Integrity " + ("{:+d}".format(integrity_change)) + " (was " + str(old_int) + ", now " + str(old_int + integrity_change) + ")")
+
+    # Mark project completed and unassign NPCs
+    project["completed"] = True
+    project.pop("assignedNpcs", None)
+    projects[project_index] = project
+    agency.projects = projects
+    agency.save(update_fields=["projects", "attributes", "integrity"])
+
+    return JsonResponse({
+        "messages": messages,
+        "message": "Project '" + project.get("name", "") + "' completed." + ("\n" + "\n".join(messages) if messages else " No stat changes."),
+    })
+
+
+@login_required
+@require_http_methods(["GET"])
+def api_stat_logs(request, pk):
+    """Return stat change logs for an agency."""
+    agency = get_object_or_404(Agency, pk=pk)
+    logs = AgencyStatLog.objects.filter(agency=agency)[:50]
+    return JsonResponse({
+        "logs": [
+            {
+                "id": log.id,
+                "statType": log.stat_type,
+                "statPath": log.stat_path,
+                "amount": log.amount,
+                "reason": log.reason,
+                "date": log.created_at.isoformat(),
+            }
+            for log in logs
+        ]
+    })
+
+
+@login_required
+@require_http_methods(["POST"])
+def api_project_roll(request, pk, project_index):
+    """Player spends a roll allocation to make a completion roll on their project."""
+    import random
+
+    agency = get_object_or_404(Agency, pk=pk)
+
+    from characters.models import Character
+    char = Character.objects.filter(owner=request.user).first()
+
+    projects = agency.projects or []
+    if project_index < 0 or project_index >= len(projects):
+        return JsonResponse({"error": "Invalid project index."}, status=400)
+
+    project = projects[project_index]
+    if not isinstance(project, dict):
+        return JsonResponse({"error": "Invalid project data."}, status=400)
+
+    # Check ownership — player can only roll on projects assigned to their character
+    if not request.user.is_superuser:
+        if not char or project.get("player") != char.name:
+            return JsonResponse({"error": "You can only roll on your own projects."}, status=403)
+
+    # Determine available rolls (per-character allocation)
+    rolls_data = agency.project_rolls or {}
+    char_name = char.name if char else ""
+    personal = rolls_data.get(char_name, {})
+
+    total_free = personal.get("free", 0) or 0
+    total_spare = personal.get("spare", 0) or 0
+
+    if total_free <= 0 and total_spare <= 0:
+        return JsonResponse({"error": "No rolls available."}, status=400)
+
+    # Determine roll type: free rolls first, then spare time
+    roll_type = "free" if total_free > 0 else "spare"
+
+    # Deduct the roll from character's allocation
+    if roll_type == "free":
+        personal["free"] = total_free - 1
+    else:
+        personal["spare"] = total_spare - 1
+    rolls_data[char_name] = personal
+
+    # Apply mental load for spare time rolls
+    mental_damage = False
+    if roll_type == "spare" and char:
+        char.mental_load = (char.mental_load or 0) + 1
+        char.save(update_fields=["mental_load"])
+        mental_damage = True
+
+    # Get dice pool from computed pool or default to 1
+    pool_size = 1
+    # Re-compute pool server-side
+    from .serializers import _compute_project_dice_pool
+    characters_by_name = {c.name: c for c in Character.objects.prefetch_related(
+        "character_merits__merit", "character_pulling_strings__pulling_string"
+    ).all()}
+    bases_list = list(agency.bases.all())
+    computed = _compute_project_dice_pool(project, agency, characters_by_name, bases_list)
+    if computed:
+        pool_size = max(computed["pool"], 1)
+
+    # Check for auto-success merit activation
+    auto_merit_name = None
+    auto_successes = 0
+    try:
+        body = json.loads(request.body) if request.body else {}
+        auto_merit_name = body.get("useAutoMerit")
+    except (json.JSONDecodeError, AttributeError):
+        pass
+
+    if auto_merit_name and char:
+        cm = char.character_merits.select_related("merit").filter(merit__name=auto_merit_name).first()
+        if cm and cm.merit.effects.get("auto_success"):
+            uses = char.merit_uses or {}
+            used = uses.get(auto_merit_name, 0)
+            if used < cm.rating:
+                auto_successes = cm.rating
+                uses[auto_merit_name] = used + 1
+                char.merit_uses = uses
+                char.save(update_fields=["merit_uses"])
+            else:
+                auto_merit_name = None  # No uses left
+        else:
+            auto_merit_name = None  # Not a valid auto-success merit
+
+    # Roll dice (WoD 2.0: d10, 8+ = success, reroll threshold from config)
+    reroll_threshold = int(project.get("rerollThreshold", 10) or 10)
+    successes = 0
+    rolls = []
+    dice_left = pool_size
+    while dice_left > 0:
+        batch = []
+        explosions = 0
+        for _ in range(dice_left):
+            die = random.randint(1, 10)
+            batch.append(die)
+            if die >= 8:
+                successes += 1
+            if die >= reroll_threshold:
+                explosions += 1
+        rolls.extend(batch)
+        dice_left = explosions
+
+    # Add auto-successes from merit
+    successes += auto_successes
+
+    # Add auto-successes from child prodigy (+2 per roll if assigned)
+    prodigy_successes = 0
+    if project.get("assignedProdigyId"):
+        prodigy_successes = 2
+        successes += prodigy_successes
+
+    # Chance die if pool was 0 or less
+    is_chance = pool_size <= 0
+    is_dramatic_failure = is_chance and len(rolls) > 0 and rolls[0] == 1
+
+    # Add successes to project completion
+    old_score = int(project.get("completionScore", 0))
+    project["completionScore"] = old_score + successes
+
+    # Clear per-roll fringe effects (consumed on roll)
+    for per_roll_key in ["stimulants", "stimulantDice", "stimulantLocked", "stimulantResults",
+                         "neuralInterface", "neuralInterfaceDice", "neuralInterfaceMlDamage", "neuralInterfaceAttrDamage",
+                         "sleepDeprivation", "sleepDeprivationDice", "sleepDeprivationMlDamage"]:
+        project.pop(per_roll_key, None)
+
+    projects[project_index] = project
+    agency.project_rolls = rolls_data
+    agency.projects = projects
+    agency.save(update_fields=["projects", "project_rolls"])
+
+    dice_successes = successes - auto_successes - prodigy_successes
+    msg = roll_type.replace("_", " ").title() + " roll: " + str(pool_size) + " dice → " + str(dice_successes) + " successes."
+    if auto_successes > 0:
+        msg += " +" + str(auto_successes) + " auto (" + auto_merit_name + ")."
+    if prodigy_successes > 0:
+        msg += " +" + str(prodigy_successes) + " auto (Child Prodigy)."
+    if auto_successes > 0 or prodigy_successes > 0:
+        msg += " Total: " + str(successes) + " successes."
+    if successes >= 5:
+        msg += " EXCEPTIONAL SUCCESS!"
+    if mental_damage:
+        msg += " " + char_name + " takes 1 mental load."
+    msg += " Completion: " + str(old_score) + " → " + str(project["completionScore"]) + "."
+
+    # Log the roll
+    try:
+        ProjectRollLog.objects.create(
+            agency=agency,
+            project_index=project_index,
+            project_name=project.get("name", ""),
+            character_name=char_name,
+            roll_type=roll_type,
+            pool=pool_size,
+            rolls=rolls,
+            successes=successes,
+            auto_successes=auto_successes + prodigy_successes,
+            auto_merit=(auto_merit_name or "") + (" + Child Prodigy" if prodigy_successes > 0 else "") if (auto_successes > 0 or prodigy_successes > 0) else "",
+            mental_damage=mental_damage,
+            old_score=old_score,
+            new_score=project["completionScore"],
+            message=msg,
+        )
+    except Exception as e:
+        import logging
+        logging.getLogger(__name__).exception("Failed to log project roll")
+
+    return JsonResponse({
+        "rollType": roll_type,
+        "pool": pool_size,
+        "rolls": rolls,
+        "successes": successes,
+        "autoSuccesses": auto_successes + prodigy_successes,
+        "autoMerit": (auto_merit_name or "") + (" + Child Prodigy" if prodigy_successes > 0 else "") if (auto_successes > 0 or prodigy_successes > 0) else None,
+        "isChance": is_chance,
+        "isDramaticFailure": is_dramatic_failure,
+        "mentalDamage": mental_damage,
+        "oldScore": old_score,
+        "newScore": project["completionScore"],
+        "message": msg,
+    })
+
+
+@login_required
+@require_http_methods(["GET"])
+def api_project_roll_log(request, pk, project_index):
+    """Get roll log for a regular project."""
+    agency = get_object_or_404(Agency, pk=pk)
+    logs = ProjectRollLog.objects.filter(
+        agency=agency, project_index=project_index, assignment__isnull=True,
+    )[:50]
+    data = [
+        {
+            "id": log.id,
+            "characterName": log.character_name,
+            "rollType": log.roll_type,
+            "pool": log.pool,
+            "rolls": log.rolls,
+            "successes": log.successes,
+            "autoSuccesses": log.auto_successes,
+            "autoMerit": log.auto_merit or None,
+            "mentalDamage": log.mental_damage,
+            "oldScore": log.old_score,
+            "newScore": log.new_score,
+            "message": log.message,
+            "rolledAt": log.rolled_at.isoformat(),
+        }
+        for log in logs
+    ]
+    return JsonResponse(data, safe=False)
+
+
+@login_required
+@require_http_methods(["POST"])
+def api_ftl_meta(request, pk, assignment_id):
+    """Update FTL assignment metadata: player, base, dice pool config, fringe, NPCs, etc."""
+    agency = get_object_or_404(Agency, pk=pk)
+    afp = AgencyFTLProject.objects.filter(id=assignment_id, agency=agency).first()
+    if not afp:
+        return JsonResponse({"error": "FTL assignment not found."}, status=404)
+
+    try:
+        body = json.loads(request.body)
+    except json.JSONDecodeError:
+        return JsonResponse({"error": "Invalid JSON."}, status=400)
+
+    # Direct field updates (admin only)
+    if request.user.is_superuser:
+        if "player" in body:
+            afp.player = body["player"]
+        if "baseId" in body:
+            afp.base_id = body["baseId"] or None
+            afp.base_name = body.get("baseName", "")
+
+    # Metadata updates
+    meta = afp.metadata or {}
+    if "dicePoolConfig" in body:
+        meta["dicePoolConfig"] = body["dicePoolConfig"]
+    if "assignedNpcs" in body:
+        meta["assignedNpcs"] = body["assignedNpcs"]
+    if "completionEffects" in body:
+        meta["completionEffects"] = body["completionEffects"]
+    if "toggleFringe" in body and request.user.is_superuser:
+        meta["fringe"] = not meta.get("fringe", False)
+    if "rerollThreshold" in body and request.user.is_superuser:
+        meta["rerollThreshold"] = int(body["rerollThreshold"])
+
+    afp.metadata = meta
+    afp.save()
+
+    return JsonResponse({"status": "updated", "metadata": meta, "player": afp.player, "baseId": afp.base_id, "baseName": afp.base_name})
+
+
+@login_required
+@require_http_methods(["POST"])
+def api_ftl_fringe_effect(request, pk, assignment_id):
+    """Activate a fringe effect on an FTL project. Mirrors api_fringe_effect."""
+    import random
+
+    agency = get_object_or_404(Agency, pk=pk)
+    afp = AgencyFTLProject.objects.filter(id=assignment_id, agency=agency).first()
+    if not afp:
+        return JsonResponse({"error": "FTL assignment not found."}, status=404)
+
+    from characters.models import Character
+    char = Character.objects.filter(owner=request.user).first()
+    is_science = request.user.is_superuser or (char and char.character_class == "science")
+    if not is_science:
+        return JsonResponse({"error": "Science class required."}, status=403)
+
+    meta = afp.metadata or {}
+    if not meta.get("fringe"):
+        return JsonResponse({"error": "Project must be marked as fringe first."}, status=400)
+
+    try:
+        body = json.loads(request.body)
+    except json.JSONDecodeError:
+        return JsonResponse({"error": "Invalid JSON."}, status=400)
+
+    effect = body.get("effect", "")
+
+    # Build a fake project dict from metadata for reuse
+    project = dict(meta)
+    project["player"] = afp.player
+    project["name"] = afp.ftl_project.name
+
+    # Reuse the same fringe effect logic by calling the handler inline
+    # Dark Grants
+    if effect == "dark_grants":
+        level = int(body.get("level", 0))
+        if level < 1 or level > 3:
+            return JsonResponse({"error": "Level must be 1-3."}, status=400)
+        if meta.get("darkGrantsLevel"):
+            return JsonResponse({"error": "Dark Grants already active."}, status=400)
+        linked_agencies = []
+        npc_agencies = list(Agency.objects.filter(is_player_agency=False, is_hidden=False).values_list("id", "name"))
+        random.shuffle(npc_agencies)
+        thresholds = {1: 9, 2: 14, 3: 23}
+        rolls = []
+        for i in range(level):
+            die = random.randint(1, 100)
+            rolls.append(die)
+            if die <= thresholds.get(level, 9) and npc_agencies:
+                for ag_id, ag_name in npc_agencies:
+                    if ag_id not in [la["id"] for la in linked_agencies]:
+                        linked_agencies.append({"id": ag_id, "name": ag_name})
+                        break
+        meta["darkGrantsLevel"] = level
+        meta["darkGrantsAgencies"] = linked_agencies
+        afp.metadata = meta
+        afp.save()
+        msg = "Dark Grants level " + str(level) + " activated. +" + str(level) + " permanent dice."
+        if linked_agencies:
+            msg += " WARNING: " + str(len(linked_agencies)) + " agency(ies) linked."
+        return JsonResponse({"level": level, "rolls": rolls, "linkedAgencies": linked_agencies, "message": msg})
+
+    # For other effects, store directly in metadata using same keys as regular projects
+    SIMPLE_EFFECTS = {
+        "black_market_tech": {"key": "blackMarketTech", "dice_key": "blackMarketTechDice", "dice": 2, "risk": 15, "risk_type": "agency"},
+        "gene_manipulation": {"key": "geneManipulation", "dice_key": "geneManipulationDice", "dice": 3, "risk": 18, "risk_type": "breach"},
+        "neural_interface": {"key": "neuralInterface", "dice_key": "neuralInterfaceDice", "dice": 4},
+        "sleep_deprivation": {"key": "sleepDeprivation", "dice_key": "sleepDeprivationDice", "dice": 2},
+    }
+
+    if effect in SIMPLE_EFFECTS:
+        cfg = SIMPLE_EFFECTS[effect]
+        if meta.get(cfg["key"]):
+            return JsonResponse({"error": "Already active."}, status=400)
+        roll = random.randint(1, 100)
+        meta[cfg["key"]] = True
+        meta[cfg["dice_key"]] = cfg["dice"]
+        afp.metadata = meta
+        afp.save()
+        return JsonResponse({"dice": cfg["dice"], "roll": roll, "message": effect.replace("_", " ").title() + " activated. +" + str(cfg["dice"]) + " dice."})
+
+    if effect == "live_testing":
+        level = body.get("level", "")
+        valid_levels = {
+            "small_animals": {"dice": 1, "label": "Small Animals"},
+            "large_animals": {"dice": 2, "label": "Large Animals"},
+            "human": {"dice": 5, "label": "Human Testing"},
+            "off_books": {"dice": 5, "label": "Off the Books Human Testing"},
+        }
+        if level not in valid_levels:
+            return JsonResponse({"error": "Invalid level."}, status=400)
+        if meta.get("liveTestingLevel"):
+            return JsonResponse({"error": "Already active."}, status=400)
+        cfg = valid_levels[level]
+        meta["liveTestingLevel"] = level
+        meta["liveTestingLabel"] = cfg["label"]
+        meta["liveTestingDice"] = cfg["dice"]
+        afp.metadata = meta
+        afp.save()
+        return JsonResponse({"dice": cfg["dice"], "label": cfg["label"], "message": cfg["label"] + " activated. +" + str(cfg["dice"]) + " dice."})
+
+    return JsonResponse({"error": "Unknown effect: " + effect}, status=400)
+
+
+@login_required
+@require_http_methods(["POST"])
+def api_ftl_roll(request, pk, assignment_id):
+    """Player rolls on an FTL project using their roll allocation."""
+    import random
+
+    agency = get_object_or_404(Agency, pk=pk)
+    afp = AgencyFTLProject.objects.filter(id=assignment_id, agency=agency).first()
+    if not afp:
+        return JsonResponse({"error": "FTL assignment not found."}, status=404)
+
+    from characters.models import Character
+    char = Character.objects.filter(owner=request.user).first()
+    char_name = char.name if char else ""
+
+    if not request.user.is_superuser and afp.player != char_name:
+        return JsonResponse({"error": "You can only roll on your own projects."}, status=403)
+
+    # Check rolls
+    rolls_data = agency.project_rolls or {}
+    personal = rolls_data.get(char_name, {})
+    total_free = personal.get("free", 0) or 0
+    total_spare = personal.get("spare", 0) or 0
+
+    if total_free <= 0 and total_spare <= 0:
+        return JsonResponse({"error": "No rolls available."}, status=400)
+
+    roll_type = "free" if total_free > 0 else "spare"
+    if roll_type == "free":
+        personal["free"] = total_free - 1
+    else:
+        personal["spare"] = total_spare - 1
+    rolls_data[char_name] = personal
+
+    mental_damage = False
+    if roll_type == "spare" and char:
+        char.mental_load = (char.mental_load or 0) + 1
+        char.save(update_fields=["mental_load"])
+        mental_damage = True
+
+    # Compute pool
+    pool_size = 1
+    meta = afp.metadata or {}
+    if meta.get("dicePoolConfig"):
+        from .serializers import _compute_project_dice_pool
+        fake_project = {"player": afp.player, "baseId": afp.base_id, "dicePoolConfig": meta.get("dicePoolConfig"), "assignedNpcs": meta.get("assignedNpcs", [])}
+        for fk, _ in [("darkGrantsLevel",""), ("liveTestingDice",""), ("blackMarketTechDice",""), ("geneManipulationDice",""), ("neuralInterfaceDice",""), ("sleepDeprivationDice",""), ("overclockedEquipmentDice",""), ("childProdigyDice",""), ("assignedProdigyDice","")]:
+            if fk in meta:
+                fake_project[fk] = meta[fk]
+        chars_by_name = {c.name: c for c in Character.objects.prefetch_related("character_merits__merit", "character_pulling_strings__pulling_string").all()}
+        bases = list(agency.bases.all())
+        computed = _compute_project_dice_pool(fake_project, agency, chars_by_name, bases)
+        if computed:
+            pool_size = max(computed["pool"], 1)
+
+    # Check for auto-success merit activation
+    auto_merit_name = None
+    auto_successes = 0
+    try:
+        body = json.loads(request.body) if request.body else {}
+        auto_merit_name = body.get("useAutoMerit")
+    except (json.JSONDecodeError, AttributeError):
+        pass
+
+    if auto_merit_name and char:
+        cm = char.character_merits.select_related("merit").filter(merit__name=auto_merit_name).first()
+        if cm and cm.merit.effects.get("auto_success"):
+            uses = char.merit_uses or {}
+            used = uses.get(auto_merit_name, 0)
+            if used < cm.rating:
+                auto_successes = cm.rating
+                uses[auto_merit_name] = used + 1
+                char.merit_uses = uses
+                char.save(update_fields=["merit_uses"])
+            else:
+                auto_merit_name = None
+        else:
+            auto_merit_name = None
+
+    # Roll
+    reroll_threshold = int(meta.get("rerollThreshold", 10) or 10)
+    successes = 0
+    rolls = []
+    dice_left = pool_size
+    while dice_left > 0:
+        batch = []
+        explosions = 0
+        for _ in range(dice_left):
+            die = random.randint(1, 10)
+            batch.append(die)
+            if die >= 8:
+                successes += 1
+            if die >= reroll_threshold:
+                explosions += 1
+        rolls.extend(batch)
+        dice_left = explosions
+
+    # Add auto-successes from merit
+    successes += auto_successes
+
+    # Add auto-successes from child prodigy (+2 per roll if assigned)
+    prodigy_successes = 0
+    if meta.get("assignedProdigyId"):
+        prodigy_successes = 2
+        successes += prodigy_successes
+
+    old_score = afp.current_successes
+    afp.current_successes = old_score + successes
+
+    # Clear per-roll fringe effects from FTL metadata
+    for per_roll_key in ["stimulantDice", "stimulants", "stimulantLocked", "stimulantResults",
+                         "neuralInterface", "neuralInterfaceDice", "neuralInterfaceMlDamage", "neuralInterfaceAttrDamage",
+                         "sleepDeprivation", "sleepDeprivationDice", "sleepDeprivationMlDamage"]:
+        meta.pop(per_roll_key, None)
+    afp.metadata = meta
+
+    afp.save(update_fields=["current_successes", "metadata"])
+    agency.project_rolls = rolls_data
+    agency.save(update_fields=["project_rolls"])
+
+    dice_successes = successes - auto_successes - prodigy_successes
+    msg = roll_type.replace("_", " ").title() + " roll: " + str(pool_size) + " dice → " + str(dice_successes) + " successes."
+    if auto_successes > 0:
+        msg += " +" + str(auto_successes) + " auto (" + auto_merit_name + ")."
+    if prodigy_successes > 0:
+        msg += " +" + str(prodigy_successes) + " auto (Child Prodigy)."
+    if auto_successes > 0 or prodigy_successes > 0:
+        msg += " Total: " + str(successes) + " successes."
+    if successes >= 5:
+        msg += " EXCEPTIONAL SUCCESS!"
+    if mental_damage:
+        msg += " " + char_name + " takes 1 mental load."
+    msg += " Progress: " + str(old_score) + " → " + str(afp.current_successes) + "/" + str(afp.ftl_project.required_successes) + "."
+
+    # Log the roll
+    try:
+        ProjectRollLog.objects.create(
+            agency=agency,
+            assignment=afp,
+            character_name=char_name,
+            roll_type=roll_type,
+            pool=pool_size,
+            rolls=rolls,
+            successes=successes,
+            auto_successes=auto_successes + prodigy_successes,
+            auto_merit=(auto_merit_name or "") + (" + Child Prodigy" if prodigy_successes > 0 else "") if (auto_successes > 0 or prodigy_successes > 0) else "",
+            mental_damage=mental_damage,
+            old_score=old_score,
+            new_score=afp.current_successes,
+            message=msg,
+        )
+    except Exception as e:
+        import logging
+        logging.getLogger(__name__).exception("Failed to log FTL roll")
+
+    return JsonResponse({
+        "rollType": roll_type, "pool": pool_size, "rolls": rolls,
+        "successes": successes,
+        "autoSuccesses": auto_successes + prodigy_successes,
+        "autoMerit": (auto_merit_name or "") + (" + Child Prodigy" if prodigy_successes > 0 else "") if (auto_successes > 0 or prodigy_successes > 0) else None,
+        "mentalDamage": mental_damage,
+        "oldScore": old_score, "newScore": afp.current_successes, "message": msg,
+    })
+
+
+@login_required
+@require_http_methods(["GET"])
+def api_ftl_roll_log(request, pk, assignment_id):
+    """Get roll log for an FTL project assignment."""
+    afp = get_object_or_404(AgencyFTLProject, pk=assignment_id, agency_id=pk)
+    logs = afp.roll_logs.all()[:50]
+    data = [
+        {
+            "id": log.id,
+            "characterName": log.character_name,
+            "rollType": log.roll_type,
+            "pool": log.pool,
+            "rolls": log.rolls,
+            "successes": log.successes,
+            "autoSuccesses": log.auto_successes,
+            "autoMerit": log.auto_merit or None,
+            "mentalDamage": log.mental_damage,
+            "oldScore": log.old_score,
+            "newScore": log.new_score,
+            "message": log.message,
+            "rolledAt": log.rolled_at.isoformat(),
+        }
+        for log in logs
+    ]
+    return JsonResponse(data, safe=False)
+
+
+@login_required
+@require_http_methods(["POST"])
+def api_downtime_action(request, pk):
+    """Player spends a roll on a downtime action: rest, study, or assign NPC study."""
+    agency = get_object_or_404(Agency, pk=pk)
+
+    from characters.models import Character
+    char = Character.objects.filter(owner=request.user).first()
+    if not char and not request.user.is_superuser:
+        return JsonResponse({"error": "No character found."}, status=400)
+
+    try:
+        body = json.loads(request.body)
+    except json.JSONDecodeError:
+        return JsonResponse({"error": "Invalid JSON."}, status=400)
+
+    action = body.get("action", "")
+    if action not in ("rest", "study", "npc_study"):
+        return JsonResponse({"error": "Invalid action."}, status=400)
+
+    char_name = char.name if char else ""
+
+    # Check and deduct roll
+    rolls_data = agency.project_rolls or {}
+    personal = rolls_data.get(char_name, {})
+    total_free = personal.get("free", 0) or 0
+    total_spare = personal.get("spare", 0) or 0
+
+    if total_free <= 0 and total_spare <= 0:
+        return JsonResponse({"error": "No rolls available."}, status=400)
+
+    roll_type = "free" if total_free > 0 else "spare"
+    if roll_type == "free":
+        personal["free"] = total_free - 1
+    else:
+        personal["spare"] = total_spare - 1
+    rolls_data[char_name] = personal
+
+    messages = []
+
+    # --- REST ---
+    if action == "rest":
+        if roll_type == "free":
+            # Free rest: remove 2 mental load
+            old_ml = char.mental_load or 0
+            char.mental_load = max(0, old_ml - 2)
+            char.save(update_fields=["mental_load"])
+            messages.append(char_name + " rests. Mental load: " + str(old_ml) + " → " + str(char.mental_load) + " (-2).")
+        else:
+            # Spare time rest: remove 1 mental load (no extra ML tax)
+            old_ml = char.mental_load or 0
+            char.mental_load = max(0, old_ml - 1)
+            char.save(update_fields=["mental_load"])
+            messages.append(char_name + " rests in spare time. Mental load: " + str(old_ml) + " → " + str(char.mental_load) + " (-1).")
+
+    # --- STUDY ---
+    elif action == "study":
+        if roll_type == "free":
+            # Free study: +4 XP
+            char.experience = (char.experience or 0) + 4
+            char.save(update_fields=["experience"])
+            messages.append(char_name + " studies. +4 XP.")
+        else:
+            # Spare time study: +2 XP, +1 mental load
+            char.experience = (char.experience or 0) + 2
+            char.mental_load = (char.mental_load or 0) + 1
+            char.save(update_fields=["experience", "mental_load"])
+            messages.append(char_name + " studies in spare time. +2 XP, +1 mental load.")
+
+    # --- NPC STUDY ---
+    elif action == "npc_study":
+        npc_id = body.get("npcId")
+        if not npc_id:
+            return JsonResponse({"error": "Select an NPC."}, status=400)
+        from npcs.models import NPC
+        npc = NPC.objects.filter(id=npc_id).first()
+        if not npc:
+            return JsonResponse({"error": "NPC not found."}, status=400)
+
+        # Both free and spare: +5 XP to NPC
+        npc.experience = (npc.experience or 0) + 5
+        npc.save(update_fields=["experience"])
+        messages.append(npc.name + " studies. +5 XP.")
+
+        if roll_type == "spare":
+            # Spare time: +1 mental load to player
+            char.mental_load = (char.mental_load or 0) + 1
+            char.save(update_fields=["mental_load"])
+            messages.append(char_name + " takes 1 mental load (spare time supervision).")
+
+    agency.project_rolls = rolls_data
+    agency.save(update_fields=["project_rolls"])
+
+    return JsonResponse({
+        "action": action,
+        "rollType": roll_type,
+        "messages": messages,
+        "message": "\n".join(messages),
+    })

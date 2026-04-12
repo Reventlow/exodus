@@ -134,6 +134,8 @@ const {
 
         useEffect(() => {
             fetchAgency();
+            const pollInterval = setInterval(fetchAgency, 30000);
+            return () => clearInterval(pollInterval);
         }, []);
 
         const fetchAgency = async () => {
@@ -224,7 +226,14 @@ const {
                         },
                         body: JSON.stringify(agencyRef.current),
                     });
-                    if (!response.ok) console.error('Quiet save failed:', response.status);
+                    if (!response.ok) { console.error('Quiet save failed:', response.status); return; }
+                    // Re-fetch to get server-computed fields (dice pool, etc.)
+                    const fresh = await fetch('/api/agencies/' + AGENCY_ID + '/');
+                    if (fresh.ok) {
+                        const data = await fresh.json();
+                        agencyRef.current = data;
+                        setAgency(data);
+                    }
                 } catch (err) {
                     console.error('Quiet save error:', err);
                 }
@@ -324,6 +333,7 @@ const {
                     visibility={vis} onToggleVis={toggleVisibility} />
 
                 <IntegrityModule agency={agency} update={updateAgency}
+                    fetchAgency={fetchAgency}
                     visibility={vis} onToggleVis={toggleVisibility} />
 
                 <DossiersModule dossiers={agency.linkedDossiers} />
@@ -423,6 +433,8 @@ const {
                 <BasesModule
                     bases={agency.bases}
                     baseConfig={agency.baseConfig}
+                    baseConfigLookup={agency.baseConfigLookup}
+                    isNuclearPower={agency.isNuclearPower}
                     agencyId={AGENCY_ID}
                     assignableCharacters={agency.assignableCharacters || []}
                     assignableNpcs={agency.assignableNpcs || []}
@@ -556,6 +568,12 @@ const {
                 <ProjectsModule
                     items={agency.projects}
                     characters={agency.assignableCharacters || []}
+                    bases={agency.bases || []}
+                    npcs={agency.assignableNpcs || []}
+                    agencyAttributes={agency.attributes}
+                    projectRolls={agency.projectRolls || {}}
+                    currentCharName={agency.projectRolls && agency.projectRolls.charName ? agency.projectRolls.charName : ''}
+                    fetchAgency={fetchAgency}
                     onSave={val => saveAgencyQuiet({ projects: val })}
                     visibility={vis} onToggleVis={toggleVisibility}
                 />
@@ -565,6 +583,11 @@ const {
                 <FTLProjectsModule
                     ftlProjects={agency.ftlProjects}
                     agencyId={AGENCY_ID}
+                    characters={agency.assignableCharacters || []}
+                    bases={agency.bases || []}
+                    npcs={agency.assignableNpcs || []}
+                    projectRolls={agency.projectRolls || {}}
+                    fetchAgency={fetchAgency}
                 />
 
                 <TableModule

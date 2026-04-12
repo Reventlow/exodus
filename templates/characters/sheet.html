@@ -67,6 +67,7 @@
             }
         },
         merits: [],
+        meritUses: {},
         flaws: [],
         pullingStrings: [],
         inventory: [],
@@ -976,7 +977,7 @@
     };
 
     // --- MERITS MODULE (catalog-based) ---
-    const MeritsModule = ({ merits, catalog, characterClass, onAdd, onRemove, onUpdateRating }) => {
+    const MeritsModule = ({ merits, catalog, characterClass, meritUses, onAdd, onRemove, onUpdateRating, onResetUses, onSpendUse }) => {
         const [showPicker, setShowPicker] = useState(false);
         const ownedMeritIds = merits.map(m => m.meritId);
         const available = catalog.filter(m =>
@@ -1003,16 +1004,28 @@
                     display: 'flex', justifyContent: 'space-between', alignItems: 'center'
                 }}>
                     MERITS
-                    {IS_OWNER && (
-                        <button onClick={() => setShowPicker(!showPicker)} title={showPicker ? "Close" : "Add Merit"} style={{
-                            background: 'transparent', border: '1px solid var(--accent-primary)',
-                            color: 'var(--accent-primary)', width: '24px', height: '24px',
-                            borderRadius: '4px', cursor: 'pointer',
-                            display: 'flex', alignItems: 'center', justifyContent: 'center'
-                        }}>
-                            <Icon name={showPicker ? "x" : "plus"} size={14} />
-                        </button>
-                    )}
+                    <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+                        {IS_SUPERUSER && merits.some(m => m.effects && m.effects.auto_success) && (
+                            <button onClick={() => { if (confirm('Reset all auto-success merit uses for this session?')) onResetUses(); }}
+                                title="Reset session uses"
+                                style={{
+                                    background: 'transparent', border: '1px solid #06b6d4',
+                                    color: '#06b6d4', padding: '0.15rem 0.5rem',
+                                    borderRadius: '4px', cursor: 'pointer',
+                                    fontFamily: 'var(--font-mono)', fontSize: '0.65rem',
+                                }}>RESET USES</button>
+                        )}
+                        {IS_OWNER && (
+                            <button onClick={() => setShowPicker(!showPicker)} title={showPicker ? "Close" : "Add Merit"} style={{
+                                background: 'transparent', border: '1px solid var(--accent-primary)',
+                                color: 'var(--accent-primary)', width: '24px', height: '24px',
+                                borderRadius: '4px', cursor: 'pointer',
+                                display: 'flex', alignItems: 'center', justifyContent: 'center'
+                            }}>
+                                <Icon name={showPicker ? "x" : "plus"} size={14} />
+                            </button>
+                        )}
+                    </div>
                 </h3>
 
                 {showPicker && (
@@ -1107,6 +1120,44 @@
                                         {m.effects.custom && m.effects.custom}
                                     </div>
                                 )}
+                                {m.effects && m.effects.auto_success ? (function() {
+                                    var used = (meritUses || {})[m.name] || 0;
+                                    var total = m.rating;
+                                    var remaining = total - used;
+                                    var dots = [];
+                                    for (var di = 0; di < total; di++) {
+                                        dots.push(React.createElement('span', { key: di, style: {
+                                            display: 'inline-block', width: '10px', height: '10px',
+                                            borderRadius: '50%', border: '2px solid #06b6d4',
+                                            background: di < used ? '#06b6d4' : 'transparent',
+                                        }}));
+                                    }
+                                    return (
+                                        <div style={{ marginTop: '0.35rem', display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
+                                            <span className="mono-text" style={{ fontSize: '0.65rem', color: '#06b6d4' }}>
+                                                SESSION USES
+                                            </span>
+                                            <div style={{ display: 'flex', gap: '3px' }}>
+                                                {dots}
+                                            </div>
+                                            <span className="mono-text" style={{ fontSize: '0.65rem', color: remaining > 0 ? '#06b6d4' : '#ef4444' }}>
+                                                {remaining}/{total}
+                                            </span>
+                                            <span className="mono-text" style={{ fontSize: '0.6rem', color: 'var(--text-muted)' }}>
+                                                (+{total} auto-successes each)
+                                            </span>
+                                            {(IS_OWNER || IS_SUPERUSER) && remaining > 0 ? React.createElement('button', {
+                                                onClick: function() { onSpendUse(m.name); },
+                                                style: {
+                                                    background: 'rgba(6,182,212,0.15)', border: '1px solid #06b6d4',
+                                                    color: '#06b6d4', padding: '0.1rem 0.4rem', cursor: 'pointer',
+                                                    fontFamily: 'var(--font-mono)', fontSize: '0.6rem',
+                                                    borderRadius: '3px',
+                                                },
+                                            }, 'USE') : null}
+                                        </div>
+                                    );
+                                })() : null}
                             </div>
                         ))}
                     </div>
@@ -1223,7 +1274,8 @@
         ]);
         const psCost = char.pullingStringsCost || 0;
         const autoXp = psCost + creation.totalXp;
-        const totalUsed = (char.experienceUsed || 0) + autoXp;
+        const donated = (char.xpTransfers || []).reduce((sum, t) => sum + (t.amount || 0), 0);
+        const totalUsed = (char.experienceUsed || 0) + autoXp + donated;
         const remaining = (char.experience || 0) - totalUsed;
 
         const [transferAmount, setTransferAmount] = useState(1);
@@ -1283,14 +1335,14 @@
 
                 <div style={{
                     display: 'grid',
-                    gridTemplateColumns: 'repeat(4, 1fr)',
+                    gridTemplateColumns: 'repeat(5, 1fr)',
                     gap: '1rem'
                 }}>
                     <div className="tech-border text-center" style={{ padding: '0.5rem' }}>
-                        <div className="text-secondary mono-text" style={{ fontSize: '0.8rem' }}>TOTAL</div>
+                        <div className="text-secondary mono-text" style={{ fontSize: '0.8rem' }}>EARNED</div>
                         <input type="number" value={char.experience || 0}
                             onChange={e => update({ experience: parseInt(e.target.value) || 0 })}
-                            disabled={!IS_OWNER}
+                            disabled={!IS_SUPERUSER}
                             style={{
                                 background: 'transparent', border: 'none',
                                 color: 'var(--text-accent)', width: '100%',
@@ -1324,6 +1376,16 @@
                         <div className="text-secondary mono-text" style={{ fontSize: '0.8rem' }}>AUTO</div>
                         <div style={{ fontSize: '1.5rem', color: 'var(--text-primary)' }}>
                             {autoXp}
+                        </div>
+                        <div style={{ fontSize: '0.65rem', color: 'var(--text-muted)' }}>
+                            Hover for details
+                        </div>
+                    </div>
+                    <div className="tech-border text-center" style={{ padding: '0.5rem' }}
+                        title={(char.xpTransfers || []).filter(function(t) { return t.amount > 0; }).map(function(t) { return t.agencyName + ': ' + t.amount + ' XP'; }).join('\n') || 'No transfers'}>
+                        <div className="text-secondary mono-text" style={{ fontSize: '0.8rem' }}>DONATED</div>
+                        <div style={{ fontSize: '1.5rem', color: '#f59e0b' }}>
+                            {donated}
                         </div>
                         <div style={{ fontSize: '0.65rem', color: 'var(--text-muted)' }}>
                             Hover for details
@@ -2241,6 +2303,7 @@
                         merits={char.merits || []}
                         catalog={meritCatalog}
                         characterClass={char.characterClass || ""}
+                        meritUses={char.meritUses || {}}
                         onAdd={(meritId, maxRating) => {
                             saveCharacter({ addMerit: { meritId, rating: maxRating } });
                             setTimeout(fetchCharacter, 500);
@@ -2253,6 +2316,14 @@
                         }}
                         onUpdateRating={(cmId, rating) => {
                             saveCharacter({ updateMeritRating: { id: cmId, rating } });
+                            setTimeout(fetchCharacter, 500);
+                        }}
+                        onResetUses={() => {
+                            saveCharacter({ resetMeritUses: true });
+                            setTimeout(fetchCharacter, 500);
+                        }}
+                        onSpendUse={(meritName) => {
+                            saveCharacter({ spendMeritUse: meritName });
                             setTimeout(fetchCharacter, 500);
                         }}
                     />

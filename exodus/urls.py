@@ -9,7 +9,11 @@ from . import views
 
 urlpatterns = [
     path("admin/", admin.site.urls),
+    # starmap routes now in starmap app
     path("settings/", views.site_settings, name="site-settings"),
+    path("settings/impersonate/", views.impersonate_user, name="impersonate-user"),
+    path("settings/stop-impersonate/", views.stop_impersonation, name="stop-impersonation"),
+    path("api/transfer-player-to-agency/", views.api_transfer_player_to_agency, name="api-transfer-player-to-agency"),
     path("api/status/", views.api_status, name="api-status"),
     path("api/pulling-strings/", views.api_pulling_strings, name="api-pulling-strings"),
     path("api/pulling-strings/<int:pk>/", views.api_pulling_string_detail, name="api-pulling-string-detail"),
@@ -18,6 +22,8 @@ urlpatterns = [
     path("merits/", views.merits_page, name="merits-page"),
     path("pulling-strings/", views.pulling_strings_page, name="pulling-strings-page"),
     path("accounts/", include("accounts.urls")),
+    path("", include("news.urls")),
+    path("", include("starmap.urls")),
     path("", include("comms.urls")),
     path("", include("characters.urls")),
     path("", include("agencies.urls")),

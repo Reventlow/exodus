@@ -112,7 +112,7 @@ def _get_actor_stats(user, persona_type=None, persona_id=None):
 def _get_defender_stats(thread, attacker):
     """Get the defender's Resolve + Computer for passive detection.
 
-    Returns (resolve, computer, name) or None if defender has no Computer skill.
+    Returns (resolve, computer, name, membership) or None if defender has no Computer skill.
     """
     # Find the other member(s) of the thread who aren't the attacker
     memberships = ThreadMembership.objects.filter(
@@ -126,13 +126,13 @@ def _get_defender_stats(thread, attacker):
             if npc:
                 comp = npc.skills.get("mental", {}).get("Computer", 0)
                 resolve = npc.attributes.get("resistance", {}).get("mental", 1)
-                return resolve, comp, npc.name
+                return resolve, comp, npc.name, m
         # Check user's character
         char = Character.objects.filter(owner=m.user).first()
         if char:
             comp = char.skills.get("mental", {}).get("Computer", 0)
             resolve = char.attributes.get("resistance", {}).get("mental", 1)
-            return resolve, comp, char.name
+            return resolve, comp, char.name, m
     return None
 
 
@@ -144,11 +144,11 @@ def _passive_detect(thread, attacker, difficulty, defender_bonus=0):
     defender = _get_defender_stats(thread, attacker)
     if not defender:
         return None
-    resolve, computer, name = defender
+    resolve, computer, name, membership = defender
     if computer < 1:
         return None  # Unskilled get no passive roll
-    thread_defense = thread.defense_bonus if hasattr(thread, 'defense_bonus') else 0
-    pool = resolve + computer + defender_bonus + thread_defense
+    member_defense = membership.defense_bonus if membership else 0
+    pool = resolve + computer + defender_bonus + member_defense
     result = roll_dice(pool)
     detected = result.successes >= difficulty
     return detected, result, name
@@ -467,13 +467,20 @@ def thread_cyber_status(request, thread_id):
                 if isinstance(p, dict) and not p.get("classified", True)
             ]
 
+    # Get the current user's own defense state
+    user_membership = ThreadMembership.objects.filter(
+        thread=thread, user=request.user
+    ).first()
+    my_defense_active = user_membership.defense_active if user_membership else False
+    my_defense_bonus = user_membership.defense_bonus if user_membership else 0
+
     return JsonResponse({
         "effects": effects_data,
         "actions": actions_data,
         "session": session_data,
         "isConnectionClosed": thread.is_connection_closed,
-        "defenseActive": thread.defense_active,
-        "defenseBonus": thread.defense_bonus,
+        "defenseActive": my_defense_active,
+        "defenseBonus": my_defense_bonus,
         "intrusionDetected": thread.intrusion_detected,
         "defenderAgency": defender_agency,
         "defenderBases": defender_bases,
@@ -493,6 +500,10 @@ def cyber_roll(request, thread_id):
 
     if thread.is_connection_closed:
         return JsonResponse({"error": "Connection closed — no further actions possible."}, status=400)
+    if not request.user.is_superuser:
+        from exodus.models import SiteSettings
+        if SiteSettings.load().lock_comms:
+            return JsonResponse({"error": "Cyber terminal is locked between sessions."}, status=403)
 
     try:
         body = json.loads(request.body)
@@ -604,6 +615,13 @@ def _handle_gain_access(thread, actor, target_user, pool, pool_desc,
                         helper_npc_id=None):
     """Handle Gain Access with session creation and passive detection."""
     ps_flags = ps_flags or {}
+
+    # Target must have sent at least one message in this thread
+    if target_user and not thread.messages.filter(sender=target_user).exists():
+        return JsonResponse(
+            {"error": "Target has not written anything in this chat — no signal to intercept."},
+            status=400,
+        )
 
     # Check difficulty escalation from prior closed sessions
     prior_closes = CyberSession.objects.filter(
@@ -883,11 +901,15 @@ def _handle_deploy(thread, actor, deploy_action, pool, pool_desc,
 
 def _handle_defend(thread, actor, pool, pool_desc,
                    persona_type, persona_id, persona_name, gm_modifier):
-    """Handle defend: activate defense systems, add detection bonus."""
+    """Handle defend: activate defense systems, add detection bonus (per-user)."""
+    from .models import ThreadMembership
 
-    # Can only defend once per thread
-    if thread.defense_active:
-        return JsonResponse({"error": "Defense systems already running on this channel."}, status=400)
+    membership = ThreadMembership.objects.filter(thread=thread, user=actor).first()
+    if not membership:
+        return JsonResponse({"error": "Not a member of this thread."}, status=403)
+
+    if membership.defense_active:
+        return JsonResponse({"error": "Your defense systems are already running on this channel."}, status=400)
 
     result = roll_dice(pool)
 
@@ -899,10 +921,10 @@ def _handle_defend(thread, actor, pool, pool_desc,
 
     s = result.successes
 
-    # Set defense bonus and mark as active
-    thread.defense_bonus = s
-    thread.defense_active = True
-    thread.save(update_fields=["defense_bonus", "defense_active"])
+    # Set defense bonus on the user's membership, not the thread
+    membership.defense_bonus = s
+    membership.defense_active = True
+    membership.save(update_fields=["defense_bonus", "defense_active"])
 
     # Build outcome with escalating messages (only shown to executor)
     actor_name = persona_name or actor.username
@@ -941,11 +963,17 @@ def _handle_detect(thread, actor, pool, pool_desc,
     else:
         own_session = own_session.filter(attacker=actor).first()
 
-    if own_session and thread.defense_active and thread.defense_bonus > 0:
+    # Check if any other member has defense active (for attacker scanning)
+    defender_memberships = ThreadMembership.objects.filter(
+        thread=thread, defense_active=True
+    ).exclude(user=actor)
+    defender_ms = defender_memberships.first()
+
+    if own_session and defender_ms and defender_ms.defense_bonus > 0:
         # Attacker is scanning for defense — roll against defense successes
         detect_pool = pool + 2
         result = roll_dice(detect_pool)
-        defense_s = thread.defense_bonus
+        defense_s = defender_ms.defense_bonus
         if result.successes >= defense_s:
             # Reveal defense messages up to 5
             msgs = _get_defense_messages(min(defense_s, 5), "Target")
@@ -989,10 +1017,11 @@ def _handle_detect(thread, actor, pool, pool_desc,
                     persona_type, persona_id, persona_name, None, gm_modifier)
         return _roll_response("detect", pool_desc, None, outcome, hide_dice=True)
 
-    # Active detect roll: pool + 2 bonus + thread defense bonus vs attacker's gain_access successes
-    thread_defense = thread.defense_bonus if hasattr(thread, 'defense_bonus') else 0
-    detect_pool = pool + 2 + thread_defense
-    defense_text = f" + defense {thread_defense}" if thread_defense else ""
+    # Active detect roll: pool + 2 bonus + own defense bonus vs attacker's gain_access successes
+    actor_membership = ThreadMembership.objects.filter(thread=thread, user=actor).first()
+    my_defense = actor_membership.defense_bonus if actor_membership else 0
+    detect_pool = pool + 2 + my_defense
+    defense_text = f" + defense {my_defense}" if my_defense else ""
     detect_desc = pool_desc.rsplit("=", 1)[0] + f"+ 2 bonus{defense_text} = {detect_pool} dice"
     result = roll_dice(detect_pool)
 
@@ -1289,6 +1318,7 @@ def cyber_modify(request, thread_id):
         ThreadEffect.objects.filter(thread=thread, is_active=True).update(is_active=False)
         ThreadMembership.objects.filter(thread=thread, hidden=True).delete()
         CyberSession.objects.filter(thread=thread, is_active=True).update(is_active=False)
+        ThreadMembership.objects.filter(thread=thread).update(defense_bonus=0, defense_active=False)
         return JsonResponse({"status": "ok"})
 
     elif action == "reopen":

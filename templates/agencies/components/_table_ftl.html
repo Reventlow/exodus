@@ -160,11 +160,50 @@ const { Icon, AutoSaveInput, Classified, VisibilityToggle, getCookie } = window;
     // --- FTL PROJECTS MODULE (per-agency assignments with progress tracking) ---
     const FTL_ACCENT = '#3b82f6';
 
-    const FTLProjectsModule = ({ ftlProjects, agencyId }) => {
+    const FTLProjectsModule = ({ ftlProjects, agencyId, characters, bases, npcs, projectRolls, fetchAgency }) => {
         const [projects, setProjects] = useState(ftlProjects || []);
         const [showAssign, setShowAssign] = useState(false);
         const [allFTL, setAllFTL] = useState([]);
         const [loadingFTL, setLoadingFTL] = useState(false);
+        const [openPanels, setOpenPanels] = useState({});
+        const [armedMerits, setArmedMerits] = useState({});
+        const [lastRolls, setLastRolls] = useState({});
+        const [rollLogData, setRollLogData] = useState(null);
+        const [rollLogLoading, setRollLogLoading] = useState(false);
+
+        var fetchRollLog = function(assignmentId) {
+            setRollLogLoading(true);
+            fetch('/api/agencies/' + agencyId + '/ftl/' + assignmentId + '/roll-log/')
+                .then(function(r) { return r.json(); })
+                .then(function(data) { setRollLogData({ assignmentId: assignmentId, logs: data }); })
+                .catch(function(e) { console.error('Failed to fetch roll log:', e); })
+                .finally(function() { setRollLogLoading(false); });
+        };
+
+        var togglePanel = function(key) {
+            var next = {};
+            for (var k in openPanels) next[k] = openPanels[k];
+            next[key] = !next[key];
+            setOpenPanels(next);
+        };
+
+        var CHAR_ATTRS = [
+            {path: ['power','mental'], label: 'Intelligence'},
+            {path: ['power','physical'], label: 'Strength'},
+            {path: ['power','social'], label: 'Presence'},
+            {path: ['finesse','mental'], label: 'Wits'},
+            {path: ['finesse','physical'], label: 'Dexterity'},
+            {path: ['finesse','social'], label: 'Manipulation'},
+            {path: ['resistance','mental'], label: 'Resolve'},
+            {path: ['resistance','physical'], label: 'Stamina'},
+            {path: ['resistance','social'], label: 'Composure'},
+        ];
+        var SKILLS = [
+            {cat: 'mental', names: ['Academics','Computer','Crafts','Investigation','Medicine','Occult','Politics','Science']},
+            {cat: 'physical', names: ['Athletics','Brawl','Drive','Firearms','Larceny','Stealth','Survival','Weaponry']},
+            {cat: 'social', names: ['AnimalKen','Empathy','Expression','Intimidation','Persuasion','Socialize','Streetwise','Subterfuge']},
+        ];
+        var pathKey = function(p) { return p[0] + '.' + p[1]; };
 
         // Keep in sync when parent re-renders with new data
         useEffect(() => {
@@ -251,7 +290,7 @@ const { Icon, AutoSaveInput, Classified, VisibilityToggle, getCookie } = window;
         const assignedIds = projects.map(p => p.id);
         const unassigned = allFTL.filter(fp => !assignedIds.includes(fp.id));
 
-        return (
+        return (<React.Fragment>
             <div className="glass-panel" style={{
                 padding: '1.5rem', marginBottom: '1rem',
                 borderLeft: `3px solid ${FTL_ACCENT}`,
@@ -535,11 +574,461 @@ const { Icon, AutoSaveInput, Classified, VisibilityToggle, getCookie } = window;
                                     </div>
                                 )}
                             </div>
+
+                            {/* Player & Base assignment (admin) */}
+                            {IS_ADMIN && (
+                                <div style={{ display: 'flex', gap: '1rem', flexWrap: 'wrap', marginTop: '0.75rem', paddingTop: '0.5rem', borderTop: '1px solid var(--border-color)' }}>
+                                    <div style={{ minWidth: '130px' }}>
+                                        <div className="text-muted mono-text" style={{ fontSize: '0.65rem', marginBottom: '0.15rem' }}>PLAYER</div>
+                                        <select value={proj.player || ''} onChange={function(e) {
+                                            fetch('/api/agencies/' + agencyId + '/ftl/' + proj.assignmentId + '/meta/', {
+                                                method: 'POST', headers: { 'Content-Type': 'application/json', 'X-CSRFToken': getCookie('csrftoken') || CSRF_TOKEN },
+                                                body: JSON.stringify({ player: e.target.value }),
+                                            }).then(function() { if (fetchAgency) fetchAgency(); });
+                                        }} style={{ background: 'var(--bg-input, #1a1a2e)', border: 'none', borderBottom: '1px solid var(--border-color)', color: 'var(--text-primary)', width: '100%', fontSize: '0.8rem', fontFamily: 'var(--font-mono)', padding: '0.2rem 0' }}>
+                                            <option value="">Unassigned</option>
+                                            {(characters || []).map(function(c) { return <option key={c.id} value={c.name}>{c.name}</option>; })}
+                                        </select>
+                                    </div>
+                                    <div style={{ minWidth: '130px' }}>
+                                        <div className="text-muted mono-text" style={{ fontSize: '0.65rem', marginBottom: '0.15rem' }}>BASE</div>
+                                        <select value={proj.baseId || ''} onChange={function(e) {
+                                            var sel = e.target.value;
+                                            var bName = '';
+                                            if (sel) { var found = (bases || []).filter(function(b) { return String(b.id) === sel; }); if (found.length) bName = found[0].name; }
+                                            fetch('/api/agencies/' + agencyId + '/ftl/' + proj.assignmentId + '/meta/', {
+                                                method: 'POST', headers: { 'Content-Type': 'application/json', 'X-CSRFToken': getCookie('csrftoken') || CSRF_TOKEN },
+                                                body: JSON.stringify({ baseId: sel ? parseInt(sel) : null, baseName: bName }),
+                                            }).then(function() { if (fetchAgency) fetchAgency(); });
+                                        }} style={{ background: 'var(--bg-input, #1a1a2e)', border: 'none', borderBottom: '1px solid var(--border-color)', color: 'var(--text-primary)', width: '100%', fontSize: '0.8rem', fontFamily: 'var(--font-mono)', padding: '0.2rem 0' }}>
+                                            <option value="">Unassigned</option>
+                                            {(bases || []).map(function(b) { return <option key={b.id} value={b.id}>{b.name}</option>; })}
+                                        </select>
+                                    </div>
+                                    {IS_SCIENCE ? (
+                                        <button onClick={function() {
+                                            fetch('/api/agencies/' + agencyId + '/ftl/' + proj.assignmentId + '/meta/', {
+                                                method: 'POST', headers: { 'Content-Type': 'application/json', 'X-CSRFToken': getCookie('csrftoken') || CSRF_TOKEN },
+                                                body: JSON.stringify({ toggleFringe: true }),
+                                            }).then(function() { if (fetchAgency) fetchAgency(); });
+                                        }} style={{
+                                            alignSelf: 'flex-end', background: 'transparent',
+                                            border: proj.fringe ? '2px solid #8a2be2' : '1px solid var(--border-color)',
+                                            cursor: 'pointer', fontSize: '1.2rem', padding: '0.2rem 0.5rem',
+                                            opacity: proj.fringe ? 1 : 0.3, borderRadius: '4px',
+                                        }} title={proj.fringe ? 'Fringe Science' : 'Mark as Fringe'}>🖐</button>
+                                    ) : null}
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
+                                        <span className="text-muted mono-text" style={{ fontSize: '0.65rem' }}>REROLL</span>
+                                        <select value={(proj.metadata && proj.metadata.rerollThreshold) || 10} onChange={function(e) {
+                                            var newMeta = Object.assign({}, proj.metadata || {});
+                                            newMeta.rerollThreshold = parseInt(e.target.value);
+                                            fetch('/api/agencies/' + agencyId + '/ftl/' + proj.assignmentId + '/meta/', {
+                                                method: 'POST', headers: { 'Content-Type': 'application/json', 'X-CSRFToken': getCookie('csrftoken') || CSRF_TOKEN },
+                                                body: JSON.stringify({ rerollThreshold: parseInt(e.target.value) }),
+                                            }).then(function() { if (fetchAgency) fetchAgency(); });
+                                        }} style={{
+                                            background: 'var(--bg-input, #1a1a2e)', border: 'none', borderBottom: '1px solid var(--border-color)',
+                                            color: ((proj.metadata && proj.metadata.rerollThreshold) || 10) < 10 ? '#2ecc71' : 'var(--text-muted)', fontSize: '0.75rem', fontFamily: 'var(--font-mono)', padding: '0 0.2rem',
+                                        }}>
+                                            <option value="10">10</option>
+                                            <option value="9">9+</option>
+                                            <option value="8">8+</option>
+                                        </select>
+                                    </div>
+                                </div>
+                            )}
+
+                            {/* Fringe effects */}
+                            {proj.fringe && IS_SCIENCE ? (
+                                <div style={{ marginTop: '0.5rem' }}>
+                                    {proj.metadata && proj.metadata.darkGrantsLevel ? (
+                                        <div className="mono-text" style={{ fontSize: '0.7rem', color: '#8a2be2', marginBottom: '0.25rem' }}>
+                                            Dark Grants Level {proj.metadata.darkGrantsLevel} (+{proj.metadata.darkGrantsLevel} dice)
+                                        </div>
+                                    ) : (
+                                        <div style={{ display: 'flex', gap: '0.3rem', marginBottom: '0.25rem' }}>
+                                            {[1,2,3].map(function(lvl) {
+                                                return <button key={lvl} onClick={function() {
+                                                    if (!confirm('Dark Grants Level ' + lvl + '?')) return;
+                                                    fetch('/api/agencies/' + agencyId + '/ftl/' + proj.assignmentId + '/fringe-effect/', {
+                                                        method: 'POST', headers: { 'Content-Type': 'application/json', 'X-CSRFToken': getCookie('csrftoken') || CSRF_TOKEN },
+                                                        body: JSON.stringify({ effect: 'dark_grants', level: lvl }),
+                                                    }).then(function(r) { return r.json(); }).then(function(d) { if (d.error) alert(d.error); else { alert(d.message); if (fetchAgency) fetchAgency(); } });
+                                                }} style={{ padding: '0.3rem 0.5rem', background: 'rgba(138,43,226,0.08)', border: '1px solid #8a2be2', borderRadius: '3px', fontFamily: 'var(--font-mono)', color: '#c084fc', cursor: 'pointer', fontSize: '0.7rem' }}>DG +{lvl}</button>;
+                                            })}
+                                        </div>
+                                    )}
+                                    {['black_market_tech','gene_manipulation','neural_interface','sleep_deprivation'].map(function(eff) {
+                                        var labels = {black_market_tech: 'Black Market +2', gene_manipulation: 'Gene Manip +3', neural_interface: 'Neural +4', sleep_deprivation: 'Sleep Dep +2'};
+                                        var keys = {black_market_tech: 'blackMarketTech', gene_manipulation: 'geneManipulation', neural_interface: 'neuralInterface', sleep_deprivation: 'sleepDeprivation'};
+                                        if (proj.metadata && proj.metadata[keys[eff]]) return <span key={eff} className="mono-text" style={{ fontSize: '0.65rem', color: '#2dd4bf', marginRight: '0.5rem' }}>{labels[eff]} ✓</span>;
+                                        return <button key={eff} onClick={function() {
+                                            if (!confirm(labels[eff] + '?')) return;
+                                            fetch('/api/agencies/' + agencyId + '/ftl/' + proj.assignmentId + '/fringe-effect/', {
+                                                method: 'POST', headers: { 'Content-Type': 'application/json', 'X-CSRFToken': getCookie('csrftoken') || CSRF_TOKEN },
+                                                body: JSON.stringify({ effect: eff }),
+                                            }).then(function(r) { return r.json(); }).then(function(d) { if (d.error) alert(d.error); else { alert(d.message); if (fetchAgency) fetchAgency(); } });
+                                        }} style={{ padding: '0.2rem 0.4rem', background: 'transparent', border: '1px solid var(--border-color)', borderRadius: '3px', fontFamily: 'var(--font-mono)', color: 'var(--text-muted)', cursor: 'pointer', fontSize: '0.6rem', marginRight: '0.3rem', marginBottom: '0.2rem' }}>{labels[eff]}</button>;
+                                    })}
+                                </div>
+                            ) : null}
+
+                            {/* Dice pool display with hover */}
+                            {proj.computedPool ? (function() {
+                                var cp = proj.computedPool;
+                                var hKey = 'ftl-pool-' + proj.assignmentId;
+                                var isHover = openPanels[hKey];
+                                return (
+                                    <div style={{ marginTop: '0.5rem', position: 'relative', display: 'inline-block' }}
+                                         onMouseEnter={function() { var n = {}; for (var k in openPanels) n[k] = openPanels[k]; n[hKey] = true; setOpenPanels(n); }}
+                                         onMouseLeave={function() { var n = {}; for (var k in openPanels) n[k] = openPanels[k]; n[hKey] = false; setOpenPanels(n); }}>
+                                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                                            <span className="mono-text" style={{ fontSize: '1.4rem', fontWeight: 'bold', color: FTL_ACCENT }}>{cp.pool}</span>
+                                            <span className="mono-text text-muted" style={{ fontSize: '0.7rem' }}>DICE POOL</span>
+                                        </div>
+                                        {isHover ? (
+                                            <div style={{ position: 'absolute', top: '100%', left: 0, zIndex: 100, marginTop: '0.25rem', padding: '0.5rem 0.75rem', background: 'rgba(15,15,30,0.97)', border: '1px solid var(--border-color)', borderRadius: '4px', fontSize: '0.7rem', minWidth: '220px', boxShadow: '0 4px 12px rgba(0,0,0,0.5)' }}>
+                                                {cp.parts.map(function(pt, i) {
+                                                    var color = 'var(--text-secondary)';
+                                                    if (pt.type === 'fringe') color = '#c084fc';
+                                                    if (pt.type === 'fringePerRoll') color = '#e879f9';
+                                                    if (pt.type === 'mentalLoad') color = 'var(--accent-danger, #c0392b)';
+                                                    if (pt.type === 'workspace') color = '#2dd4bf';
+                                                    if (pt.type === 'pullingString') color = '#fbbf24';
+                                                    if (pt.type === 'merit') color = '#60a5fa';
+                                                    if (pt.type === 'npc') color = '#f97316';
+                                                    if (pt.type === 'thrive') color = pt.value > 0 ? '#22c55e' : '#ef4444';
+                                                    return (
+                                                        <div key={i} style={{ display: 'flex', justifyContent: 'space-between', padding: '0.1rem 0' }}>
+                                                            <span className="mono-text" style={{ color: color }}>{pt.label}</span>
+                                                            <span className="mono-text" style={{ color: color, marginLeft: '1rem' }}>{pt.value > 0 ? '+' + pt.value : pt.value}</span>
+                                                        </div>
+                                                    );
+                                                })}
+                                                <div style={{ borderTop: '1px solid var(--border-color)', marginTop: '0.25rem', paddingTop: '0.25rem', display: 'flex', justifyContent: 'space-between' }}>
+                                                    <span className="mono-text" style={{ fontWeight: 'bold', color: 'var(--text-primary)' }}>Total</span>
+                                                    <span className="mono-text" style={{ fontWeight: 'bold', color: FTL_ACCENT }}>{cp.pool} dice</span>
+                                                </div>
+                                            </div>
+                                        ) : null}
+                                    </div>
+                                );
+                            })() : null}
+
+                            {/* Dice Pool Config (admin) */}
+                            {IS_ADMIN ? (function() {
+                                var meta = proj.metadata || {};
+                                var cfg = meta.dicePoolConfig || {};
+                                var panelKey = 'ftl-cfg-' + proj.assignmentId;
+                                var expanded = openPanels[panelKey];
+                                var hasConfig = cfg.charSkill || (cfg.charAttributes && cfg.charAttributes.length > 0);
+
+                                var charData = null;
+                                if (proj.player) {
+                                    for (var ci = 0; ci < (characters || []).length; ci++) {
+                                        if (characters[ci].name === proj.player) { charData = characters[ci]; break; }
+                                    }
+                                }
+                                var charMerits = charData && charData.merits ? charData.merits : [];
+                                var charPS = charData && charData.pullingStrings ? charData.pullingStrings : [];
+
+                                var saveCfg = function(newCfg) {
+                                    fetch('/api/agencies/' + agencyId + '/ftl/' + proj.assignmentId + '/meta/', {
+                                        method: 'POST', headers: { 'Content-Type': 'application/json', 'X-CSRFToken': getCookie('csrftoken') || CSRF_TOKEN },
+                                        body: JSON.stringify({ dicePoolConfig: newCfg }),
+                                    }).then(function() { if (fetchAgency) fetchAgency(); });
+                                };
+                                var updateCfg = function(key, val) {
+                                    var newCfg = {};
+                                    for (var k in cfg) newCfg[k] = cfg[k];
+                                    newCfg[key] = val;
+                                    saveCfg(newCfg);
+                                };
+
+                                var selStyle = { background: 'var(--bg-input, #1a1a2e)', border: 'none', borderBottom: '1px solid var(--border-color)', color: 'var(--text-primary)', width: '100%', fontSize: '0.75rem', fontFamily: 'var(--font-mono)', padding: '0.2rem 0' };
+
+                                return (
+                                    <div style={{ marginTop: '0.5rem' }}>
+                                        <button onClick={function() { togglePanel(panelKey); }} style={{ background: 'transparent', border: 'none', cursor: 'pointer', padding: 0, color: hasConfig ? FTL_ACCENT : 'var(--text-muted)', fontFamily: 'var(--font-mono)', fontSize: '0.65rem' }}>
+                                            {expanded ? '▼' : '▶'} DICE POOL CONFIG
+                                        </button>
+                                        {expanded ? (
+                                            <div style={{ marginTop: '0.4rem', padding: '0.5rem', background: 'rgba(0,0,0,0.15)', borderRadius: '3px' }}>
+                                                <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap', marginBottom: '0.5rem' }}>
+                                                    <div style={{ minWidth: '120px', flex: 1 }}>
+                                                        <div className="text-muted mono-text" style={{ fontSize: '0.6rem', marginBottom: '0.15rem' }}>ATTRIBUTE 1</div>
+                                                        <select value={cfg.charAttributes && cfg.charAttributes[0] ? pathKey(cfg.charAttributes[0]) : ''} onChange={function(e) {
+                                                            var val = e.target.value;
+                                                            var arr = (cfg.charAttributes || []).slice();
+                                                            if (val) { arr[0] = val.split('.'); } else { arr = arr.slice(1); }
+                                                            updateCfg('charAttributes', arr);
+                                                        }} style={selStyle}>
+                                                            <option value="">— none —</option>
+                                                            {CHAR_ATTRS.map(function(a) { return <option key={pathKey(a.path)} value={pathKey(a.path)}>{a.label}</option>; })}
+                                                        </select>
+                                                    </div>
+                                                    <div style={{ minWidth: '120px', flex: 1 }}>
+                                                        <div className="text-muted mono-text" style={{ fontSize: '0.6rem', marginBottom: '0.15rem' }}>ATTRIBUTE 2</div>
+                                                        <select value={cfg.charAttributes && cfg.charAttributes[1] ? pathKey(cfg.charAttributes[1]) : ''} onChange={function(e) {
+                                                            var val = e.target.value;
+                                                            var arr = (cfg.charAttributes || []).slice();
+                                                            while (arr.length < 1) arr.push(null);
+                                                            if (val) { arr[1] = val.split('.'); } else { arr = arr.length > 1 ? [arr[0]] : []; }
+                                                            arr = arr.filter(function(x) { return x; });
+                                                            updateCfg('charAttributes', arr);
+                                                        }} style={selStyle}>
+                                                            <option value="">— none —</option>
+                                                            {CHAR_ATTRS.map(function(a) { return <option key={pathKey(a.path)} value={pathKey(a.path)}>{a.label}</option>; })}
+                                                        </select>
+                                                    </div>
+                                                    <div style={{ minWidth: '120px', flex: 1 }}>
+                                                        <div className="text-muted mono-text" style={{ fontSize: '0.6rem', marginBottom: '0.15rem' }}>SKILL</div>
+                                                        <select value={cfg.charSkill ? cfg.charSkill.category + '.' + cfg.charSkill.name : ''} onChange={function(e) {
+                                                            var val = e.target.value;
+                                                            if (!val) { updateCfg('charSkill', null); return; }
+                                                            var parts = val.split('.');
+                                                            updateCfg('charSkill', {category: parts[0], name: parts[1]});
+                                                        }} style={selStyle}>
+                                                            <option value="">— none —</option>
+                                                            {SKILLS.map(function(group) { return group.names.map(function(s) { return <option key={group.cat + '.' + s} value={group.cat + '.' + s}>{s} ({group.cat})</option>; }); })}
+                                                        </select>
+                                                    </div>
+                                                </div>
+                                                {!proj.player ? (
+                                                    <div className="mono-text text-muted" style={{ fontSize: '0.6rem' }}>Assign a player to configure merits and pulling strings.</div>
+                                                ) : (
+                                                    <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap' }}>
+                                                        {charMerits.length > 0 ? (
+                                                            <div style={{ flex: 1, minWidth: '150px' }}>
+                                                                <div className="text-muted mono-text" style={{ fontSize: '0.6rem', marginBottom: '0.15rem' }}>MERITS — {proj.player}</div>
+                                                                <select multiple value={cfg.matchingMerits || []} onChange={function(e) {
+                                                                    var opts = e.target.options; var sel = [];
+                                                                    for (var i = 0; i < opts.length; i++) { if (opts[i].selected) sel.push(opts[i].value); }
+                                                                    updateCfg('matchingMerits', sel);
+                                                                }} style={{ background: 'var(--bg-input, #1a1a2e)', border: '1px solid var(--border-color)', color: 'var(--text-primary)', width: '100%', fontSize: '0.65rem', fontFamily: 'var(--font-mono)', height: '60px' }}>
+                                                                    {charMerits.map(function(m, mi) { return <option key={mi} value={m.name}>{m.name} ({m.rating})</option>; })}
+                                                                </select>
+                                                            </div>
+                                                        ) : null}
+                                                        {(function() {
+                                                            var nonNpcPS = charPS.filter(function(ps) { return !ps.linkedNpc; });
+                                                            if (nonNpcPS.length === 0) return null;
+                                                            return (
+                                                            <div style={{ flex: 1, minWidth: '150px' }}>
+                                                                <div className="text-muted mono-text" style={{ fontSize: '0.6rem', marginBottom: '0.15rem' }}>PULLING STRINGS — {proj.player}</div>
+                                                                <select multiple value={cfg.matchingPullingStrings || []} onChange={function(e) {
+                                                                    var opts = e.target.options; var sel = [];
+                                                                    for (var i = 0; i < opts.length; i++) { if (opts[i].selected) sel.push(opts[i].value); }
+                                                                    updateCfg('matchingPullingStrings', sel);
+                                                                }} style={{ background: 'var(--bg-input, #1a1a2e)', border: '1px solid var(--border-color)', color: 'var(--text-primary)', width: '100%', fontSize: '0.65rem', fontFamily: 'var(--font-mono)', height: '60px' }}>
+                                                                    {nonNpcPS.map(function(ps, pi) {
+                                                                        return <option key={pi} value={ps.name}>{ps.name}</option>;
+                                                                    })}
+                                                                </select>
+                                                            </div>
+                                                            );
+                                                        })()}
+                                                    </div>
+                                                )}
+                                                <div className="mono-text text-muted" style={{ fontSize: '0.55rem', marginTop: '0.35rem' }}>Workspace quality and mental load auto-applied. Fringe modifiers auto-included.</div>
+                                            </div>
+                                        ) : null}
+                                    </div>
+                                );
+                            })() : null}
+
+                            {/* Roll button */}
+                            {!isComplete && proj.player ? (function() {
+                                var pr = projectRolls || {};
+                                var charRolls = IS_ADMIN && proj.player ? (pr[proj.player] || {}) : pr;
+                                var totalFree = charRolls.free || 0;
+                                var totalSpare = charRolls.spare || 0;
+                                var hasRolls = totalFree + totalSpare > 0;
+                                var rollLabel = totalFree > 0 ? 'FREE ROLL' : totalSpare > 0 ? 'SPARE TIME ROLL' : 'NO ROLLS';
+                                var rollColor = totalFree > 0 ? FTL_ACCENT : totalSpare > 0 ? '#eab308' : 'var(--text-muted)';
+                                var countText = totalFree > 0 ? totalFree + ' free' : totalSpare > 0 ? totalSpare + ' spare' : '0 remaining';
+                                var charData = (characters || []).find(function(c) { return c.name === proj.player; });
+                                var autoMerits = charData ? (charData.autoSuccessMerits || []).filter(function(m) { return m.remaining > 0; }) : [];
+                                var ftlKey = 'ftl_' + proj.assignmentId;
+                                var armed = armedMerits[ftlKey] || null;
+                                var armedMerit = armed ? autoMerits.find(function(m) { return m.name === armed; }) : null;
+                                return (
+                                    <div>
+                                    {autoMerits.length > 0 ? (
+                                        <div style={{ marginTop: '0.35rem', marginBottom: '0.35rem', display: 'flex', flexWrap: 'wrap', gap: '0.3rem' }}>
+                                            {autoMerits.map(function(m) {
+                                                var isArmed = armed === m.name;
+                                                var dots = [];
+                                                for (var d = 0; d < m.rating; d++) {
+                                                    dots.push(React.createElement('span', { key: d, style: {
+                                                        display: 'inline-block', width: '8px', height: '8px', borderRadius: '50%',
+                                                        border: '1px solid ' + (isArmed ? '#fff' : '#06b6d4'),
+                                                        background: d < (m.rating - m.remaining) ? '#06b6d4' : 'transparent',
+                                                        marginRight: '2px',
+                                                    }}));
+                                                }
+                                                return React.createElement('button', {
+                                                    key: m.name,
+                                                    onClick: function() { setArmedMerits(function(prev) { var n = Object.assign({}, prev); if (n[ftlKey] === m.name) { delete n[ftlKey]; } else { n[ftlKey] = m.name; } return n; }); },
+                                                    style: {
+                                                        background: isArmed ? '#06b6d422' : 'transparent',
+                                                        border: '1px solid ' + (isArmed ? '#06b6d4' : 'var(--border-color)'),
+                                                        color: isArmed ? '#06b6d4' : 'var(--text-muted)',
+                                                        padding: '0.2rem 0.5rem', cursor: 'pointer',
+                                                        fontFamily: 'var(--font-mono)', fontSize: '0.65rem',
+                                                        borderRadius: '4px', display: 'flex', alignItems: 'center', gap: '0.3rem',
+                                                    },
+                                                }, isArmed ? '✓ ' : '', m.name + ' ', dots, ' +' + m.rating);
+                                            })}
+                                        </div>
+                                    ) : null}
+                                    <button disabled={!hasRolls && !IS_ADMIN} onClick={function() {
+                                        if (!hasRolls && !IS_ADMIN) return;
+                                        var msg = rollLabel + ' on "' + proj.name + '"?';
+                                        if (totalFree <= 0 && totalSpare > 0) msg += '\n\nSpare time: +1 mental load.';
+                                        if (armedMerit) msg += '\n\n+ ' + armedMerit.rating + ' auto-successes from ' + armedMerit.name;
+                                        if (!confirm(msg)) return;
+                                        var bodyData = armed ? JSON.stringify({ useAutoMerit: armed }) : '{}';
+                                        fetch('/api/agencies/' + agencyId + '/ftl/' + proj.assignmentId + '/roll/', {
+                                            method: 'POST', headers: { 'Content-Type': 'application/json', 'X-CSRFToken': getCookie('csrftoken') || CSRF_TOKEN },
+                                            body: bodyData,
+                                        }).then(function(r) { return r.json(); }).then(function(d) {
+                                            if (d.error) { alert(d.error); return; }
+                                            setLastRolls(function(prev) { var n = Object.assign({}, prev); n[ftlKey] = d; return n; });
+                                            setArmedMerits(function(prev) { var n = Object.assign({}, prev); delete n[ftlKey]; return n; });
+                                            if (fetchAgency) fetchAgency();
+                                        });
+                                    }} style={{
+                                        width: '100%', padding: '0.4rem', marginTop: '0.5rem',
+                                        cursor: hasRolls || IS_ADMIN ? 'pointer' : 'not-allowed',
+                                        background: armedMerit ? 'rgba(6,182,212,0.1)' : 'rgba(0,0,0,0.2)',
+                                        border: '1px solid ' + (armedMerit ? '#06b6d4' : rollColor),
+                                        borderRadius: '4px', fontFamily: 'var(--font-mono)',
+                                        color: armedMerit ? '#06b6d4' : rollColor,
+                                        fontSize: '0.75rem', fontWeight: 'bold',
+                                        opacity: hasRolls || IS_ADMIN ? 1 : 0.4,
+                                    }}>
+                                        {rollLabel} ({countText}){armedMerit ? ' + ' + armedMerit.name : ''}
+                                    </button>
+                                    {/* Inline roll result */}
+                                    {lastRolls[ftlKey] ? (function() {
+                                        var lr = lastRolls[ftlKey];
+                                        var totalSuccesses = lr.successes || 0;
+                                        var diceSuccesses = totalSuccesses - (lr.autoSuccesses || 0);
+                                        return (
+                                            <div style={{ marginTop: '0.4rem', padding: '0.5rem', background: 'rgba(0,0,0,0.3)', borderRadius: '4px', border: '1px solid var(--border-color)' }}>
+                                                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px', marginBottom: '0.35rem' }}>
+                                                    {(lr.rolls || []).map(function(die, i) {
+                                                        var isSuccess = die >= 8;
+                                                        return React.createElement('span', { key: i, className: 'mono-text', style: {
+                                                            display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+                                                            width: '26px', height: '26px', borderRadius: '4px',
+                                                            background: isSuccess ? 'rgba(34,197,94,0.2)' : 'rgba(0,0,0,0.3)',
+                                                            border: '1px solid ' + (isSuccess ? '#22c55e' : 'var(--border-color)'),
+                                                            color: isSuccess ? '#22c55e' : 'var(--text-muted)',
+                                                            fontSize: '0.8rem', fontWeight: isSuccess ? 'bold' : 'normal',
+                                                        }}, die);
+                                                    })}
+                                                </div>
+                                                <div className="mono-text" style={{ fontSize: '0.75rem', fontWeight: 'bold', color: totalSuccesses > 0 ? '#22c55e' : '#ef4444' }}>
+                                                    {diceSuccesses} {diceSuccesses === 1 ? 'SUCCESS' : 'SUCCESSES'}
+                                                    {lr.autoSuccesses > 0 ? ' + ' + lr.autoSuccesses + ' AUTO (' + lr.autoMerit + ')' : ''}
+                                                    {lr.autoSuccesses > 0 ? ' = ' + totalSuccesses + ' TOTAL' : ''}
+                                                    {totalSuccesses >= 5 ? ' — EXCEPTIONAL!' : ''}
+                                                </div>
+                                                <div className="mono-text" style={{ fontSize: '0.65rem', color: 'var(--text-muted)', marginTop: '0.2rem' }}>
+                                                    {lr.rollType === 'spare' ? 'Spare time roll' : 'Free roll'}
+                                                    {' · '}Progress: {lr.oldScore} → {lr.newScore}
+                                                    {lr.mentalDamage ? ' · +1 mental load' : ''}
+                                                </div>
+                                            </div>
+                                        );
+                                    })() : null}
+                                    </div>
+                                );
+                            })() : null}
+                            {/* Roll log button */}
+                            <button onClick={function() { fetchRollLog(p.assignmentId); }}
+                                className="mono-text"
+                                style={{
+                                    marginTop: '0.5rem', background: 'transparent',
+                                    border: '1px solid var(--border-color)', color: 'var(--text-muted)',
+                                    padding: '0.3rem 0.75rem', cursor: 'pointer',
+                                    fontSize: '0.7rem', fontFamily: 'var(--font-mono)',
+                                    letterSpacing: '1px',
+                                }}>
+                                ROLL LOG
+                            </button>
                         </div>
                     );
                 })}
             </div>
-        );
+
+            {/* Roll log modal */}
+            {rollLogData && (
+                <div style={{
+                    position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
+                    background: 'rgba(0,0,0,0.85)', display: 'flex',
+                    alignItems: 'center', justifyContent: 'center', zIndex: 1000,
+                }} onClick={function() { setRollLogData(null); }}>
+                    <div className="glass-panel" style={{
+                        padding: '1.5rem', maxWidth: '600px', width: '95%',
+                        maxHeight: '80vh', overflowY: 'auto',
+                    }} onClick={function(e) { e.stopPropagation(); }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem', borderBottom: '1px solid var(--border-color)', paddingBottom: '0.5rem' }}>
+                            <h3 className="mono-text text-accent" style={{ fontSize: '1rem', margin: 0 }}>ROLL LOG</h3>
+                            <button onClick={function() { setRollLogData(null); }} className="mono-text"
+                                style={{ background: 'transparent', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', fontSize: '1.2rem' }}>&times;</button>
+                        </div>
+                        {rollLogData.logs.length === 0 ? (
+                            <p className="mono-text text-muted" style={{ textAlign: 'center', padding: '2rem 0', fontStyle: 'italic' }}>No rolls recorded yet.</p>
+                        ) : rollLogData.logs.map(function(log) {
+                            var diceSuccesses = log.successes - (log.autoSuccesses || 0);
+                            return (
+                                <div key={log.id} style={{
+                                    padding: '0.75rem', marginBottom: '0.5rem',
+                                    background: 'rgba(0,0,0,0.3)', borderRadius: '4px',
+                                    border: '1px solid var(--border-color)',
+                                }}>
+                                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.4rem' }}>
+                                        <span className="mono-text text-accent" style={{ fontSize: '0.8rem' }}>
+                                            {log.characterName}
+                                        </span>
+                                        <span className="mono-text text-muted" style={{ fontSize: '0.65rem' }}>
+                                            {new Date(log.rolledAt).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}
+                                        </span>
+                                    </div>
+                                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: '3px', marginBottom: '0.35rem' }}>
+                                        {(log.rolls || []).map(function(die, i) {
+                                            var isSuccess = die >= 8;
+                                            return React.createElement('span', { key: i, className: 'mono-text', style: {
+                                                display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+                                                width: '22px', height: '22px', borderRadius: '3px',
+                                                background: isSuccess ? 'rgba(34,197,94,0.2)' : 'rgba(0,0,0,0.3)',
+                                                border: '1px solid ' + (isSuccess ? '#22c55e' : 'var(--border-color)'),
+                                                color: isSuccess ? '#22c55e' : 'var(--text-muted)',
+                                                fontSize: '0.7rem', fontWeight: isSuccess ? 'bold' : 'normal',
+                                            }}, die);
+                                        })}
+                                    </div>
+                                    <div className="mono-text" style={{ fontSize: '0.7rem', fontWeight: 'bold', color: log.successes > 0 ? '#22c55e' : '#ef4444' }}>
+                                        {diceSuccesses} {diceSuccesses === 1 ? 'SUCCESS' : 'SUCCESSES'}
+                                        {log.autoSuccesses > 0 ? ' + ' + log.autoSuccesses + ' AUTO' + (log.autoMerit ? ' (' + log.autoMerit + ')' : '') : ''}
+                                        {log.autoSuccesses > 0 ? ' = ' + log.successes + ' TOTAL' : ''}
+                                        {log.successes >= 5 ? ' — EXCEPTIONAL!' : ''}
+                                    </div>
+                                    <div className="mono-text" style={{ fontSize: '0.6rem', color: 'var(--text-muted)', marginTop: '0.2rem' }}>
+                                        {log.rollType === 'spare' ? 'Spare time' : 'Free'} · {log.pool} dice · Progress: {log.oldScore} → {log.newScore}
+                                        {log.mentalDamage ? ' · +1 ML' : ''}
+                                    </div>
+                                </div>
+                            );
+                        })}
+                    </div>
+                </div>
+            )}
+        </React.Fragment>);
     };
 
 // Export to global scope

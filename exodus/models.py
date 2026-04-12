@@ -110,6 +110,35 @@ class SiteSettings(models.Model):
         default="",
         help_text="United Interstellar Council charter content (Markdown).",
     )
+    lock_comms = models.BooleanField(
+        default=True,
+        help_text="Lock comms and cyber terminal for non-superusers (unlock during game sessions).",
+    )
+    show_world_map = models.BooleanField(
+        default=True,
+        help_text="Show WORLD MAP link in navigation for all players.",
+    )
+    show_star_map = models.BooleanField(
+        default=False,
+        help_text="Show STAR MAP link in navigation for all players.",
+    )
+    show_council = models.BooleanField(
+        default=True,
+        help_text="Show COUNCIL link in navigation.",
+    )
+    council_mode = models.CharField(
+        max_length=20,
+        default="agency",
+        help_text="Council voting mode: 'agency' (agencies vote) or 'player' (individual players/NPCs vote).",
+    )
+
+    # Nav bar label customisation
+    label_dispatch = models.CharField(max_length=50, default="DISPATCH", blank=True)
+    label_players = models.CharField(max_length=50, default="PLAYERS", blank=True)
+    label_agencies = models.CharField(max_length=50, default="AGENCIES", blank=True)
+    label_council = models.CharField(max_length=50, default="COUNCIL", blank=True)
+    label_npcs = models.CharField(max_length=50, default="NPC'S", blank=True)
+    label_comms = models.CharField(max_length=50, default="COMMS", blank=True)
 
     class Meta:
         verbose_name = "Site Settings"

@@ -1,0 +1,792 @@
+{% extends "base.html" %}
+
+{% block title %}STARMAP // EXODUS{% endblock %}
+
+{% block content %}
+<style>
+    /* Fill the viewport below the nav bar */
+    #starmap-container {
+        position: relative;
+        width: 100%;
+        height: calc(100vh - 60px);
+        overflow: hidden;
+        background: var(--bg-dark, #0a0a0f);
+    }
+
+    #starmap-container canvas {
+        display: block;
+        width: 100%;
+        height: 100%;
+    }
+
+    /* Info panel — top-left overlay */
+    #star-info {
+        position: absolute;
+        top: 1rem;
+        left: 1rem;
+        z-index: 10;
+        font-family: var(--font-mono, 'Courier New', monospace);
+        font-size: 0.85rem;
+        color: var(--text-primary, #e0e0e0);
+        background: rgba(10, 10, 15, 0.85);
+        border: 1px solid var(--border-color, #333);
+        border-radius: var(--radius-sm, 4px);
+        padding: 0.75rem 1rem;
+        min-width: 220px;
+        pointer-events: none;
+        backdrop-filter: blur(6px);
+    }
+
+    #star-info .label {
+        color: var(--text-muted, #666);
+        font-size: 0.7rem;
+        text-transform: uppercase;
+        letter-spacing: 1.5px;
+        margin-bottom: 0.25rem;
+    }
+
+    #star-info .value {
+        color: var(--accent-primary, #00ff88);
+        font-size: 1rem;
+        margin-bottom: 0.5rem;
+    }
+
+    #star-info .detail {
+        color: var(--text-secondary, #aaa);
+        font-size: 0.8rem;
+    }
+
+    /* Controls hint — bottom-left */
+    #controls-hint {
+        position: absolute;
+        bottom: 1rem;
+        left: 1rem;
+        z-index: 10;
+        font-family: var(--font-mono, 'Courier New', monospace);
+        font-size: 0.7rem;
+        color: var(--text-muted, #555);
+        line-height: 1.6;
+        pointer-events: none;
+    }
+
+    /* Hover label that follows cursor */
+    #hover-label {
+        position: absolute;
+        z-index: 20;
+        font-family: var(--font-mono, 'Courier New', monospace);
+        font-size: 0.75rem;
+        color: var(--accent-primary, #00ff88);
+        background: rgba(10, 10, 15, 0.8);
+        padding: 2px 8px;
+        border-radius: 3px;
+        pointer-events: none;
+        display: none;
+        white-space: nowrap;
+    }
+</style>
+
+<div id="starmap-container">
+    <div id="star-info">
+        <div class="label">STAR SYSTEM</div>
+        <div class="value" id="info-name">-- hover a star --</div>
+        <div class="detail" id="info-distance"></div>
+        <div class="detail" id="info-spectral"></div>
+        <div class="detail" id="info-planets"></div>
+        <div class="detail" id="info-scan"></div>
+        <div id="info-resources" style="margin-top: 0.5rem; display: none;">
+            <div class="label" style="margin-bottom: 0.3rem;">RESOURCE PROBABILITY</div>
+            <div id="resource-bars"></div>
+        </div>
+    </div>
+
+    <!-- Drive & Route panel — top-right -->
+    <div id="drive-panel" style="
+        position: absolute; top: 1rem; right: 1rem; z-index: 10;
+        font-family: var(--font-mono, 'Courier New', monospace);
+        font-size: 0.8rem; color: var(--text-primary, #e0e0e0);
+        background: rgba(10, 10, 15, 0.85); border: 1px solid var(--border-color, #333);
+        border-radius: var(--radius-sm, 4px); padding: 0.75rem 1rem;
+        min-width: 220px; backdrop-filter: blur(6px);
+    ">
+        <div style="color: var(--text-muted, #666); font-size: 0.7rem; text-transform: uppercase; letter-spacing: 1.5px; margin-bottom: 0.5rem;">DISPLACEMENT DRIVE</div>
+        <div id="drive-buttons" style="display: flex; gap: 0.3rem; margin-bottom: 0.75rem; flex-wrap: wrap;"></div>
+        <div style="color: var(--text-muted, #666); font-size: 0.7rem; text-transform: uppercase; letter-spacing: 1.5px; margin-bottom: 0.3rem;">ROUTE</div>
+        <div id="route-info" style="font-size: 0.75rem; color: var(--text-secondary, #aaa); line-height: 1.6;"></div>
+        <div style="margin-top: 0.5rem; display: flex; gap: 0.3rem;">
+            <button id="btn-clear-route" style="
+                background: transparent; border: 1px solid var(--border-color, #333);
+                color: var(--text-muted, #666); padding: 0.25rem 0.5rem; cursor: pointer;
+                font-family: var(--font-mono); font-size: 0.65rem; letter-spacing: 1px;
+            ">CLEAR ROUTE</button>
+        </div>
+        <div style="margin-top: 0.75rem; color: var(--text-muted, #666); font-size: 0.6rem; line-height: 1.5;">
+            <div style="margin-bottom: 0.2rem;">NAVIGATION DIFFICULTY</div>
+            <div><span style="color: #22c55e;">&bull;</span> SHORT 0-5 ly — Routine</div>
+            <div><span style="color: #f59e0b;">&bull;</span> MEDIUM 5-12 ly — Challenging</div>
+            <div><span style="color: #f97316;">&bull;</span> LONG 12-25 ly — Dangerous</div>
+            <div><span style="color: #ef4444;">&bull;</span> EXTREME 25+ ly — Near-impossible</div>
+        </div>
+    </div>
+
+    <div id="controls-hint">
+        ORBIT: left-drag &middot; ZOOM: scroll &middot; PAN: right-drag &middot; CLICK: add to route
+    </div>
+
+    <div id="hover-label"></div>
+</div>
+
+<!-- Three.js from CDN -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script src="https://unpkg.com/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+{% endblock %}
+
+{% block scripts %}
+<script>
+(function () {
+    "use strict";
+
+    // ── Star catalog (loaded from API) ──────────────────────────────
+    const SCAN_LABELS = ["UNSCANNED", "SURVEY (HIGH)", "FOCUSED (MEDIUM)", "DEEP (LOW)"];
+
+    // Hardcoded fallback catalog (used if API unavailable)
+    var STARS_FALLBACK = [
+        { name: "Sol",                x:  0.00, y:  0.00, z:  0.00, dist:  0.00, spectral: "G2V",  isSol: true, scanLevel: 3,
+          resources: { ice: 5, metals: 40, rareEarth: 15, helium3: 2, hydrocarbons: 10, exotic: 0 }, planets: 8 },
+        { name: "Proxima Centauri",   x: -1.55, y: -1.33, z: -3.77, dist:  4.24, spectral: "M5.5V", scanLevel: 2,
+          resources: { ice: 72, metals: 25, rareEarth: 8, helium3: 5, hydrocarbons: 3, exotic: 2 }, planets: 3 },
+        { name: "Alpha Centauri A",   x: -1.64, y: -1.37, z: -3.84, dist:  4.37, spectral: "G2V", scanLevel: 2,
+          resources: { ice: 45, metals: 55, rareEarth: 20, helium3: 15, hydrocarbons: 12, exotic: 1 }, planets: 5 },
+        { name: "Alpha Centauri B",   x: -1.64, y: -1.37, z: -3.84, dist:  4.37, spectral: "K1V", scanLevel: 1,
+          resources: { ice: 38, metals: 42, rareEarth: 12, helium3: 8, hydrocarbons: 6, exotic: 0 }, planets: 3 },
+        { name: "Barnard's Star",     x: -0.02, y:  5.94, z:  0.49, dist:  5.96, spectral: "M4V", scanLevel: 1,
+          resources: { ice: 85, metals: 10, rareEarth: 3, helium3: 2, hydrocarbons: 1, exotic: 5 }, planets: 2 },
+        { name: "Wolf 359",           x: -4.67, y:  5.63, z:  2.48, dist:  7.86, spectral: "M6.5V", scanLevel: 0,
+          resources: { ice: 30, metals: 15, rareEarth: 5, helium3: 1, hydrocarbons: 0, exotic: 0 }, planets: 1 },
+        { name: "Lalande 21185",      x: -3.41, y:  7.26, z:  0.69, dist:  8.29, spectral: "M2V", scanLevel: 0,
+          resources: { ice: 60, metals: 35, rareEarth: 10, helium3: 5, hydrocarbons: 8, exotic: 0 }, planets: 4 },
+        { name: "Sirius A",           x: -5.76, y: -6.22, z: -1.33, dist:  8.60, spectral: "A1V", scanLevel: 1,
+          resources: { ice: 10, metals: 70, rareEarth: 30, helium3: 25, hydrocarbons: 5, exotic: 3 }, planets: 2 },
+        { name: "Luyten 726-8",       x: -2.37, y: -3.27, z: -7.45, dist:  8.73, spectral: "M5.5V", scanLevel: 0,
+          resources: { ice: 55, metals: 20, rareEarth: 5, helium3: 2, hydrocarbons: 3, exotic: 0 }, planets: 2 },
+        { name: "Ross 154",           x:  1.89, y: -8.64, z: -3.92, dist:  9.69, spectral: "M3.5V", scanLevel: 0,
+          resources: { ice: 40, metals: 30, rareEarth: 8, helium3: 3, hydrocarbons: 5, exotic: 1 }, planets: 3 },
+        { name: "Ross 248",           x:  7.39, y:  6.49, z:  3.27, dist: 10.32, spectral: "M5.5V", scanLevel: 0,
+          resources: { ice: 65, metals: 12, rareEarth: 2, helium3: 1, hydrocarbons: 1, exotic: 0 }, planets: 1 },
+        { name: "Epsilon Eridani",    x: -6.04, y: -1.88, z: -8.09, dist: 10.52, spectral: "K2V", scanLevel: 1,
+          resources: { ice: 78, metals: 45, rareEarth: 18, helium3: 20, hydrocarbons: 15, exotic: 8 }, planets: 7 },
+        { name: "Lacaille 9352",      x: -1.58, y: -5.75, z: -8.79, dist: 10.74, spectral: "M1.5V", scanLevel: 0,
+          resources: { ice: 50, metals: 25, rareEarth: 7, helium3: 4, hydrocarbons: 6, exotic: 0 }, planets: 3 },
+        { name: "Ross 128",           x: -8.88, y:  4.76, z: -4.14, dist: 11.01, spectral: "M4V", scanLevel: 0,
+          resources: { ice: 35, metals: 40, rareEarth: 15, helium3: 3, hydrocarbons: 8, exotic: 2 }, planets: 2 },
+        { name: "Procyon",            x: -4.77, y: -8.16, z:  3.49, dist: 11.46, spectral: "F5IV", scanLevel: 0,
+          resources: { ice: 20, metals: 60, rareEarth: 25, helium3: 30, hydrocarbons: 10, exotic: 5 }, planets: 4 },
+        { name: "61 Cygni",           x:  6.36, y:  7.14, z: -5.73, dist: 11.41, spectral: "K5V", scanLevel: 0,
+          resources: { ice: 58, metals: 35, rareEarth: 12, helium3: 10, hydrocarbons: 9, exotic: 1 }, planets: 5 },
+        { name: "Tau Ceti",           x: -7.17, y: -3.13, z: -8.06, dist: 11.89, spectral: "G8.5V", scanLevel: 1,
+          resources: { ice: 50, metals: 50, rareEarth: 22, helium3: 18, hydrocarbons: 20, exotic: 12 }, planets: 8 },
+        { name: "Epsilon Indi",       x:  3.39, y: -3.94, z:-10.07, dist: 11.87, spectral: "K5V", scanLevel: 0,
+          resources: { ice: 70, metals: 30, rareEarth: 10, helium3: 8, hydrocarbons: 12, exotic: 3 }, planets: 4 },
+        { name: "Groombridge 34",     x:  7.46, y:  3.71, z: -7.61, dist: 11.73, spectral: "M1.5V", scanLevel: 0,
+          resources: { ice: 45, metals: 20, rareEarth: 6, helium3: 3, hydrocarbons: 4, exotic: 0 }, planets: 2 },
+        { name: "GJ 1061",            x: -3.56, y: -0.36, z:-11.44, dist: 11.98, spectral: "M5.5V", scanLevel: 0,
+          resources: { ice: 42, metals: 18, rareEarth: 4, helium3: 2, hydrocarbons: 2, exotic: 0 }, planets: 2 },
+        { name: "Kapteyn's Star",     x: -3.16, y:  4.78, z:-11.08, dist: 12.76, spectral: "M1V", scanLevel: 0,
+          resources: { ice: 55, metals: 38, rareEarth: 14, helium3: 6, hydrocarbons: 7, exotic: 4 }, planets: 3 },
+        { name: "Kruger 60",          x:  6.47, y:  8.86, z: -5.42, dist: 13.15, spectral: "M3V", scanLevel: 0,
+          resources: { ice: 48, metals: 22, rareEarth: 8, helium3: 4, hydrocarbons: 5, exotic: 1 }, planets: 2 },
+        { name: "Altair",             x:  7.69, y: -2.05, z:-14.18, dist: 16.73, spectral: "A7V", scanLevel: 0,
+          resources: { ice: 15, metals: 65, rareEarth: 28, helium3: 35, hydrocarbons: 8, exotic: 10 }, planets: 3 },
+        { name: "Vega",               x:  0.29, y: 12.12, z:-22.10, dist: 25.04, spectral: "A0V", scanLevel: 0,
+          resources: { ice: 25, metals: 55, rareEarth: 20, helium3: 40, hydrocarbons: 5, exotic: 15 }, planets: 2 },
+        { name: "Fomalhaut",          x: -7.17, y: -2.22, z:-23.74, dist: 25.13, spectral: "A3V", scanLevel: 0,
+          resources: { ice: 80, metals: 30, rareEarth: 15, helium3: 20, hydrocarbons: 12, exotic: 18 }, planets: 4 },
+        { name: "Arcturus",           x:-28.20, y: 22.78, z:  3.05, dist: 36.70, spectral: "K1.5III", scanLevel: 0,
+          resources: { ice: 10, metals: 80, rareEarth: 40, helium3: 50, hydrocarbons: 15, exotic: 25 }, planets: 6 },
+
+        // ── Within 15 ly — gap fills ──────────────────────────────
+        { name: "Luhman 16",             x:  -3.71, y:  -5.23, z:  -1.18, dist:  6.52, spectral: "L7.5",  scanLevel: 0,
+          resources: { ice: 40, metals: 5, rareEarth: 2, helium3: 3, hydrocarbons: 5, exotic: 30 }, planets: 0 },
+        { name: "WISE 0855-0714",        x:  -5.10, y:  -0.94, z:  -5.32, dist:  7.43, spectral: "Y4",    scanLevel: 0,
+          resources: { ice: 55, metals: 2, rareEarth: 1, helium3: 2, hydrocarbons: 8, exotic: 45 }, planets: 0 },
+        { name: "EZ Aquarii",            x:  10.05, y:  -2.93, z:   3.73, dist: 11.11, spectral: "M5V",   scanLevel: 0,
+          resources: { ice: 52, metals: 15, rareEarth: 4, helium3: 2, hydrocarbons: 3, exotic: 1 }, planets: 0 },
+        { name: "Struve 2398",           x:   1.08, y:   9.94, z:   5.72, dist: 11.52, spectral: "M3V",   scanLevel: 0,
+          resources: { ice: 55, metals: 20, rareEarth: 6, helium3: 3, hydrocarbons: 4, exotic: 0 }, planets: 0 },
+        { name: "DX Cancri",             x:  -6.42, y:   5.33, z:  -8.38, dist: 11.83, spectral: "M6.5V", scanLevel: 0,
+          resources: { ice: 48, metals: 10, rareEarth: 3, helium3: 1, hydrocarbons: 2, exotic: 2 }, planets: 0 },
+        { name: "Luyten's Star",         x:  -4.58, y:   1.13, z: -11.41, dist: 12.35, spectral: "M3.5V", scanLevel: 0,
+          resources: { ice: 60, metals: 35, rareEarth: 15, helium3: 5, hydrocarbons: 8, exotic: 3 }, planets: 2 },
+        { name: "Teegarden's Star",      x:   8.71, y:   3.63, z:  -8.20, dist: 12.50, spectral: "M7V",   scanLevel: 0,
+          resources: { ice: 55, metals: 40, rareEarth: 18, helium3: 4, hydrocarbons: 6, exotic: 5 }, planets: 3 },
+        { name: "YZ Ceti",               x:  10.94, y:  -3.52, z:  -3.58, dist: 12.04, spectral: "M4.5V", scanLevel: 0,
+          resources: { ice: 50, metals: 32, rareEarth: 12, helium3: 3, hydrocarbons: 5, exotic: 4 }, planets: 3 },
+        { name: "Lacaille 8760",         x:   7.60, y:  -8.08, z:   6.53, dist: 12.87, spectral: "M0V",   scanLevel: 0,
+          resources: { ice: 45, metals: 28, rareEarth: 8, helium3: 4, hydrocarbons: 6, exotic: 0 }, planets: 0 },
+        { name: "Ross 614",              x:  -1.82, y:  -0.66, z: -13.21, dist: 13.35, spectral: "M4.5V", scanLevel: 0,
+          resources: { ice: 50, metals: 18, rareEarth: 5, helium3: 2, hydrocarbons: 3, exotic: 1 }, planets: 0 },
+        { name: "Van Maanen's Star",     x:  13.69, y:   1.32, z:  -2.98, dist: 14.07, spectral: "DZ8",   scanLevel: 0,
+          resources: { ice: 5, metals: 60, rareEarth: 35, helium3: 8, hydrocarbons: 0, exotic: 20 }, planets: 0 },
+        { name: "Wolf 1061",             x:  -5.23, y:  -3.08, z:  12.67, dist: 14.05, spectral: "M3V",   scanLevel: 0,
+          resources: { ice: 58, metals: 38, rareEarth: 16, helium3: 5, hydrocarbons: 7, exotic: 3 }, planets: 3 },
+        { name: "Wolf 424",              x: -14.04, y:   2.25, z:   2.05, dist: 14.37, spectral: "M5.5V", scanLevel: 0,
+          resources: { ice: 48, metals: 14, rareEarth: 4, helium3: 2, hydrocarbons: 3, exotic: 1 }, planets: 0 },
+        { name: "Gliese 674",            x:  -1.38, y: -10.84, z:  10.05, dist: 14.85, spectral: "M3V",   scanLevel: 0,
+          resources: { ice: 52, metals: 25, rareEarth: 8, helium3: 12, hydrocarbons: 5, exotic: 2 }, planets: 1 },
+        { name: "GJ 1002",               x:  15.64, y:  -2.07, z:  -0.46, dist: 15.78, spectral: "M5.5V", scanLevel: 0,
+          resources: { ice: 55, metals: 35, rareEarth: 14, helium3: 3, hydrocarbons: 5, exotic: 6 }, planets: 2 },
+
+        // ── 15-25 ly — notable systems ────────────────────────────
+        { name: "Gliese 876",            x:  14.05, y:  -4.15, z:   4.21, dist: 15.24, spectral: "M4V",   scanLevel: 0,
+          resources: { ice: 42, metals: 30, rareEarth: 12, helium3: 20, hydrocarbons: 8, exotic: 8 }, planets: 4 },
+        { name: "40 Eridani",            x:   7.14, y:  -2.17, z: -14.53, dist: 16.34, spectral: "K1V",   scanLevel: 0,
+          resources: { ice: 35, metals: 45, rareEarth: 15, helium3: 10, hydrocarbons: 8, exotic: 5 }, planets: 0 },
+        { name: "AD Leonis",             x: -13.79, y:   5.50, z:  -6.46, dist: 16.19, spectral: "M3.5V", scanLevel: 0,
+          resources: { ice: 55, metals: 15, rareEarth: 5, helium3: 2, hydrocarbons: 3, exotic: 3 }, planets: 0 },
+        { name: "70 Ophiuchi",           x:   0.40, y:   0.73, z:  16.68, dist: 16.70, spectral: "K0V",   scanLevel: 0,
+          resources: { ice: 40, metals: 42, rareEarth: 14, helium3: 10, hydrocarbons: 8, exotic: 1 }, planets: 0 },
+        { name: "Sigma Draconis",        x:   2.56, y:  17.60, z:   6.00, dist: 18.77, spectral: "K0V",   scanLevel: 0,
+          resources: { ice: 38, metals: 48, rareEarth: 16, helium3: 12, hydrocarbons: 10, exotic: 2 }, planets: 1 },
+        { name: "36 Ophiuchi",           x:  -3.35, y:  -8.68, z:  17.00, dist: 19.38, spectral: "K1V",   scanLevel: 0,
+          resources: { ice: 40, metals: 44, rareEarth: 15, helium3: 10, hydrocarbons: 9, exotic: 1 }, planets: 0 },
+        { name: "Gliese 570",            x: -12.78, y:  -7.01, z:  12.50, dist: 19.20, spectral: "K4V",   scanLevel: 0,
+          resources: { ice: 45, metals: 35, rareEarth: 10, helium3: 8, hydrocarbons: 6, exotic: 8 }, planets: 0 },
+        { name: "Eta Cassiopeiae",       x:  10.11, y:  16.44, z:  -2.20, dist: 19.42, spectral: "G0V",   scanLevel: 0,
+          resources: { ice: 30, metals: 50, rareEarth: 18, helium3: 15, hydrocarbons: 12, exotic: 2 }, planets: 0 },
+        { name: "82 Eridani",            x:   9.26, y: -13.46, z: -11.02, dist: 19.71, spectral: "G8V",   scanLevel: 0,
+          resources: { ice: 35, metals: 52, rareEarth: 22, helium3: 15, hydrocarbons: 14, exotic: 3 }, planets: 3 },
+        { name: "Delta Pavonis",         x:   4.28, y: -18.22, z:   6.81, dist: 19.92, spectral: "G8IV",  scanLevel: 0,
+          resources: { ice: 25, metals: 55, rareEarth: 20, helium3: 18, hydrocarbons: 12, exotic: 5 }, planets: 0 },
+        { name: "Gliese 581",            x: -13.13, y:  -2.76, z:  15.57, dist: 20.55, spectral: "M3V",   scanLevel: 0,
+          resources: { ice: 52, metals: 32, rareEarth: 14, helium3: 6, hydrocarbons: 8, exotic: 4 }, planets: 3 },
+
+        // ── 25-51 ly — deep reach / extreme ───────────────────────
+        { name: "HD 219134",             x:  11.33, y:  17.93, z:   2.34, dist: 21.34, spectral: "K3V",   scanLevel: 0,
+          resources: { ice: 32, metals: 55, rareEarth: 25, helium3: 12, hydrocarbons: 10, exotic: 5 }, planets: 6 },
+        { name: "Gliese 667 C",          x:  -3.44, y: -13.55, z:  19.04, dist: 23.62, spectral: "M1.5V", scanLevel: 0,
+          resources: { ice: 48, metals: 38, rareEarth: 18, helium3: 6, hydrocarbons: 7, exotic: 5 }, planets: 2 },
+        { name: "61 Virginis",           x: -24.90, y:  -8.75, z:   8.87, dist: 27.84, spectral: "G7V",   scanLevel: 0,
+          resources: { ice: 32, metals: 50, rareEarth: 20, helium3: 15, hydrocarbons: 14, exotic: 3 }, planets: 3 },
+        { name: "GJ 357",                x: -23.12, y: -11.35, z: -16.79, dist: 30.75, spectral: "M2.5V", scanLevel: 0,
+          resources: { ice: 55, metals: 35, rareEarth: 15, helium3: 5, hydrocarbons: 7, exotic: 4 }, planets: 3 },
+        { name: "Wolf 1069",             x:   9.70, y:  26.68, z:  13.10, dist: 31.27, spectral: "M5V",   scanLevel: 0,
+          resources: { ice: 60, metals: 28, rareEarth: 12, helium3: 3, hydrocarbons: 5, exotic: 5 }, planets: 1 },
+        { name: "TRAPPIST-1",            x:  39.40, y:  -3.57, z:   9.37, dist: 40.66, spectral: "M8V",   scanLevel: 0,
+          resources: { ice: 65, metals: 42, rareEarth: 22, helium3: 5, hydrocarbons: 8, exotic: 15 }, planets: 7 },
+        { name: "55 Cancri",             x: -24.72, y:  19.49, z: -26.37, dist: 41.06, spectral: "G8V",   scanLevel: 0,
+          resources: { ice: 20, metals: 62, rareEarth: 30, helium3: 22, hydrocarbons: 15, exotic: 10 }, planets: 5 },
+        { name: "GJ 1214",               x:  -9.26, y:   4.15, z:  46.88, dist: 47.97, spectral: "M4.5V", scanLevel: 0,
+          resources: { ice: 80, metals: 20, rareEarth: 8, helium3: 5, hydrocarbons: 10, exotic: 12 }, planets: 1 },
+        { name: "LHS 1140",              x:  46.16, y: -12.85, z:  -9.18, dist: 48.79, spectral: "M4.5V", scanLevel: 0,
+          resources: { ice: 55, metals: 40, rareEarth: 18, helium3: 5, hydrocarbons: 8, exotic: 8 }, planets: 2 },
+        { name: "Tau Bootis",            x: -43.31, y:  15.26, z:  21.89, dist: 50.87, spectral: "F7V",   scanLevel: 0,
+          resources: { ice: 15, metals: 58, rareEarth: 22, helium3: 35, hydrocarbons: 8, exotic: 6 }, planets: 1 },
+        { name: "Mu Arae",               x:  -2.13, y: -39.15, z:  30.70, dist: 49.80, spectral: "G3IV",  scanLevel: 0,
+          resources: { ice: 28, metals: 55, rareEarth: 24, helium3: 20, hydrocarbons: 16, exotic: 5 }, planets: 4 },
+    ];
+
+    // Load stars from API, fall back to hardcoded catalog
+    var STARS = STARS_FALLBACK;
+    fetch('/api/starmap/systems/').then(function(r) {
+        if (r.ok) return r.json();
+        return null;
+    }).then(function(data) {
+        if (data && data.length > 0) {
+            STARS = data;
+            // Rebuild scene with API data
+            rebuildStars();
+        }
+    }).catch(function() {});
+
+    // Get displayed resources — use scannedResources from API if available
+    function getDisplayedResources(star) {
+        if (star.scannedResources && Object.keys(star.scannedResources).length > 0) return star.scannedResources;
+        if (star.resources) return star.resources;
+        if (star.isSol) return { ice: 5, metals: 40, rareEarth: 15, helium3: 2, hydrocarbons: 10, exotic: 0 };
+        if (!star.scanLevel || star.scanLevel === 0) return null;
+        return null;
+    }
+
+    // ── Spectral type to color mapping ─────────────────────────────
+    function spectralColor(sp) {
+        const first = sp.charAt(0);
+        switch (first) {
+            case 'O': return 0x9bb0ff;  // blue-white
+            case 'B': return 0xaabfff;  // blue-white
+            case 'A': return 0xcad7ff;  // white-blue
+            case 'F': return 0xf8f7ff;  // white
+            case 'G': return 0xfff4e8;  // yellow-white
+            case 'K': return 0xffddb4;  // orange
+            case 'M': return 0xffbd6f;  // red-orange
+            case 'L': return 0xff8866;  // deep red-brown
+            case 'T': return 0xcc6644;  // dark brown
+            case 'Y': return 0x996633;  // dim brown
+            case 'D': return 0xeeeeff;  // pale blue-white (white dwarf)
+            default:  return 0xcccccc;
+        }
+    }
+
+    // ── Scene setup ────────────────────────────────────────────────
+    const container = document.getElementById("starmap-container");
+    const scene = new THREE.Scene();
+    scene.background = new THREE.Color(0x06060c);
+
+    const camera = new THREE.PerspectiveCamera(
+        60, container.clientWidth / container.clientHeight, 0.1, 500
+    );
+    camera.position.set(15, 15, 30);
+
+    const renderer = new THREE.WebGLRenderer({ antialias: true });
+    renderer.setSize(container.clientWidth, container.clientHeight);
+    renderer.setPixelRatio(window.devicePixelRatio);
+    container.appendChild(renderer.domElement);
+
+    // Orbit controls
+    const controls = new THREE.OrbitControls(camera, renderer.domElement);
+    controls.enableDamping = true;
+    controls.dampingFactor = 0.12;
+    controls.minDistance = 2;
+    controls.maxDistance = 150;
+    controls.mouseButtons = {
+        LEFT: THREE.MOUSE.ROTATE,
+        MIDDLE: THREE.MOUSE.DOLLY,
+        RIGHT: THREE.MOUSE.PAN
+    };
+
+    // ── Ambient grid / reference ───────────────────────────────────
+    // Faint grid on the xz-plane for spatial reference
+    const gridHelper = new THREE.GridHelper(80, 40, 0x1a1a2e, 0x0d0d1a);
+    scene.add(gridHelper);
+
+    // Axis lines (subtle)
+    const axisLen = 45;
+    const axisGeo = new THREE.BufferGeometry();
+    const axisPositions = new Float32Array([
+        -axisLen, 0, 0,  axisLen, 0, 0,   // x
+         0, -axisLen, 0,  0, axisLen, 0,   // y
+         0, 0, -axisLen,  0, 0, axisLen    // z
+    ]);
+    axisGeo.setAttribute("position", new THREE.BufferAttribute(axisPositions, 3));
+    const axisMat = new THREE.LineBasicMaterial({ color: 0x1a1a2e, transparent: true, opacity: 0.4 });
+    const axisLines = new THREE.LineSegments(axisGeo, axisMat);
+    scene.add(axisLines);
+
+    // ── Create star objects ────────────────────────────────────────
+    const starMeshes = [];
+    const starSprites = [];
+
+    // Glow texture: radial gradient on canvas
+    function makeGlowTexture(color, size) {
+        const canvas = document.createElement("canvas");
+        canvas.width = size;
+        canvas.height = size;
+        const ctx = canvas.getContext("2d");
+        const half = size / 2;
+
+        const gradient = ctx.createRadialGradient(half, half, 0, half, half, half);
+        const c = new THREE.Color(color);
+        gradient.addColorStop(0, "rgba(" +
+            Math.round(c.r * 255) + "," +
+            Math.round(c.g * 255) + "," +
+            Math.round(c.b * 255) + ", 1)");
+        gradient.addColorStop(0.3, "rgba(" +
+            Math.round(c.r * 255) + "," +
+            Math.round(c.g * 255) + "," +
+            Math.round(c.b * 255) + ", 0.4)");
+        gradient.addColorStop(1, "rgba(0, 0, 0, 0)");
+
+        ctx.fillStyle = gradient;
+        ctx.fillRect(0, 0, size, size);
+
+        const tex = new THREE.Texture(canvas);
+        tex.needsUpdate = true;
+        return tex;
+    }
+
+    var connectionLines = [];
+
+    function buildStars() {
+        STARS.forEach(function (star) {
+            var color = spectralColor(star.spectral || "?");
+            var baseSize = star.isSol ? 0.5 : star.isEndgame ? 0.4 : 0.2;
+
+            // Endgame beacon: violet
+            if (star.isEndgame) color = 0xc084fc;
+
+            // Point sphere (for raycasting)
+            var geo = new THREE.SphereGeometry(baseSize, 12, 12);
+            var mat = new THREE.MeshBasicMaterial({ color: color });
+            var mesh = new THREE.Mesh(geo, mat);
+            mesh.position.set(star.x, star.y, star.z);
+            mesh.userData = star;
+            scene.add(mesh);
+            starMeshes.push(mesh);
+
+            // Glow sprite
+            var spriteSize = star.isSol ? 3.0 : star.isEndgame ? 2.5 : 1.2;
+            var spriteMat = new THREE.SpriteMaterial({
+                map: makeGlowTexture(color, 128),
+                transparent: true,
+                blending: THREE.AdditiveBlending,
+                depthWrite: false
+            });
+            var sprite = new THREE.Sprite(spriteMat);
+            sprite.position.set(star.x, star.y, star.z);
+            sprite.scale.set(spriteSize, spriteSize, 1);
+            scene.add(sprite);
+            starSprites.push(sprite);
+
+            // Claim ring
+            if (star.claimedBy) {
+                var ringGeo = new THREE.RingGeometry(0.35, 0.45, 24);
+                var ringMat = new THREE.MeshBasicMaterial({
+                    color: 0x06b6d4,
+                    side: THREE.DoubleSide,
+                    transparent: true,
+                    opacity: 0.6,
+                });
+                var ring = new THREE.Mesh(ringGeo, ringMat);
+                ring.position.set(star.x, star.y, star.z);
+                ring.lookAt(camera.position);
+                scene.add(ring);
+            }
+        });
+
+        // Connection lines to Sol (faint, nearest stars only)
+        STARS.forEach(function (star) {
+            if (star.isSol || star.isEndgame) return;
+            if (star.dist > 15) return;
+
+            var lineGeo = new THREE.BufferGeometry();
+            var positions = new Float32Array([0, 0, 0, star.x, star.y, star.z]);
+            lineGeo.setAttribute("position", new THREE.BufferAttribute(positions, 3));
+            var lineMat = new THREE.LineBasicMaterial({ color: 0x1a3a2a, transparent: true, opacity: 0.15 });
+            var line = new THREE.Line(lineGeo, lineMat);
+            scene.add(line);
+            connectionLines.push(line);
+        });
+    }
+
+    function rebuildStars() {
+        // Remove old stars
+        starMeshes.forEach(function(m) { scene.remove(m); });
+        starSprites.forEach(function(s) { scene.remove(s); });
+        connectionLines.forEach(function(l) { scene.remove(l); });
+        starMeshes.length = 0;
+        starSprites.length = 0;
+        connectionLines.length = 0;
+        buildStars();
+    }
+
+    buildStars();
+
+    // ── Drive versions ──────────────────────────────────────────────
+    const DRIVES = [
+        { version: 1, label: "v1", jumps: 1 },
+        { version: 2, label: "v2", jumps: 2 },
+        { version: 3, label: "v3", jumps: 5 },
+        { version: 4, label: "v4", jumps: 7 },
+        { version: 5, label: "v5", jumps: 10 },
+    ];
+    let selectedDrive = DRIVES[0];
+
+    // Navigation difficulty by distance
+    function getNavDifficulty(distLy) {
+        if (distLy <= 5)  return { label: "SHORT",   color: "#22c55e", risk: "Routine" };
+        if (distLy <= 12) return { label: "MEDIUM",  color: "#f59e0b", risk: "Challenging" };
+        if (distLy <= 25) return { label: "LONG",    color: "#f97316", risk: "Dangerous" };
+        return                     { label: "EXTREME", color: "#ef4444", risk: "Near-impossible" };
+    }
+
+    function distBetween(a, b) {
+        var dx = a.x - b.x, dy = a.y - b.y, dz = a.z - b.z;
+        return Math.sqrt(dx*dx + dy*dy + dz*dz);
+    }
+
+    // ── Route planning ───────────────────────────────────────────────
+    let route = [];
+    let routeLines = [];
+
+    function addToRoute(star) {
+        // Don't add same star twice in a row
+        if (route.length > 0 && route[route.length - 1].name === star.name) return;
+        route.push(star);
+        updateRouteDisplay();
+    }
+
+    function clearRoute() {
+        route = [];
+        routeLines.forEach(function(l) { scene.remove(l); });
+        routeLines = [];
+        updateRouteDisplay();
+    }
+
+    function updateRouteDisplay() {
+        // Remove old route lines
+        routeLines.forEach(function(l) { scene.remove(l); });
+        routeLines = [];
+
+        var infoDiv = document.getElementById("route-info");
+        if (route.length === 0) {
+            infoDiv.innerHTML = '<span style="color: var(--text-muted);">Click stars to plan a route.</span>';
+            return;
+        }
+
+        var totalDist = 0;
+        var legs = [];
+        var html = "";
+
+        for (var i = 0; i < route.length; i++) {
+            if (i === 0) {
+                html += '<div style="color: var(--accent-primary, #00ff88);">\u25C9 ' + route[i].name + '</div>';
+            } else {
+                var legDist = distBetween(route[i-1], route[i]);
+                totalDist += legDist;
+                var nav = getNavDifficulty(legDist);
+                legs.push({ dist: legDist, nav: nav });
+
+                // Draw route line
+                var lineGeo = new THREE.BufferGeometry();
+                var positions = new Float32Array([
+                    route[i-1].x, route[i-1].y, route[i-1].z,
+                    route[i].x, route[i].y, route[i].z
+                ]);
+                lineGeo.setAttribute("position", new THREE.BufferAttribute(positions, 3));
+                var lineMat = new THREE.LineBasicMaterial({
+                    color: new THREE.Color(nav.color),
+                    transparent: true,
+                    opacity: 0.8,
+                    linewidth: 2,
+                });
+                var line = new THREE.Line(lineGeo, lineMat);
+                scene.add(line);
+                routeLines.push(line);
+
+                html += '<div style="color: ' + nav.color + '; font-size: 0.65rem; padding-left: 0.5rem;">'
+                    + '\u2193 ' + legDist.toFixed(1) + ' ly \u2014 ' + nav.label + '</div>';
+                html += '<div style="color: var(--accent-primary, #00ff88);">\u25C9 ' + route[i].name + '</div>';
+            }
+        }
+
+        var totalJumps = route.length - 1;
+        var canMakeIt = totalJumps <= selectedDrive.jumps;
+        var statusColor = canMakeIt ? "#22c55e" : "#ef4444";
+        var statusText = canMakeIt ? "FEASIBLE" : "EXCEEDS DRIVE CAPACITY";
+
+        html += '<div style="margin-top: 0.5rem; border-top: 1px solid var(--border-color, #333); padding-top: 0.5rem;">';
+        html += '<div>Total: ' + totalDist.toFixed(1) + ' ly in ' + totalJumps + ' jump' + (totalJumps !== 1 ? 's' : '') + '</div>';
+        html += '<div>Drive ' + selectedDrive.label + ': ' + selectedDrive.jumps + ' jumps capacity</div>';
+        html += '<div style="color: ' + statusColor + '; font-weight: bold;">' + statusText + '</div>';
+        html += '</div>';
+
+        infoDiv.innerHTML = html;
+    }
+
+    // Build drive buttons
+    (function() {
+        var container = document.getElementById("drive-buttons");
+        DRIVES.forEach(function(d) {
+            var btn = document.createElement("button");
+            btn.textContent = d.label + " (" + d.jumps + ")";
+            btn.style.cssText = "font-family: var(--font-mono); font-size: 0.7rem; padding: 0.25rem 0.5rem; cursor: pointer; letter-spacing: 1px; border-radius: 2px; transition: all 0.2s;";
+            btn.onclick = function() {
+                selectedDrive = d;
+                updateDriveButtons();
+                updateRouteDisplay();
+            };
+            container.appendChild(btn);
+        });
+        updateDriveButtons();
+
+        document.getElementById("btn-clear-route").onclick = clearRoute;
+    })();
+
+    function updateDriveButtons() {
+        var btns = document.getElementById("drive-buttons").children;
+        for (var i = 0; i < btns.length; i++) {
+            var isActive = DRIVES[i].version === selectedDrive.version;
+            btns[i].style.background = isActive ? "var(--accent-primary, #00ff88)" : "transparent";
+            btns[i].style.color = isActive ? "var(--bg-dark, #0a0a0f)" : "var(--text-muted, #666)";
+            btns[i].style.border = "1px solid " + (isActive ? "var(--accent-primary, #00ff88)" : "var(--border-color, #333)");
+            btns[i].style.fontWeight = isActive ? "bold" : "normal";
+        }
+    }
+
+    // ── Raycasting for hover / click ───────────────────────────────
+    const raycaster = new THREE.Raycaster();
+    raycaster.params.Mesh = { threshold: 0.5 };
+    const mouse = new THREE.Vector2();
+    const hoverLabel = document.getElementById("hover-label");
+    let hoveredStar = null;
+
+    function onPointerMove(event) {
+        const rect = container.getBoundingClientRect();
+        mouse.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
+        mouse.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
+
+        raycaster.setFromCamera(mouse, camera);
+        const intersects = raycaster.intersectObjects(starMeshes);
+
+        if (intersects.length > 0) {
+            const star = intersects[0].object.userData;
+            hoveredStar = star;
+
+            // Show hover label near cursor
+            hoverLabel.textContent = star.name;
+            hoverLabel.style.display = "block";
+            hoverLabel.style.left = (event.clientX - rect.left + 14) + "px";
+            hoverLabel.style.top = (event.clientY - rect.top - 10) + "px";
+
+            container.style.cursor = "pointer";
+        } else {
+            hoveredStar = null;
+            hoverLabel.style.display = "none";
+            container.style.cursor = "grab";
+        }
+    }
+
+    function onPointerClick(event) {
+        if (!hoveredStar) return;
+        updateInfoPanel(hoveredStar);
+        addToRoute(hoveredStar);
+    }
+
+    var RESOURCE_LABELS = {
+        ice: { name: "Water Ice", color: "#06b6d4", icon: "\u2744" },
+        metals: { name: "Metallic Ore", color: "#f59e0b", icon: "\u2692" },
+        rareEarth: { name: "Rare Earth", color: "#c084fc", icon: "\u2666" },
+        helium3: { name: "Helium-3", color: "#22c55e", icon: "\u2622" },
+        hydrocarbons: { name: "Hydrocarbons", color: "#f97316", icon: "\u25C6" },
+        exotic: { name: "Exotic Matter", color: "#ef4444", icon: "\u2736" },
+    };
+
+    function updateInfoPanel(star) {
+        document.getElementById("info-name").textContent = star.isEndgame
+            ? "SIGNAL SOURCE OMEGA" : star.name;
+        document.getElementById("info-distance").textContent = star.isSol
+            ? "ORIGIN SYSTEM"
+            : star.isEndgame ? "Distance: " + star.dist.toFixed(1) + " ly — BEYOND DISPLACEMENT RANGE"
+            : "Distance: " + star.dist.toFixed(2) + " ly";
+        document.getElementById("info-spectral").textContent = star.isEndgame
+            ? "Spectral: UNKNOWN" : "Spectral: " + star.spectral;
+
+        var scanLevel = star.scanLevel || 0;
+        var scanLabel = SCAN_LABELS[scanLevel];
+        var scanEl = document.getElementById("info-scan");
+        var scanColor = scanLevel === 0 ? "#666" : scanLevel === 1 ? "#ef4444" : scanLevel === 2 ? "#f59e0b" : "#22c55e";
+        scanEl.innerHTML = "Scan: <span style='color:" + scanColor + "'>" + scanLabel + "</span>";
+
+        var planetsEl = document.getElementById("info-planets");
+        if (scanLevel > 0 || star.isSol) {
+            planetsEl.textContent = "Planets: " + (star.planets || "?");
+        } else {
+            planetsEl.textContent = "";
+        }
+
+        var resDiv = document.getElementById("info-resources");
+        var barsDiv = document.getElementById("resource-bars");
+        var displayed = getDisplayedResources(star);
+
+        if (!displayed) {
+            resDiv.style.display = "none";
+            return;
+        }
+
+        resDiv.style.display = "block";
+        var html = "";
+        var keys = ["ice", "metals", "rareEarth", "helium3", "hydrocarbons", "exotic"];
+        // Bar width scales to the largest value in the displayed set so the
+        // bars stay meaningful across wildly different unit ranges
+        // (helium-3 canisters vs kt of ore).
+        var peak = 0;
+        for (var j = 0; j < keys.length; j++) {
+            var cell = displayed[keys[j]];
+            var hi = typeof cell === "object" && cell !== null
+                ? (cell.max != null ? cell.max : cell.value || 0)
+                : (cell || 0);
+            if (hi > peak) peak = hi;
+        }
+        if (peak <= 0) peak = 1;
+        for (var i = 0; i < keys.length; i++) {
+            var key = keys[i];
+            var cfg = RESOURCE_LABELS[key];
+            var cell2 = displayed[key];
+            // Accept three shapes: {min,max,unit} (scan bracket),
+            // {value,unit} (GM ground truth), or plain integer (demo fallback).
+            var lo, hi2, unit, label;
+            if (typeof cell2 === "object" && cell2 !== null) {
+                if (cell2.min != null) {
+                    lo = cell2.min;
+                    hi2 = cell2.max;
+                    unit = cell2.unit || "";
+                    label = lo === hi2 ? String(lo) : lo + "\u2013" + hi2;
+                } else {
+                    lo = hi2 = cell2.value || 0;
+                    unit = cell2.unit || "";
+                    label = String(lo);
+                }
+            } else {
+                lo = hi2 = cell2 || 0;
+                unit = "";
+                label = String(lo);
+            }
+            var barWidth = Math.max(2, Math.round((hi2 / peak) * 100));
+            html += "<div style='display:flex;align-items:center;gap:0.4rem;margin-bottom:0.2rem;'>" +
+                "<span style='color:" + cfg.color + ";width:6rem;font-size:0.7rem;'>" + cfg.icon + " " + cfg.name + "</span>" +
+                "<div style='flex:1;height:6px;background:rgba(255,255,255,0.08);border-radius:3px;overflow:hidden;'>" +
+                "<div style='width:" + barWidth + "%;height:100%;background:" + cfg.color + ";border-radius:3px;'></div>" +
+                "</div>" +
+                "<span style='color:" + cfg.color + ";font-size:0.7rem;min-width:6rem;text-align:right;'>" + label + " " + unit + "</span>" +
+                "</div>";
+        }
+        barsDiv.innerHTML = html;
+    }
+
+    container.addEventListener("pointermove", onPointerMove);
+    container.addEventListener("click", onPointerClick);
+
+    // ── Resize handling ────────────────────────────────────────────
+    function onResize() {
+        const w = container.clientWidth;
+        const h = container.clientHeight;
+        camera.aspect = w / h;
+        camera.updateProjectionMatrix();
+        renderer.setSize(w, h);
+    }
+    window.addEventListener("resize", onResize);
+
+    // ── Animate ────────────────────────────────────────────────────
+    function animate() {
+        requestAnimationFrame(animate);
+        controls.update();
+
+        // Pulse Sol and endgame beacon
+        const t = Date.now() * 0.001;
+        if (starSprites[0]) {
+            const pulseScale = 3.0 + Math.sin(t * 1.5) * 0.3;
+            starSprites[0].scale.set(pulseScale, pulseScale, 1);
+        }
+        // Pulse endgame beacons
+        for (var si = 0; si < STARS.length; si++) {
+            if (STARS[si].isEndgame && starSprites[si]) {
+                var ep = 2.5 + Math.sin(t * 0.8) * 0.5;
+                starSprites[si].scale.set(ep, ep, 1);
+            }
+        }
+
+        // Update info panel on hover (so it updates in real-time)
+        if (hoveredStar) {
+            updateInfoPanel(hoveredStar);
+        }
+
+        renderer.render(scene, camera);
+    }
+
+    animate();
+
+    // Start focused on Sol
+    controls.target.set(0, 0, 0);
+    controls.update();
+
+})();
+</script>
+{% endblock %}

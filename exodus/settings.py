@@ -27,6 +27,8 @@ INSTALLED_APPS = [
     "agencies",
     "comms",
     "npcs",
+    "news",
+    "starmap",
     "exodus",
 ]
 
@@ -59,6 +61,8 @@ TEMPLATES = [
                 "exodus.context_processors.changelog",
                 "exodus.context_processors.game_date",
                 "comms.context_processors.unread_count",
+                "exodus.context_processors.impersonation",
+                "exodus.context_processors.map_visibility",
             ],
         },
     },

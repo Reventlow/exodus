@@ -1,0 +1,535 @@
+{% extends "base.html" %}
+
+{% block title %}BIFROST DISPATCH // BLACKLOG.NET // EXODUS{% endblock %}
+
+{% block content %}
+<div id="app-root">
+    <div class="loading-screen">
+        <h1 class="mono-text">LOADING DISPATCH...</h1>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    const IS_ADMIN = {{ user.is_superuser|yesno:"true,false" }};
+    const CURRENT_USER_ID = {{ user.id }};
+    const CSRF_TOKEN = '{{ csrf_token }}';
+</script>
+{% verbatim %}
+<script type="text/babel">
+    const { useState, useEffect, useRef } = React;
+
+    function getCookie(name) {
+        let v = null;
+        if (document.cookie) {
+            for (const c of document.cookie.split(';')) {
+                const t = c.trim();
+                if (t.startsWith(name + '=')) {
+                    v = decodeURIComponent(t.substring(name.length + 1));
+                    break;
+                }
+            }
+        }
+        return v;
+    }
+
+    const csrf = () => getCookie('csrftoken') || CSRF_TOKEN;
+
+    const Icon = ({ name, size = 16 }) => {
+        useEffect(() => { if (window.lucide) window.lucide.createIcons(); }, [name]);
+        return <i data-lucide={name} width={size} height={size}></i>;
+    };
+
+    // Visibility badge colors
+    const VIS_STYLES = {
+        hidden:    { color: 'var(--accent-danger)',  border: 'var(--accent-danger)' },
+        eyes_only: { color: 'var(--accent-warning)', border: 'var(--accent-warning)' },
+        public:    { color: 'var(--accent-primary)', border: 'var(--accent-primary)' },
+    };
+
+    const VisibilityBadge = ({ visibility, eyesOnlyPlayer, releasedAt }) => {
+        if (releasedAt && eyesOnlyPlayer) {
+            // Released eyes-only: show both badges
+            return (
+                <span style={{ display: 'inline-flex', gap: '0.3rem', flexWrap: 'wrap' }}>
+                    <span className="mono-text" style={{
+                        fontSize: '0.65rem', color: 'var(--accent-warning)',
+                        border: '1px solid var(--accent-warning)',
+                        padding: '0.1rem 0.4rem', letterSpacing: '1px',
+                    }}>
+                        EYES ONLY — {eyesOnlyPlayer.toUpperCase()}
+                    </span>
+                    <span className="mono-text" style={{
+                        fontSize: '0.65rem', color: 'var(--accent-primary)',
+                        border: '1px solid var(--accent-primary)',
+                        padding: '0.1rem 0.4rem', letterSpacing: '1px',
+                    }}>
+                        RELEASED
+                    </span>
+                </span>
+            );
+        }
+        const s = VIS_STYLES[visibility] || VIS_STYLES.public;
+        const label = visibility === 'eyes_only'
+            ? `EYES ONLY${eyesOnlyPlayer ? ' — ' + eyesOnlyPlayer.toUpperCase() : ''}`
+            : visibility.toUpperCase();
+        return (
+            <span className="mono-text" style={{
+                fontSize: '0.65rem', color: s.color,
+                border: `1px solid ${s.border}`,
+                padding: '0.1rem 0.4rem', letterSpacing: '1px',
+            }}>
+                {label}
+            </span>
+        );
+    };
+
+    // Format date for display
+    const formatDate = (iso) => {
+        if (!iso) return '';
+        const d = new Date(iso);
+        return d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
+    };
+
+    // Render markdown excerpt as plain text (strip markdown)
+    const stripMd = (text) => {
+        return text
+            .replace(/#{1,6}\s/g, '')
+            .replace(/[*_~`]/g, '')
+            .replace(/\[([^\]]+)\]\([^)]+\)/g, '$1')
+            .replace(/!\[([^\]]*)\]\([^)]+\)/g, '')
+            .trim();
+    };
+
+    // Article card for the feed
+    const ArticleCard = ({ article, onRelease }) => {
+        const vis = article.visibility;
+        return (
+            <div
+                className="glass-panel tech-border glitch-hover"
+                style={{ cursor: 'pointer', transition: 'all 0.2s', overflow: 'hidden' }}
+                onClick={() => { window.location.href = '/news/' + article.slug + '/'; }}
+            >
+                {article.featuredImage && (
+                    <div style={{
+                        height: '180px', overflow: 'hidden',
+                        borderBottom: '1px solid var(--border-color)',
+                        display: 'flex', alignItems: 'center', justifyContent: 'center',
+                        background: article.featuredImageFull ? 'var(--bg-dark)' : 'transparent',
+                    }}>
+                        <img src={article.featuredImage} alt={article.title}
+                            style={{
+                                width: '100%', height: '100%',
+                                objectFit: article.featuredImageFull ? 'contain' : 'cover',
+                            }}
+                        />
+                    </div>
+                )}
+                <div style={{ padding: '1.25rem' }}>
+                    <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', marginBottom: '0.5rem', flexWrap: 'wrap' }}>
+                        <VisibilityBadge visibility={vis} eyesOnlyPlayer={article.eyesOnlyPlayer} releasedAt={article.releasedAt} />
+                        {article.attachmentCount > 0 && (
+                            <span className="mono-text text-muted" style={{ fontSize: '0.65rem' }}>
+                                <Icon name="paperclip" size={12} /> {article.attachmentCount}
+                            </span>
+                        )}
+                    </div>
+
+                    <h3 className="mono-text text-accent" style={{
+                        fontSize: '1.05rem', margin: '0 0 0.5rem 0', lineHeight: '1.3',
+                    }}>
+                        {article.title}
+                    </h3>
+
+                    <p className="text-secondary" style={{
+                        fontSize: '0.85rem', margin: '0 0 0.75rem 0',
+                        lineHeight: '1.5', opacity: 0.8,
+                    }}>
+                        {stripMd(article.excerpt)}
+                    </p>
+
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <span className="mono-text text-muted" style={{ fontSize: '0.7rem' }}>
+                            {article.gameDate || formatDate(article.publishedAt || article.createdAt)}
+                        </span>
+
+                        {article.canRelease && (
+                            <button
+                                onClick={(e) => { e.stopPropagation(); onRelease(article.id); }}
+                                className="mono-text"
+                                style={{
+                                    background: 'var(--accent-warning)',
+                                    border: 'none', color: 'var(--bg-dark)',
+                                    padding: '0.3rem 0.75rem', cursor: 'pointer',
+                                    fontSize: '0.7rem', fontWeight: 'bold',
+                                    fontFamily: 'var(--font-mono)',
+                                    letterSpacing: '1px',
+                                    borderRadius: 'var(--radius-sm)',
+                                }}
+                            >
+                                RELEASE TO ALL
+                            </button>
+                        )}
+                    </div>
+                </div>
+            </div>
+        );
+    };
+
+    // Create/Edit article modal
+    const ArticleEditor = ({ article, users, onClose, onSave }) => {
+        const [title, setTitle] = useState(article ? article.title : '');
+        const [content, setContent] = useState(article ? article.content : '');
+        const [visibility, setVisibility] = useState(article ? article.visibility : 'hidden');
+        const [gameDate, setGameDate] = useState(article ? (article.gameDate || '') : '');
+        const [eyesOnlyPlayerId, setEyesOnlyPlayerId] = useState(
+            article ? (article.eyesOnlyPlayerId || '') : ''
+        );
+        const [saving, setSaving] = useState(false);
+        const [preview, setPreview] = useState(false);
+
+        const handleSave = async () => {
+            setSaving(true);
+            const payload = { title, content, visibility, gameDate };
+            if (visibility === 'eyes_only') {
+                payload.eyesOnlyPlayerId = eyesOnlyPlayerId ? parseInt(eyesOnlyPlayerId) : null;
+            }
+
+            const url = article ? `/api/news/${article.id}/` : '/api/news/';
+            const method = article ? 'PUT' : 'POST';
+
+            try {
+                const resp = await fetch(url, {
+                    method,
+                    headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrf() },
+                    body: JSON.stringify(payload),
+                });
+                if (resp.ok) {
+                    const data = await resp.json();
+                    onSave(data);
+                    onClose();
+                }
+            } catch (err) {
+                console.error('Save failed:', err);
+            } finally {
+                setSaving(false);
+            }
+        };
+
+        return (
+            <div style={{
+                position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
+                background: 'rgba(0,0,0,0.85)', display: 'flex',
+                alignItems: 'center', justifyContent: 'center', zIndex: 1000,
+            }} onClick={onClose}>
+                <div className="glass-panel" style={{
+                    padding: '2rem', maxWidth: '700px', width: '95%',
+                    maxHeight: '90vh', overflowY: 'auto',
+                }} onClick={e => e.stopPropagation()}>
+                    <h3 className="mono-text text-accent" style={{
+                        marginBottom: '1.5rem',
+                        borderBottom: '1px solid var(--border-color)',
+                        paddingBottom: '0.5rem',
+                    }}>
+                        {article ? 'EDIT ARTICLE' : 'NEW ARTICLE'}
+                    </h3>
+
+                    <div style={{ marginBottom: '1rem' }}>
+                        <label className="text-secondary mono-text" style={{ fontSize: '0.8rem' }}>TITLE</label>
+                        <input type="text" value={title} onChange={e => setTitle(e.target.value)}
+                            style={{
+                                display: 'block', width: '100%', marginTop: '0.25rem',
+                                background: 'transparent', border: '1px solid var(--border-color)',
+                                color: 'var(--text-primary)', padding: '0.5rem',
+                                fontFamily: 'var(--font-mono)',
+                            }}
+                        />
+                    </div>
+
+                    <div style={{ marginBottom: '1rem' }}>
+                        <label className="text-secondary mono-text" style={{ fontSize: '0.8rem' }}>IN-GAME DATE</label>
+                        <input type="text" value={gameDate} onChange={e => setGameDate(e.target.value)}
+                            placeholder="e.g. 9 February 2036, Evening"
+                            style={{
+                                display: 'block', width: '100%', marginTop: '0.25rem',
+                                background: 'transparent', border: '1px solid var(--border-color)',
+                                color: 'var(--text-primary)', padding: '0.5rem',
+                                fontFamily: 'var(--font-mono)',
+                            }}
+                        />
+                    </div>
+
+                    <div style={{ marginBottom: '1rem' }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                            <label className="text-secondary mono-text" style={{ fontSize: '0.8rem' }}>
+                                CONTENT (MARKDOWN)
+                            </label>
+                            <button onClick={() => setPreview(!preview)} className="mono-text"
+                                style={{
+                                    background: 'transparent',
+                                    border: '1px solid var(--border-color)',
+                                    color: preview ? 'var(--accent-primary)' : 'var(--text-muted)',
+                                    padding: '0.2rem 0.5rem', cursor: 'pointer',
+                                    fontSize: '0.7rem', fontFamily: 'var(--font-mono)',
+                                }}>
+                                {preview ? 'EDIT' : 'PREVIEW'}
+                            </button>
+                        </div>
+                        {preview ? (
+                            <div style={{
+                                marginTop: '0.25rem', border: '1px solid var(--border-color)',
+                                padding: '1rem', minHeight: '200px',
+                                color: 'var(--text-secondary)', lineHeight: '1.6',
+                            }} dangerouslySetInnerHTML={{
+                                __html: window.marked ? window.marked.parse(content) : content
+                            }} />
+                        ) : (
+                            <textarea value={content} onChange={e => setContent(e.target.value)}
+                                rows={12}
+                                style={{
+                                    display: 'block', width: '100%', marginTop: '0.25rem',
+                                    background: 'transparent', border: '1px solid var(--border-color)',
+                                    color: 'var(--text-primary)', padding: '0.5rem',
+                                    fontFamily: 'var(--font-mono)', fontSize: '0.85rem',
+                                    resize: 'vertical',
+                                }}
+                            />
+                        )}
+                    </div>
+
+                    <div style={{ marginBottom: '1rem' }}>
+                        <label className="text-secondary mono-text" style={{ fontSize: '0.8rem' }}>VISIBILITY</label>
+                        <select value={visibility} onChange={e => setVisibility(e.target.value)}
+                            style={{
+                                display: 'block', width: '100%', marginTop: '0.25rem',
+                                background: 'transparent', border: '1px solid var(--border-color)',
+                                color: 'var(--text-primary)', padding: '0.5rem',
+                                fontFamily: 'var(--font-mono)', cursor: 'pointer',
+                            }}>
+                            <option value="hidden" style={{ background: 'var(--bg-dark)' }}>HIDDEN (superuser only)</option>
+                            <option value="eyes_only" style={{ background: 'var(--bg-dark)' }}>EYES ONLY (specific player)</option>
+                            <option value="public" style={{ background: 'var(--bg-dark)' }}>PUBLIC (all players)</option>
+                        </select>
+                    </div>
+
+                    {visibility === 'eyes_only' && (
+                        <div style={{ marginBottom: '1rem' }}>
+                            <label className="text-secondary mono-text" style={{ fontSize: '0.8rem' }}>
+                                EYES ONLY PLAYER
+                            </label>
+                            <select value={eyesOnlyPlayerId} onChange={e => setEyesOnlyPlayerId(e.target.value)}
+                                style={{
+                                    display: 'block', width: '100%', marginTop: '0.25rem',
+                                    background: 'transparent', border: '1px solid var(--border-color)',
+                                    color: 'var(--text-primary)', padding: '0.5rem',
+                                    fontFamily: 'var(--font-mono)', cursor: 'pointer',
+                                }}>
+                                <option value="" style={{ background: 'var(--bg-dark)' }}>-- Select player --</option>
+                                {users.map(u => (
+                                    <option key={u.id} value={u.id} style={{ background: 'var(--bg-dark)' }}>
+                                        {u.username}
+                                    </option>
+                                ))}
+                            </select>
+                        </div>
+                    )}
+
+                    <div style={{ display: 'flex', gap: '0.5rem', marginTop: '1.5rem' }}>
+                        <button onClick={handleSave} disabled={saving} className="mono-text"
+                            style={{
+                                flex: 1, background: 'var(--accent-primary)', border: 'none',
+                                color: 'var(--bg-dark)', padding: '0.6rem',
+                                cursor: saving ? 'wait' : 'pointer', fontWeight: 'bold',
+                                fontFamily: 'var(--font-mono)', fontSize: '0.85rem',
+                                opacity: saving ? 0.6 : 1,
+                            }}>
+                            {saving ? 'SAVING...' : (article ? 'UPDATE' : 'PUBLISH')}
+                        </button>
+                        <button onClick={onClose} className="mono-text"
+                            style={{
+                                background: 'transparent', border: '1px solid var(--border-color)',
+                                color: 'var(--text-muted)', padding: '0.6rem 1rem',
+                                cursor: 'pointer', fontFamily: 'var(--font-mono)', fontSize: '0.85rem',
+                            }}>
+                            CANCEL
+                        </button>
+                    </div>
+                </div>
+            </div>
+        );
+    };
+
+    // Filter bar
+    const FilterBar = ({ active, onChange, articles }) => {
+        const filters = [{ key: 'all', label: 'ALL' }];
+        if (articles.some(a => a.visibility === 'public')) filters.push({ key: 'public', label: 'OPEN MEDIA' });
+        if (articles.some(a => a.visibility === 'eyes_only')) filters.push({ key: 'eyes_only', label: 'EYES ONLY' });
+        if (IS_ADMIN && articles.some(a => a.visibility === 'hidden')) filters.push({ key: 'hidden', label: 'HIDDEN' });
+
+        if (filters.length <= 1) return null;
+
+        return (
+            <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', marginBottom: '1.5rem' }}>
+                {filters.map(f => (
+                    <button key={f.key} className="tech-border mono-text"
+                        onClick={() => onChange(f.key)}
+                        style={{
+                            background: active === f.key ? 'var(--accent-primary)' : 'transparent',
+                            color: active === f.key ? 'var(--bg-dark)' : 'var(--text-secondary)',
+                            border: active === f.key ? '1px solid var(--accent-primary)' : '1px solid var(--border-color)',
+                            padding: '0.4rem 1rem', cursor: 'pointer',
+                            fontSize: '0.75rem', letterSpacing: '1px',
+                            fontWeight: active === f.key ? 'bold' : 'normal',
+                            fontFamily: 'var(--font-mono)', transition: 'all 0.2s',
+                        }}>
+                        {f.label}
+                    </button>
+                ))}
+            </div>
+        );
+    };
+
+    // Main news feed component
+    const NewsFeed = () => {
+        const [articles, setArticles] = useState([]);
+        const [loading, setLoading] = useState(true);
+        const [filter, setFilter] = useState('all');
+        const [showEditor, setShowEditor] = useState(false);
+        const [users, setUsers] = useState([]);
+
+        useEffect(() => { fetchArticles(); }, []);
+
+        const fetchArticles = async () => {
+            try {
+                const resp = await fetch('/api/news/');
+                if (resp.ok) setArticles(await resp.json());
+            } catch (err) {
+                console.error('Failed to fetch news:', err);
+            } finally {
+                setLoading(false);
+            }
+        };
+
+        const fetchUsers = async () => {
+            try {
+                const resp = await fetch('/api/comms/users/');
+                if (resp.ok) setUsers(await resp.json());
+            } catch (err) {
+                console.error('Failed to fetch users:', err);
+            }
+        };
+
+        const handleCreate = async () => {
+            await fetchUsers();
+            setShowEditor(true);
+        };
+
+        const handleRelease = async (articleId) => {
+            if (!confirm('Release this article to all players?')) return;
+            try {
+                const resp = await fetch(`/api/news/${articleId}/release/`, {
+                    method: 'POST',
+                    headers: { 'X-CSRFToken': csrf() },
+                });
+                if (resp.ok) fetchArticles();
+            } catch (err) {
+                console.error('Release failed:', err);
+            }
+        };
+
+        const handleSave = () => {
+            fetchArticles();
+        };
+
+        const filtered = filter === 'all'
+            ? articles
+            : articles.filter(a => a.visibility === filter);
+
+        if (loading) {
+            return (
+                <div style={{ textAlign: 'center', padding: '4rem' }}>
+                    <h2 className="mono-text text-accent" style={{ animation: 'pulse 1.5s infinite' }}>
+                        ACCESSING BIFROST DISPATCH...
+                    </h2>
+                </div>
+            );
+        }
+
+        return (
+            <div>
+                <div className="glass-panel" style={{ padding: '2rem', maxWidth: '1100px', margin: '2rem auto' }}>
+                    <h2 className="mono-text" style={{
+                        marginBottom: '1.5rem',
+                        borderBottom: '1px solid var(--border-color)',
+                        paddingBottom: '0.5rem',
+                        display: 'flex', flexWrap: 'wrap',
+                        justifyContent: 'space-between', alignItems: 'center', gap: '0.5rem',
+                    }}>
+                        <span className="text-accent">
+                            <Icon name="radio" size={20} /> BIFROST DISPATCH
+                        </span>
+                        <span className="text-muted" style={{ fontSize: '0.8rem' }}>
+                            {filtered.length} ARTICLE{filtered.length !== 1 ? 'S' : ''}
+                        </span>
+                    </h2>
+
+                    <FilterBar active={filter} onChange={setFilter} articles={articles} />
+
+                    {IS_ADMIN && (
+                        <div style={{ textAlign: 'right', marginBottom: '1.5rem' }}>
+                            <button onClick={handleCreate} className="mono-text"
+                                style={{
+                                    background: 'var(--accent-primary)', border: 'none',
+                                    color: 'var(--bg-dark)', padding: '0.6rem 1.5rem',
+                                    cursor: 'pointer', fontWeight: 'bold',
+                                    fontFamily: 'var(--font-mono)', fontSize: '0.85rem',
+                                    letterSpacing: '1px', borderRadius: 'var(--radius-sm)',
+                                }}>
+                                NEW ARTICLE
+                            </button>
+                        </div>
+                    )}
+
+                    <div style={{
+                        display: 'grid',
+                        gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))',
+                        gap: '1.5rem', marginBottom: '2rem',
+                    }}>
+                        {filtered.map(article => (
+                            <ArticleCard
+                                key={article.id}
+                                article={article}
+                                onRelease={handleRelease}
+                            />
+                        ))}
+                    </div>
+
+                    {filtered.length === 0 && (
+                        <p className="text-muted mono-text fade-in" style={{
+                            textAlign: 'center', fontStyle: 'italic', padding: '2rem 0',
+                        }}>
+                            {articles.length === 0
+                                ? 'No dispatches yet.'
+                                : 'No dispatches match the current filter.'}
+                        </p>
+                    )}
+                </div>
+
+                {showEditor && (
+                    <ArticleEditor
+                        article={null}
+                        users={users}
+                        onClose={() => setShowEditor(false)}
+                        onSave={handleSave}
+                    />
+                )}
+            </div>
+        );
+    };
+
+    const root = ReactDOM.createRoot(document.getElementById('app-root'));
+    root.render(<NewsFeed />);
+</script>
+{% endverbatim %}
+{% endblock %}

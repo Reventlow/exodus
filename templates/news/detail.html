@@ -1,0 +1,753 @@
+{% extends "base.html" %}
+
+{% block title %}BIFROST DISPATCH // BLACKLOG.NET // EXODUS{% endblock %}
+
+{% block content %}
+<div id="app-root">
+    <div class="loading-screen">
+        <h1 class="mono-text">LOADING ARTICLE...</h1>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    const IS_ADMIN = {{ user.is_superuser|yesno:"true,false" }};
+    const CURRENT_USER_ID = {{ user.id }};
+    const CSRF_TOKEN = '{{ csrf_token }}';
+    const ARTICLE_SLUG = '{{ article_slug }}';
+</script>
+{% verbatim %}
+<script type="text/babel">
+    const { useState, useEffect, useRef } = React;
+
+    function getCookie(name) {
+        let v = null;
+        if (document.cookie) {
+            for (const c of document.cookie.split(';')) {
+                const t = c.trim();
+                if (t.startsWith(name + '=')) {
+                    v = decodeURIComponent(t.substring(name.length + 1));
+                    break;
+                }
+            }
+        }
+        return v;
+    }
+
+    const csrf = () => getCookie('csrftoken') || CSRF_TOKEN;
+
+    const Icon = ({ name, size = 16 }) => {
+        useEffect(() => { if (window.lucide) window.lucide.createIcons(); }, [name]);
+        return <i data-lucide={name} width={size} height={size}></i>;
+    };
+
+    const VIS_STYLES = {
+        hidden:    { color: 'var(--accent-danger)',  border: 'var(--accent-danger)' },
+        eyes_only: { color: 'var(--accent-warning)', border: 'var(--accent-warning)' },
+        public:    { color: 'var(--accent-primary)', border: 'var(--accent-primary)' },
+    };
+
+    const VisibilityBadge = ({ visibility, eyesOnlyPlayer, releasedAt }) => {
+        if (releasedAt && eyesOnlyPlayer) {
+            return (
+                <span style={{ display: 'inline-flex', gap: '0.3rem', flexWrap: 'wrap' }}>
+                    <span className="mono-text" style={{
+                        fontSize: '0.7rem', color: 'var(--accent-warning)',
+                        border: '1px solid var(--accent-warning)',
+                        padding: '0.15rem 0.5rem', letterSpacing: '1px',
+                    }}>
+                        EYES ONLY — {eyesOnlyPlayer.toUpperCase()}
+                    </span>
+                    <span className="mono-text" style={{
+                        fontSize: '0.7rem', color: 'var(--accent-primary)',
+                        border: '1px solid var(--accent-primary)',
+                        padding: '0.15rem 0.5rem', letterSpacing: '1px',
+                    }}>
+                        RELEASED
+                    </span>
+                </span>
+            );
+        }
+        const s = VIS_STYLES[visibility] || VIS_STYLES.public;
+        const label = visibility === 'eyes_only'
+            ? `EYES ONLY${eyesOnlyPlayer ? ' — ' + eyesOnlyPlayer.toUpperCase() : ''}`
+            : visibility.toUpperCase();
+        return (
+            <span className="mono-text" style={{
+                fontSize: '0.7rem', color: s.color,
+                border: `1px solid ${s.border}`,
+                padding: '0.15rem 0.5rem', letterSpacing: '1px',
+            }}>
+                {label}
+            </span>
+        );
+    };
+
+    const formatDate = (iso) => {
+        if (!iso) return '';
+        const d = new Date(iso);
+        return d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
+    };
+
+    // Inline article editor for superusers
+    const EditPanel = ({ article, users, onSave, onCancel }) => {
+        const [title, setTitle] = useState(article.title);
+        const [content, setContent] = useState(article.content);
+        const [gameDate, setGameDate] = useState(article.gameDate || '');
+        const [visibility, setVisibility] = useState(article.visibility);
+        const [eyesOnlyPlayerId, setEyesOnlyPlayerId] = useState(article.eyesOnlyPlayerId || '');
+        const [saving, setSaving] = useState(false);
+
+        const handleSave = async () => {
+            setSaving(true);
+            const payload = { title, content, gameDate, visibility };
+            if (visibility === 'eyes_only') {
+                payload.eyesOnlyPlayerId = eyesOnlyPlayerId ? parseInt(eyesOnlyPlayerId) : null;
+            }
+            try {
+                const resp = await fetch(`/api/news/${article.id}/`, {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrf() },
+                    body: JSON.stringify(payload),
+                });
+                if (resp.ok) onSave(await resp.json());
+            } catch (err) {
+                console.error('Save failed:', err);
+            } finally {
+                setSaving(false);
+            }
+        };
+
+        return (
+            <div style={{ marginBottom: '2rem' }}>
+                <div style={{ marginBottom: '1rem' }}>
+                    <label className="text-secondary mono-text" style={{ fontSize: '0.8rem' }}>TITLE</label>
+                    <input type="text" value={title} onChange={e => setTitle(e.target.value)}
+                        style={{
+                            display: 'block', width: '100%', marginTop: '0.25rem',
+                            background: 'transparent', border: '1px solid var(--border-color)',
+                            color: 'var(--text-primary)', padding: '0.5rem',
+                            fontFamily: 'var(--font-mono)',
+                        }} />
+                </div>
+                <div style={{ marginBottom: '1rem' }}>
+                    <label className="text-secondary mono-text" style={{ fontSize: '0.8rem' }}>IN-GAME DATE</label>
+                    <input type="text" value={gameDate} onChange={e => setGameDate(e.target.value)}
+                        placeholder="e.g. 9 February 2036, Evening"
+                        style={{
+                            display: 'block', width: '100%', marginTop: '0.25rem',
+                            background: 'transparent', border: '1px solid var(--border-color)',
+                            color: 'var(--text-primary)', padding: '0.5rem',
+                            fontFamily: 'var(--font-mono)',
+                        }} />
+                </div>
+                <div style={{ marginBottom: '1rem' }}>
+                    <label className="text-secondary mono-text" style={{ fontSize: '0.8rem' }}>CONTENT (MARKDOWN)</label>
+                    <textarea value={content} onChange={e => setContent(e.target.value)} rows={16}
+                        style={{
+                            display: 'block', width: '100%', marginTop: '0.25rem',
+                            background: 'transparent', border: '1px solid var(--border-color)',
+                            color: 'var(--text-primary)', padding: '0.5rem',
+                            fontFamily: 'var(--font-mono)', fontSize: '0.85rem', resize: 'vertical',
+                        }} />
+                </div>
+                <div style={{ display: 'flex', gap: '1rem', flexWrap: 'wrap', marginBottom: '1rem' }}>
+                    <div style={{ flex: 1, minWidth: '200px' }}>
+                        <label className="text-secondary mono-text" style={{ fontSize: '0.8rem' }}>VISIBILITY</label>
+                        <select value={visibility} onChange={e => setVisibility(e.target.value)}
+                            style={{
+                                display: 'block', width: '100%', marginTop: '0.25rem',
+                                background: 'transparent', border: '1px solid var(--border-color)',
+                                color: 'var(--text-primary)', padding: '0.5rem',
+                                fontFamily: 'var(--font-mono)', cursor: 'pointer',
+                            }}>
+                            <option value="hidden" style={{ background: 'var(--bg-dark)' }}>HIDDEN</option>
+                            <option value="eyes_only" style={{ background: 'var(--bg-dark)' }}>EYES ONLY</option>
+                            <option value="public" style={{ background: 'var(--bg-dark)' }}>PUBLIC</option>
+                        </select>
+                    </div>
+                    {visibility === 'eyes_only' && (
+                        <div style={{ flex: 1, minWidth: '200px' }}>
+                            <label className="text-secondary mono-text" style={{ fontSize: '0.8rem' }}>EYES ONLY PLAYER</label>
+                            <select value={eyesOnlyPlayerId} onChange={e => setEyesOnlyPlayerId(e.target.value)}
+                                style={{
+                                    display: 'block', width: '100%', marginTop: '0.25rem',
+                                    background: 'transparent', border: '1px solid var(--border-color)',
+                                    color: 'var(--text-primary)', padding: '0.5rem',
+                                    fontFamily: 'var(--font-mono)', cursor: 'pointer',
+                                }}>
+                                <option value="" style={{ background: 'var(--bg-dark)' }}>-- Select --</option>
+                                {users.map(u => (
+                                    <option key={u.id} value={u.id} style={{ background: 'var(--bg-dark)' }}>
+                                        {u.username}
+                                    </option>
+                                ))}
+                            </select>
+                        </div>
+                    )}
+                </div>
+                <div style={{ display: 'flex', gap: '0.5rem' }}>
+                    <button onClick={handleSave} disabled={saving} className="mono-text"
+                        style={{
+                            background: 'var(--accent-primary)', border: 'none',
+                            color: 'var(--bg-dark)', padding: '0.6rem 1.5rem',
+                            cursor: saving ? 'wait' : 'pointer', fontWeight: 'bold',
+                            fontFamily: 'var(--font-mono)', fontSize: '0.85rem',
+                            opacity: saving ? 0.6 : 1,
+                        }}>
+                        {saving ? 'SAVING...' : 'SAVE'}
+                    </button>
+                    <button onClick={onCancel} className="mono-text"
+                        style={{
+                            background: 'transparent', border: '1px solid var(--border-color)',
+                            color: 'var(--text-muted)', padding: '0.6rem 1rem',
+                            cursor: 'pointer', fontFamily: 'var(--font-mono)', fontSize: '0.85rem',
+                        }}>
+                        CANCEL
+                    </button>
+                </div>
+            </div>
+        );
+    };
+
+    // Main article detail component
+    const ArticleDetail = () => {
+        const [article, setArticle] = useState(null);
+        const [loading, setLoading] = useState(true);
+        const [editing, setEditing] = useState(false);
+        const [users, setUsers] = useState([]);
+        const contentRef = useRef(null);
+
+        useEffect(() => { fetchArticle(); }, []);
+
+        // Re-render markdown and icons when article changes
+        useEffect(() => {
+            if (article && contentRef.current && !editing) {
+                contentRef.current.innerHTML = window.marked
+                    ? window.marked.parse(article.content)
+                    : article.content;
+                if (window.lucide) window.lucide.createIcons();
+            }
+        }, [article, editing]);
+
+        const fetchArticle = async () => {
+            try {
+                // Find article by slug via list API then get detail by ID
+                const listResp = await fetch('/api/news/');
+                if (!listResp.ok) return;
+                const list = await listResp.json();
+                const match = list.find(a => a.slug === ARTICLE_SLUG);
+                if (!match) {
+                    setLoading(false);
+                    return;
+                }
+                const resp = await fetch(`/api/news/${match.id}/`);
+                if (resp.ok) setArticle(await resp.json());
+            } catch (err) {
+                console.error('Failed to fetch article:', err);
+            } finally {
+                setLoading(false);
+            }
+        };
+
+        const fetchUsers = async () => {
+            try {
+                const resp = await fetch('/api/comms/users/');
+                if (resp.ok) setUsers(await resp.json());
+            } catch (err) {
+                console.error('Failed to fetch users:', err);
+            }
+        };
+
+        const handleEdit = async () => {
+            await fetchUsers();
+            setEditing(true);
+        };
+
+        const handleDelete = async () => {
+            if (!confirm('Delete this article permanently?')) return;
+            try {
+                const resp = await fetch(`/api/news/${article.id}/`, {
+                    method: 'DELETE',
+                    headers: { 'X-CSRFToken': csrf() },
+                });
+                if (resp.ok) window.location.href = '/';
+            } catch (err) {
+                console.error('Delete failed:', err);
+            }
+        };
+
+        const handleRelease = async () => {
+            if (!confirm('Release this article to all players?')) return;
+            try {
+                const resp = await fetch(`/api/news/${article.id}/release/`, {
+                    method: 'POST',
+                    headers: { 'X-CSRFToken': csrf() },
+                });
+                if (resp.ok) setArticle(await resp.json());
+            } catch (err) {
+                console.error('Release failed:', err);
+            }
+        };
+
+        const [showShare, setShowShare] = useState(false);
+        const [allUsers, setAllUsers] = useState([]);
+
+        const fetchUsersForShare = async () => {
+            try {
+                const resp = await fetch('/api/comms/users/');
+                if (resp.ok) setAllUsers(await resp.json());
+            } catch (err) {
+                console.error('Failed to fetch users:', err);
+            }
+            setShowShare(true);
+        };
+
+        const handleShare = async (userId) => {
+            try {
+                const resp = await fetch(`/api/news/${article.id}/share/`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrf() },
+                    body: JSON.stringify({ userIds: [userId] }),
+                });
+                if (resp.ok) setArticle(await resp.json());
+            } catch (err) {
+                console.error('Share failed:', err);
+            }
+        };
+
+        const handleImageUpload = async (e) => {
+            const file = e.target.files[0];
+            if (!file) return;
+            const form = new FormData();
+            form.append('image', file);
+            try {
+                const resp = await fetch(`/api/news/${article.id}/image/`, {
+                    method: 'POST',
+                    headers: { 'X-CSRFToken': csrf() },
+                    body: form,
+                });
+                if (resp.ok) {
+                    const data = await resp.json();
+                    setArticle(prev => ({ ...prev, featuredImage: data.featuredImage }));
+                }
+            } catch (err) {
+                console.error('Image upload failed:', err);
+            }
+        };
+
+        const handleAttachmentUpload = async (e) => {
+            const file = e.target.files[0];
+            if (!file) return;
+            const form = new FormData();
+            form.append('file', file);
+            try {
+                const resp = await fetch(`/api/news/${article.id}/attachments/`, {
+                    method: 'POST',
+                    headers: { 'X-CSRFToken': csrf() },
+                    body: form,
+                });
+                if (resp.ok) {
+                    const att = await resp.json();
+                    setArticle(prev => ({
+                        ...prev,
+                        attachments: [...(prev.attachments || []), att],
+                    }));
+                }
+            } catch (err) {
+                console.error('Attachment upload failed:', err);
+            }
+        };
+
+        const handleDeleteAttachment = async (attId) => {
+            if (!confirm('Delete this attachment?')) return;
+            try {
+                const resp = await fetch(`/api/news/${article.id}/attachments/${attId}/`, {
+                    method: 'DELETE',
+                    headers: { 'X-CSRFToken': csrf() },
+                });
+                if (resp.ok) {
+                    setArticle(prev => ({
+                        ...prev,
+                        attachments: prev.attachments.filter(a => a.id !== attId),
+                    }));
+                }
+            } catch (err) {
+                console.error('Delete attachment failed:', err);
+            }
+        };
+
+        if (loading) {
+            return (
+                <div style={{ textAlign: 'center', padding: '4rem' }}>
+                    <h2 className="mono-text text-accent" style={{ animation: 'pulse 1.5s infinite' }}>
+                        LOADING ARTICLE...
+                    </h2>
+                </div>
+            );
+        }
+
+        if (!article) {
+            return (
+                <div className="glass-panel" style={{ padding: '2rem', maxWidth: '800px', margin: '2rem auto', textAlign: 'center' }}>
+                    <h2 className="mono-text text-muted">ARTICLE NOT FOUND</h2>
+                    <a href="/" className="mono-text text-accent" style={{ textDecoration: 'none' }}>
+                        RETURN TO DISPATCH
+                    </a>
+                </div>
+            );
+        }
+
+        return (<>
+            <div className="glass-panel" style={{ padding: '2rem', maxWidth: '800px', margin: '2rem auto' }}>
+                {/* Header */}
+                <div style={{ marginBottom: '1.5rem' }}>
+                    <a href="/" className="mono-text text-muted" style={{
+                        textDecoration: 'none', fontSize: '0.8rem',
+                        display: 'inline-flex', alignItems: 'center', gap: '0.25rem',
+                    }}>
+                        <Icon name="arrow-left" size={14} /> BACK TO DISPATCH
+                    </a>
+                </div>
+
+                {/* Badges and actions */}
+                <div style={{
+                    display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start',
+                    marginBottom: '1rem', flexWrap: 'wrap', gap: '0.5rem',
+                }}>
+                    <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', flexWrap: 'wrap' }}>
+                        <VisibilityBadge visibility={article.visibility} eyesOnlyPlayer={article.eyesOnlyPlayer} releasedAt={article.releasedAt} />
+                        <span className="mono-text text-muted" style={{ fontSize: '0.75rem' }}>
+                            {article.gameDate || formatDate(article.publishedAt || article.createdAt)}
+                        </span>
+                    </div>
+                    <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+                        {article.canRelease && (
+                            <button onClick={handleRelease} className="mono-text"
+                                style={{
+                                    background: 'var(--accent-warning)', border: 'none',
+                                    color: 'var(--bg-dark)', padding: '0.4rem 0.75rem',
+                                    cursor: 'pointer', fontSize: '0.75rem', fontWeight: 'bold',
+                                    fontFamily: 'var(--font-mono)', letterSpacing: '1px',
+                                    borderRadius: 'var(--radius-sm)',
+                                }}>
+                                RELEASE TO ALL
+                            </button>
+                        )}
+                        {article.canRelease && (
+                            <button onClick={fetchUsersForShare} className="mono-text"
+                                style={{
+                                    background: 'transparent',
+                                    border: '1px solid var(--accent-warning)',
+                                    color: 'var(--accent-warning)', padding: '0.4rem 0.75rem',
+                                    cursor: 'pointer', fontSize: '0.75rem', fontWeight: 'bold',
+                                    fontFamily: 'var(--font-mono)', letterSpacing: '1px',
+                                    borderRadius: 'var(--radius-sm)',
+                                }}>
+                                SHARE WITH...
+                            </button>
+                        )}
+                        {/* Shared with badges */}
+                        {article.sharedWith && article.sharedWith.length > 0 && (
+                            <span style={{ display: 'inline-flex', gap: '0.3rem', flexWrap: 'wrap', alignItems: 'center' }}>
+                                {article.sharedWith.map(u => (
+                                    <span key={u.id} className="mono-text" style={{
+                                        fontSize: '0.65rem', color: 'var(--accent-primary)',
+                                        border: '1px solid var(--accent-primary)',
+                                        padding: '0.1rem 0.4rem', letterSpacing: '1px',
+                                    }}>
+                                        SHARED — {u.name.toUpperCase()}
+                                    </span>
+                                ))}
+                            </span>
+                        )}
+                        {IS_ADMIN && !editing && (
+                            <>
+                                <button onClick={handleEdit} className="mono-text"
+                                    style={{
+                                        background: 'transparent', border: '1px solid var(--border-color)',
+                                        color: 'var(--text-secondary)', padding: '0.4rem 0.75rem',
+                                        cursor: 'pointer', fontSize: '0.75rem',
+                                        fontFamily: 'var(--font-mono)',
+                                    }}>
+                                    EDIT
+                                </button>
+                                <button onClick={handleDelete} className="mono-text"
+                                    style={{
+                                        background: 'transparent', border: '1px solid var(--accent-danger)',
+                                        color: 'var(--accent-danger)', padding: '0.4rem 0.75rem',
+                                        cursor: 'pointer', fontSize: '0.75rem',
+                                        fontFamily: 'var(--font-mono)',
+                                    }}>
+                                    DELETE
+                                </button>
+                            </>
+                        )}
+                    </div>
+                </div>
+
+                {/* Featured image */}
+                {article.featuredImage && (
+                    <div style={{
+                        marginBottom: '1.5rem', borderRadius: 'var(--radius-sm)',
+                        overflow: 'hidden', border: '1px solid var(--border-color)',
+                    }}>
+                        <img src={article.featuredImage} alt={article.title}
+                            style={{
+                                width: '100%',
+                                height: article.featuredImageFull ? 'auto' : '400px',
+                                objectFit: article.featuredImageFull ? 'contain' : 'cover',
+                            }}
+                        />
+                    </div>
+                )}
+
+                {/* Title */}
+                {!editing && (
+                    <h1 className="mono-text text-accent" style={{
+                        fontSize: '1.5rem', marginBottom: '1.5rem',
+                        borderBottom: '1px solid var(--border-color)',
+                        paddingBottom: '0.75rem', lineHeight: '1.3',
+                    }}>
+                        {article.title}
+                    </h1>
+                )}
+
+                {/* Edit mode or content */}
+                {editing ? (
+                    <EditPanel
+                        article={article}
+                        users={users}
+                        onSave={(updated) => { setArticle(updated); setEditing(false); }}
+                        onCancel={() => setEditing(false)}
+                    />
+                ) : (
+                    <div ref={contentRef}
+                        style={{
+                            color: 'var(--text-secondary)', lineHeight: '1.8',
+                            fontSize: '0.95rem',
+                        }}
+                        className="markdown-content"
+                    />
+                )}
+
+                {/* Image upload for admins */}
+                {IS_ADMIN && !editing && (
+                    <div style={{
+                        marginTop: '2rem', paddingTop: '1rem',
+                        borderTop: '1px solid var(--border-color)',
+                    }}>
+                        <label className="mono-text text-muted" style={{ fontSize: '0.75rem', display: 'block', marginBottom: '0.5rem' }}>
+                            FEATURED IMAGE
+                        </label>
+                        <input type="file" accept="image/*" onChange={handleImageUpload}
+                            style={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}
+                        />
+                        <label style={{
+                            display: 'flex', alignItems: 'center', gap: '0.5rem',
+                            cursor: 'pointer', fontFamily: 'var(--font-mono)',
+                            fontSize: '0.75rem', color: 'var(--text-muted)',
+                            marginTop: '0.5rem',
+                        }}>
+                            <input type="checkbox"
+                                checked={article.featuredImageFull}
+                                onChange={async (e) => {
+                                    const resp = await fetch(`/api/news/${article.id}/`, {
+                                        method: 'PUT',
+                                        headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrf() },
+                                        body: JSON.stringify({ featuredImageFull: e.target.checked }),
+                                    });
+                                    if (resp.ok) setArticle(await resp.json());
+                                }}
+                                style={{ accentColor: 'var(--accent-primary)' }}
+                            />
+                            SHOW FULL IMAGE (no crop)
+                        </label>
+                    </div>
+                )}
+
+                {/* Attachments */}
+                {(article.attachments?.length > 0 || IS_ADMIN) && (
+                    <div style={{
+                        marginTop: '1.5rem', paddingTop: '1rem',
+                        borderTop: '1px solid var(--border-color)',
+                    }}>
+                        <h3 className="mono-text text-muted" style={{
+                            fontSize: '0.85rem', marginBottom: '0.75rem', letterSpacing: '1px',
+                        }}>
+                            <Icon name="paperclip" size={14} /> ATTACHMENTS
+                        </h3>
+
+                        {article.attachments?.map(att => (
+                            <div key={att.id} style={{
+                                display: 'flex', alignItems: 'center', gap: '0.75rem',
+                                padding: '0.4rem 0', borderBottom: '1px solid var(--border-color)',
+                            }}>
+                                <a href={att.url} target="_blank" rel="noopener noreferrer"
+                                    className="text-accent mono-text"
+                                    style={{ fontSize: '0.85rem', textDecoration: 'none' }}>
+                                    <Icon name="download" size={14} /> {att.filename}
+                                </a>
+                                {IS_ADMIN && (
+                                    <button onClick={() => handleDeleteAttachment(att.id)}
+                                        className="mono-text"
+                                        style={{
+                                            background: 'transparent', border: 'none',
+                                            color: 'var(--accent-danger)', cursor: 'pointer',
+                                            fontSize: '0.7rem', fontFamily: 'var(--font-mono)',
+                                        }}>
+                                        REMOVE
+                                    </button>
+                                )}
+                            </div>
+                        ))}
+
+                        {IS_ADMIN && !editing && (
+                            <div style={{ marginTop: '0.75rem' }}>
+                                <input type="file" onChange={handleAttachmentUpload}
+                                    style={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}
+                                />
+                            </div>
+                        )}
+                    </div>
+                )}
+            </div>
+
+            {/* Share modal */}
+            {showShare && (
+                <div style={{
+                    position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
+                    background: 'rgba(0,0,0,0.85)', display: 'flex',
+                    alignItems: 'center', justifyContent: 'center', zIndex: 1000,
+                }} onClick={() => setShowShare(false)}>
+                    <div className="glass-panel" style={{
+                        padding: '1.5rem', maxWidth: '400px', width: '90%',
+                    }} onClick={e => e.stopPropagation()}>
+                        <h3 className="mono-text text-accent" style={{
+                            marginBottom: '1rem', borderBottom: '1px solid var(--border-color)',
+                            paddingBottom: '0.5rem', fontSize: '1rem',
+                        }}>
+                            SHARE WITH
+                        </h3>
+                        <p className="mono-text text-muted" style={{ fontSize: '0.7rem', marginBottom: '1rem' }}>
+                            Sharing is permanent and cannot be revoked.
+                        </p>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                            {allUsers.filter(u => {
+                                // Don't show the eyes-only player or already shared users
+                                const sharedIds = (article.sharedWith || []).map(s => s.id);
+                                return u.id !== CURRENT_USER_ID && !sharedIds.includes(u.id);
+                            }).map(u => (
+                                <button key={u.id}
+                                    onClick={() => { handleShare(u.id); }}
+                                    className="mono-text"
+                                    style={{
+                                        background: 'transparent',
+                                        border: '1px solid var(--border-color)',
+                                        color: 'var(--text-secondary)',
+                                        padding: '0.5rem 1rem',
+                                        cursor: 'pointer',
+                                        fontFamily: 'var(--font-mono)',
+                                        fontSize: '0.85rem',
+                                        textAlign: 'left',
+                                        letterSpacing: '1px',
+                                    }}>
+                                    {u.displayName.toUpperCase()}
+                                </button>
+                            ))}
+                        </div>
+                        <button onClick={() => setShowShare(false)} className="mono-text"
+                            style={{
+                                marginTop: '1rem', width: '100%',
+                                background: 'transparent', border: '1px solid var(--border-color)',
+                                color: 'var(--text-muted)', padding: '0.5rem',
+                                cursor: 'pointer', fontFamily: 'var(--font-mono)', fontSize: '0.8rem',
+                            }}>
+                            CLOSE
+                        </button>
+                    </div>
+                </div>
+            )}
+        </>);
+    };
+
+    const root = ReactDOM.createRoot(document.getElementById('app-root'));
+    root.render(<ArticleDetail />);
+</script>
+{% endverbatim %}
+
+<style>
+    /* Markdown content styling */
+    .markdown-content h1, .markdown-content h2, .markdown-content h3,
+    .markdown-content h4, .markdown-content h5, .markdown-content h6 {
+        color: var(--accent-primary);
+        font-family: var(--font-mono);
+        margin-top: 1.5rem;
+        margin-bottom: 0.75rem;
+    }
+    .markdown-content h1 { font-size: 1.3rem; }
+    .markdown-content h2 { font-size: 1.15rem; }
+    .markdown-content h3 { font-size: 1rem; }
+    .markdown-content p { margin-bottom: 1rem; }
+    .markdown-content ul, .markdown-content ol {
+        padding-left: 1.5rem;
+        margin-bottom: 1rem;
+    }
+    .markdown-content li { margin-bottom: 0.25rem; }
+    .markdown-content blockquote {
+        border-left: 3px solid var(--accent-primary);
+        padding-left: 1rem;
+        margin: 1rem 0;
+        color: var(--text-muted);
+        font-style: italic;
+    }
+    .markdown-content code {
+        background: var(--bg-dark);
+        padding: 0.15rem 0.4rem;
+        border-radius: 3px;
+        font-size: 0.85em;
+    }
+    .markdown-content pre {
+        background: var(--bg-dark);
+        padding: 1rem;
+        border-radius: var(--radius-sm);
+        overflow-x: auto;
+        margin-bottom: 1rem;
+    }
+    .markdown-content pre code {
+        background: none;
+        padding: 0;
+    }
+    .markdown-content img {
+        max-width: 100%;
+        border-radius: var(--radius-sm);
+        border: 1px solid var(--border-color);
+        margin: 0.5rem 0;
+    }
+    .markdown-content a {
+        color: var(--accent-primary);
+    }
+    .markdown-content hr {
+        border: none;
+        border-top: 1px solid var(--border-color);
+        margin: 1.5rem 0;
+    }
+    .markdown-content table {
+        width: 100%;
+        border-collapse: collapse;
+        margin-bottom: 1rem;
+    }
+    .markdown-content th, .markdown-content td {
+        border: 1px solid var(--border-color);
+        padding: 0.5rem;
+        text-align: left;
+    }
+    .markdown-content th {
+        background: var(--bg-dark);
+        color: var(--accent-primary);
+        font-family: var(--font-mono);
+        font-size: 0.85rem;
+    }
+</style>
+{% endblock %}

@@ -2,9 +2,455 @@
 
 from characters.models import Character
 from npcs.models import NPC
-from .models import GlobalFlaw, FTLProject, AgencyFTLProject, CouncilItem, CouncilVote, BaseConfig, Base
+from .models import GlobalFlaw, FTLProject, AgencyFTLProject, CouncilItem, CouncilVote, BaseConfig, Base, BASE_DEPARTMENTS, THRIVE_LABELS
 
 CLASSIFIED = "CLASSIFIED"
+
+# --- Auto-calculated thrive system ---
+# Facility -> department bonuses (per facility level present on base)
+FACILITY_DEPT_BONUSES = {
+    "barracks":      {"military": 2},
+    "armory":        {"military": 1, "admin": -1},
+    "training":      {"military": 2},
+    "shipyard":      {"military": 1, "engineering_ops": 1},
+    "motor":         {"military": 1},
+    "aviation":      {"military": 1},
+    "brig":          {"military": 1, "intelligence": 1, "admin": -1},
+    "intel_archive": {"intelligence": 2},
+    "comms_centre":  {"intelligence": 1, "engineering_ops": 1},
+    "interrogation": {"intelligence": 2, "diplomatic_corps": -1, "admin": -1},
+    "computer_core": {"engineering_ops": 2, "intelligence": 1},
+    "fabrication":   {"engineering_ops": 2},
+    "power_plant":   {"engineering_ops": 1},
+    "workspace":     {"engineering_ops": 1},
+    "drone_bay":     {"engineering_ops": 1, "military": 1},
+    "laboratory":    {"science_ops": 2},
+    "medical":       {"science_ops": 1},
+    "observatory":   {"science_ops": 2},
+    "xenotech_vault": {"science_ops": 2, "military": -1},
+    "hydroponics":   {"science_ops": 1},
+    "Diplomatic":    {"diplomatic_corps": 2},
+    "hr":            {"diplomatic_corps": 1, "admin": 1},
+    "safe_room":     {"diplomatic_corps": 1, "intelligence": 1},
+    "general":       {"admin": 1},
+    "living":        {"admin": 1},
+    "recreation":    {"admin": 2},
+    "storage":       {"admin": 1},
+}
+
+# Equipment -> department bonuses (checked separately from facilities)
+EQUIPMENT_DEPT_BONUSES = {
+    "internal_security":   {"admin": 1},
+    "segmented_security":  {"intelligence": 1},
+    "high_level_monitoring": {"intelligence": 1, "science_ops": -1, "engineering_ops": -1},
+}
+
+# Location type -> thrive modifiers
+# These apply per facility of the penalised type (not flat)
+LOCATION_THRIVE_PENALTIES = {
+    "military_base": {
+        "penalty_per_facility": {"science_ops": -1, "diplomatic_corps": -1, "engineering_ops": -1},
+        "bonus": {},
+    },
+    "black_site": {
+        "penalty_per_facility": {"science_ops": -1, "diplomatic_corps": -1, "engineering_ops": -1},
+        "bonus": {},
+    },
+    "rd_installation": {
+        "penalty_per_facility": {"military": -1},
+        "bonus": {"science_ops": 1, "engineering_ops": 1},
+    },
+    "new_location_1774111686349": {  # Observitorium
+        "penalty_per_facility": {"military": -1},
+        "bonus": {"science_ops": 1, "engineering_ops": 1},
+    },
+}
+
+# Which facility keys count as "military" for R&D penalty
+MILITARY_FACILITY_KEYS = {"barracks", "armory", "training", "shipyard", "motor", "aviation", "brig"}
+# Which facility keys count as "science" for military base penalty
+SCIENCE_FACILITY_KEYS = {"laboratory", "medical", "observatory", "xenotech_vault", "hydroponics"}
+# Which facility keys count as "diplomatic" for military base penalty
+DIPLOMATIC_FACILITY_KEYS = {"Diplomatic", "hr", "safe_room"}
+# Which facility keys count as "engineering" for military base penalty
+ENGINEERING_FACILITY_KEYS = {"computer_core", "fabrication", "power_plant", "workspace", "drone_bay", "comms_centre"}
+
+MOBILE_MERIT_KEYS = {"new_merit_1774341649496", "new_merit_1774341869469", "new_merit_1774341977938", "mobile_platform"}
+ISOLATED_MERIT_KEYS = {"underwater", "orbital"}
+
+
+def compute_base_thrive(base, agency=None):
+    """Auto-calculate department thrive scores from facilities on a base.
+
+    Returns list of {key, name, thrive, label, linked_class} dicts.
+    """
+    facilities = base.facilities or []
+    workspaces = base.workspaces or []
+    merits = set(base.merits or [])
+
+    total_count = len(facilities) + len(workspaces)
+    living_max = max((f.get("level", 0) for f in facilities if f.get("key") == "living"), default=0)
+    general_rec = sum(1 for f in facilities if f.get("key") in ("general", "recreation"))
+    has_medical = any(f.get("key") == "medical" for f in facilities)
+    has_power = any(f.get("key") == "power_plant" for f in facilities)
+    is_isolated = bool(merits & ISOLATED_MERIT_KEYS) or bool(merits & MOBILE_MERIT_KEYS)
+
+    # Facility bonuses
+    raw = {}
+    for f in facilities:
+        mapping = FACILITY_DEPT_BONUSES.get(f.get("key"), {})
+        for dept, bonus in mapping.items():
+            raw[dept] = raw.get(dept, 0) + bonus
+    for _w in workspaces:
+        raw["engineering_ops"] = raw.get("engineering_ops", 0) + 1
+
+    # Equipment bonuses (security levels, etc.)
+    for eq_key in (base.equipment or []):
+        mapping = EQUIPMENT_DEPT_BONUSES.get(eq_key, {})
+        for dept, bonus in mapping.items():
+            raw[dept] = raw.get(dept, 0) + bonus
+
+    # Location type penalties/bonuses (per facility of penalised type)
+    loc_config = LOCATION_THRIVE_PENALTIES.get(base.location_type, {})
+    penalty_map = loc_config.get("penalty_per_facility", {})
+    loc_bonus = loc_config.get("bonus", {})
+    if penalty_map:
+        for f in facilities:
+            fkey = f.get("key")
+            # Count how many science/diplomatic/military facilities trigger penalties
+            for dept, penalty in penalty_map.items():
+                if dept == "science_ops" and fkey in SCIENCE_FACILITY_KEYS:
+                    raw[dept] = raw.get(dept, 0) + penalty
+                elif dept == "diplomatic_corps" and fkey in DIPLOMATIC_FACILITY_KEYS:
+                    raw[dept] = raw.get(dept, 0) + penalty
+                elif dept == "engineering_ops" and fkey in ENGINEERING_FACILITY_KEYS:
+                    raw[dept] = raw.get(dept, 0) + penalty
+                elif dept == "military" and fkey in MILITARY_FACILITY_KEYS:
+                    raw[dept] = raw.get(dept, 0) + penalty
+    for dept, bonus in loc_bonus.items():
+        raw[dept] = raw.get(dept, 0) + bonus
+
+    # Global modifiers
+    global_mod = 0
+    global_reasons = []
+
+    # Location type label for global reasons
+    if penalty_map or loc_bonus:
+        loc_name = base.location_type.replace("_", " ").title()
+        penalties_desc = []
+        for dept, p in penalty_map.items():
+            dept_name = dept.replace("_", " ").title()
+            penalties_desc.append(f"{p:+d}/facility to {dept_name}")
+        bonuses_desc = []
+        for dept, b in loc_bonus.items():
+            dept_name = dept.replace("_", " ").title()
+            bonuses_desc.append(f"{b:+d} {dept_name}")
+        parts = penalties_desc + bonuses_desc
+        if parts:
+            global_reasons.append(f"{loc_name}: {', '.join(parts)}")
+
+    # Calculate total base space for housing threshold
+    from .models import BaseConfig as _BC
+    _cfg = _BC.load()
+    _lt_map = {lt["key"]: lt for lt in (_cfg.location_types or [])}
+    _merit_map = {m["key"]: m for m in (_cfg.location_merits or [])}
+    _loc = _lt_map.get(base.location_type)
+    _total_space = (_loc.get("space", 0) if _loc else 0)
+    for mk in merits:
+        _m = _merit_map.get(mk)
+        if _m:
+            _total_space += _m.get("extraSpace", 0)
+
+    # Living — based on highest quality level built
+    # Small bases (≤12 space) assume staff rotation, no housing needed
+    if _total_space > 12 and total_count >= 5:
+        if living_max == 0:
+            mod = -2 if total_count >= 11 else -1
+            global_mod += mod
+            global_reasons.append(f"No housing: {mod:+d}")
+        elif living_max == 1:
+            global_mod -= 1
+            global_reasons.append("Basic housing (Normal): -1")
+        elif living_max == 2:
+            pass  # Nice housing = neutral, no modifier
+        elif living_max >= 3:
+            global_mod += 1
+            global_reasons.append("Luxury housing (Luxus): +1")
+
+    # Medical
+    if total_count >= 8 and not has_medical:
+        global_mod -= 1
+        global_reasons.append("No medical: -1")
+
+    # Amenities ratio
+    if total_count >= 6:
+        ratio = general_rec / total_count if total_count > 0 else 0
+        if ratio < 0.10:
+            global_mod -= 1
+            global_reasons.append(f"Poor amenities ({ratio:.0%}): -1")
+        elif ratio >= 0.20:
+            global_mod += 1
+            global_reasons.append(f"Good amenities ({ratio:.0%}): +1")
+
+    # Power (isolated only)
+    if is_isolated and not has_power:
+        global_mod -= 1
+        global_reasons.append("No power (isolated): -1")
+
+    # Fringe projects on this base: -1 per active fringe project
+    # Child prodigy assigned to a project on this base: additional -1 per prodigy
+    if agency:
+        base_id = base.id
+        fringe_count = 0
+        prodigy_count = 0
+        for proj in (agency.projects or []):
+            if not isinstance(proj, dict):
+                continue
+            if proj.get("discarded"):
+                continue
+            if str(proj.get("baseId", "")) == str(base_id) and proj.get("fringe"):
+                fringe_count += 1
+                if proj.get("assignedProdigyId"):
+                    prodigy_count += 1
+        # Also check FTL projects
+        for afp in agency.ftl_assignments.all():
+            if afp.base_id == base_id:
+                meta = afp.metadata or {}
+                if meta.get("fringe") or any(meta.get(k) for k in ["darkGrantsLevel", "liveTestingDice"]):
+                    fringe_count += 1
+                    if meta.get("assignedProdigyId"):
+                        prodigy_count += 1
+        if fringe_count > 0:
+            global_mod -= fringe_count
+            global_reasons.append(f"Fringe projects x{fringe_count}: -{fringe_count}")
+
+    # Build department list
+    dept_lookup = {d["key"]: d for d in BASE_DEPARTMENTS}
+    all_dept_keys = ["military", "intelligence", "engineering_ops", "science_ops", "diplomatic_corps", "admin"]
+    result = []
+    for dk in all_dept_keys:
+        r = raw.get(dk, 0)
+        if r == 0 and dk != "admin" and dk not in raw:
+            continue  # department doesn't exist on this base
+        thrive = max(1, min(10, 1 + int(r + global_mod)))
+        dept_def = dept_lookup.get(dk, {})
+        # Build breakdown of what contributes to this department
+        sources = []
+        for f in facilities:
+            mapping = FACILITY_DEPT_BONUSES.get(f.get("key"), {})
+            bonus = mapping.get(dk)
+            if bonus:
+                # Look up facility name from config
+                from .models import BaseConfig
+                config = BaseConfig.load()
+                ft = next((ft for ft in (config.facility_types or []) if ft["key"] == f.get("key")), None)
+                fname = ft["name"] if ft else f.get("key", "")
+                lvl_def = next((l for l in ft.get("levels", []) if l["level"] == f.get("level")), None) if ft else None
+                lname = lvl_def["name"] if lvl_def else f"L{f.get('level')}"
+                sources.append(f"{fname} ({lname}): {bonus:+g}")
+        if dk == "engineering_ops" and workspaces:
+            sources.append(f"Workspaces x{len(workspaces)}: +{len(workspaces)}")
+        for eq_key in (base.equipment or []):
+            eq_mapping = EQUIPMENT_DEPT_BONUSES.get(eq_key, {})
+            eq_bonus = eq_mapping.get(dk)
+            if eq_bonus:
+                eq_name = eq_key.replace("_", " ").title()
+                sources.append(f"{eq_name}: {eq_bonus:+g}")
+        if global_mod != 0:
+            for reason in global_reasons:
+                sources.append(f"[Global] {reason}")
+        tooltip = f"Base: 1\n" + "\n".join(sources) + f"\n= {thrive}"
+
+        result.append({
+            "key": dk,
+            "name": dept_def.get("name", dk),
+            "thrive": thrive,
+            "label": THRIVE_LABELS.get(thrive, ""),
+            "linked_class": dept_def.get("linked_class", "general"),
+            "raw": round(r, 1),
+            "tooltip": tooltip,
+        })
+
+    return result, global_mod, global_reasons
+
+ATTR_NAMES = {
+    ("power", "mental"): "Intelligence",
+    ("power", "physical"): "Strength",
+    ("power", "social"): "Presence",
+    ("finesse", "mental"): "Wits",
+    ("finesse", "physical"): "Dexterity",
+    ("finesse", "social"): "Manipulation",
+    ("resistance", "mental"): "Resolve",
+    ("resistance", "physical"): "Stamina",
+    ("resistance", "social"): "Composure",
+}
+
+FRINGE_DICE_FIELDS = [
+    ("darkGrantsLevel", "Dark Grants", False),
+    ("liveTestingDice", "Live Testing", False),
+    ("stimulantDice", "Stimulants (next roll)", True),
+    ("blackMarketTechDice", "Black Market Tech", False),
+    ("geneManipulationDice", "Gene Manipulation", False),
+    ("neuralInterfaceDice", "Neural Interface (next roll)", True),
+    ("sleepDeprivationDice", "Sleep Deprivation (next roll)", True),
+    ("overclockedEquipmentDice", "Overclocked Equipment", False),
+    ("childProdigyDice", "Child Prodigy", False),
+    ("assignedProdigyDice", "Assigned Prodigy", False),
+]
+
+WORKSPACE_BONUS = {1: 0, 2: 1, 3: 3, 4: 5}
+
+
+def _compute_project_dice_pool(project, agency, characters_by_name, bases_list):
+    """Compute the dice pool for a project based on its dicePoolConfig."""
+    config = project.get("dicePoolConfig")
+    if not config:
+        return None
+
+    pool = 0
+    parts = []
+
+    # Resolve assigned character
+    player_name = project.get("player", "")
+    char = characters_by_name.get(player_name)
+
+    # 1. Character attributes (0-2)
+    for attr_path in (config.get("charAttributes") or []):
+        if char and isinstance(attr_path, list) and len(attr_path) == 2:
+            val = (char.attributes or {}).get(attr_path[0], {}).get(attr_path[1], 0)
+            label = ATTR_NAMES.get(tuple(attr_path), attr_path[1])
+            pool += val
+            parts.append({"label": label, "value": val, "type": "charAttr"})
+
+    # 2. Character skill (1)
+    skill_cfg = config.get("charSkill")
+    if char and skill_cfg:
+        cat = skill_cfg.get("category", "")
+        name = skill_cfg.get("name", "")
+        val = (char.skills or {}).get(cat, {}).get(name, 0)
+        pool += val
+        parts.append({"label": name, "value": val, "type": "charSkill"})
+
+    # 3. Agency attributes (0-2)
+    for attr_path in (config.get("agencyAttributes") or []):
+        if isinstance(attr_path, list) and len(attr_path) == 2:
+            val = (agency.attributes or {}).get(attr_path[0], {}).get(attr_path[1], 0)
+            pool += val
+            parts.append({"label": attr_path[1], "value": val, "type": "agencyAttr"})
+
+    # 4. Matching pulling strings (+1 base, linked NPCs get +1 per 15 XP)
+    # Values may be composite "name|npcName" for linkable PS like Personal NPC
+    matching_ps = config.get("matchingPullingStrings") or []
+    if char and matching_ps:
+        char_ps_names = set()
+        for cps in char.character_pulling_strings.all():
+            char_ps_names.add(cps.pulling_string.name)
+        for ps_entry in matching_ps:
+            ps_name = ps_entry.split("|")[0] if "|" in ps_entry else ps_entry
+            if ps_name in char_ps_names:
+                bonus = 1
+                label = ps_name
+                # Linked NPC: look up XP for bonus calculation
+                if "|" in ps_entry:
+                    npc_name = ps_entry.split("|", 1)[1]
+                    label = ps_name + " — " + npc_name
+                    linked_npc = NPC.objects.filter(name=npc_name).only("experience").first()
+                    if linked_npc:
+                        bonus = 1 + (linked_npc.experience or 0) // 15
+                pool += bonus
+                parts.append({"label": label, "value": bonus, "type": "pullingString"})
+
+    # 5. Matching merits (+rating each)
+    matching_merits = config.get("matchingMerits") or []
+    if char and matching_merits:
+        matching_lower = {m.lower() for m in matching_merits}
+        for cm in char.character_merits.all():
+            if cm.merit.name.lower() in matching_lower:
+                pool += cm.rating
+                parts.append({"label": cm.merit.name, "value": cm.rating, "type": "merit"})
+
+    # 6. Workspace quality bonus
+    base_id = project.get("baseId")
+    if char and base_id:
+        for b in bases_list:
+            if b.id == int(base_id):
+                for ws in (b.workspaces or []):
+                    if ws.get("assignedType") == "character" and ws.get("assignedTo") == char.id:
+                        bonus = WORKSPACE_BONUS.get(ws.get("level", 1), 0)
+                        if bonus > 0:
+                            pool += bonus
+                            parts.append({"label": "Workspace", "value": bonus, "type": "workspace"})
+                        break
+                break
+
+    # 7. Department thrive modifier (auto-calculated from facilities)
+    if char and base_id:
+        char_class = char.character_class or ""
+        for b in bases_list:
+            if b.id == int(base_id):
+                computed_depts, _, _ = compute_base_thrive(b, agency=agency)
+                best_thrive = None
+                best_dept = None
+                for dept in computed_depts:
+                    linked = dept.get("linked_class", "")
+                    if linked == char_class or linked == "general":
+                        t = dept.get("thrive", 1)
+                        if best_thrive is None or t > best_thrive:
+                            best_thrive = t
+                            best_dept = dept
+                if best_thrive is not None:
+                    modifier = (best_thrive - 5) // 2
+                    if modifier != 0:
+                        label = f"{best_dept['name']} ({best_dept.get('label', '')})"
+                        pool += modifier
+                        parts.append({"label": label, "value": modifier, "type": "thrive"})
+                break
+
+    # 8. Assigned NPCs (+1 base + 1 per 15 XP each)
+    assigned_npc_ids = project.get("assignedNpcs") or []
+    if assigned_npc_ids:
+        npcs = NPC.objects.filter(id__in=assigned_npc_ids).only("id", "name", "experience")
+        for npc in npcs:
+            bonus = 1 + (npc.experience or 0) // 15
+            pool += bonus
+            parts.append({"label": npc.name, "value": bonus, "type": "npc"})
+
+    # 9. Fringe dice
+    for field_key, label, is_per_roll in FRINGE_DICE_FIELDS:
+        val = project.get(field_key, 0) or 0
+        if val > 0:
+            pool += val
+            parts.append({"label": label, "value": val, "type": "fringePerRoll" if is_per_roll else "fringe"})
+
+    # 10. Mental load (only the last 4 boxes give penalties)
+    # Total boxes = 4 + floor((Composure + Resolve) / 2)
+    # Penalty zone starts at (total - 3). The 4 penalty boxes give:
+    #   Box 1: -2 social
+    #   Box 2: -2 cognitive
+    #   Box 3: -1 social, -1 cognitive
+    #   Box 4: -2 social, -2 cognitive
+    # Projects use cognitive penalty for the dice pool.
+    if char and (char.mental_load or 0) > 0:
+        attrs = char.attributes or {}
+        composure = (attrs.get("resistance", {}).get("social", 1))
+        resolve = (attrs.get("resistance", {}).get("mental", 1))
+        ml_max = 4 + (composure + resolve) // 2
+        penalty_start = ml_max - 3  # first penalty box level
+        ml = char.mental_load or 0
+        cognitive = 0
+        if ml >= penalty_start:
+            pass  # box 1: social only, no cognitive
+        if ml >= penalty_start + 1:
+            cognitive -= 2  # box 2: -2 cognitive
+        if ml >= penalty_start + 2:
+            cognitive -= 1  # box 3: -1 cognitive
+        if ml >= penalty_start + 3:
+            cognitive -= 2  # box 4: -2 cognitive
+        if cognitive < 0:
+            pool += cognitive  # cognitive is negative
+            parts.append({"label": "Mental Load", "value": cognitive, "type": "mentalLoad"})
+
+    return {"pool": max(pool, 0), "parts": parts, "raw": pool}
 
 
 def _serialize_projects(agency, show_all, user, is_field_visible_fn):
@@ -25,7 +471,39 @@ def _serialize_projects(agency, show_all, user, is_field_visible_fn):
         # Strip fringe field from projects
         projects = [{k: v for k, v in p.items() if k != "fringe"} if isinstance(p, dict) else p for p in projects]
 
+    # Compute dice pools for projects with config
+    has_config = any(isinstance(p, dict) and p.get("dicePoolConfig") for p in projects)
+    if has_config:
+        characters_by_name = {
+            c.name: c for c in Character.objects.prefetch_related(
+                "character_merits__merit", "character_pulling_strings__pulling_string"
+            ).all()
+        }
+        bases_list = list(agency.bases.all())
+        for p in projects:
+            if isinstance(p, dict) and p.get("dicePoolConfig"):
+                p["computedPool"] = _compute_project_dice_pool(p, agency, characters_by_name, bases_list)
+
     return projects
+
+
+def _get_player_rolls(agency, user):
+    """Get roll allocation for the current player, plus personal NPCs for downtime."""
+    rolls = agency.project_rolls or {}
+    char = Character.objects.filter(owner=user).first()
+    char_name = char.name if char else ""
+    personal = rolls.get(char_name, {})
+    # Personal NPCs assigned to this player
+    personal_npcs = [
+        {"id": n.id, "name": n.name}
+        for n in NPC.objects.filter(assigned_to=user).order_by("name").only("id", "name")
+    ] if not user.is_superuser else []
+    return {
+        "free": personal.get("free", 0) or 0,
+        "spare": personal.get("spare", 0) or 0,
+        "charName": char_name,
+        "personalNpcs": personal_npcs,
+    }
 
 
 def _get_fringe_info(agency, user):
@@ -192,9 +670,11 @@ def serialize_agency(agency, user):
         "isHidden": agency.is_hidden,
         "mapColor": agency.map_color,
         "zeroDayPool": agency.zero_day_pool if is_admin else None,
+        "isNuclearPower": agency.is_nuclear_power,
         "sweepPool": agency.sweep_pool,
         "sweepInfo": _get_sweep_info(agency, user),
         "fringeInfo": _get_fringe_info(agency, user),
+        "projectRolls": agency.project_rolls if is_admin else _get_player_rolls(agency, user),
         "conditions_cyber": [
             {
                 "id": c.id,
@@ -228,11 +708,20 @@ def serialize_agency(agency, user):
     # Council items — visible to everyone, not editable per-agency
     data["councilItems"] = [serialize_council_item(ci) for ci in CouncilItem.objects.all()]
 
+    # Determine character class for base building visibility filtering
+    # Admins see all options; players see only their class + general
+    if is_admin:
+        char_class = None  # No filtering
+    else:
+        char = Character.objects.filter(owner=user).first()
+        char_class = char.character_class if char else ""
+
     # Bases + config for cost lookups (with per-base visibility for NPC agencies)
     # Hidden bases are only visible to superusers
+    config = BaseConfig.load()
     bases_qs = agency.bases.all() if is_admin else agency.bases.filter(is_hidden=False)
     if show_all:
-        data["bases"] = [serialize_base(b, is_admin=is_admin) for b in bases_qs]
+        data["bases"] = [serialize_base(b, is_admin=is_admin, character_class=char_class, base_config=config, agency=agency) for b in bases_qs]
     elif is_field_visible(agency, "bases"):
         serialized_bases = []
         for b in bases_qs:
@@ -240,7 +729,7 @@ def serialize_agency(agency, user):
             if not is_field_visible(agency, base_path):
                 serialized_bases.append({"id": b.id, "name": b.name, "classified": True})
             else:
-                sb = serialize_base(b, is_admin=is_admin)
+                sb = serialize_base(b, is_admin=is_admin, character_class=char_class, base_config=config, agency=agency)
                 if not is_field_visible(agency, f"{base_path}.facilities"):
                     sb["facilities"] = []
                     sb["classifiedFacilities"] = True
@@ -255,17 +744,70 @@ def serialize_agency(agency, user):
     else:
         data["bases"] = []
         data["classifiedBases"] = True
-    config = BaseConfig.load()
-    data["baseConfig"] = serialize_base_config(config)
+    data["baseConfig"] = serialize_base_config(config, character_class=char_class)
+    # Full definitions for display lookups (names/costs of built items from other classes)
+    if char_class is not None:
+        data["baseConfigLookup"] = {
+            "facilityTypes": config.facility_types,
+            "locationTypes": config.location_types,
+            "locationMerits": config.location_merits,
+            "equipmentTypes": config.equipment_types,
+        }
 
-    # Assignable entities for workspace assignment
+    # Assignable entities for workspace assignment (with merits/PS for dice pool config)
     data["assignableCharacters"] = [
-        {"id": c.id, "name": c.name, "username": c.owner.username}
-        for c in Character.objects.select_related("owner").all().order_by("name")
+        {
+            "id": c.id, "name": c.name, "username": c.owner.username,
+            "merits": [
+                {"name": cm.merit.name, "rating": cm.rating}
+                for cm in c.character_merits.select_related("merit").all()
+            ],
+            "autoSuccessMerits": [
+                {
+                    "name": cm.merit.name, "rating": cm.rating,
+                    "used": (c.merit_uses or {}).get(cm.merit.name, 0),
+                    "remaining": cm.rating - (c.merit_uses or {}).get(cm.merit.name, 0),
+                }
+                for cm in c.character_merits.select_related("merit").all()
+                if cm.merit.effects.get("auto_success")
+            ],
+            "pullingStrings": [
+                {
+                    "name": cps.pulling_string.name,
+                    "linkedNpc": cps.linked_npc.name if cps.linked_npc else None,
+                    "linkedNpcClass": cps.linked_npc.character_class if cps.linked_npc else None,
+                    "linkedNpcBonus": (1 + (cps.linked_npc.experience or 0) // 15) if cps.linked_npc else 0,
+                }
+                for cps in c.character_pulling_strings.select_related("pulling_string", "linked_npc").all()
+            ],
+        }
+        for c in Character.objects.select_related("owner").prefetch_related(
+            "character_merits__merit", "character_pulling_strings__pulling_string",
+            "character_pulling_strings__linked_npc",
+        ).all().order_by("name")
     ]
+    # NPCs belonging to this agency (includes personal NPCs now that they have agency set)
     data["assignableNpcs"] = [
-        {"id": n.id, "name": n.name}
-        for n in NPC.objects.filter(agency=agency).order_by("name").only("id", "name")
+        {
+            "id": n.id, "name": n.name, "experience": n.experience or 0,
+            "bonus": 1 + (n.experience or 0) // 15,
+            "assignedTo": n.assigned_to.username if n.assigned_to else None,
+        }
+        for n in NPC.objects.filter(agency=agency).select_related("assigned_to").order_by("name")
+    ]
+
+    # Child prodigy NPCs available for assignment to fringe projects
+    prodigy_assigned = {}
+    for i, proj in enumerate(agency.projects or []):
+        if isinstance(proj, dict) and proj.get("assignedProdigyId"):
+            prodigy_assigned[proj["assignedProdigyId"]] = proj.get("name", "")
+    data["childProdigies"] = [
+        {
+            "id": n.id,
+            "name": n.name,
+            "assignedTo": prodigy_assigned.get(n.id, None),
+        }
+        for n in NPC.objects.filter(agency=agency, is_child_prodigy=True)
     ]
 
     # Linked dossiers: characters assigned to workspaces + NPC dossiers
@@ -279,19 +821,32 @@ def serialize_agency(agency, user):
         for c in Character.objects.filter(id__in=char_ids).order_by("name").only("id", "name")
     ] if char_ids else []
     linked_npcs = [
-        {"id": n.id, "name": n.name, "type": "npc"}
-        for n in NPC.objects.filter(agency=agency).order_by("name").only("id", "name")
+        {"id": n.id, "name": n.name, "type": "npc", "agencyName": n.agency.name if n.agency else None, "agencyId": n.agency_id}
+        for n in NPC.objects.filter(agency=agency).select_related("agency").order_by("name").only("id", "name", "agency")
     ]
-    data["linkedDossiers"] = linked_characters + linked_npcs
+    # All NPC dossiers from other visible agencies (for contact dossier browsing)
+    other_npcs = []
+    if is_admin:
+        other_npcs = [
+            {"id": n.id, "name": n.name, "type": "npc", "agencyName": n.agency.name if n.agency else None, "agencyId": n.agency_id}
+            for n in NPC.objects.filter(is_npc_dossier=True).exclude(agency=agency).select_related("agency").order_by("agency__name", "name").only("id", "name", "agency")
+        ]
+    data["linkedDossiers"] = linked_characters + linked_npcs + other_npcs
 
-    # FTL project assignments with progress
-    data["ftlProjects"] = [
-        {
-            **serialize_ftl_project(afp.ftl_project),
-            "assignmentId": afp.id,
-            "currentSuccesses": afp.current_successes,
+    # FTL project assignments with progress + dice pool
+    ftl_chars = None
+    ftl_bases = None
+    ftl_assignments = list(agency.ftl_assignments.select_related("ftl_project").all())
+    if any(afp.metadata.get("dicePoolConfig") for afp in ftl_assignments if afp.metadata):
+        ftl_chars = {
+            c.name: c for c in Character.objects.prefetch_related(
+                "character_merits__merit", "character_pulling_strings__pulling_string"
+            ).all()
         }
-        for afp in agency.ftl_assignments.select_related("ftl_project").all()
+        ftl_bases = list(agency.bases.all())
+    data["ftlProjects"] = [
+        serialize_agency_ftl_project(afp, agency, ftl_chars, ftl_bases)
+        for afp in ftl_assignments
     ]
 
     # XP transfer log for player agencies
@@ -310,6 +865,20 @@ def serialize_agency(agency, user):
             }
             for t in transfers
         ]
+
+    # Base XP log
+    from .models import BaseXpLog
+    base_xp_logs = BaseXpLog.objects.filter(agency=agency).select_related("base").order_by("-created_at")[:20]
+    data["baseXpLogs"] = [
+        {
+            "id": log.id,
+            "baseName": log.base.name if log.base else "Unknown",
+            "amount": log.amount,
+            "reason": log.reason,
+            "date": log.created_at.isoformat(),
+        }
+        for log in base_xp_logs
+    ]
 
     # Include visibility map and change request counts for admins
     if is_admin:
@@ -365,16 +934,38 @@ def serialize_ftl_project(fp):
     }
 
 
-def serialize_agency_ftl_project(afp):
+def serialize_agency_ftl_project(afp, agency=None, characters_by_name=None, bases_list=None):
     """Serialize an AgencyFTLProject join record with nested project data."""
-    return {
+    meta = afp.metadata or {}
+    data = {
         **serialize_ftl_project(afp.ftl_project),
         "assignmentId": afp.id,
         "currentSuccesses": afp.current_successes,
+        "player": afp.player,
+        "baseId": afp.base_id,
+        "baseName": afp.base_name,
+        "fringe": meta.get("fringe", False),
+        "metadata": meta,
     }
+    # Build a fake project dict for dice pool computation
+    if meta.get("dicePoolConfig") and agency and characters_by_name is not None:
+        fake_project = {
+            "player": afp.player,
+            "baseId": afp.base_id,
+            "dicePoolConfig": meta.get("dicePoolConfig"),
+            "assignedNpcs": meta.get("assignedNpcs", []),
+        }
+        # Copy fringe dice fields from metadata
+        for field_key, _, _ in FRINGE_DICE_FIELDS:
+            if field_key in meta:
+                fake_project[field_key] = meta[field_key]
+        data["computedPool"] = _compute_project_dice_pool(
+            fake_project, agency, characters_by_name, bases_list or []
+        )
+    return data
 
 
-def serialize_council_item(ci):
+def serialize_council_item(ci, user=None):
     """Serialize a CouncilItem model instance, including votes when voting."""
     from .models import Agency
 
@@ -396,6 +987,10 @@ def serialize_council_item(ci):
         # Frozen snapshot from when the vote was emergency-suspended
         data["votes"] = ci.vote_record.get("votes", [])
         data["tally"] = ci.vote_record.get("tally", {})
+
+    # Superuser-only: predicted votes
+    if user and user.is_superuser and ci.predicted_votes:
+        data["predictedVotes"] = ci.predicted_votes
 
     return data
 
@@ -542,10 +1137,12 @@ def _filter_equipment_by_hidden(equipment, hidden_sections):
     return [k for k in equipment if k not in hidden_eq_keys]
 
 
-def serialize_base(base, is_admin=True):
+def serialize_base(base, is_admin=True, character_class=None, base_config=None, agency=None):
     """Serialize a Base model instance.
 
     When is_admin is False, sections listed in hidden_sections are redacted.
+    When character_class is provided, built items are filtered by class visibility.
+    base_config is needed to look up required_class for built items.
     """
     hidden = set(base.hidden_sections or [])
 
@@ -555,20 +1152,33 @@ def serialize_base(base, is_admin=True):
     else:
         equipment = _filter_equipment_by_hidden(base.equipment or [], hidden)
 
+    loc_type = base.location_type if (is_admin or "locationType" not in hidden) else ""
+    merits = base.merits if (is_admin or "merits" not in hidden) else []
+    facilities = base.facilities if (is_admin or "facilities" not in hidden) else []
+    workspaces = _resolve_workspace_names(base.workspaces or []) if (is_admin or "workspaces" not in hidden) else []
+
     data = {
         "id": base.id,
         "name": base.name,
-        "locationType": base.location_type if (is_admin or "locationType" not in hidden) else "",
-        "merits": base.merits if (is_admin or "merits" not in hidden) else [],
-        "facilities": base.facilities if (is_admin or "facilities" not in hidden) else [],
-        "workspaces": _resolve_workspace_names(base.workspaces or []) if (is_admin or "workspaces" not in hidden) else [],
+        "locationType": loc_type,
+        "merits": merits,
+        "facilities": facilities,
+        "workspaces": workspaces,
         "equipment": equipment,
+        "departments": [],
+        "thriveGlobal": None,
         "notes": base.notes if (is_admin or "notes" not in hidden) else "",
         "isHidden": base.is_hidden,
         "hiddenSections": (base.hidden_sections or []) if is_admin else [],
         "latitude": base.latitude if (is_admin or "coordinates" not in hidden) else None,
         "longitude": base.longitude if (is_admin or "coordinates" not in hidden) else None,
     }
+
+    # Auto-calculate department thrive from facilities
+    if is_admin or "departments" not in hidden:
+        thrive_depts, thrive_mod, thrive_reasons = compute_base_thrive(base, agency=agency)
+        data["departments"] = thrive_depts
+        data["thriveGlobal"] = {"mod": thrive_mod, "reasons": thrive_reasons}
 
     # Add classified markers for redacted sections
     if not is_admin:
@@ -579,11 +1189,29 @@ def serialize_base(base, is_admin=True):
     return data
 
 
-def serialize_base_config(config):
-    """Serialize the BaseConfig singleton."""
+def _class_visible(item, character_class):
+    """Check if a config item is visible to the given character class.
+
+    Items with required_class 'general' or no required_class are visible to all.
+    Admins pass character_class=None to bypass filtering.
+    """
+    if character_class is None:
+        return True
+    rc = item.get("required_class", "general")
+    return rc == "general" or rc == character_class
+
+
+def serialize_base_config(config, character_class=None):
+    """Serialize the BaseConfig singleton.
+
+    When character_class is provided, filters options to only those
+    visible to that class. Pass None (admin) to show all.
+    """
     return {
-        "locationTypes": config.location_types,
-        "locationMerits": config.location_merits,
-        "facilityTypes": config.facility_types,
-        "equipmentTypes": config.equipment_types,
+        "locationTypes": [lt for lt in config.location_types if _class_visible(lt, character_class)],
+        "locationMerits": [lm for lm in config.location_merits if _class_visible(lm, character_class)],
+        "facilityTypes": [ft for ft in config.facility_types if _class_visible(ft, character_class)],
+        "equipmentTypes": [eq for eq in config.equipment_types if _class_visible(eq, character_class)],
+        "departments": BASE_DEPARTMENTS,
+        "thriveLabels": THRIVE_LABELS,
     }

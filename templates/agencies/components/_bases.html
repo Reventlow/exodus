@@ -45,8 +45,59 @@ const { Icon, AutoSaveInput, Classified, VisibilityToggle, getCookie, getWorkspa
         );
     };
 
-    const BasesModule = ({ bases: initialBases, baseConfig, agencyId, onBasesChange, assignableCharacters, assignableNpcs, visibility, onToggleVis, classifiedBases }) => {
+    const BasesModule = ({ bases: initialBases, baseConfig, baseConfigLookup, isNuclearPower, agencyId, onBasesChange, assignableCharacters, assignableNpcs, visibility, onToggleVis, classifiedBases }) => {
+        const lookup = baseConfigLookup || {};
+
+        // Mobile base detection: these merits/location types mean the base needs its own power
+        const MOBILE_MERIT_KEYS = new Set(['new_merit_1774341649496', 'new_merit_1774341869469', 'new_merit_1774341977938', 'mobile_platform']);
+        const MOBILE_LOC_KEYS = new Set(['new_location_1774342056263']);
+        const SELF_POWER_MERIT_KEYS = new Set(['underwater', 'self_sufficient', 'orbital']);
+
+        const isMobileBase = (base) => {
+            if (MOBILE_LOC_KEYS.has(base.locationType)) return true;
+            return (base.merits || []).some(m => MOBILE_MERIT_KEYS.has(m));
+        };
+
+        const requiresSelfPower = (base) => {
+            if (isMobileBase(base)) return true;
+            return (base.merits || []).some(m => SELF_POWER_MERIT_KEYS.has(m));
+        };
+
+        const calcPower = (base) => {
+            let totalConsumed = 0;
+            let internalConsumed = 0;
+            let produced = 0;
+            const allFt = lookup.facilityTypes || baseConfig.facilityTypes || [];
+            const ftMap = {};
+            allFt.forEach(ft => { ftMap[ft.key] = ft; });
+            const selfPow = requiresSelfPower(base);
+            (base.facilities || []).forEach(f => {
+                const ft = ftMap[f.key];
+                if (ft) {
+                    const lvl = ft.levels.find(l => l.level === f.level);
+                    if (lvl) {
+                        const pw = lvl.power || 0;
+                        totalConsumed += pw;
+                        if (f.internalPower) internalConsumed += pw;
+                        produced += lvl.powerOutput || 0;
+                    }
+                }
+            });
+            const wsFt = ftMap['workspace'];
+            (base.workspaces || []).forEach(w => {
+                if (wsFt) {
+                    const lvl = wsFt.levels.find(l => l.level === w.level);
+                    if (lvl) {
+                        const pw = lvl.power || 0;
+                        totalConsumed += pw;
+                        if (w.internalPower) internalConsumed += pw;
+                    }
+                }
+            });
+            return { totalConsumed, internalConsumed, produced, gridConsumed: totalConsumed - internalConsumed };
+        };
         const [bases, setBases] = useState(initialBases || []);
+        const [showRules, setShowRules] = useState(false);
         const [expandedBase, setExpandedBase] = useState(() => {
             const params = new URLSearchParams(window.location.search);
             const baseId = params.get('base');
@@ -57,10 +108,12 @@ const { Icon, AutoSaveInput, Classified, VisibilityToggle, getCookie, getWorkspa
 
         useEffect(() => { setBases(initialBases || []); }, [initialBases]);
 
-        // Auto-scroll to expanded base from URL param
+        // Auto-scroll to expanded base from URL param (once on mount only)
         const baseScrollRef = useRef(null);
+        const hasScrolled = useRef(false);
         useEffect(() => {
-            if (expandedBase && baseScrollRef.current) {
+            if (expandedBase && baseScrollRef.current && !hasScrolled.current) {
+                hasScrolled.current = true;
                 setTimeout(() => baseScrollRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' }), 300);
             }
         }, [initialBases]);
@@ -79,11 +132,11 @@ const { Icon, AutoSaveInput, Classified, VisibilityToggle, getCookie, getWorkspa
             'X-CSRFToken': getCookie('csrftoken') || CSRF_TOKEN,
         });
 
-        // Lookup helpers
-        const getLocationType = (key) => (baseConfig.locationTypes || []).find(lt => lt.key === key);
-        const getMerit = (key) => (baseConfig.locationMerits || []).find(m => m.key === key);
-        const getFacilityType = (key) => (baseConfig.facilityTypes || []).find(f => f.key === key);
-        const getEquipment = (key) => (baseConfig.equipmentTypes || []).find(e => e.key === key);
+        // Lookup helpers — use full defs (allXxx) for cost/name lookups so other-class items resolve
+        const getLocationType = (key) => (lookup.locationTypes || baseConfig.locationTypes || []).find(lt => lt.key === key);
+        const getMerit = (key) => (lookup.locationMerits || baseConfig.locationMerits || []).find(m => m.key === key);
+        const getFacilityType = (key) => (lookup.facilityTypes || baseConfig.facilityTypes || []).find(f => f.key === key);
+        const getEquipment = (key) => (lookup.equipmentTypes || baseConfig.equipmentTypes || []).find(e => e.key === key);
 
         const calcBaseCosts = (base) => {
             let totalExp = 0;
@@ -102,7 +155,7 @@ const { Icon, AutoSaveInput, Classified, VisibilityToggle, getCookie, getWorkspa
                     if (lvl) { totalExp += lvl.exp; usedSpace += lvl.size; }
                 }
             });
-            const wsConfig = getWorkspaceConfig(baseConfig);
+            const wsConfig = getWorkspaceConfig(baseConfig, lookup);
             (base.workspaces || []).forEach(w => {
                 if (wsConfig) {
                     const lvl = wsConfig.levels.find(l => l.level === w.level);
@@ -129,6 +182,19 @@ const { Icon, AutoSaveInput, Classified, VisibilityToggle, getCookie, getWorkspa
                     }
                 } catch (err) { console.error('Base save error:', err); }
             }, 500);
+        };
+
+        const saveBaseNow = async (baseId, data) => {
+            if (saveTimers.current[baseId]) clearTimeout(saveTimers.current[baseId]);
+            try {
+                const res = await fetch(`/api/agencies/${agencyId}/bases/${baseId}/`, {
+                    method: 'PUT', headers: headers(), body: JSON.stringify(data),
+                });
+                if (res.ok) {
+                    const updated = await res.json();
+                    updateBases(prev => prev.map(b => b.id === baseId ? updated : b));
+                }
+            } catch (err) { console.error('Base save error:', err); }
         };
 
         const createBase = async () => {
@@ -187,6 +253,30 @@ const { Icon, AutoSaveInput, Classified, VisibilityToggle, getCookie, getWorkspa
                 newFacilities = [...current, { key: facilityKey, level }];
             }
             updateBaseField(baseId, 'facilities', newFacilities);
+        };
+
+        const toggleFacilityPower = (baseId, facilityKey, level) => {
+            const base = bases.find(b => b.id === baseId);
+            if (!base) return;
+            const newFacilities = (base.facilities || []).map(f => {
+                if (f.key === facilityKey && f.level === level) {
+                    return { ...f, internalPower: !f.internalPower };
+                }
+                return f;
+            });
+            updateBases(prev => prev.map(b => b.id !== baseId ? b : { ...b, facilities: newFacilities }));
+            saveBaseNow(baseId, { ...base, facilities: newFacilities });
+        };
+
+        const toggleWorkspacePower = (baseId, idx) => {
+            const base = bases.find(b => b.id === baseId);
+            if (!base) return;
+            const newWs = (base.workspaces || []).map((w, i) => {
+                if (i === idx) return { ...w, internalPower: !w.internalPower };
+                return w;
+            });
+            updateBases(prev => prev.map(b => b.id !== baseId ? b : { ...b, workspaces: newWs }));
+            saveBaseNow(baseId, { ...base, workspaces: newWs });
         };
 
         const addWorkspace = (baseId, level) => {
@@ -273,42 +363,90 @@ const { Icon, AutoSaveInput, Classified, VisibilityToggle, getCookie, getWorkspa
             return (
                 <div ref={expandedBase === base.id ? baseScrollRef : null}
                     className="glass-panel" style={{ padding: '1rem', marginBottom: '0.75rem', borderLeft: `3px solid ${BASE_ACCENT}` }}>
-                    {/* Header row */}
+                    {/* Header — collapsed card */}
                     <div title={loc ? `${loc.description}${loc.included ? '\n' + loc.included : ''}` : ''}
-                         style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', cursor: 'pointer' }}
+                         style={{ cursor: 'pointer' }}
                          onClick={() => setExpandedBase(isExpanded ? null : base.id)}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', flex: 1 }}>
-                            <Icon name={isExpanded ? "chevron-down" : "chevron-right"} size={16} />
-                            <span className="mono-text" style={{ color: BASE_ACCENT, fontSize: '1rem', fontWeight: 'bold' }}>
-                                {base.name || 'UNNAMED BASE'}
-                            </span>
-                            {loc && (
-                                <span className="text-muted mono-text" style={{ fontSize: '0.75rem' }}>
-                                    [{loc.name}]
+
+                        {/* Row 1: name + location (left) | stats (right) */}
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '0.75rem' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', minWidth: 0 }}>
+                                <Icon name={isExpanded ? "chevron-down" : "chevron-right"} size={16} />
+                                <span className="mono-text" style={{ color: BASE_ACCENT, fontSize: '1rem', fontWeight: 'bold', whiteSpace: 'nowrap' }}>
+                                    {base.name || 'UNNAMED BASE'}
                                 </span>
-                            )}
-                            <VisibilityToggle field={basePath} visibility={visibility} onToggle={onToggleVis} />
-                            {base.isHidden && (
-                                <span className="mono-text" style={{
-                                    fontSize: '0.65rem', color: 'var(--accent-danger)',
-                                    border: '1px solid var(--accent-danger)',
-                                    padding: '0.1rem 0.4rem', borderRadius: 'var(--radius-sm)',
-                                }}>HIDDEN</span>
-                            )}
-                        </div>
-                        <div style={{ display: 'flex', gap: '1rem', alignItems: 'center' }}>
-                            <span className="mono-text" style={{ fontSize: '0.75rem', color: '#f59e0b' }}>
-                                EXP: {costs.totalExp}
-                            </span>
-                            {!isSectionHidden('space') && (
-                                <span className="mono-text" style={{
-                                    fontSize: '0.75rem',
-                                    color: costs.freeSpace < 0 ? 'var(--accent-danger)' : BASE_ACCENT
-                                }}>
-                                    SPACE: {costs.usedSpace}/{costs.totalSpace}
+                                {loc && (
+                                    <span className="text-muted mono-text" style={{ fontSize: '0.7rem', whiteSpace: 'nowrap' }}>
+                                        [{loc.name}]
+                                    </span>
+                                )}
+                                <VisibilityToggle field={basePath} visibility={visibility} onToggle={onToggleVis} />
+                                {base.isHidden && (
+                                    <span className="mono-text" style={{
+                                        fontSize: '0.6rem', color: 'var(--accent-danger)',
+                                        border: '1px solid var(--accent-danger)',
+                                        padding: '0.1rem 0.35rem', borderRadius: 'var(--radius-sm)',
+                                        whiteSpace: 'nowrap',
+                                    }}>HIDDEN</span>
+                                )}
+                            </div>
+                            <div style={{ display: 'flex', gap: '0.75rem', alignItems: 'center', flexShrink: 0 }}>
+                                <span className="mono-text" style={{ fontSize: '0.7rem', color: '#f59e0b' }}>
+                                    EXP: {costs.totalExp}
                                 </span>
-                            )}
+                                {!isSectionHidden('space') && (
+                                    <span className="mono-text" style={{
+                                        fontSize: '0.7rem',
+                                        color: costs.freeSpace < 0 ? 'var(--accent-danger)' : BASE_ACCENT
+                                    }}>
+                                        SPACE: {costs.usedSpace}/{costs.totalSpace}
+                                    </span>
+                                )}
+                                {(() => {
+                                    const pw = calcPower(base);
+                                    if (pw.totalConsumed === 0 && pw.produced === 0) return null;
+                                    const selfPow = requiresSelfPower(base);
+                                    const over = pw.internalConsumed > pw.produced;
+                                    return React.createElement('span', { className: 'mono-text', style: {
+                                        fontSize: '0.7rem', color: over && selfPow ? 'var(--accent-danger)' : '#eab308',
+                                    }}, '\u26A1 ' + pw.internalConsumed + '/' + pw.produced);
+                                })()}
+                            </div>
                         </div>
+
+                        {/* Row 2: department thrive pills */}
+                        {(() => {
+                            var depts = base.departments || [];
+                            if (depts.length === 0) return null;
+                            var allDepts = baseConfig.departments || [];
+                            return React.createElement('div', {
+                                style: {
+                                    display: 'flex', flexWrap: 'wrap', gap: '0.35rem',
+                                    marginTop: '0.4rem', paddingLeft: '1.75rem',
+                                },
+                            }, depts.map(function(d) {
+                                var def = allDepts.find(function(dd) { return dd.key === d.key; });
+                                var name = def ? def.name : d.key;
+                                var t = d.thrive || 5;
+                                var color = t <= 2 ? '#ef4444' : t <= 4 ? '#f59e0b' : t <= 6 ? '#6b7280' : t <= 8 ? '#22c55e' : '#06b6d4';
+                                return React.createElement('span', {
+                                    key: d.key,
+                                    className: 'mono-text',
+                                    title: d.tooltip || '',
+                                    style: {
+                                        fontSize: '0.6rem',
+                                        color: color,
+                                        background: 'rgba(0,0,0,0.25)',
+                                        border: '1px solid ' + color + '40',
+                                        padding: '0.1rem 0.4rem',
+                                        borderRadius: '9999px',
+                                        whiteSpace: 'nowrap',
+                                        lineHeight: '1.4',
+                                        cursor: 'help',
+                                    },
+                                }, name + ' ' + t);
+                            }));
+                        })()}
                     </div>
 
                     {isExpanded && (
@@ -355,28 +493,46 @@ const { Icon, AutoSaveInput, Classified, VisibilityToggle, getCookie, getWorkspa
                                 {isSectionHidden('locationType') ? <Classified /> : (
                                     <React.Fragment>
                                         <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem' }}>
-                                            {(baseConfig.locationTypes || []).map(lt => {
-                                                const selected = base.locationType === lt.key;
-                                                return (
-                                                    <button key={lt.key}
-                                                        onClick={() => IS_ADMIN && updateBaseField(base.id, 'locationType', selected ? '' : lt.key)}
-                                                        disabled={!IS_ADMIN}
-                                                        title={`${lt.description}${lt.included ? '\n' + lt.included : ''}`}
-                                                        style={{
-                                                            background: selected ? `${BASE_ACCENT}22` : 'rgba(0,0,0,0.2)',
-                                                            border: `1px solid ${selected ? BASE_ACCENT : 'var(--border-color)'}`,
-                                                            color: selected ? BASE_ACCENT : 'var(--text-muted)',
-                                                            padding: '0.4rem 0.75rem', cursor: IS_ADMIN ? 'pointer' : 'default',
-                                                            fontFamily: 'var(--font-mono)', fontSize: '0.8rem',
-                                                            borderRadius: 'var(--radius-sm)',
-                                                        }}>
-                                                        {lt.name}
-                                                        <span style={{ fontSize: '0.65rem', marginLeft: '0.5rem', opacity: 0.7 }}>
-                                                            E:{lt.exp} S:{lt.space}
-                                                        </span>
-                                                    </button>
-                                                );
-                                            })}
+                                            {(() => {
+                                                const configLtKeys = new Set((baseConfig.locationTypes || []).map(lt => lt.key));
+                                                const allLtDefs = lookup.locationTypes || baseConfig.locationTypes || [];
+                                                const items = [...(baseConfig.locationTypes || [])];
+                                                if (base.locationType && !configLtKeys.has(base.locationType)) {
+                                                    const def = allLtDefs.find(lt => lt.key === base.locationType);
+                                                    items.push(def ? Object.assign({}, def, { otherClass: true }) : { key: base.locationType, name: base.locationType.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase()), exp: 0, space: 0, otherClass: true });
+                                                }
+                                                return items.filter(lt => {
+                                                    // Once a type is chosen, non-admins only see the selected one
+                                                    if (!IS_ADMIN && base.locationType && base.locationType !== lt.key) return false;
+                                                    return true;
+                                                }).map(lt => {
+                                                    const selected = base.locationType === lt.key;
+                                                    const isOtherClass = lt.otherClass || false;
+                                                    // Players can select (if not already set) but not deselect
+                                                    const canClick = IS_ADMIN || (!selected && !isOtherClass && !base.locationType);
+                                                    return (
+                                                        <button key={lt.key}
+                                                            onClick={() => {
+                                                                if (!canClick) return;
+                                                                if (selected && !IS_ADMIN) return;
+                                                                updateBaseField(base.id, 'locationType', selected ? '' : lt.key);
+                                                            }}
+                                                            disabled={!canClick && !selected}
+                                                            title={isOtherClass ? lt.name : selected && !IS_ADMIN ? 'Only GM can change' : `${lt.description || ''}${lt.included ? '\n' + lt.included : ''}`}
+                                                            style={{
+                                                                background: selected ? `${BASE_ACCENT}22` : 'rgba(0,0,0,0.2)',
+                                                                border: `1px solid ${selected ? BASE_ACCENT : 'var(--border-color)'}`,
+                                                                color: selected ? BASE_ACCENT : 'var(--text-muted)',
+                                                                padding: '0.4rem 0.75rem', cursor: canClick ? 'pointer' : 'default',
+                                                                fontFamily: 'var(--font-mono)', fontSize: '0.8rem',
+                                                                borderRadius: 'var(--radius-sm)',
+                                                            }}>
+                                                            {lt.name}
+                                                            {lt.exp > 0 ? React.createElement('span', { style: { fontSize: '0.65rem', marginLeft: '0.5rem', opacity: 0.7 } }, 'E:' + lt.exp + ' S:' + lt.space) : null}
+                                                        </button>
+                                                    );
+                                                });
+                                            })()}
                                         </div>
                                         {loc && loc.included && (
                                             <p className="text-muted" style={{ fontSize: '0.75rem', marginTop: '0.5rem', fontStyle: 'italic' }}>
@@ -395,28 +551,45 @@ const { Icon, AutoSaveInput, Classified, VisibilityToggle, getCookie, getWorkspa
                                 </label>
                                 {isSectionHidden('merits') ? <Classified /> : (
                                     <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem' }}>
-                                        {(baseConfig.locationMerits || []).map(m => {
-                                            const selected = (base.merits || []).includes(m.key);
-                                            return (
-                                                <button key={m.key}
-                                                    onClick={() => IS_ADMIN && toggleMerit(base.id, m.key)}
-                                                    disabled={!IS_ADMIN}
-                                                    title={m.description}
-                                                    style={{
-                                                        background: selected ? '#3b82f622' : 'rgba(0,0,0,0.2)',
-                                                        border: `1px solid ${selected ? '#3b82f6' : 'var(--border-color)'}`,
-                                                        color: selected ? '#3b82f6' : 'var(--text-muted)',
-                                                        padding: '0.4rem 0.75rem', cursor: IS_ADMIN ? 'pointer' : 'default',
-                                                        fontFamily: 'var(--font-mono)', fontSize: '0.8rem',
-                                                        borderRadius: 'var(--radius-sm)',
-                                                    }}>
-                                                    {m.name}
-                                                    <span style={{ fontSize: '0.65rem', marginLeft: '0.5rem', opacity: 0.7 }}>
-                                                        E:+{m.exp}{m.extraSpace > 0 ? ` S:+${m.extraSpace}` : ''}
-                                                    </span>
-                                                </button>
-                                            );
-                                        })}
+                                        {(() => {
+                                            const configMeritKeys = new Set((baseConfig.locationMerits || []).map(m => m.key));
+                                            const allMeritDefs = lookup.locationMerits || baseConfig.locationMerits || [];
+                                            const items = [...(baseConfig.locationMerits || [])];
+                                            (base.merits || []).forEach(mk => {
+                                                if (!configMeritKeys.has(mk)) {
+                                                    const def = allMeritDefs.find(m => m.key === mk);
+                                                    items.push(def ? Object.assign({}, def, { otherClass: true }) : { key: mk, name: mk.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase()), exp: 0, extraSpace: 0, otherClass: true });
+                                                }
+                                            });
+                                            return items.map(m => {
+                                                const selected = (base.merits || []).includes(m.key);
+                                                const isOtherClass = m.otherClass || false;
+                                                if (!selected && isOtherClass) return null;
+                                                // Players can add but not remove
+                                                const canClick = IS_ADMIN || (!selected && !isOtherClass);
+                                                return (
+                                                    <button key={m.key}
+                                                        onClick={() => {
+                                                            if (!canClick) return;
+                                                            if (selected && !IS_ADMIN) return;
+                                                            toggleMerit(base.id, m.key);
+                                                        }}
+                                                        disabled={!canClick && !selected}
+                                                        title={isOtherClass ? m.name : selected && !IS_ADMIN ? 'Only GM can remove' : m.description || ''}
+                                                        style={{
+                                                            background: selected ? '#3b82f622' : 'rgba(0,0,0,0.2)',
+                                                            border: `1px solid ${selected ? '#3b82f6' : 'var(--border-color)'}`,
+                                                            color: selected ? '#3b82f6' : 'var(--text-muted)',
+                                                            padding: '0.4rem 0.75rem', cursor: canClick ? 'pointer' : 'default',
+                                                            fontFamily: 'var(--font-mono)', fontSize: '0.8rem',
+                                                            borderRadius: 'var(--radius-sm)',
+                                                        }}>
+                                                        {m.name}
+                                                        {m.exp > 0 ? React.createElement('span', { style: { fontSize: '0.65rem', marginLeft: '0.5rem', opacity: 0.7 } }, 'E:+' + m.exp + (m.extraSpace > 0 ? ' S:+' + m.extraSpace : '')) : null}
+                                                    </button>
+                                                );
+                                            });
+                                        })()}
                                     </div>
                                 )}
                             </div>
@@ -441,6 +614,53 @@ const { Icon, AutoSaveInput, Classified, VisibilityToggle, getCookie, getWorkspa
                                 </div>
                             )}
 
+                            {/* Power Usage Bar */}
+                            {(() => {
+                                const pw = calcPower(base);
+                                const selfPowered = requiresSelfPower(base);
+                                const mobile = isMobileBase(base);
+                                if (pw.totalConsumed === 0 && pw.produced === 0) return null;
+                                const internalPct = pw.produced > 0 ? Math.min(100, Math.round(pw.internalConsumed / pw.produced * 100)) : (pw.internalConsumed > 0 ? 100 : 0);
+                                const internalOver = pw.internalConsumed > pw.produced;
+                                const gridInfraPct = !selfPowered && pw.totalConsumed > 0 ? Math.round(pw.gridConsumed / pw.totalConsumed * 100) : 0;
+                                const barColor = !internalOver ? '#eab308' : (selfPowered ? 'var(--accent-danger)' : '#f59e0b');
+                                return (
+                                    <div style={{ marginBottom: '1rem' }}>
+                                        <label className="mono-text" style={{ fontSize: '0.7rem', display: 'block', marginBottom: '0.25rem', color: '#eab308' }}>
+                                            ⚡ INTERNAL POWER: {pw.internalConsumed} / {pw.produced}
+                                            {!selfPowered && pw.gridConsumed > 0 && (
+                                                <span style={{ color: 'var(--text-muted)', marginLeft: '0.5rem', fontSize: '0.65rem' }}>
+                                                    | {pw.gridConsumed} on country grid ({gridInfraPct}% infrastructure dependent)
+                                                </span>
+                                            )}
+                                            {!selfPowered && pw.gridConsumed === 0 && pw.produced > 0 && (
+                                                <span style={{ color: '#22c55e', marginLeft: '0.5rem', fontSize: '0.65rem' }}>
+                                                    (self-sufficient)
+                                                </span>
+                                            )}
+                                            {!selfPowered && pw.produced === 0 && pw.totalConsumed > 0 && (
+                                                <span style={{ color: 'var(--text-muted)', marginLeft: '0.5rem', fontSize: '0.65rem' }}>
+                                                    | 100% country infrastructure
+                                                </span>
+                                            )}
+                                            {internalOver && selfPowered && (
+                                                <span style={{ color: 'var(--accent-danger)', marginLeft: '0.5rem', fontSize: '0.65rem' }}>
+                                                    POWER DEFICIT! {mobile ? 'Mobile base requires self-power.' : 'No grid connection.'}
+                                                </span>
+                                            )}
+                                        </label>
+                                        <div style={{ background: 'rgba(0,0,0,0.3)', height: '8px', borderRadius: '4px', overflow: 'hidden' }}>
+                                            <div style={{
+                                                width: pw.produced > 0 ? `${internalPct}%` : (pw.internalConsumed > 0 ? '100%' : '0%'),
+                                                height: '100%',
+                                                background: barColor,
+                                                transition: 'width 0.3s',
+                                            }} />
+                                        </div>
+                                    </div>
+                                );
+                            })()}
+
                             {/* Facilities (multi-select, excludes workspace) */}
                             <div style={{ marginBottom: '1rem' }}>
                                 <label className="text-muted mono-text" style={{ fontSize: '0.7rem', display: 'block', marginBottom: '0.5rem' }}>
@@ -449,74 +669,121 @@ const { Icon, AutoSaveInput, Classified, VisibilityToggle, getCookie, getWorkspa
                                     <VisibilityToggle field={`${basePath}.facilities`} visibility={visibility} onToggle={onToggleVis} />
                                 </label>
                                 {(isSectionHidden('facilities') || (base.classifiedFacilities && !IS_ADMIN)) ? <Classified /> : (() => {
-                                    // Group facilities by category, sorted
-                                    const allFt = (baseConfig.facilityTypes || []).filter(ft => ft.key !== 'workspace');
-                                    const catMap = {};
-                                    allFt.forEach(ft => {
-                                        const cat = ft.category || 'Uncategorised';
-                                        if (!catMap[cat]) catMap[cat] = { catSortOrder: ft.catSortOrder ?? 999, facilities: [] };
-                                        catMap[cat].facilities.push(ft);
+                                    // Check if any character has "Fringe Science Labs" pulling string
+                                    const hasFringePS = (assignableCharacters || []).some(c =>
+                                        (c.pullingStrings || []).some(ps => ps.name === 'Fringe Science Labs')
+                                    );
+                                    // Config facilities = what this player's class can build
+                                    const myFt = (baseConfig.facilityTypes || []).filter(ft => ft.key !== 'workspace');
+                                    const configKeys = new Set(myFt.map(ft => ft.key));
+                                    // Full definitions for all classes (for display lookups)
+                                    const allDefs = lookup.facilityTypes || baseConfig.facilityTypes || [];
+                                    const defByKey = {};
+                                    allDefs.forEach(ft => { defByKey[ft.key] = ft; });
+                                    // Add read-only entries for built facilities from other classes
+                                    const builtOtherClassKeys = new Set();
+                                    (base.facilities || []).forEach(f => {
+                                        if (f.key !== 'workspace' && !configKeys.has(f.key)) builtOtherClassKeys.add(f.key);
                                     });
-                                    const groups = Object.entries(catMap)
-                                        .sort(([,a],[,b]) => a.catSortOrder - b.catSortOrder)
-                                        .map(([name, data]) => ({
-                                            name,
-                                            facilities: data.facilities.sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0)),
-                                        }));
+                                    const otherClassFts = [];
+                                    builtOtherClassKeys.forEach(key => {
+                                        const def = defByKey[key];
+                                        if (def) {
+                                            otherClassFts.push(Object.assign({}, def, { otherClass: true }));
+                                        } else {
+                                            const levels = (base.facilities || []).filter(f => f.key === key).map(f => f.level);
+                                            otherClassFts.push({ key, name: key.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase()), levels: levels.map(l => ({ level: l, name: 'Level ' + l, exp: 0, size: 0 })), otherClass: true });
+                                        }
+                                    });
+                                    const combinedFt = myFt.concat(otherClassFts);
 
-                                    return groups.map(group => (
-                                        <div key={group.name} style={{ marginBottom: '0.75rem' }}>
-                                            <div className="mono-text" style={{
-                                                fontSize: '0.7rem', color: BASE_ACCENT, marginBottom: '0.35rem',
-                                                borderBottom: '1px solid var(--border-color)', paddingBottom: '0.2rem',
-                                            }}>{group.name.toUpperCase()}</div>
-                                            {group.facilities.map(ft => {
-                                                const selectedLevels = (base.facilities || []).filter(f => f.key === ft.key).map(f => f.level);
-                                                const hasAny = selectedLevels.length > 0;
-                                                return (
-                                                    <div key={ft.key} className="tech-border" style={{
-                                                        padding: '0.5rem', marginBottom: '0.25rem',
-                                                        background: hasAny ? 'rgba(34,197,94,0.05)' : 'rgba(0,0,0,0.15)',
-                                                    }}>
-                                                        <span className="mono-text" style={{
-                                                            fontSize: '0.85rem', display: 'block', marginBottom: '0.35rem',
-                                                            color: hasAny ? BASE_ACCENT : 'var(--text-muted)',
-                                                        }}>{ft.name}</span>
-                                                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.3rem' }}>
-                                                            {ft.levels.map(lvl => {
-                                                                const active = selectedLevels.includes(lvl.level);
-                                                                return (
-                                                                    <button key={lvl.level}
-                                                                        onClick={() => IS_ADMIN && toggleFacilityLevel(base.id, ft.key, lvl.level)}
-                                                                        disabled={!IS_ADMIN}
-                                                                        title={lvl.description}
-                                                                        style={{
-                                                                            background: active ? `${BASE_ACCENT}22` : 'rgba(0,0,0,0.2)',
-                                                                            border: `1px solid ${active ? BASE_ACCENT : 'var(--border-color)'}`,
-                                                                            color: active ? BASE_ACCENT : 'var(--text-muted)',
-                                                                            padding: '0.25rem 0.5rem', cursor: IS_ADMIN ? 'pointer' : 'default',
-                                                                            fontFamily: 'var(--font-mono)', fontSize: '0.7rem',
-                                                                            borderRadius: 'var(--radius-sm)',
-                                                                        }}>
-                                                                        {lvl.name}
-                                                                        <span style={{ fontSize: '0.6rem', marginLeft: '0.3rem', opacity: 0.7 }}>
-                                                                            E:{lvl.exp} S:{lvl.size}
-                                                                        </span>
-                                                                    </button>
-                                                                );
-                                                            })}
-                                                        </div>
-                                                    </div>
-                                                );
-                                            })}
-                                        </div>
-                                    ));
+                                    return combinedFt.map(ft => {
+                                        const selectedLevels = (base.facilities || []).filter(f => f.key === ft.key).map(f => f.level);
+                                        const hasAny = selectedLevels.length > 0;
+                                        const isOtherClass = ft.otherClass || false;
+                                        // Hide unselected facilities from other classes
+                                        if (!hasAny && isOtherClass) return null;
+                                        // Hide unselected facilities that aren't in this player's config (shouldn't happen but safety)
+                                        if (!hasAny && !configKeys.has(ft.key) && !IS_ADMIN) return null;
+                                        return (
+                                            <div key={ft.key} className="tech-border" style={{
+                                                padding: '0.5rem', marginBottom: '0.25rem',
+                                                background: hasAny ? 'rgba(34,197,94,0.05)' : 'rgba(0,0,0,0.15)',
+                                            }}>
+                                                <span className="mono-text" style={{
+                                                    fontSize: '0.85rem', display: 'block', marginBottom: '0.35rem',
+                                                    color: hasAny ? BASE_ACCENT : 'var(--text-muted)',
+                                                }}>{ft.name}{isOtherClass && !IS_ADMIN ? '' : ''}</span>
+                                                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.3rem' }}>
+                                                    {ft.levels.map(lvl => {
+                                                        const active = selectedLevels.includes(lvl.level);
+                                                        const baseMerits = base.merits || [];
+                                                        const isUnderground = baseMerits.includes('underground');
+                                                        const isUnderwater = baseMerits.includes('underwater');
+                                                        const isSubterranean = isUnderground || isUnderwater;
+                                                        const lockedFringe = ft.key === 'fringe_lab' && !hasFringePS && !active;
+                                                        const lockedNuclear = ft.key === 'power_plant' && lvl.level === 3 && !isNuclearPower && !active;
+                                                        const lockedSolar = ft.key === 'power_plant' && lvl.level === 2 && isSubterranean && !active;
+                                                        const lockedGeothermal = ft.key === 'power_plant' && lvl.level === 4 && !isSubterranean && !active;
+                                                        const locked = lockedFringe || lockedNuclear || lockedSolar || lockedGeothermal;
+                                                        // Players can add (not active → active) but only admin can remove (active → not active)
+                                                        const canClick = IS_ADMIN || (!active && !isOtherClass && !locked);
+                                                        // For other-class built items, show as read-only
+                                                        if (isOtherClass && !active) return null;
+                                                        const facilityEntry = active ? (base.facilities || []).find(f => f.key === ft.key && f.level === lvl.level) : null;
+                                                        const isPowered = facilityEntry ? !!facilityEntry.internalPower : false;
+                                                        const selfPow = requiresSelfPower(base);
+                                                        const hasPower = (lvl.power || 0) > 0;
+                                                        const isPowerPlant = ft.key === 'power_plant';
+                                                        const canTogglePower = active && hasPower && !isPowerPlant && (IS_ADMIN || CHARACTER_CLASS === 'engineer');
+                                                        return React.createElement('span', { key: lvl.level, style: { display: 'inline-flex', alignItems: 'center', gap: '2px' } },
+                                                            React.createElement('button', {
+                                                                onClick: function() {
+                                                                    if (!canClick) return;
+                                                                    if (active && !IS_ADMIN) return;
+                                                                    if (locked) return;
+                                                                    toggleFacilityLevel(base.id, ft.key, lvl.level);
+                                                                },
+                                                                disabled: !canClick,
+                                                                title: lockedSolar ? 'Solar/Wind not available underground or underwater' : lockedGeothermal ? 'Geothermal only available underground or underwater' : lockedNuclear ? 'Agency must have Nuclear Power status (council approval)' : lockedFringe ? 'Requires Fringe Science Labs pulling string' : isOtherClass ? ft.name : active && !IS_ADMIN ? 'Only GM can remove' : lvl.description,
+                                                                style: {
+                                                                    background: active ? (BASE_ACCENT + '22') : locked ? 'rgba(0,0,0,0.05)' : 'rgba(0,0,0,0.2)',
+                                                                    border: '1px solid ' + (active ? BASE_ACCENT : locked ? 'var(--bg-panel)' : 'var(--border-color)'),
+                                                                    color: active ? BASE_ACCENT : locked ? 'var(--bg-panel)' : 'var(--text-muted)',
+                                                                    padding: '0.25rem 0.5rem', cursor: canClick ? 'pointer' : 'default',
+                                                                    fontFamily: 'var(--font-mono)', fontSize: '0.7rem',
+                                                                    borderRadius: 'var(--radius-sm)',
+                                                                    opacity: locked ? 0.4 : 1,
+                                                                },
+                                                            }, locked ? '🔒 ' : '', lvl.name,
+                                                                lvl.exp > 0 ? React.createElement('span', { style: { fontSize: '0.6rem', marginLeft: '0.3rem', opacity: 0.7 } }, 'E:' + lvl.exp + ' S:' + lvl.size) : null,
+                                                                hasPower && !isPowerPlant ? React.createElement('span', { style: { fontSize: '0.6rem', marginLeft: '0.3rem', opacity: 0.7 } }, 'P:' + (lvl.power || 0)) : null,
+                                                                isPowerPlant && (lvl.powerOutput || 0) > 0 ? React.createElement('span', { style: { fontSize: '0.6rem', marginLeft: '0.3rem', opacity: 0.7, color: '#22c55e' } }, 'P:+' + lvl.powerOutput) : null
+                                                            ),
+                                                            canTogglePower ? React.createElement('button', {
+                                                                onClick: function() { toggleFacilityPower(base.id, ft.key, lvl.level); },
+                                                                title: isPowered ? (selfPow ? 'Powered — click to take offline' : 'Internal power — click for country grid') : (selfPow ? 'Offline — click to power on' : 'Country grid — click for internal power'),
+                                                                style: {
+                                                                    background: isPowered ? '#eab30833' : 'transparent',
+                                                                    border: '1px solid ' + (isPowered ? '#eab308' : 'var(--border-color)'),
+                                                                    color: isPowered ? '#eab308' : 'var(--text-muted)',
+                                                                    padding: '0.15rem 0.25rem', cursor: 'pointer',
+                                                                    fontSize: '0.65rem', borderRadius: '3px',
+                                                                    opacity: isPowered ? 1 : 0.4,
+                                                                },
+                                                            }, '\u26A1') : null
+                                                        );
+                                                    })}
+                                                </div>
+                                            </div>
+                                        );
+                                    });
                                 })()}
                             </div>
 
                             {/* Workspaces (multi-instance with assignment) */}
                             {(() => {
-                                const wsConfig = getWorkspaceConfig(baseConfig);
+                                const wsConfig = getWorkspaceConfig(baseConfig, lookup);
                                 if (!wsConfig) return null;
                                 if ((isSectionHidden('workspaces') || (base.classifiedWorkspaces && !IS_ADMIN))) return (
                                     <div style={{ marginBottom: '1rem' }}>
@@ -539,7 +806,7 @@ const { Icon, AutoSaveInput, Classified, VisibilityToggle, getCookie, getWorkspa
                                                 <SectionHideToggle baseId={base.id} sectionKey="workspaces" hiddenSections={base.hiddenSections} />
                                                 <VisibilityToggle field={`${basePath}.workspaces`} visibility={visibility} onToggle={onToggleVis} />
                                             </span>
-                                            {IS_ADMIN && (
+                                            {(IS_ADMIN || CHARACTER_CLASS === 'engineer') && (
                                                 <select
                                                     value=""
                                                     onChange={e => { if (e.target.value) addWorkspace(base.id, parseInt(e.target.value)); e.target.value = ''; }}
@@ -552,7 +819,7 @@ const { Icon, AutoSaveInput, Classified, VisibilityToggle, getCookie, getWorkspa
                                                     <option value="">+ Add Workspace</option>
                                                     {wsConfig.levels.map(lvl => (
                                                         <option key={lvl.level} value={lvl.level}>
-                                                            {lvl.name} (E:{lvl.exp} S:{lvl.size})
+                                                            {lvl.name} (E:{lvl.exp} S:{lvl.size}{lvl.power ? ' P:' + lvl.power : ''})
                                                         </option>
                                                     ))}
                                                 </select>
@@ -572,12 +839,26 @@ const { Icon, AutoSaveInput, Classified, VisibilityToggle, getCookie, getWorkspa
                                                         <span style={{ fontSize: '0.65rem', marginLeft: '0.3rem', opacity: 0.7 }}>
                                                             E:{lvl?.exp || 0} S:{lvl?.size || 0}
                                                         </span>
+                                                        {(lvl?.power || 0) > 0 ? React.createElement('span', { style: { fontSize: '0.6rem', marginLeft: '0.3rem', opacity: 0.7 } }, 'P:' + lvl.power) : null}
                                                     </span>
-                                                    {IS_ADMIN ? (
+                                                    {(lvl?.power || 0) > 0 && (IS_ADMIN || CHARACTER_CLASS === 'engineer') ? (
+                                                        <button onClick={() => toggleWorkspacePower(base.id, idx)}
+                                                            title={ws.internalPower ? (requiresSelfPower(base) ? 'Powered — click to take offline' : 'Internal power — click for country grid') : (requiresSelfPower(base) ? 'Offline — click to power on' : 'Country grid — click for internal power')}
+                                                            style={{
+                                                                background: ws.internalPower ? '#eab30833' : 'transparent',
+                                                                border: '1px solid ' + (ws.internalPower ? '#eab308' : 'var(--border-color)'),
+                                                                color: ws.internalPower ? '#eab308' : 'var(--text-muted)',
+                                                                padding: '0.1rem 0.25rem', cursor: 'pointer',
+                                                                fontSize: '0.6rem', borderRadius: '3px',
+                                                                opacity: ws.internalPower ? 1 : 0.4,
+                                                            }}>⚡</button>
+                                                    ) : null}
+                                                    {(IS_ADMIN || CHARACTER_CLASS === 'engineer') ? (
                                                         <select
                                                             value={ws.assignedTo ? `${ws.assignedType}:${ws.assignedTo}` : ''}
                                                             onChange={e => {
                                                                 if (!e.target.value) {
+                                                                    if (!IS_ADMIN) return; // only admin can unassign
                                                                     updateWorkspace(base.id, idx, { assignedTo: null, assignedType: null });
                                                                 } else {
                                                                     const [type, id] = e.target.value.split(':');
@@ -658,11 +939,22 @@ const { Icon, AutoSaveInput, Classified, VisibilityToggle, getCookie, getWorkspa
                                         return andMet && orMet;
                                     };
 
+                                    // Build categories from config + add built items from other classes
+                                    const configEqKeys = new Set((baseConfig.equipmentTypes || []).map(eq => eq.key));
+                                    const allEqDefs = lookup.equipmentTypes || baseConfig.equipmentTypes || [];
                                     const categories = {};
                                     (baseConfig.equipmentTypes || []).forEach(eq => {
                                         const cat = eq.category || 'Other';
                                         if (!categories[cat]) categories[cat] = [];
                                         categories[cat].push(eq);
+                                    });
+                                    (base.equipment || []).forEach(ek => {
+                                        if (!configEqKeys.has(ek)) {
+                                            const def = allEqDefs.find(eq => eq.key === ek);
+                                            const cat = def ? (def.category || 'Other') : 'Other';
+                                            if (!categories[cat]) categories[cat] = [];
+                                            categories[cat].push(def ? Object.assign({}, def, { otherClass: true }) : { key: ek, name: ek.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase()), exp: 0, category: cat, otherClass: true });
+                                        }
                                     });
                                     const catKeyMap = {
                                         'Aviation Units': 'aviationUnits', 'Base Defenses': 'baseDefenses',
@@ -671,7 +963,6 @@ const { Icon, AutoSaveInput, Classified, VisibilityToggle, getCookie, getWorkspa
                                     return Object.entries(categories).map(([cat, items]) => {
                                         const catKey = catKeyMap[cat];
                                         const catHidden = catKey && isSectionHidden(catKey);
-                                        // Hide entire category if no items meet requirements and none are selected
                                         const anyAvailable = items.some(eq => meetsRequirements(eq) || (base.equipment || []).includes(eq.key));
                                         if (!anyAvailable && !IS_ADMIN) return null;
                                         return (
@@ -684,26 +975,34 @@ const { Icon, AutoSaveInput, Classified, VisibilityToggle, getCookie, getWorkspa
                                             <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.4rem' }}>
                                                 {items.map(eq => {
                                                     const selected = (base.equipment || []).includes(eq.key);
-                                                    const reqMet = meetsRequirements(eq);
-                                                    // Hide unavailable unselected equipment for non-admins
+                                                    const isOtherClass = eq.otherClass || false;
+                                                    const reqMet = isOtherClass ? true : meetsRequirements(eq);
+                                                    if (!selected && isOtherClass) return null;
                                                     if (!reqMet && !selected && !IS_ADMIN) return null;
                                                     const locked = !reqMet && !selected;
+                                                    // Players can add but not remove
+                                                    const canClick = IS_ADMIN || (!selected && !isOtherClass && reqMet);
                                                     return (
                                                         <button key={eq.key}
-                                                            onClick={() => IS_ADMIN && reqMet && toggleEquipment(base.id, eq.key)}
-                                                            disabled={!IS_ADMIN || locked}
-                                                            title={locked ? `Requires: ${eq.requires}` : (eq.requires || eq.name)}
+                                                            onClick={() => {
+                                                                if (!canClick) return;
+                                                                if (selected && !IS_ADMIN) return;
+                                                                if (locked) return;
+                                                                toggleEquipment(base.id, eq.key);
+                                                            }}
+                                                            disabled={!canClick && !selected}
+                                                            title={locked ? `Requires: ${eq.requires}` : selected && !IS_ADMIN ? 'Only GM can remove' : (eq.requires || eq.name)}
                                                             style={{
                                                                 background: selected ? '#f59e0b22' : locked ? 'rgba(0,0,0,0.05)' : 'rgba(0,0,0,0.2)',
                                                                 border: `1px solid ${selected ? '#f59e0b' : locked ? 'var(--bg-panel)' : 'var(--border-color)'}`,
                                                                 color: selected ? '#f59e0b' : locked ? 'var(--bg-panel)' : 'var(--text-muted)',
-                                                                padding: '0.3rem 0.6rem', cursor: (IS_ADMIN && reqMet) ? 'pointer' : 'default',
+                                                                padding: '0.3rem 0.6rem', cursor: canClick ? 'pointer' : 'default',
                                                                 fontFamily: 'var(--font-mono)', fontSize: '0.75rem',
                                                                 borderRadius: 'var(--radius-sm)',
                                                                 opacity: locked ? 0.4 : 1,
                                                             }}>
                                                             {locked && '🔒 '}{eq.name}
-                                                            <span style={{ fontSize: '0.6rem', marginLeft: '0.4rem', opacity: 0.7 }}>E:{eq.exp}</span>
+                                                            {eq.exp > 0 ? React.createElement('span', { style: { fontSize: '0.6rem', marginLeft: '0.4rem', opacity: 0.7 } }, 'E:' + eq.exp) : null}
                                                         </button>
                                                     );
                                                 })}
@@ -712,6 +1011,99 @@ const { Icon, AutoSaveInput, Classified, VisibilityToggle, getCookie, getWorkspa
                                         </div>
                                         );
                                     });
+                                })()}
+                            </div>
+
+                            {/* Departments & Thrive Scores (auto-calculated from facilities) */}
+                            <div style={{ marginBottom: '1rem' }}>
+                                <label className="text-muted mono-text" style={{ fontSize: '0.7rem', display: 'block', marginBottom: '0.5rem' }}>
+                                    DEPARTMENTS
+                                    <SectionHideToggle baseId={base.id} sectionKey="departments" hiddenSections={base.hiddenSections} />
+                                </label>
+                                {isSectionHidden('departments') ? <Classified /> : (() => {
+                                    const depts = base.departments || [];
+                                    const tg = base.thriveGlobal || {};
+                                    const reasons = tg.reasons || [];
+                                    const globalMod = tg.mod || 0;
+
+                                    const thriveColor = (t) => {
+                                        if (t <= 2) return '#ef4444';
+                                        if (t <= 4) return '#f59e0b';
+                                        if (t <= 6) return '#6b7280';
+                                        if (t <= 8) return '#22c55e';
+                                        return '#06b6d4';
+                                    };
+
+                                    const thriveModifier = (t) => {
+                                        const mod = Math.floor((t - 5) / 2);
+                                        if (mod > 0) return '+' + mod;
+                                        if (mod < 0) return '' + mod;
+                                        return '0';
+                                    };
+
+                                    return (
+                                        <div>
+                                            {/* Global modifiers */}
+                                            {reasons.length > 0 && (
+                                                <div style={{ marginBottom: '0.5rem', padding: '0.3rem 0.5rem', background: 'rgba(0,0,0,0.2)', borderRadius: 'var(--radius-sm)', borderLeft: '3px solid ' + (globalMod >= 0 ? '#22c55e' : '#ef4444') }}>
+                                                    <span className="mono-text" style={{ fontSize: '0.6rem', color: globalMod >= 0 ? '#22c55e' : '#ef4444' }}>
+                                                        GLOBAL {globalMod >= 0 ? '+' + globalMod : globalMod}: {reasons.join(' | ')}
+                                                    </span>
+                                                </div>
+                                            )}
+
+                                            {depts.length === 0 ? (
+                                                <span className="text-muted" style={{ fontSize: '0.75rem', fontStyle: 'italic' }}>
+                                                    No facilities built — no departments active.
+                                                </span>
+                                            ) : (
+                                                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
+                                                    {depts.map(function(dept) {
+                                                        var t = dept.thrive || 1;
+                                                        var color = thriveColor(t);
+                                                        var mod = thriveModifier(t);
+                                                        return (
+                                                            <div key={dept.key} title={dept.tooltip || ''} style={{
+                                                                display: 'flex', alignItems: 'center', gap: '0.5rem',
+                                                                background: 'rgba(0,0,0,0.15)', padding: '0.4rem 0.6rem',
+                                                                borderRadius: 'var(--radius-sm)', borderLeft: '3px solid ' + color,
+                                                                cursor: 'help',
+                                                            }}>
+                                                                <span className="mono-text" style={{ fontSize: '0.75rem', color: 'var(--text-primary)', minWidth: '120px' }}>
+                                                                    {dept.name}
+                                                                </span>
+                                                                <div style={{
+                                                                    flex: 1, maxWidth: '120px', height: '6px',
+                                                                    background: 'rgba(0,0,0,0.3)', borderRadius: '3px',
+                                                                    overflow: 'hidden',
+                                                                }}>
+                                                                    <div style={{
+                                                                        width: (t * 10) + '%', height: '100%',
+                                                                        background: color, borderRadius: '3px',
+                                                                    }} />
+                                                                </div>
+                                                                <span className="mono-text" style={{
+                                                                    fontSize: '0.8rem', fontWeight: 'bold',
+                                                                    color: color, minWidth: '20px', textAlign: 'center',
+                                                                }}>{t}</span>
+                                                                <span className="mono-text" style={{
+                                                                    fontSize: '0.7rem', color: color,
+                                                                    minWidth: '80px',
+                                                                }}>{dept.label}</span>
+                                                                <span className="mono-text" style={{
+                                                                    fontSize: '0.65rem', padding: '0.1rem 0.3rem',
+                                                                    background: 'rgba(0,0,0,0.3)', borderRadius: '3px',
+                                                                    color: mod.charAt(0) === '-' ? '#ef4444' : mod === '0' ? 'var(--text-muted)' : '#22c55e',
+                                                                }}>
+                                                                    {mod} dice
+                                                                </span>
+                                                            </div>
+                                                        );
+                                                    })}
+                                                </div>
+                                            )}
+                                        </div>
+                                    );
                                 })()}
                             </div>
 
@@ -756,10 +1148,33 @@ const { Icon, AutoSaveInput, Classified, VisibilityToggle, getCookie, getWorkspa
                                 </div>
                             )}
 
-                            {/* Delete button */}
+                            {/* Clear & Delete buttons */}
                             {IS_ADMIN && (
-                                <div style={{ textAlign: 'right', marginTop: '0.5rem' }}>
-                                    <button onClick={() => deleteBase(base.id)}
+                                <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '0.5rem' }}>
+                                    <button onClick={() => {
+                                        const costs = calcBaseCosts(base);
+                                        if (!confirm('CLEAR ALL CHOICES on "' + base.name + '"?\n\nThis will remove:\n- Location type\n- All merits\n- All facilities\n- All workspaces\n- All equipment\n\nEXP returned: ' + costs.totalExp + '\n\nDepartments and notes will be kept.\n\nAre you sure?')) return;
+                                        saveBase(base.id, {
+                                            locationType: '',
+                                            merits: [],
+                                            facilities: [],
+                                            workspaces: [],
+                                            equipment: [],
+                                        });
+                                    }}
+                                        className="mono-text"
+                                        style={{
+                                            background: 'transparent', border: '1px solid #f59e0b',
+                                            color: '#f59e0b', padding: '0.3rem 1rem',
+                                            cursor: 'pointer', fontSize: '0.75rem', fontFamily: 'var(--font-mono)',
+                                            borderRadius: 'var(--radius-sm)',
+                                        }}>
+                                        CLEAR BASE
+                                    </button>
+                                    <button onClick={() => {
+                                        if (!confirm('PERMANENTLY DELETE "' + base.name + '"?\n\nThis cannot be undone.')) return;
+                                        deleteBase(base.id);
+                                    }}
                                         className="mono-text"
                                         style={{
                                             background: 'transparent', border: '1px solid var(--accent-danger)',
@@ -805,18 +1220,86 @@ const { Icon, AutoSaveInput, Classified, VisibilityToggle, getCookie, getWorkspa
                             ({bases.length}) // TOTAL EXP: {totalBaseExp}
                         </span>
                     </span>
-                    {IS_ADMIN && (
-                        <button onClick={createBase} disabled={creating}
+                    <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+                        <button onClick={() => setShowRules(prev => !prev)}
                             style={{
-                                background: 'transparent', border: `1px solid ${BASE_ACCENT}`,
-                                color: BASE_ACCENT, width: '24px', height: '24px',
-                                borderRadius: '4px', cursor: creating ? 'wait' : 'pointer',
-                                display: 'flex', alignItems: 'center', justifyContent: 'center',
-                            }}>
-                            <Icon name="plus" size={14} />
-                        </button>
-                    )}
+                                background: showRules ? `${BASE_ACCENT}22` : 'transparent',
+                                border: `1px solid ${BASE_ACCENT}`,
+                                color: BASE_ACCENT, padding: '0.15rem 0.5rem',
+                                borderRadius: '4px', cursor: 'pointer',
+                                fontFamily: 'var(--font-mono)', fontSize: '0.65rem',
+                            }}>RULES</button>
+                        {IS_ADMIN && (
+                            <button onClick={createBase} disabled={creating}
+                                style={{
+                                    background: 'transparent', border: `1px solid ${BASE_ACCENT}`,
+                                    color: BASE_ACCENT, width: '24px', height: '24px',
+                                    borderRadius: '4px', cursor: creating ? 'wait' : 'pointer',
+                                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                }}>
+                                <Icon name="plus" size={14} />
+                            </button>
+                        )}
+                    </div>
                 </h3>
+
+                {showRules && (
+                    <div style={{ marginBottom: '1rem', padding: '1rem', background: 'rgba(0,0,0,0.3)', borderRadius: 'var(--radius-sm)', border: `1px solid ${BASE_ACCENT}`, fontSize: '0.75rem', fontFamily: 'var(--font-mono)', color: 'var(--text-secondary)' }}>
+                        <div style={{ color: BASE_ACCENT, fontWeight: 'bold', marginBottom: '0.5rem' }}>BASE BUILDING RULES</div>
+
+                        <div style={{ marginBottom: '0.75rem' }}>
+                            <span style={{ color: '#f59e0b', fontWeight: 'bold' }}>CLASS RESTRICTIONS</span><br/>
+                            Each player class can only see and build facilities matching their specialisation. General facilities are available to all.<br/>
+                            <span style={{ color: '#6b7280' }}>Soldier: military, security, aviation · Engineer: tech, power, fabrication · Science: labs, medical, research · Fixer: diplomacy, HR, intelligence</span><br/>
+                            Players can ADD items but only the GM can remove them. Built items from other classes are visible but read-only.
+                        </div>
+
+                        <div style={{ marginBottom: '0.75rem' }}>
+                            <span style={{ color: '#eab308', fontWeight: 'bold' }}>⚡ POWER SYSTEM</span><br/>
+                            Every facility consumes power (shown as P: value). Power plants produce power.<br/>
+                            <span style={{ color: '#6b7280' }}>Generator: 15 output · Solar/Wind: 30 · Geothermal: 40 (underground/underwater only) · Nuclear Reactor: 80 (requires council approval)</span><br/>
+                            Non-mobile bases draw excess from country infrastructure. Underwater, mobile, and orbital bases must be fully self-powered.<br/>
+                            Engineers can toggle ⚡ on each facility to connect/disconnect from internal power.
+                        </div>
+
+                        <div style={{ marginBottom: '0.75rem' }}>
+                            <span style={{ color: '#22c55e', fontWeight: 'bold' }}>DEPARTMENT THRIVE</span><br/>
+                            Departments appear automatically based on built facilities. Each department has a thrive score (1-10) that affects project dice pools.<br/>
+                            <span style={{ color: '#6b7280' }}>1-2 Collapsing/Critical (-2 dice) · 3-4 Struggling/Strained (-1 dice) · 5-6 Stable/Functional (0) · 7-8 Thriving/Flourishing (+1 dice) · 9-10 Exemplary/Pinnacle (+2 dice)</span><br/>
+                            Most specialist facilities give +2 per level (labs, fabrication, intel archive, training, diplomatic). Barracks also gives +2. General areas, living, storage give +1 admin each. Recreation gives +2 admin.<br/>
+                            Some facilities have cross-department effects — interrogation boosts intelligence but hurts diplomacy and admin. High-level monitoring boosts intelligence but hinders science and engineering.<br/>
+                            Hover over a department row to see the full breakdown.
+                        </div>
+
+                        <div style={{ marginBottom: '0.75rem' }}>
+                            <span style={{ color: '#ef4444', fontWeight: 'bold' }}>GLOBAL PENALTIES & BONUSES</span><br/>
+                            These affect ALL departments on the base:<br/>
+                            <span style={{ color: '#ef4444' }}>No housing (large base, &gt;12 space): -1 or -2 · Normal housing (L1): -1 · No medical (8+ facilities): -1 · Poor amenities (&lt;10%): -1 · No power (isolated base): -1</span><br/>
+                            <span style={{ color: '#22c55e' }}>Nice housing (L2): neutral · Luxus housing (L3): +1 · Good amenities (20%+): +1</span><br/>
+                            <span style={{ color: '#6b7280' }}>Small bases (12 space or less) assume staff rotation — no housing penalty.</span><br/>
+                            <span style={{ color: '#ef4444' }}>Active fringe project on base: -1 per project to all departments</span><br/>
+                            <span style={{ color: '#6b7280' }}>Tip: build housing, medical, and recreation early — they lift every department. Fringe research is powerful but destabilises the base.</span><br/>
+                            <span style={{ color: '#c084fc' }}>Child Prodigy: +2 automatic successes on every roll for their assigned project (+ normal NPC dice bonus). Dedicated until project completion.</span>
+                        </div>
+
+                        <div style={{ marginBottom: '0.75rem' }}>
+                            <span style={{ color: '#f97316', fontWeight: 'bold' }}>BASE IDENTITY</span><br/>
+                            The location type affects which departments thrive. Specialised bases are powerful in their domain but hostile to outsiders.<br/>
+                            <span style={{ color: '#ef4444' }}>Military Base / Black Site: each science facility gets -1 Science Ops, each engineering facility gets -1 Engineering Ops, each diplomatic facility gets -1 Diplomatic Corps. War bases aren't built for research, engineering, or negotiation.</span><br/>
+                            <span style={{ color: '#22c55e' }}>R&D Installation / Observitorium: +1 Science Ops and +1 Engineering Ops baseline. But each military facility gets -1 Military. Soldiers feel unwelcome among lab coats and telescopes.</span><br/>
+                            <span style={{ color: '#6b7280' }}>Other locations (Official Building, Vessel, etc.): no identity modifiers — neutral ground for all departments.</span><br/>
+                            <span style={{ color: '#6b7280' }}>Tip: general-purpose bases avoid penalties but miss the specialisation bonuses. Choose your base type to match your strategy.</span>
+                        </div>
+
+                        <div>
+                            <span style={{ color: '#c084fc', fontWeight: 'bold' }}>SPECIAL LOCKS</span><br/>
+                            <span style={{ color: '#6b7280' }}>🔒 Nuclear Reactor — agency needs council-approved nuclear power status<br/>
+                            🔒 Fringe Lab — requires Fringe Science Labs pulling string<br/>
+                            🔒 Solar/Wind — not available underground or underwater<br/>
+                            🔒 Geothermal — only available underground or underwater</span>
+                        </div>
+                    </div>
+                )}
 
                 {bases.map(base => <BaseCard key={base.id} base={base} />)}
 

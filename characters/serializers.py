@@ -85,6 +85,7 @@ def serialize_character(character, user=None):
         "classifiedNotes": character.classified_notes if (
             user and (user == character.owner or user.is_superuser)
         ) else None,
+        "meritUses": character.merit_uses or {},
         "willpower": {"current": character.willpower_current},
         "xpTransfers": [
             {

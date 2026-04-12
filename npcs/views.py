@@ -238,13 +238,11 @@ def api_npc_detail(request, pk):
         if "removePullingString" in data:
             NpcPullingString.objects.filter(pk=data["removePullingString"], npc=npc).delete()
 
-        # Admin can assign/change agency (NPC dossiers)
-        if "agencyId" in data and request.user.is_superuser and npc.is_npc_dossier:
+        # Admin can assign/change agency
+        if "agencyId" in data and request.user.is_superuser:
             if data["agencyId"]:
                 try:
-                    agency = Agency.objects.get(
-                        pk=data["agencyId"], is_player_agency=False
-                    )
+                    agency = Agency.objects.get(pk=data["agencyId"])
                     npc.agency = agency
                 except Agency.DoesNotExist:
                     pass

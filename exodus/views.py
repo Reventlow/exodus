@@ -5,12 +5,24 @@ from pathlib import Path
 
 from django.contrib import messages
 from django.contrib.admin.views.decorators import staff_member_required
+from django.contrib.auth import get_user_model, login
 from django.contrib.auth.decorators import login_required
-from django.http import JsonResponse
+from django.http import HttpResponseForbidden, JsonResponse
 from django.shortcuts import redirect, render
-from django.views.decorators.http import require_GET, require_http_methods
+from django.views.decorators.http import require_GET, require_http_methods, require_POST
 
 from .models import MeritDefinition, PullingString, SiteSettings
+
+User = get_user_model()
+
+
+@login_required
+@require_GET
+def starmap_demo(request):
+    """3D star map demo — superuser only."""
+    if not request.user.is_superuser:
+        return HttpResponseForbidden("ACCESS DENIED. Superuser clearance required.")
+    return render(request, "starmap/demo.html")
 
 
 @staff_member_required
@@ -22,11 +34,208 @@ def site_settings(request):
         date_value = request.POST.get("next_game_date", "").strip()
         settings_obj.next_game_date = date_value or None
         settings_obj.charter_text = request.POST.get("charter_text", "")
+        settings_obj.lock_comms = "lock_comms" not in request.POST
+        settings_obj.show_world_map = "show_world_map" in request.POST
+        settings_obj.show_star_map = "show_star_map" in request.POST
+        settings_obj.show_council = "show_council" in request.POST
+        settings_obj.council_mode = request.POST.get("council_mode", "agency")
+        for lbl in ["dispatch", "players", "agencies", "council", "npcs", "comms"]:
+            val = request.POST.get(f"label_{lbl}", "").strip()
+            if val:
+                setattr(settings_obj, f"label_{lbl}", val)
         settings_obj.save()
         messages.success(request, "Settings updated.")
         return redirect("site-settings")
 
-    return render(request, "site_settings.html", {"settings_obj": settings_obj})
+    from agencies.models import Agency
+    users = User.objects.filter(is_active=True).order_by("username")
+    impersonating = request.session.get("_impersonate_real_user_id")
+    all_agencies = Agency.objects.order_by("name")
+    player_agencies = all_agencies.filter(is_player_agency=True)
+    npc_agencies = all_agencies.filter(is_player_agency=False)
+    return render(request, "site_settings.html", {
+        "settings_obj": settings_obj,
+        "users": users,
+        "impersonating": impersonating,
+        "player_agencies": player_agencies,
+        "npc_agencies": npc_agencies,
+    })
+
+
+@login_required
+@require_POST
+def impersonate_user(request):
+    """Log in as another user (superuser only). Stores real user ID in session."""
+    if not request.user.is_superuser and "_impersonate_real_user_id" not in request.session:
+        return HttpResponseForbidden("ACCESS DENIED.")
+
+    target_id = request.POST.get("user_id")
+    if not target_id:
+        return redirect("site-settings")
+
+    target = User.objects.filter(pk=target_id).first()
+    if not target:
+        messages.error(request, "User not found.")
+        return redirect("site-settings")
+
+    # Store real superuser ID before switching
+    real_user_id = request.session.get("_impersonate_real_user_id") or request.user.pk
+
+    login(request, target, backend="django.contrib.auth.backends.ModelBackend")
+    # Restore after login() flushes the session
+    request.session["_impersonate_real_user_id"] = real_user_id
+    messages.success(request, f"Now viewing as {target.username}.")
+    return redirect("/")
+
+
+@login_required
+def stop_impersonation(request):
+    """Return to the real superuser account."""
+    real_user_id = request.session.get("_impersonate_real_user_id")
+    if real_user_id:
+        real_user = User.objects.filter(pk=real_user_id).first()
+        if real_user:
+            del request.session["_impersonate_real_user_id"]
+            login(request, real_user, backend="django.contrib.auth.backends.ModelBackend")
+            messages.success(request, f"Returned to {real_user.username}.")
+            return redirect("site-settings")
+
+    # Fallback: if no impersonation session, try to find the superuser
+    superuser = User.objects.filter(is_superuser=True).first()
+    if superuser:
+        request.session.pop("_impersonate_real_user_id", None)
+        login(request, superuser, backend="django.contrib.auth.backends.ModelBackend")
+        messages.success(request, f"Returned to {superuser.username}.")
+        return redirect("site-settings")
+
+    return redirect("/")
+
+
+@login_required
+@require_POST
+def api_transfer_player_to_agency(request):
+    """Transfer a player's character and NPCs to another agency as NPC dossiers."""
+    if not request.user.is_superuser:
+        return JsonResponse({"error": "ACCESS DENIED."}, status=403)
+
+    from django.db import transaction
+    from django.core.files.base import ContentFile
+    from characters.models import Character
+    from npcs.models import NPC, NpcMerit, NpcPullingString
+    from agencies.models import Agency, Base
+
+    try:
+        body = json.loads(request.body)
+    except json.JSONDecodeError:
+        return JsonResponse({"error": "Invalid JSON."}, status=400)
+
+    source_user_id = body.get("sourceUserId")
+    target_agency_id = body.get("targetAgencyId")
+    source_agency_id = body.get("sourceAgencyId")
+    transfer_xp = body.get("transferXp", False)
+
+    source_user = User.objects.filter(pk=source_user_id).first()
+    if not source_user:
+        return JsonResponse({"error": "Source user not found."}, status=400)
+
+    character = Character.objects.filter(owner=source_user).first()
+    if not character:
+        return JsonResponse({"error": "Source user has no character."}, status=400)
+
+    target_agency = Agency.objects.filter(pk=target_agency_id).first()
+    if not target_agency:
+        return JsonResponse({"error": "Target agency not found."}, status=400)
+
+    source_agency = None
+    if source_agency_id:
+        source_agency = Agency.objects.filter(pk=source_agency_id).first()
+
+    with transaction.atomic():
+        # Create NPC dossier from character
+        npc = NPC.objects.create(
+            name=character.name,
+            character_class=character.character_class,
+            bio=character.dossier or "",
+            attributes=character.attributes,
+            skills=character.skills,
+            health_bashing=getattr(character, "health_bashing", 0),
+            health_lethal=getattr(character, "health_lethal", 0),
+            health_aggravated=getattr(character, "health_aggravated", 0),
+            size=character.size,
+            mental_load=character.mental_load or 0,
+            willpower_current=character.willpower_current or 0,
+            experience=character.experience or 0,
+            experience_used=character.experience_used or 0,
+            flaws=character.flaws or [],
+            specialisations=character.specialisations if hasattr(character, "specialisations") else [],
+            is_npc_dossier=True,
+            agency=target_agency,
+            created_by=request.user,
+            state="active",
+        )
+
+        # Copy profile picture
+        if character.profile_picture:
+            try:
+                name = character.profile_picture.name.split("/")[-1]
+                npc.image.save(name, ContentFile(character.profile_picture.read()), save=True)
+            except Exception:
+                pass
+
+        # Copy merits
+        for cm in character.character_merits.select_related("merit").all():
+            NpcMerit.objects.create(npc=npc, merit=cm.merit, rating=cm.rating)
+
+        # Copy pulling strings
+        for cps in character.character_pulling_strings.select_related("pulling_string").all():
+            NpcPullingString.objects.create(npc=npc, pulling_string=cps.pulling_string)
+
+        # Transfer existing player NPCs to target agency
+        npcs_moved = NPC.objects.filter(assigned_to=source_user).update(
+            is_npc_dossier=True, agency=target_agency, assigned_to=None
+        )
+
+        # Clean up workspace assignments referencing this character
+        char_id = character.id
+        for base in Base.objects.all():
+            if base.workspaces:
+                cleaned = [
+                    ws for ws in base.workspaces
+                    if not (ws.get("assignedType") == "character" and ws.get("assignedTo") == char_id)
+                ]
+                if len(cleaned) != len(base.workspaces):
+                    base.workspaces = cleaned
+                    base.save(update_fields=["workspaces"])
+
+        # Transfer XP and merits from source agency
+        xp_transferred = 0
+        merits_transferred = 0
+        if transfer_xp and source_agency:
+            xp_transferred = source_agency.experience
+            target_agency.experience = (target_agency.experience or 0) + xp_transferred
+            source_agency.experience = 0
+            # Transfer merits
+            src_merits = source_agency.merits or []
+            tgt_merits = target_agency.merits or []
+            merits_transferred = len(src_merits)
+            target_agency.merits = tgt_merits + src_merits
+            source_agency.merits = []
+            source_agency.save(update_fields=["experience", "merits"])
+            target_agency.save(update_fields=["experience", "merits"])
+
+        # Delete the character
+        char_name = character.name
+        character.delete()
+
+    return JsonResponse({
+        "status": "Transfer complete.",
+        "character": char_name,
+        "npcDossierId": npc.id,
+        "npcsMoved": npcs_moved,
+        "xpTransferred": xp_transferred,
+        "meritsTransferred": merits_transferred,
+        "targetAgency": target_agency.name,
+    })
 
 
 @login_required

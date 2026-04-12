@@ -63,6 +63,10 @@ class NPC(models.Model):
         default=False,
         help_text="Hidden dossiers are only visible to superusers.",
     )
+    is_child_prodigy = models.BooleanField(
+        default=False,
+        help_text="Tagged as a child prodigy recruited via fringe science.",
+    )
 
     # WoD 2.0 stats (superuser-only, mirrors Character model)
     attributes = models.JSONField(default=default_attributes)

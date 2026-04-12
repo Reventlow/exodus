@@ -17,6 +17,7 @@
     const USER_AGENCY_ID = {{ user_agency_id }};
     const USER_AGENCY_NAME = '{{ user_agency_name|escapejs }}';
     const IS_CHAIRMAN = {{ is_chairman|yesno:"true,false" }};
+    const IS_FIXER = {{ is_fixer|yesno:"true,false" }};
     const ALL_AGENCIES = {{ agencies_json|safe }};
 </script>
 {% verbatim %}
@@ -24,8 +25,9 @@
     const { useState, useEffect, useRef, useCallback } = React;
 
     const COUNCIL_ACCENT = '#a855f7';
-    const CAN_REORDER = IS_ADMIN || IS_CHAIRMAN;
-    const CAN_CREATE = IS_ADMIN || USER_AGENCY_ID > 0;
+    const CAN_ACT = IS_ADMIN || IS_FIXER;
+    const CAN_REORDER = CAN_ACT && (IS_ADMIN || IS_CHAIRMAN);
+    const CAN_CREATE = CAN_ACT && (IS_ADMIN || USER_AGENCY_ID > 0);
 
     function getCookie(name) {
         let cookieValue = null;
@@ -247,7 +249,7 @@
                     {/* Use members list for live voting, or votes array for frozen records */}
                     {(item.status === 'voting' ? members : (votes || []).map(v => ({ id: v.agencyId, name: v.agencyName }))).map(m => {
                         const currentVote = getVote(m.id);
-                        const canVoteForThis = item.status === 'voting' && (IS_ADMIN || (USER_AGENCY_ID === m.id));
+                        const canVoteForThis = item.status === 'voting' && CAN_ACT && (IS_ADMIN || (USER_AGENCY_ID === m.id));
                         const voteLabel = currentVote === 'did_not_vote' ? 'DID NOT VOTE'
                             : currentVote ? currentVote.toUpperCase()
                             : 'NOT VOTED';
@@ -358,7 +360,7 @@
     const CouncilItemCard = ({ item, onSave, onDelete, saving, dragHandlers, members, onVote }) => {
         const statusLabel = STATUS_OPTIONS.find(o => o.value === item.status)?.label || item.status;
         const typeLabel = TYPE_OPTIONS.find(o => o.value === item.itemType)?.label || item.itemType;
-        const isOwnProposal = !IS_ADMIN && item.proposedBy === USER_AGENCY_NAME && item.status === 'proposed';
+        const isOwnProposal = !IS_ADMIN && IS_FIXER && item.proposedBy === USER_AGENCY_NAME && item.status === 'proposed';
         const canEdit = IS_ADMIN || isOwnProposal;
 
         return (
@@ -527,8 +529,67 @@
                     )}
                 </div>
 
-                {/* Chairman actions */}
-                {(IS_ADMIN || IS_CHAIRMAN) && item.status === 'proposed' && (
+                {/* Predicted votes — superuser only */}
+                {IS_ADMIN && (item.status === 'proposed' || item.status === 'voting') && (() => {
+                    const predicted = item.predictedVotes || {};
+                    const memberAgencies = ALL_AGENCIES.filter(a => a.id !== undefined);
+                    const voteOptions = ['for', 'against', 'abstain', 'undecided'];
+                    const voteColors = { for: '#22c55e', against: '#ef4444', abstain: '#a855f7', undecided: 'var(--text-muted)' };
+                    return (
+                        <div style={{
+                            marginTop: '0.75rem', padding: '0.75rem',
+                            background: 'rgba(168,85,247,0.05)',
+                            border: '1px solid rgba(168,85,247,0.3)',
+                            borderRadius: 'var(--radius-sm)',
+                        }}>
+                            <div className="mono-text" style={{ fontSize: '0.7rem', color: COUNCIL_ACCENT, marginBottom: '0.5rem', letterSpacing: '1px' }}>
+                                PREDICTED VOTES (GM ONLY)
+                            </div>
+                            {memberAgencies.map(agency => {
+                                const current = predicted[agency.name] || 'undecided';
+                                return (
+                                    <div key={agency.id} style={{
+                                        display: 'flex', alignItems: 'center', gap: '0.5rem',
+                                        marginBottom: '0.3rem', flexWrap: 'wrap',
+                                    }}>
+                                        <span className="mono-text" style={{
+                                            fontSize: '0.7rem', color: 'var(--text-secondary)',
+                                            minWidth: '140px',
+                                        }}>
+                                            {agency.name}
+                                        </span>
+                                        {voteOptions.map(opt => (
+                                            <button key={opt}
+                                                className="mono-text"
+                                                onClick={() => {
+                                                    const newPredicted = { ...predicted, [agency.name]: opt };
+                                                    onSave(item.id, 'predictedVotes', newPredicted);
+                                                }}
+                                                style={{
+                                                    background: current === opt ? voteColors[opt] : 'transparent',
+                                                    color: current === opt ? 'var(--bg-dark)' : voteColors[opt],
+                                                    border: `1px solid ${voteColors[opt]}`,
+                                                    padding: '0.15rem 0.4rem',
+                                                    cursor: 'pointer',
+                                                    fontSize: '0.6rem',
+                                                    fontFamily: 'var(--font-mono)',
+                                                    fontWeight: current === opt ? 'bold' : 'normal',
+                                                    borderRadius: '2px',
+                                                    letterSpacing: '0.5px',
+                                                }}
+                                            >
+                                                {opt.toUpperCase()}
+                                            </button>
+                                        ))}
+                                    </div>
+                                );
+                            })}
+                        </div>
+                    );
+                })()}
+
+                {/* Chairman actions — fixer only */}
+                {CAN_ACT && (IS_ADMIN || IS_CHAIRMAN) && item.status === 'proposed' && (
                     <div style={{ marginTop: '0.75rem' }}>
                         <button
                             onClick={() => onSave(item.id, 'status', 'voting')}
@@ -550,7 +611,7 @@
                     </div>
                 )}
 
-                {(IS_ADMIN || IS_CHAIRMAN) && item.status === 'voting' && (
+                {CAN_ACT && (IS_ADMIN || IS_CHAIRMAN) && item.status === 'voting' && (
                     <div style={{ marginTop: '0.5rem' }}>
                         <button
                             onClick={() => {

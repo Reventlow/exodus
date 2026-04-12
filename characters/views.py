@@ -223,6 +223,23 @@ def api_character_detail(request, pk):
                 "current", character.willpower_current
             )
 
+        # Reset auto-success merit uses (superuser only)
+        if "resetMeritUses" in data and request.user.is_superuser:
+            character.merit_uses = {}
+
+        # Spend one use of an auto-success merit (owner or superuser)
+        if "spendMeritUse" in data:
+            merit_name = data["spendMeritUse"]
+            cm = CharacterMerit.objects.select_related("merit").filter(
+                character=character, merit__name=merit_name
+            ).first()
+            if cm and cm.merit.effects.get("auto_success"):
+                uses = character.merit_uses or {}
+                used = uses.get(merit_name, 0)
+                if used < cm.rating:
+                    uses[merit_name] = used + 1
+                    character.merit_uses = uses
+
         character.save()
         return JsonResponse(serialize_character(character, request.user))
 

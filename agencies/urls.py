@@ -53,6 +53,26 @@ urlpatterns = [
         name="api_agency_ftl_detail",
     ),
     path(
+        "api/agencies/<int:pk>/ftl/<int:assignment_id>/meta/",
+        views.api_ftl_meta,
+        name="api_ftl_meta",
+    ),
+    path(
+        "api/agencies/<int:pk>/ftl/<int:assignment_id>/fringe-effect/",
+        views.api_ftl_fringe_effect,
+        name="api_ftl_fringe_effect",
+    ),
+    path(
+        "api/agencies/<int:pk>/ftl/<int:assignment_id>/roll/",
+        views.api_ftl_roll,
+        name="api_ftl_roll",
+    ),
+    path(
+        "api/agencies/<int:pk>/ftl/<int:assignment_id>/roll-log/",
+        views.api_ftl_roll_log,
+        name="api_ftl_roll_log",
+    ),
+    path(
         "api/changes/<int:pk>/review/",
         views.api_change_request_review,
         name="api_change_request_review",
@@ -123,6 +143,40 @@ urlpatterns = [
         "api/agencies/<int:pk>/projects/<int:project_index>/live-testing/",
         views.api_live_testing,
         name="api_live_testing",
+    ),
+    path(
+        "api/agencies/<int:pk>/projects/<int:project_index>/fringe-effect/",
+        views.api_fringe_effect,
+        name="api_fringe_effect",
+    ),
+    # Downtime actions
+    path(
+        "api/agencies/<int:pk>/downtime/",
+        views.api_downtime_action,
+        name="api_downtime_action",
+    ),
+    # Project rolls
+    path(
+        "api/agencies/<int:pk>/projects/<int:project_index>/roll/",
+        views.api_project_roll,
+        name="api_project_roll",
+    ),
+    path(
+        "api/agencies/<int:pk>/projects/<int:project_index>/roll-log/",
+        views.api_project_roll_log,
+        name="api_project_roll_log",
+    ),
+    # Complete project
+    path(
+        "api/agencies/<int:pk>/projects/<int:project_index>/complete/",
+        views.api_complete_project,
+        name="api_complete_project",
+    ),
+    # Stat change logs
+    path(
+        "api/agencies/<int:pk>/stat-logs/",
+        views.api_stat_logs,
+        name="api_stat_logs",
     ),
     # Conditions
     path(
