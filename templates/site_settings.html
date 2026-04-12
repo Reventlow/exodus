@@ -1105,95 +1105,160 @@ function moveModuleSection(id, delta) {
 loadModuleSections();
 
 // --- Ship Modules ---
+// Collapsed-section state, keyed by section key or 'standalone'.
+// Defaults to OPEN so a fresh page shows everything; the user can
+// collapse to scan headings.
+var SM_GROUP_COLLAPSED = {};
+
+function renderModuleRow(m) {
+    var open = !!SM_OPEN[m.id];
+    var html = '';
+    html += '<div style="border-bottom: 1px solid var(--border-color);">';
+    html += '<div style="display: flex; align-items: center; gap: 0.5rem; padding: 0.4rem 0 0.4rem 1rem;">';
+
+    // Sectioned rows get a prominent tier pill instead of the
+    // category pill (category is already implied by the group).
+    if (m.section_id) {
+        html += '<span class="mono-text" style="font-size: 0.65rem; color: #c084fc; border: 1px solid #c084fc; padding: 0.1rem 0.45rem; min-width: 2.2rem; text-align: center; font-weight: bold;">L' + m.level + '</span>';
+    } else {
+        html += '<span class="mono-text" style="font-size: 0.6rem; color: var(--accent-primary); border: 1px solid var(--accent-primary); padding: 0.05rem 0.3rem; min-width: 5rem; text-align: center;">' + (m.category_label || m.category) + '</span>';
+    }
+
+    html += '<span class="mono-text" style="font-size: 0.85rem; color: var(--text-primary); flex: 1;">' + m.name + '</span>';
+    html += '<span class="mono-text text-muted" style="font-size: 0.65rem;">slots ' + m.slot_cost + '</span>';
+    html += '<span class="mono-text text-muted" style="font-size: 0.65rem;">crew ' + (m.crew_delta >= 0 ? '+' : '') + m.crew_delta + '</span>';
+    html += '<span class="mono-text text-muted" style="font-size: 0.65rem;">pwr ' + (m.energy_delta >= 0 ? '+' : '') + m.energy_delta + '</span>';
+    if (m.provides_sublight) html += '<span class="mono-text" style="font-size: 0.55rem; color: #22c55e; border: 1px solid #22c55e; padding: 0.05rem 0.2rem;">SUB</span>';
+    if (m.provides_ftl) html += '<span class="mono-text" style="font-size: 0.55rem; color: #c084fc; border: 1px solid #c084fc; padding: 0.05rem 0.2rem;">FTL</span>';
+    html += '<button type="button" onclick="toggleShipModule(' + m.id + ')" class="mono-text" style="background: transparent; border: 1px solid var(--border-color); color: var(--text-primary); padding: 0.15rem 0.4rem; cursor: pointer; font-size: 0.6rem;">' + (open ? 'HIDE' : 'EDIT') + '</button>';
+    html += '<button type="button" onclick="deleteShipModule(' + m.id + ')" class="mono-text" style="background: transparent; border: 1px solid var(--accent-danger); color: var(--accent-danger); padding: 0.15rem 0.4rem; cursor: pointer; font-size: 0.6rem;">X</button>';
+    html += '</div>';
+
+    if (open) {
+        html += renderModuleEditPanel(m);
+    }
+    html += '</div>';
+    return html;
+}
+
+function renderModuleEditPanel(m) {
+    var html = '<div data-sm-edit="' + m.id + '" style="padding: 0.6rem 0.5rem 0.9rem 1.4rem; display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 0.55rem;">';
+    html += stField(m, 'name', 'DISPLAY NAME', 'text');
+    html += stField(m, 'key', 'KEY', 'text');
+    html += '<div style="display: flex; flex-direction: column; gap: 0.15rem;">' +
+        '<label class="text-muted mono-text" style="font-size: 0.58rem; letter-spacing: 0.5px;">CATEGORY</label>' +
+        '<select data-field="category" style="background: var(--bg-input); border: 1px solid var(--border-color); color: var(--text-primary); padding: 0.35rem; font-family: var(--font-mono); font-size: 0.72rem;">' +
+        ['propulsion','power','weapons','defense','sensors','quarters','cargo','hangar','command','special'].map(function(cat) {
+            return '<option value="' + cat + '"' + (m.category === cat ? ' selected' : '') + '>' + cat + '</option>';
+        }).join('') +
+        '</select></div>';
+    html += '<div style="display: flex; flex-direction: column; gap: 0.15rem;">' +
+        '<label class="text-muted mono-text" style="font-size: 0.58rem; letter-spacing: 0.5px;">SECTION</label>' +
+        '<select data-field="section_id" style="background: var(--bg-input); border: 1px solid var(--border-color); color: var(--text-primary); padding: 0.35rem; font-family: var(--font-mono); font-size: 0.72rem;">' +
+        '<option value="">— standalone —</option>' +
+        MS_CACHE.map(function(s) {
+            return '<option value="' + s.id + '"' + (m.section_id === s.id ? ' selected' : '') + '>' + s.name + '</option>';
+        }).join('') +
+        '</select></div>';
+    html += stField(m, 'level', 'LEVEL', 'number', '1\u20135 when sectioned');
+    html += stField(m, 'slot_cost', 'SLOT COST', 'number');
+    html += stField(m, 'crew_delta', 'CREW \u0394', 'number');
+    html += stField(m, 'energy_delta', 'ENERGY \u0394', 'number');
+    html += stField(m, 'maintenance_delta', 'MAINT. \u0394', 'number');
+    html += stField(m, 'min_hull_size', 'MIN HULL SIZE', 'number');
+    html += stField(m, 'build_cost_xp_delta', 'BUILD COST XP', 'number');
+    html += stField(m, 'xp_cost', 'RESEARCH XP', 'number');
+    html += stField(m, 'order', 'ORDER', 'number');
+    html += '<div style="display: flex; flex-direction: column; gap: 0.2rem;">' +
+        '<label class="text-muted mono-text" style="font-size: 0.58rem; letter-spacing: 0.5px;">FLAGS</label>' +
+        '<label style="display: flex; align-items: center; gap: 0.3rem;"><input type="checkbox" data-field="provides_sublight" ' + (m.provides_sublight ? 'checked' : '') + '> <span class="mono-text" style="font-size: 0.65rem;">SUBLIGHT</span></label>' +
+        '<label style="display: flex; align-items: center; gap: 0.3rem;"><input type="checkbox" data-field="provides_ftl" ' + (m.provides_ftl ? 'checked' : '') + '> <span class="mono-text" style="font-size: 0.65rem;">FTL</span></label>' +
+        '</div>';
+    html += '<div style="grid-column: span 2;">' +
+        '<label class="text-muted mono-text" style="font-size: 0.58rem; letter-spacing: 0.5px;">RESTRICTED TO TYPES <span style="text-transform: none;">(comma-separated keys, empty = all)</span></label>' +
+        '<input type="text" data-field="restricted_to_types" value="' + ((m.restricted_to_types || []).join(',')).replace(/"/g, '&quot;') + '" style="width: 100%; background: var(--bg-input); border: 1px solid var(--border-color); color: var(--text-primary); padding: 0.35rem; font-family: var(--font-mono); font-size: 0.72rem;">' +
+        '</div>';
+    html += '<div style="grid-column: 1 / -1;">' +
+        '<label class="text-muted mono-text" style="font-size: 0.58rem; letter-spacing: 0.5px;">DESCRIPTION</label>' +
+        '<textarea data-field="description" rows="2" style="width: 100%; background: var(--bg-input); border: 1px solid var(--border-color); color: var(--text-primary); padding: 0.35rem; font-family: var(--font-mono); font-size: 0.72rem; resize: vertical;">' + (m.description || '') + '</textarea>' +
+        '</div>';
+    html += '<div style="grid-column: 1 / -1; display: flex; justify-content: flex-end;">';
+    html += '<button type="button" onclick="saveShipModule(' + m.id + ')" class="mono-text" style="background: var(--accent-primary); border: none; color: var(--bg-dark); padding: 0.35rem 0.9rem; cursor: pointer; font-size: 0.72rem; font-weight: bold; letter-spacing: 1px;">SAVE</button>';
+    html += '</div>';
+    html += '</div>';
+    return html;
+}
+
+function toggleSmGroup(key) {
+    SM_GROUP_COLLAPSED[key] = !SM_GROUP_COLLAPSED[key];
+    loadShipModules();
+}
+
+function renderSmGroupHeader(key, label, count, collapsed) {
+    return '<div onclick="toggleSmGroup(\'' + key + '\')" style="cursor: pointer; display: flex; align-items: center; gap: 0.5rem; padding: 0.5rem 0.6rem; background: rgba(255,255,255,0.03); border-top: 1px solid var(--border-color); border-bottom: 1px solid var(--border-color); margin-top: 0.4rem;">' +
+        '<span class="mono-text" style="font-size: 0.75rem; color: var(--accent-primary); letter-spacing: 1px;">' + (collapsed ? '\u25B6' : '\u25BC') + ' ' + label + '</span>' +
+        '<span class="mono-text text-muted" style="font-size: 0.6rem;">(' + count + ')</span>' +
+        '</div>';
+}
+
 function loadShipModules() {
     var filter = document.getElementById('sm-filter-category').value;
     fetch('/api/starships/modules/').then(function(r) { return r.json(); }).then(function(modules) {
         SM_CACHE = modules.slice();
         if (filter) modules = modules.filter(function(m) { return m.category === filter; });
-        var html = '';
-        modules.forEach(function(m, idx) {
-            var open = !!SM_OPEN[m.id];
-            var isFirst = idx === 0;
-            var isLast = idx === modules.length - 1;
-            var arrowBase = 'background: transparent; border: 1px solid var(--border-color); color: var(--text-primary); padding: 0.1rem 0.35rem; cursor: pointer; font-size: 0.65rem; line-height: 1;';
-            var disabledStyle = 'opacity: 0.3; cursor: not-allowed;';
 
-            html += '<div style="border-bottom: 1px solid var(--border-color);">';
-            html += '<div style="display: flex; align-items: center; gap: 0.5rem; padding: 0.4rem 0;">';
-            html += '<div style="display: flex; flex-direction: column; gap: 0.1rem;">';
-            html += '<button type="button" onclick="moveShipModule(' + m.id + ',-1)" ' + (isFirst ? 'disabled' : '') + ' class="mono-text" style="' + arrowBase + (isFirst ? disabledStyle : '') + '" title="Move up">\u25B2</button>';
-            html += '<button type="button" onclick="moveShipModule(' + m.id + ',1)" ' + (isLast ? 'disabled' : '') + ' class="mono-text" style="' + arrowBase + (isLast ? disabledStyle : '') + '" title="Move down">\u25BC</button>';
-            html += '</div>';
-            html += '<span class="mono-text" style="font-size: 0.65rem; color: var(--accent-primary); border: 1px solid var(--accent-primary); padding: 0.05rem 0.3rem; min-width: 5.5rem; text-align: center;">' + (m.category_label || m.category) + '</span>';
-            html += '<span class="mono-text" style="font-size: 0.8rem; color: var(--text-primary); flex: 1;">' + m.name +
-                (m.section_name ? ' <span class="mono-text text-muted" style="font-size: 0.6rem;">\u00B7 ' + m.section_name + ' L' + m.level + '</span>' : '') +
-                '</span>';
-            html += '<span class="mono-text text-muted" style="font-size: 0.65rem;">slots ' + m.slot_cost + '</span>';
-            html += '<span class="mono-text text-muted" style="font-size: 0.65rem;">crew ' + (m.crew_delta >= 0 ? '+' : '') + m.crew_delta + '</span>';
-            html += '<span class="mono-text text-muted" style="font-size: 0.65rem;">pwr ' + (m.energy_delta >= 0 ? '+' : '') + m.energy_delta + '</span>';
-            if (m.provides_sublight) html += '<span class="mono-text" style="font-size: 0.55rem; color: #22c55e; border: 1px solid #22c55e; padding: 0.05rem 0.2rem;">SUB</span>';
-            if (m.provides_ftl) html += '<span class="mono-text" style="font-size: 0.55rem; color: #c084fc; border: 1px solid #c084fc; padding: 0.05rem 0.2rem;">FTL</span>';
-            html += '<button type="button" onclick="toggleShipModule(' + m.id + ')" class="mono-text" style="background: transparent; border: 1px solid var(--border-color); color: var(--text-primary); padding: 0.15rem 0.4rem; cursor: pointer; font-size: 0.6rem;">' + (open ? 'HIDE' : 'EDIT') + '</button>';
-            html += '<button type="button" onclick="deleteShipModule(' + m.id + ')" class="mono-text" style="background: transparent; border: 1px solid var(--accent-danger); color: var(--accent-danger); padding: 0.15rem 0.4rem; cursor: pointer; font-size: 0.6rem;">X</button>';
-            html += '</div>';
-
-            if (open) {
-                html += '<div data-sm-edit="' + m.id + '" style="padding: 0.6rem 0.5rem 0.9rem 1.4rem; display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 0.55rem;">';
-                html += stField(m, 'name', 'DISPLAY NAME', 'text');
-                html += stField(m, 'key', 'KEY', 'text');
-                // Category select
-                html += '<div style="display: flex; flex-direction: column; gap: 0.15rem;">' +
-                    '<label class="text-muted mono-text" style="font-size: 0.58rem; letter-spacing: 0.5px;">CATEGORY</label>' +
-                    '<select data-field="category" style="background: var(--bg-input); border: 1px solid var(--border-color); color: var(--text-primary); padding: 0.35rem; font-family: var(--font-mono); font-size: 0.72rem;">' +
-                    ['propulsion','power','weapons','defense','sensors','quarters','cargo','hangar','command','special'].map(function(cat) {
-                        return '<option value="' + cat + '"' + (m.category === cat ? ' selected' : '') + '>' + cat + '</option>';
-                    }).join('') +
-                    '</select></div>';
-                // Section select (tier family) + level number
-                html += '<div style="display: flex; flex-direction: column; gap: 0.15rem;">' +
-                    '<label class="text-muted mono-text" style="font-size: 0.58rem; letter-spacing: 0.5px;">SECTION</label>' +
-                    '<select data-field="section_id" style="background: var(--bg-input); border: 1px solid var(--border-color); color: var(--text-primary); padding: 0.35rem; font-family: var(--font-mono); font-size: 0.72rem;">' +
-                    '<option value="">— standalone —</option>' +
-                    MS_CACHE.map(function(s) {
-                        return '<option value="' + s.id + '"' + (m.section_id === s.id ? ' selected' : '') + '>' + s.name + '</option>';
-                    }).join('') +
-                    '</select></div>';
-                html += stField(m, 'level', 'LEVEL', 'number', '1\u20135 when sectioned');
-                html += stField(m, 'slot_cost', 'SLOT COST', 'number');
-                html += stField(m, 'crew_delta', 'CREW \u0394', 'number');
-                html += stField(m, 'energy_delta', 'ENERGY \u0394', 'number');
-                html += stField(m, 'maintenance_delta', 'MAINT. \u0394', 'number');
-                html += stField(m, 'min_hull_size', 'MIN HULL SIZE', 'number');
-                html += stField(m, 'build_cost_xp_delta', 'BUILD COST XP', 'number');
-                html += stField(m, 'xp_cost', 'RESEARCH XP', 'number');
-                html += stField(m, 'order', 'ORDER', 'number');
-                // Sublight / FTL flags
-                html += '<div style="display: flex; flex-direction: column; gap: 0.2rem;">' +
-                    '<label class="text-muted mono-text" style="font-size: 0.58rem; letter-spacing: 0.5px;">FLAGS</label>' +
-                    '<label style="display: flex; align-items: center; gap: 0.3rem;"><input type="checkbox" data-field="provides_sublight" ' + (m.provides_sublight ? 'checked' : '') + '> <span class="mono-text" style="font-size: 0.65rem;">SUBLIGHT</span></label>' +
-                    '<label style="display: flex; align-items: center; gap: 0.3rem;"><input type="checkbox" data-field="provides_ftl" ' + (m.provides_ftl ? 'checked' : '') + '> <span class="mono-text" style="font-size: 0.65rem;">FTL</span></label>' +
-                    '</div>';
-                // Restricted types (CSV input)
-                html += '<div style="grid-column: span 2;">' +
-                    '<label class="text-muted mono-text" style="font-size: 0.58rem; letter-spacing: 0.5px;">RESTRICTED TO TYPES <span style="text-transform: none;">(comma-separated keys, empty = all)</span></label>' +
-                    '<input type="text" data-field="restricted_to_types" value="' + ((m.restricted_to_types || []).join(',')).replace(/"/g, '&quot;') + '" style="width: 100%; background: var(--bg-input); border: 1px solid var(--border-color); color: var(--text-primary); padding: 0.35rem; font-family: var(--font-mono); font-size: 0.72rem;">' +
-                    '</div>';
-                // Description
-                html += '<div style="grid-column: 1 / -1;">' +
-                    '<label class="text-muted mono-text" style="font-size: 0.58rem; letter-spacing: 0.5px;">DESCRIPTION</label>' +
-                    '<textarea data-field="description" rows="2" style="width: 100%; background: var(--bg-input); border: 1px solid var(--border-color); color: var(--text-primary); padding: 0.35rem; font-family: var(--font-mono); font-size: 0.72rem; resize: vertical;">' + (m.description || '') + '</textarea>' +
-                    '</div>';
-                html += '<div style="grid-column: 1 / -1; display: flex; justify-content: flex-end;">';
-                html += '<button type="button" onclick="saveShipModule(' + m.id + ')" class="mono-text" style="background: var(--accent-primary); border: none; color: var(--bg-dark); padding: 0.35rem 0.9rem; cursor: pointer; font-size: 0.72rem; font-weight: bold; letter-spacing: 1px;">SAVE</button>';
-                html += '</div>';
-                html += '</div>';
+        // Bucket by section, then a final "standalone" bucket.
+        var sectionBuckets = {};  // section_id -> [modules]
+        var standalone = [];
+        modules.forEach(function(m) {
+            if (m.section_id) {
+                (sectionBuckets[m.section_id] = sectionBuckets[m.section_id] || []).push(m);
+            } else {
+                standalone.push(m);
             }
-            html += '</div>';
         });
-        if (!modules.length) html = '<span class="mono-text text-muted" style="font-size: 0.8rem;">No modules in this category.</span>';
+
+        var html = '';
+
+        // Sections first, in MS_CACHE order.
+        MS_CACHE.forEach(function(s) {
+            var bucket = sectionBuckets[s.id];
+            if (!bucket || !bucket.length) return;
+            var key = 'section_' + s.id;
+            var collapsed = !!SM_GROUP_COLLAPSED[key];
+            html += renderSmGroupHeader(key, s.name, bucket.length, collapsed);
+            if (!collapsed) {
+                bucket.slice()
+                    .sort(function(a, b) { return (a.level || 0) - (b.level || 0); })
+                    .forEach(function(m) { html += renderModuleRow(m); });
+            }
+        });
+
+        // Standalone modules, grouped by category for readability.
+        if (standalone.length) {
+            var byCat = {};
+            standalone.forEach(function(m) {
+                (byCat[m.category_label] = byCat[m.category_label] || []).push(m);
+            });
+            Object.keys(byCat).sort().forEach(function(cat) {
+                var key = 'cat_' + cat;
+                var collapsed = !!SM_GROUP_COLLAPSED[key];
+                html += renderSmGroupHeader(key, cat.toUpperCase() + ' (standalone)', byCat[cat].length, collapsed);
+                if (!collapsed) {
+                    byCat[cat].forEach(function(m) { html += renderModuleRow(m); });
+                }
+            });
+        }
+
+        if (!html) html = '<span class="mono-text text-muted" style="font-size: 0.8rem;">No modules in this category.</span>';
         document.getElementById('ship-module-list').innerHTML = html;
     });
 }
+
+// The grouped module list no longer puts ▲▼ reorder arrows on each
+// row — tier families sort by level and standalone modules sort by
+// category. moveShipModule() is still defined further down in case
+// anything else calls it, but nothing in the new renderer does.
 
 function toggleShipModule(id) { SM_OPEN[id] = !SM_OPEN[id]; loadShipModules(); }
 

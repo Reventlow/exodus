@@ -1,5 +1,12 @@
 # Changelog
 
+## v0.13.11
+- Settings → Ship Modules: grouped by section instead of a flat list
+- Each tier family (Fighter Guns, Main Guns, Shields, Armour, Sensors) is a collapsible group header with its own heading and count; click the chevron to fold it away
+- Standalone modules group by category with their own collapsible headers
+- Sectioned rows show a prominent L1–L5 tier pill and drop the redundant category pill
+- Dropped the per-row ▲▼ reorder arrows — tier order is now driven by level and standalone order by category, so the arrows were just noise
+
 ## v0.13.10
 - Settings: Starships section split into four dedicated sidebar items — Starships (slot toggle + legacy import), Ship Types, Module Sections, Ship Modules
 - Each subsection now has its own heading and description, making tuning catalogues less claustrophobic
