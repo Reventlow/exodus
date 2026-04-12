@@ -54,4 +54,12 @@ urlpatterns = [
         views.api_ship_construction_roll,
         name="api-ship-construction-roll",
     ),
+
+    # Release E — fleets
+    path("api/starships/fleets/", views.api_fleets, name="api-fleets"),
+    path(
+        "api/starships/fleets/<int:pk>/",
+        views.api_fleet_detail,
+        name="api-fleet-detail",
+    ),
 ]

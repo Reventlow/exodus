@@ -12,7 +12,14 @@ from django.http import HttpResponseForbidden, JsonResponse
 from django.shortcuts import get_object_or_404, render
 from django.views.decorators.http import require_GET, require_http_methods
 
-from .models import ClassModule, ShipModule, ShipType, Starship, StarshipClass
+from .models import (
+    ClassModule,
+    Fleet,
+    ShipModule,
+    ShipType,
+    Starship,
+    StarshipClass,
+)
 
 
 # ---------------------------------------------------------------------------
@@ -817,6 +824,21 @@ def api_ship_detail(request, pk):
                 ship.location = StarSystem.objects.get(pk=body["location_id"])
             except StarSystem.DoesNotExist:
                 return JsonResponse({"error": "location not found"}, status=400)
+    # Fleet FK
+    if "fleet_id" in body:
+        if body["fleet_id"] in (None, "", 0):
+            ship.fleet = None
+        else:
+            try:
+                fleet = Fleet.objects.get(pk=body["fleet_id"])
+            except Fleet.DoesNotExist:
+                return JsonResponse({"error": "fleet not found"}, status=400)
+            if fleet.agency_id != ship.agency_id:
+                return JsonResponse(
+                    {"error": "fleet must belong to the ship's agency"},
+                    status=400,
+                )
+            ship.fleet = fleet
     # Build base FK
     if "build_assigned_base_id" in body:
         if body["build_assigned_base_id"] in (None, "", 0):
@@ -879,6 +901,130 @@ def api_ship_construction_roll(request, pk):
         "ship": _serialize_ship(ship),
         "completed": completed,
     })
+
+
+# ---------------------------------------------------------------------------
+# Fleets (Release E)
+# ---------------------------------------------------------------------------
+
+def _visible_fleets(user):
+    qs = Fleet.objects.select_related("agency").prefetch_related("ships")
+    if user.is_superuser:
+        return qs
+    agency = _user_agency(user)
+    if agency is None:
+        return qs.none()
+    return qs.filter(agency=agency)
+
+
+def _can_edit_fleet(user, fleet):
+    if user.is_superuser:
+        return True
+    agency = _user_agency(user)
+    return agency is not None and agency.id == fleet.agency_id
+
+
+def _serialize_fleet(fleet, include_ships=True):
+    data = {
+        "id": fleet.id,
+        "name": fleet.name,
+        "commander": fleet.commander,
+        "notes": fleet.notes,
+        "agency_id": fleet.agency_id,
+        "agency_name": fleet.agency.name if fleet.agency else None,
+        "created_at": fleet.created_at.isoformat() if fleet.created_at else None,
+    }
+    if include_ships:
+        data["ships"] = [_serialize_ship(s) for s in fleet.ships.all()]
+        data["ship_count"] = len(data["ships"])
+    else:
+        data["ship_count"] = fleet.ships.count()
+    return data
+
+
+@login_required
+@require_http_methods(["GET", "POST"])
+def api_fleets(request):
+    if request.method == "GET":
+        qs = _visible_fleets(request.user).order_by("agency__name", "name")
+        return JsonResponse(
+            [_serialize_fleet(f, include_ships=False) for f in qs],
+            safe=False,
+        )
+
+    # POST — create
+    try:
+        body = json.loads(request.body)
+    except json.JSONDecodeError:
+        return JsonResponse({"error": "Invalid JSON"}, status=400)
+
+    name = (body.get("name") or "").strip()
+    if not name:
+        return JsonResponse({"error": "name required"}, status=400)
+
+    from agencies.models import Agency
+    agency = _user_agency(request.user)
+    # Superusers can create a fleet for any agency via explicit agency_id
+    if request.user.is_superuser and body.get("agency_id"):
+        try:
+            agency = Agency.objects.get(pk=body["agency_id"])
+        except Agency.DoesNotExist:
+            return JsonResponse({"error": "agency not found"}, status=400)
+    if agency is None:
+        return JsonResponse(
+            {"error": "No owning agency resolvable for user"}, status=400,
+        )
+
+    fleet = Fleet.objects.create(
+        name=name,
+        agency=agency,
+        commander=body.get("commander", ""),
+        notes=body.get("notes", ""),
+    )
+    return JsonResponse(_serialize_fleet(fleet), status=201)
+
+
+@login_required
+@require_http_methods(["GET", "PUT", "DELETE"])
+def api_fleet_detail(request, pk):
+    fleet = get_object_or_404(
+        Fleet.objects.select_related("agency").prefetch_related(
+            "ships", "ships__starship_class", "ships__starship_class__ship_type",
+            "ships__agency", "ships__fleet", "ships__location",
+        ),
+        pk=pk,
+    )
+
+    # View permission
+    if not request.user.is_superuser:
+        agency = _user_agency(request.user)
+        if agency is None or agency.id != fleet.agency_id:
+            return JsonResponse({"error": "Not visible"}, status=404)
+
+    if request.method == "GET":
+        return JsonResponse(_serialize_fleet(fleet))
+
+    if not _can_edit_fleet(request.user, fleet):
+        return JsonResponse({"error": "Permission denied"}, status=403)
+
+    if request.method == "DELETE":
+        # Null out ship fleet assignments first so the cascade doesn't
+        # nuke the hulls along with the fleet.
+        fleet.ships.update(fleet=None)
+        fleet.delete()
+        return JsonResponse({"ok": True})
+
+    # PUT
+    try:
+        body = json.loads(request.body)
+    except json.JSONDecodeError:
+        return JsonResponse({"error": "Invalid JSON"}, status=400)
+
+    for field in ("name", "commander", "notes"):
+        if field in body:
+            setattr(fleet, field, body[field])
+    fleet.save()
+    return JsonResponse(_serialize_fleet(fleet))
 
 
 # ---------------------------------------------------------------------------

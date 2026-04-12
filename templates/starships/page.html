@@ -44,6 +44,13 @@
             </div>
             <div id="ship-list"><span class="mono-text text-muted" style="font-size: 0.75rem;">Loading…</span></div>
         </div>
+        <div id="sidebar-fleets" style="display: none;">
+            <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 0.75rem;">
+                <h3 class="mono-text" style="color: var(--accent-primary); font-size: 0.85rem; letter-spacing: 1px; margin: 0;">FLEETS</h3>
+                <button class="btn-primary" onclick="createFleet()">NEW</button>
+            </div>
+            <div id="fleet-list"><span class="mono-text text-muted" style="font-size: 0.75rem;">Loading…</span></div>
+        </div>
     </div>
 
     <!-- MAIN — editor -->
@@ -51,7 +58,7 @@
         <div style="display: flex; gap: 0.5rem; margin-bottom: 1rem;">
             <button class="ship-tab active" data-tab="classes" onclick="switchTab('classes')">CLASSES</button>
             <button class="ship-tab" data-tab="ships" onclick="switchTab('ships')">SHIPS</button>
-            <button class="ship-tab" data-tab="fleets" disabled title="Release E">FLEETS</button>
+            <button class="ship-tab" data-tab="fleets" onclick="switchTab('fleets')">FLEETS</button>
         </div>
         <div id="class-editor">
             <div class="mono-text text-muted" style="font-size: 0.85rem; text-align: center; padding: 3rem 1rem;">
@@ -63,6 +70,11 @@
                 Select a ship from the sidebar.
             </div>
         </div>
+        <div id="fleet-editor" style="display: none;">
+            <div class="mono-text text-muted" style="font-size: 0.85rem; text-align: center; padding: 3rem 1rem;">
+                Select a fleet from the sidebar, or press NEW to create one.
+            </div>
+        </div>
     </div>
 </div>
 
@@ -71,8 +83,10 @@ const IS_SUPERUSER = {{ is_superuser|yesno:"true,false" }};
 var CURRENT_TAB = 'classes';
 var CURRENT_CLASS_ID = null;
 var CURRENT_SHIP_ID = null;
+var CURRENT_FLEET_ID = null;
 var CLASSES_CACHE = [];
 var SHIPS_CACHE = [];
+var FLEETS_CACHE = [];
 var SHIP_TYPES = [];
 var SHIP_MODULES = [];
 var STAR_SYSTEMS_CACHE = null;  // lazy-loaded for the location dropdown
@@ -148,17 +162,17 @@ function loadStarSystems() {
 
 function switchTab(tab) {
     CURRENT_TAB = tab;
-    // Tab buttons
     document.querySelectorAll('.ship-tab').forEach(function(btn) {
         btn.classList.toggle('active', btn.dataset.tab === tab);
     });
-    // Sidebar panels
     document.getElementById('sidebar-classes').style.display = tab === 'classes' ? 'block' : 'none';
     document.getElementById('sidebar-ships').style.display = tab === 'ships' ? 'block' : 'none';
-    // Main editors
+    document.getElementById('sidebar-fleets').style.display = tab === 'fleets' ? 'block' : 'none';
     document.getElementById('class-editor').style.display = tab === 'classes' ? 'block' : 'none';
     document.getElementById('ship-editor').style.display = tab === 'ships' ? 'block' : 'none';
-    if (tab === 'ships') loadShips();
+    document.getElementById('fleet-editor').style.display = tab === 'fleets' ? 'block' : 'none';
+    if (tab === 'ships') { loadShips(); if (!FLEETS_CACHE.length) loadFleets(); }
+    if (tab === 'fleets') { loadFleets(); if (!SHIPS_CACHE.length) loadShips(); }
 }
 
 function renderShipList() {
@@ -285,6 +299,16 @@ function renderShipEditor(ship) {
         html += '<option value="' + sys.id + '"' + (sys.id === ship.location_id ? ' selected' : '') + '>' + escapeHtml(sys.name) + '</option>';
     });
     html += '</select></div>';
+    // Fleet assignment
+    html += '<div style="display: flex; flex-direction: column; gap: 0.15rem;">';
+    html += '<label class="text-muted mono-text" style="font-size: 0.58rem;">FLEET</label>';
+    html += '<select data-shipfield="fleet_id" class="mono-input">';
+    html += '<option value="">— unassigned —</option>';
+    // Only show fleets owned by this ship's agency.
+    FLEETS_CACHE.filter(function(f) { return f.agency_id === ship.agency_id; }).forEach(function(f) {
+        html += '<option value="' + f.id + '"' + (f.id === ship.fleet_id ? ' selected' : '') + '>' + escapeHtml(f.name) + '</option>';
+    });
+    html += '</select></div>';
     // Notes spans two columns
     html += '<div style="grid-column: span 2; display: flex; flex-direction: column; gap: 0.15rem;">';
     html += '<label class="text-muted mono-text" style="font-size: 0.58rem;">NOTES</label>';
@@ -367,6 +391,180 @@ function buildHullFromPrompt() {
     var idx = parseInt(pick, 10) - 1;
     if (isNaN(idx) || idx < 0 || idx >= CLASSES_CACHE.length) return;
     buildHullFromClass(CLASSES_CACHE[idx].id);
+}
+
+// ------------------------- Fleets -------------------------
+function loadFleets() {
+    return api('/api/starships/fleets/').then(function(fleets) {
+        FLEETS_CACHE = fleets;
+        renderFleetList();
+    });
+}
+
+function renderFleetList() {
+    var byAgency = {};
+    FLEETS_CACHE.forEach(function(f) {
+        (byAgency[f.agency_name || '—'] = byAgency[f.agency_name || '—'] || []).push(f);
+    });
+    var html = '';
+    Object.keys(byAgency).sort().forEach(function(agency) {
+        html += '<div class="mono-text text-muted" style="font-size: 0.58rem; letter-spacing: 1px; margin: 0.6rem 0 0.3rem 0;">' + escapeHtml(agency) + '</div>';
+        byAgency[agency].forEach(function(f) {
+            var selected = f.id === CURRENT_FLEET_ID ? 'selected' : '';
+            html += '<div class="class-row ' + selected + '" onclick="selectFleet(' + f.id + ')">' +
+                '<div class="ship-class-name mono-text">' + escapeHtml(f.name) + '</div>' +
+                '<div class="ship-class-meta mono-text">' + f.ship_count + ' ship' + (f.ship_count === 1 ? '' : 's') +
+                (f.commander ? ' \u00B7 cmd: ' + escapeHtml(f.commander) : '') + '</div>' +
+                '</div>';
+        });
+    });
+    if (!FLEETS_CACHE.length) html = '<span class="mono-text text-muted" style="font-size: 0.75rem;">No fleets yet. Press NEW to create one.</span>';
+    document.getElementById('fleet-list').innerHTML = html;
+}
+
+function selectFleet(id) {
+    CURRENT_FLEET_ID = id;
+    renderFleetList();
+    api('/api/starships/fleets/' + id + '/').then(renderFleetEditor);
+}
+
+function createFleet() {
+    var name = prompt('Fleet name (e.g. "First Expeditionary"):');
+    if (!name) return;
+    var commander = prompt('Commander (optional):') || '';
+    api('/api/starships/fleets/', {
+        method: 'POST',
+        body: JSON.stringify({ name: name, commander: commander }),
+    }).then(function(fleet) {
+        CURRENT_FLEET_ID = fleet.id;
+        loadFleets().then(function() { selectFleet(fleet.id); });
+    });
+}
+
+function renderFleetEditor(fleet) {
+    if (!fleet) {
+        document.getElementById('fleet-editor').innerHTML =
+            '<div class="mono-text text-muted" style="font-size: 0.85rem; text-align: center; padding: 3rem 1rem;">Select a fleet from the sidebar.</div>';
+        return;
+    }
+    var html = '';
+
+    // Header
+    html += '<div style="display: flex; align-items: flex-start; gap: 0.75rem; margin-bottom: 0.75rem; flex-wrap: wrap;">';
+    html += '<div style="flex: 1 1 300px;">';
+    html += '<input data-fleetfield="name" value="' + escapeHtml(fleet.name) + '" class="mono-input" style="width: 100%; font-size: 1rem; padding: 0.5rem;">';
+    html += '<div class="mono-text text-muted" style="font-size: 0.6rem; margin-top: 0.3rem;">' +
+        escapeHtml(fleet.agency_name || '') + ' \u00B7 ' + (fleet.ships ? fleet.ships.length : 0) + ' ship(s)' +
+        '</div>';
+    html += '</div>';
+    html += '<div style="display: flex; gap: 0.5rem;">';
+    html += '<button onclick="saveFleetHeader()" class="btn-primary">SAVE</button>';
+    html += '<button onclick="deleteFleet()" class="btn-danger" style="padding: 0.3rem 0.6rem;">DELETE</button>';
+    html += '</div>';
+    html += '</div>';
+
+    // Commander + notes
+    html += '<div style="display: grid; grid-template-columns: 1fr 2fr; gap: 0.5rem; margin-bottom: 0.9rem;">';
+    html += '<div style="display: flex; flex-direction: column; gap: 0.15rem;">';
+    html += '<label class="text-muted mono-text" style="font-size: 0.58rem;">COMMANDER</label>';
+    html += '<input data-fleetfield="commander" value="' + escapeHtml(fleet.commander || '') + '" class="mono-input">';
+    html += '</div>';
+    html += '<div style="display: flex; flex-direction: column; gap: 0.15rem;">';
+    html += '<label class="text-muted mono-text" style="font-size: 0.58rem;">NOTES</label>';
+    html += '<textarea data-fleetfield="notes" rows="2" class="mono-input" style="resize: vertical;">' + escapeHtml(fleet.notes || '') + '</textarea>';
+    html += '</div>';
+    html += '</div>';
+
+    // Assigned ships
+    html += '<div class="mono-text text-muted" style="font-size: 0.6rem; letter-spacing: 1px; margin-bottom: 0.3rem;">ASSIGNED SHIPS</div>';
+    html += '<div>';
+    if (!fleet.ships || !fleet.ships.length) {
+        html += '<div class="mono-text text-muted" style="font-size: 0.75rem; font-style: italic; padding: 0.75rem 0;">No ships assigned yet.</div>';
+    }
+    (fleet.ships || []).forEach(function(s) {
+        var col = STATUS_COLORS[s.status] || 'var(--text-muted)';
+        html += '<div class="module-row">';
+        html += '<span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:' + col + ';"></span>';
+        html += '<span class="mono-text" style="font-size: 0.8rem; flex: 1; color: var(--text-primary);">' + escapeHtml(s.name) +
+            (s.hull_number ? ' <span class="mono-text text-muted" style="font-size:0.6rem;">(' + escapeHtml(s.hull_number) + ')</span>' : '') +
+            '</span>';
+        html += '<span class="mono-text text-muted" style="font-size: 0.6rem;">' + escapeHtml(s.starship_class_name) + '</span>';
+        html += '<span class="mono-text" style="font-size: 0.6rem; color:' + col + ';">' + escapeHtml(s.status_label) + '</span>';
+        html += '<button onclick="unassignShipFromFleet(' + s.id + ')" class="btn-danger">REMOVE</button>';
+        html += '</div>';
+    });
+    html += '</div>';
+
+    // Add-ship picker
+    var unassigned = SHIPS_CACHE.filter(function(s) {
+        return s.agency_id === fleet.agency_id && s.fleet_id == null;
+    });
+    if (unassigned.length) {
+        html += '<div style="display: flex; gap: 0.4rem; margin-top: 0.75rem; align-items: center; flex-wrap: wrap;">';
+        html += '<select id="fleet-add-ship" class="mono-input">';
+        unassigned.forEach(function(s) {
+            html += '<option value="' + s.id + '">' + escapeHtml(s.name) + ' (' + escapeHtml(s.starship_class_name) + ')</option>';
+        });
+        html += '</select>';
+        html += '<button onclick="assignShipToFleet()" class="btn-primary">ASSIGN TO FLEET</button>';
+        html += '</div>';
+    } else {
+        html += '<div class="mono-text text-muted" style="font-size: 0.7rem; margin-top: 0.75rem; font-style: italic;">No unassigned ships in this agency.</div>';
+    }
+
+    document.getElementById('fleet-editor').innerHTML = html;
+}
+
+function saveFleetHeader() {
+    if (CURRENT_FLEET_ID == null) return;
+    var editor = document.getElementById('fleet-editor');
+    var payload = {};
+    editor.querySelectorAll('[data-fleetfield]').forEach(function(el) {
+        payload[el.dataset.fleetfield] = el.value;
+    });
+    api('/api/starships/fleets/' + CURRENT_FLEET_ID + '/', {
+        method: 'PUT', body: JSON.stringify(payload),
+    }).then(function() {
+        loadFleets().then(function() { selectFleet(CURRENT_FLEET_ID); });
+    });
+}
+
+function deleteFleet() {
+    if (CURRENT_FLEET_ID == null) return;
+    if (!confirm('Delete this fleet? Ships will be unassigned but not destroyed.')) return;
+    api('/api/starships/fleets/' + CURRENT_FLEET_ID + '/', { method: 'DELETE' }).then(function() {
+        CURRENT_FLEET_ID = null;
+        loadFleets().then(function() {
+            renderFleetEditor(null);
+            // Reassignments may have cleared ship.fleet_id, refresh the ship list.
+            loadShips();
+        });
+    });
+}
+
+function assignShipToFleet() {
+    if (CURRENT_FLEET_ID == null) return;
+    var shipId = parseInt(document.getElementById('fleet-add-ship').value, 10);
+    if (!shipId) return;
+    api('/api/starships/ships/' + shipId + '/', {
+        method: 'PUT',
+        body: JSON.stringify({ fleet_id: CURRENT_FLEET_ID }),
+    }).then(function() {
+        return Promise.all([loadShips(), loadFleets()]).then(function() {
+            selectFleet(CURRENT_FLEET_ID);
+        });
+    });
+}
+
+function unassignShipFromFleet(shipId) {
+    api('/api/starships/ships/' + shipId + '/', {
+        method: 'PUT',
+        body: JSON.stringify({ fleet_id: null }),
+    }).then(function() {
+        return Promise.all([loadShips(), loadFleets()]).then(function() {
+            selectFleet(CURRENT_FLEET_ID);
+        });
+    });
 }
 
 function renderClassList() {
@@ -638,7 +836,7 @@ function removeModule(cmId) {
     }).then(function() { selectClass(CURRENT_CLASS_ID); });
 }
 
-// Boot
+// Boot — load catalogues and classes up front; ships/fleets lazy on tab switch.
 loadCatalogues().then(loadClasses);
 </script>
 {% csrf_token %}

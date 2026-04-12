@@ -1,5 +1,13 @@
 # Changelog
 
+## v0.13.4
+- Fleet grouping shipped (Release E of 7)
+- FLEETS tab on /starships/ with per-agency list, NEW button, fleet editor
+- Fleet editor: name, commander, notes, ship count, assigned ships list with REMOVE buttons, add-ship dropdown of unassigned hulls in the same agency
+- Ship editor gains a FLEET dropdown so hulls can be reassigned directly from the ship detail view
+- Deleting a fleet unassigns its ships (sets fleet_id null) rather than cascade-deleting them
+- api_fleets list/create/detail CRUD; PUT /api/starships/ships/<id>/ now accepts fleet_id (validates same-agency)
+
 ## v0.13.3
 - Starship instance build flow and SHIPS tab shipped (Release D of 7)
 - BUILD HULL button on each class creates an under_construction hull
