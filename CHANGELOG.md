@@ -1,5 +1,8 @@
 # Changelog
 
+## v0.12.53
+- Fix: resource types list endpoint was broken since v0.12.51 because @login_required was accidentally decorating a helper instead of the view — settings page now loads resource types again
+
 ## v0.12.52
 - Settings: per-star ground-truth resources are now editable from the Star Map page
 - Pick a star from the planet dropdown to see every configured resource with its current value, unit, and typical range

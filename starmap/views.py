@@ -745,7 +745,6 @@ def api_seed_systems(request):
 # Resource Types
 # ---------------------------------------------------------------------------
 
-@login_required
 def _serialize_resource_type(t):
     """Return the full ResourceType payload including tuning fields."""
     return {
@@ -765,6 +764,7 @@ def _serialize_resource_type(t):
     }
 
 
+@login_required
 @require_http_methods(["GET", "POST"])
 def api_resource_types(request):
     """List or create resource types."""
