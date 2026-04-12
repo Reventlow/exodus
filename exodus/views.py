@@ -37,6 +37,7 @@ def site_settings(request):
         settings_obj.lock_comms = "lock_comms" not in request.POST
         settings_obj.show_world_map = "show_world_map" in request.POST
         settings_obj.show_star_map = "show_star_map" in request.POST
+        settings_obj.show_starships = "show_starships" in request.POST
         settings_obj.show_council = "show_council" in request.POST
         settings_obj.council_mode = request.POST.get("council_mode", "agency")
         settings_obj.enforce_ship_slot_budget = "enforce_ship_slot_budget" in request.POST

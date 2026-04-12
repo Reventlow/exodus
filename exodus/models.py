@@ -122,6 +122,10 @@ class SiteSettings(models.Model):
         default=False,
         help_text="Show STAR MAP link in navigation for all players.",
     )
+    show_starships = models.BooleanField(
+        default=False,
+        help_text="Show STARSHIPS link in navigation and let players open the /starships/ page.",
+    )
     show_council = models.BooleanField(
         default=True,
         help_text="Show COUNCIL link in navigation.",

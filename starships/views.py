@@ -1081,8 +1081,16 @@ def api_legacy_import(request):
 @login_required
 @require_GET
 def starships_page(request):
-    """Standalone starships hub — classes editor (Release C) +
-    instance build/management (Release D). Fleets land in Release E."""
+    """Standalone starships hub — classes, ships, and fleets.
+
+    Staff always see it; players only when SiteSettings.show_starships
+    is toggled on from Settings > Map Visibility.
+    """
+    if not request.user.is_staff:
+        from exodus.models import SiteSettings
+        settings_obj = SiteSettings.load()
+        if not settings_obj.show_starships:
+            return HttpResponseForbidden("STARSHIPS ACCESS DISABLED")
     return render(request, "starships/page.html", {
         "is_superuser": request.user.is_superuser,
     })

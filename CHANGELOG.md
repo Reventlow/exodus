@@ -1,5 +1,11 @@
 # Changelog
 
+## v0.13.8
+- Settings → Map Visibility now has a STARSHIPS toggle controlling whether players can see the starships page
+- Staff always see the STARSHIPS nav link; players only when the toggle is on
+- /starships/ view returns 403 for non-staff when the toggle is off (defence in depth)
+- SiteSettings.show_starships (default False) + migration 0014
+
 ## v0.13.7
 - GMs can now create starship classes, fleets, and ship instances for any agency (not just their own)
 - NEW class prompt asks "which agency owns this class?" with a numbered picker (0 = SHARED)
