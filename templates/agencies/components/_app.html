@@ -414,21 +414,44 @@ const {
                     visibility={vis} onToggleVis={toggleVisibility}
                 />
 
-                <TableModule
-                    title="FLEET" field="fleet"
-                    items={agency.fleet}
-                    columns={[
-                        { key: 'shipClass', label: 'SHIP CLASS', width: '1fr' },
-                        { key: 'role', label: 'ROLE', width: '1fr' },
-                        { key: 'quantity', label: 'QTY', width: '60px', type: 'number' },
-                        { key: 'notes', label: 'NOTES', width: '2fr' },
-                    ]}
-                    emptyItem={{ shipClass: '', role: '', quantity: 0, notes: '' }}
-                    update={val => updateAgency({ fleet: val })}
-                    onSave={val => saveAgencyQuiet({ fleet: val })}
-                    getFreshItems={() => agencyRef.current.fleet || []}
-                    visibility={vis} onToggleVis={toggleVisibility}
-                />
+                {/*
+                  Legacy fleet table removed in v0.13.6. Fleet data now
+                  lives in the dedicated /starships/ page (StarshipClass
+                  + Starship + Fleet tables). The Agency.fleet JSON
+                  field is still populated for backwards compatibility
+                  but no longer rendered or editable from the sheet.
+                */}
+                <div style={{
+                    border: '1px solid var(--border-color)',
+                    borderRadius: 'var(--radius-sm)',
+                    padding: '0.75rem 1rem',
+                    marginBottom: '1rem'
+                }}>
+                    <div className="mono-text" style={{
+                        color: 'var(--accent-primary)',
+                        fontSize: '0.75rem',
+                        letterSpacing: '1px',
+                        marginBottom: '0.4rem'
+                    }}>FLEET</div>
+                    <div className="mono-text" style={{
+                        color: 'var(--text-muted)',
+                        fontSize: '0.75rem',
+                        marginBottom: '0.5rem'
+                    }}>
+                        Fleet management has moved to the dedicated Starships page.
+                        Use it to design classes, commission hulls, and organise fleets.
+                    </div>
+                    <a href="/starships/" className="mono-text" style={{
+                        display: 'inline-block',
+                        background: 'var(--accent-primary)',
+                        color: 'var(--bg-dark)',
+                        padding: '0.35rem 0.8rem',
+                        fontSize: '0.7rem',
+                        fontWeight: 'bold',
+                        letterSpacing: '1px',
+                        textDecoration: 'none'
+                    }}>OPEN STARSHIPS</a>
+                </div>
 
                 <BasesModule
                     bases={agency.bases}

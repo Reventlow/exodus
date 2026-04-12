@@ -1,5 +1,11 @@
 # Changelog
 
+## v0.13.6
+- Legacy Agency.fleet TableModule removed from the agency sheet (Release G of 7 — final)
+- Replaced with a small info card linking to the Starships page
+- The Agency.fleet JSONField and API serialization are untouched for now; a future v0.14.x can drop them once the real records are verified as authoritative
+- Completes the starships feature — schema, catalogues, class editor, ship build flow, fleets, legacy import, and cleanup all shipped on the 0.13.x track
+
 ## v0.13.5
 - Legacy fleet import shipped (Release F of 7)
 - `python manage.py import_legacy_fleets` management command with --dry-run, --force, --agency flags
