@@ -1,5 +1,8 @@
 # Changelog
 
+## v0.12.49
+- Rebuild-only release (no code changes)
+
 ## v0.12.48
 - Star map resources: absolute unit quantities instead of 0–100 percentages
 - ResourceType gains unit_label, typical_min/max, rarity_weight, scan brackets
