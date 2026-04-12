@@ -1,0 +1,295 @@
+{% extends "base.html" %}
+
+{% block title %}{{ city.name|upper }} // CITY MAP // BLACKLOG.NET{% endblock %}
+
+{% block content %}
+<style>
+    #citymap-container {
+        position: relative;
+        width: 100%;
+        height: calc(100vh - 100px);
+        overflow: hidden;
+        background: var(--bg-dark, #0a0a0f);
+    }
+    #citymap { height: 100%; width: 100%; }
+
+    /* Override Leaflet for dark theme */
+    .leaflet-container { background: #0a0a0f; }
+    .leaflet-control-zoom a {
+        background: var(--bg-panel, #1a1a2e) !important;
+        color: var(--text-primary, #e0e0e0) !important;
+        border-color: var(--border-color, #333) !important;
+    }
+    .leaflet-control-attribution {
+        background: rgba(10, 10, 15, 0.8) !important;
+        color: var(--text-muted, #555) !important;
+        font-size: 0.6rem !important;
+    }
+    .leaflet-control-attribution a { color: var(--text-muted, #555) !important; }
+    .leaflet-popup-content-wrapper {
+        background: var(--bg-panel, #1a1a2e) !important;
+        color: var(--text-primary, #e0e0e0) !important;
+        border: 1px solid var(--border-color, #333) !important;
+        border-radius: var(--radius-sm, 4px) !important;
+        font-family: var(--font-mono, monospace) !important;
+        font-size: 0.85rem !important;
+    }
+    .leaflet-popup-tip { background: var(--bg-panel, #1a1a2e) !important; }
+    .leaflet-popup-close-button { color: var(--text-muted) !important; }
+
+    #city-info {
+        position: absolute; top: 1rem; left: 1rem; z-index: 1000;
+        font-family: var(--font-mono); font-size: 0.85rem;
+        color: var(--text-primary); background: rgba(10, 10, 15, 0.85);
+        border: 1px solid var(--border-color); border-radius: var(--radius-sm);
+        padding: 0.75rem 1rem; backdrop-filter: blur(6px);
+    }
+    #city-info .label {
+        color: var(--text-muted); font-size: 0.7rem;
+        text-transform: uppercase; letter-spacing: 1.5px; margin-bottom: 0.25rem;
+    }
+    #city-info .value {
+        color: var(--accent-primary); font-size: 1rem; margin-bottom: 0.5rem;
+    }
+</style>
+
+<div id="citymap-container">
+    <div id="city-info">
+        <div class="label">LOCATION</div>
+        <div class="value">{{ city.name|upper }}</div>
+        <div style="color: var(--text-muted); font-size: 0.75rem;">
+            {{ city.latitude|floatformat:4 }}° N, {{ city.longitude|floatformat:4 }}° E
+        </div>
+    </div>
+
+    <!-- Controls hint — bottom-left -->
+    <div style="
+        position: absolute; bottom: 1rem; left: 1rem; z-index: 1000;
+        font-family: var(--font-mono); font-size: 0.65rem;
+        color: var(--text-muted); line-height: 1.8;
+        background: rgba(10, 10, 15, 0.75); padding: 0.5rem 0.75rem;
+        border: 1px solid var(--border-color); border-radius: var(--radius-sm);
+        backdrop-filter: blur(4px); pointer-events: none;
+    ">
+        {% if user.is_superuser %}
+        <div style="color: var(--accent-primary); font-size: 0.6rem; letter-spacing: 1px; margin-bottom: 0.3rem;">GM CONTROLS</div>
+        <div>RIGHT-CLICK &middot; Place marker</div>
+        <div>CLICK MARKER &middot; View details &middot; Delete</div>
+        <div>DRAG PLAYER &middot; Move player position</div>
+        <div>SCROLL &middot; Zoom &middot; DRAG &middot; Pan</div>
+        <div style="margin-top: 0.3rem; color: var(--text-muted); font-size: 0.6rem;">
+            Marker types: <span style="color: #06b6d4;">BASE</span> &middot;
+            <span style="color: #ef4444;">MISSION</span> &middot;
+            <span style="color: #f59e0b;">NPC</span> &middot;
+            <span style="color: #c084fc;">PLAYER</span> &middot;
+            <span style="color: #00ff88;">CUSTOM</span>
+        </div>
+        {% else %}
+        <div style="color: var(--accent-primary); font-size: 0.6rem; letter-spacing: 1px; margin-bottom: 0.3rem;">CONTROLS</div>
+        <div>CLICK MARKER &middot; View details</div>
+        <div>SCROLL &middot; Zoom in/out</div>
+        <div>DRAG &middot; Pan the map</div>
+        {% endif %}
+    </div>
+
+    <div id="citymap"></div>
+</div>
+
+<!-- Leaflet CSS/JS -->
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+{% endblock %}
+
+{% block scripts %}
+<script>
+(function() {
+    var IS_ADMIN = {{ user.is_superuser|yesno:"true,false" }};
+    var CITY_ID = {{ city.id }};
+    var CSRF_TOKEN = '{{ csrf_token }}';
+
+    function getCookie(name) {
+        var v = null;
+        if (document.cookie) {
+            document.cookie.split(';').forEach(function(c) {
+                var t = c.trim();
+                if (t.startsWith(name + '=')) v = decodeURIComponent(t.substring(name.length + 1));
+            });
+        }
+        return v;
+    }
+    var csrf = function() { return getCookie('csrftoken') || CSRF_TOKEN; };
+
+    // Initialize map
+    var map = L.map('citymap').setView([{{ city.latitude }}, {{ city.longitude }}], {{ city.zoom }});
+
+    // CARTO Dark Matter tiles — no API key
+    L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
+        attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OSM</a> &copy; <a href="https://carto.com/attributions">CARTO</a>',
+        subdomains: 'abcd',
+        maxZoom: 20,
+    }).addTo(map);
+
+    // Marker type colors
+    var TYPE_COLORS = {
+        base: '#06b6d4',
+        mission: '#ef4444',
+        npc: '#f59e0b',
+        player: '#c084fc',
+        custom: '#00ff88',
+    };
+
+    // Player marker pulsing CSS
+    var pulseStyle = document.createElement('style');
+    pulseStyle.textContent = '@keyframes pulse-ring { 0% { transform: scale(1); opacity: 0.6; } 100% { transform: scale(2.5); opacity: 0; } } .player-pulse { position: absolute; border-radius: 50%; animation: pulse-ring 1.5s ease-out infinite; pointer-events: none; }';
+    document.head.appendChild(pulseStyle);
+
+    // Load markers from API
+    function loadMarkers() {
+        fetch('/api/citymaps/' + CITY_ID + '/').then(function(r) { return r.json(); }).then(function(data) {
+            (data.markers || []).forEach(function(m) {
+                var color = m.color || TYPE_COLORS[m.markerType] || '#00ff88';
+                var isPlayer = m.markerType === 'player';
+
+                var isNpc = m.markerType === 'npc';
+                var hasPortrait = isPlayer || (isNpc && m.portraitUrl);
+
+                // Player/NPC markers with portraits: circle with pulse, draggable for GM
+                if (hasPortrait) {
+                    var size = 36;
+                    var portrait = m.portraitUrl
+                        ? '<img src="' + m.portraitUrl + '" style="position: absolute; top: 3px; left: 3px; width: ' + (size-6) + 'px; height: ' + (size-6) + 'px; border-radius: 50%; object-fit: cover;">'
+                        : '<div style="position: absolute; top: 3px; left: 3px; width: ' + (size-6) + 'px; height: ' + (size-6) + 'px; border-radius: 50%; background: ' + color + '; opacity: 0.9; display: flex; align-items: center; justify-content: center; font-family: var(--font-mono); font-size: 0.7rem; color: var(--bg-dark); font-weight: bold;">' + m.label.charAt(0) + '</div>';
+                    var playerIcon = L.divIcon({
+                        className: '',
+                        html: '<div style="position: relative; width: ' + size + 'px; height: ' + size + 'px;">'
+                            + '<div class="player-pulse" style="width: ' + size + 'px; height: ' + size + 'px; border: 2px solid ' + color + '; top: 0; left: 0;"></div>'
+                            + '<div style="position: absolute; top: 0; left: 0; width: ' + size + 'px; height: ' + size + 'px; border-radius: 50%; border: 2px solid ' + color + '; overflow: hidden;"></div>'
+                            + portrait
+                            + '</div>',
+                        iconSize: [size, size],
+                        iconAnchor: [size/2, size/2],
+                    });
+                    var marker = L.marker([m.latitude, m.longitude], { icon: playerIcon, draggable: IS_ADMIN }).addTo(map);
+                    if (IS_ADMIN) {
+                        marker.on('dragend', function(e) {
+                            var pos = e.target.getLatLng();
+                            fetch('/api/citymaps/' + CITY_ID + '/markers/' + m.id + '/', {
+                                method: 'PUT',
+                                headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrf() },
+                                body: JSON.stringify({ latitude: pos.lat, longitude: pos.lng }),
+                            });
+                        });
+                    }
+                } else {
+                    var marker = L.circleMarker([m.latitude, m.longitude], {
+                        radius: 8, fillColor: color, color: color,
+                        weight: 2, opacity: 0.8, fillOpacity: 0.4,
+                    }).addTo(map);
+                }
+
+                var popupHtml = '<div style="font-family: var(--font-mono); min-width: 150px;">';
+                popupHtml += '<div style="color: ' + color + '; font-weight: bold; font-size: 0.9rem; margin-bottom: 0.25rem;">' + m.label + '</div>';
+                popupHtml += '<div style="color: var(--text-muted); font-size: 0.65rem; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 0.5rem;">' + m.markerType + '</div>';
+                if (m.description) {
+                    var desc = window.marked ? window.marked.parse(m.description) : m.description;
+                    popupHtml += '<div style="color: var(--text-secondary); font-size: 0.8rem; line-height: 1.5;">' + desc + '</div>';
+                }
+                if (IS_ADMIN) {
+                    popupHtml += '<div style="margin-top: 0.5rem; border-top: 1px solid var(--border-color); padding-top: 0.5rem;">';
+                    popupHtml += '<button onclick="deleteMarker(' + m.id + ')" style="background: transparent; border: 1px solid var(--accent-danger); color: var(--accent-danger); padding: 0.2rem 0.5rem; cursor: pointer; font-family: var(--font-mono); font-size: 0.65rem;">DELETE</button>';
+                    if (!m.visibleToPlayers) {
+                        popupHtml += ' <span style="color: var(--accent-danger); font-size: 0.6rem;">HIDDEN</span>';
+                    }
+                    popupHtml += '</div>';
+                }
+                popupHtml += '</div>';
+                marker.bindPopup(popupHtml);
+            });
+        });
+    }
+
+    loadMarkers();
+
+    // Admin: right-click to add marker
+    if (IS_ADMIN) {
+        // Cache characters and NPCs for picker
+        var cachedChars = null;
+        var cachedNpcs = null;
+
+        map.on('contextmenu', function(e) {
+            var markerType = prompt('Type (base/mission/npc/player/custom):', 'custom') || 'custom';
+            var portraitUrl = '';
+            var label = '';
+            var description = '';
+
+            if (markerType === 'player') {
+                // Fetch characters for picker
+                if (!cachedChars) {
+                    var xhr = new XMLHttpRequest();
+                    xhr.open('GET', '/api/characters/', false);  // sync for simplicity
+                    xhr.setRequestHeader('X-CSRFToken', csrf());
+                    xhr.send();
+                    cachedChars = JSON.parse(xhr.responseText);
+                }
+                var charList = cachedChars.map(function(c, i) { return (i+1) + '. ' + c.name; }).join('\n');
+                var pick = prompt('Select character:\n' + charList + '\n\nEnter number:');
+                if (!pick) return;
+                var idx = parseInt(pick) - 1;
+                if (idx < 0 || idx >= cachedChars.length) return;
+                label = cachedChars[idx].name;
+                portraitUrl = cachedChars[idx].profilePicture || '';
+            } else if (markerType === 'npc') {
+                // Fetch NPCs for picker
+                if (!cachedNpcs) {
+                    var xhr = new XMLHttpRequest();
+                    xhr.open('GET', '/api/npcs/', false);
+                    xhr.setRequestHeader('X-CSRFToken', csrf());
+                    xhr.send();
+                    cachedNpcs = JSON.parse(xhr.responseText);
+                }
+                var npcList = cachedNpcs.slice(0, 20).map(function(n, i) { return (i+1) + '. ' + n.name; }).join('\n');
+                var pick = prompt('Select NPC (first 20):\n' + npcList + '\n\nEnter number or type name:');
+                if (!pick) return;
+                var idx = parseInt(pick) - 1;
+                if (idx >= 0 && idx < cachedNpcs.length) {
+                    label = cachedNpcs[idx].name;
+                    portraitUrl = cachedNpcs[idx].image || '';
+                } else {
+                    label = pick;
+                }
+            } else {
+                label = prompt('Marker label:');
+                if (!label) return;
+            }
+
+            description = prompt('Description (optional):') || '';
+            var visible = confirm('Visible to players?');
+
+            fetch('/api/citymaps/' + CITY_ID + '/markers/', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrf() },
+                body: JSON.stringify({
+                    label: label,
+                    description: description,
+                    latitude: e.latlng.lat,
+                    longitude: e.latlng.lng,
+                    markerType: markerType,
+                    color: TYPE_COLORS[markerType] || '#00ff88',
+                    visibleToPlayers: visible,
+                    portraitUrl: portraitUrl,
+                }),
+            }).then(function() { location.reload(); });
+        });
+    }
+
+    // Delete marker function (called from popup)
+    window.deleteMarker = function(markerId) {
+        if (!confirm('Delete this marker?')) return;
+        fetch('/api/citymaps/' + CITY_ID + '/markers/' + markerId + '/', {
+            method: 'DELETE',
+            headers: { 'X-CSRFToken': csrf() },
+        }).then(function() { location.reload(); });
+    };
+})();
+</script>
+{% endblock %}
