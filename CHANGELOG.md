@@ -1,5 +1,9 @@
 # Changelog
 
+## v0.13.10
+- Settings: Starships section split into four dedicated sidebar items — Starships (slot toggle + legacy import), Ship Types, Module Sections, Ship Modules
+- Each subsection now has its own heading and description, making tuning catalogues less claustrophobic
+
 ## v0.13.9
 - Ship module sections: tiered families of modules with 5 fixed levels
 - New ShipModuleSection model + section FK/level field on ShipModule

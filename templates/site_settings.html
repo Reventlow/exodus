@@ -91,7 +91,10 @@
         </div>
         <div class="sidebar-group">
             <div class="sidebar-group-label">SHIPS</div>
-            <button class="sidebar-item" onclick="showSection('starships-config', this)">Starships</button>
+            <button class="sidebar-item" onclick="showSection('starships-general', this)">Starships</button>
+            <button class="sidebar-item" onclick="showSection('ship-types', this)">Ship Types</button>
+            <button class="sidebar-item" onclick="showSection('module-sections', this)">Module Sections</button>
+            <button class="sidebar-item" onclick="showSection('ship-modules', this)">Ship Modules</button>
         </div>
         <div class="sidebar-group">
             <div class="sidebar-group-label danger">ADMIN</div>
@@ -474,8 +477,9 @@
         </div>
 
         <!-- Starships Config -->
-        <div id="sec-starships-config" class="settings-section">
-            <h3>STARSHIPS CONFIGURATION</h3>
+        <!-- Starships → General -->
+        <div id="sec-starships-general" class="settings-section">
+            <h3>STARSHIPS</h3>
 
             <!-- Slot budget enforcement toggle — this one lives in the outer form. -->
             <div style="margin-bottom: 1.5rem; padding: 1rem; border: 1px solid var(--border-color); border-radius: var(--radius-sm);">
@@ -503,65 +507,74 @@
                     Reads each Agency.fleet JSON blob and creates matching StarshipClass + Starship records, tagging imported hulls with [legacy-import] in notes. The JSON blob itself is left untouched for Release G to clean up.
                 </span>
             </div>
+        </div>
 
-            <!-- Ship Types -->
-            <div style="margin-bottom: 2rem;">
-                <div class="mono-text text-muted" style="font-size: 0.7rem; margin-bottom: 0.75rem; letter-spacing: 1px;">SHIP TYPES</div>
-                <div id="ship-type-list"></div>
-                <div style="display: flex; gap: 0.5rem; margin-top: 0.75rem; flex-wrap: wrap;">
-                    <input type="text" id="st-key" placeholder="key" style="width: 100px; background: var(--bg-input); border: 1px solid var(--border-color); color: var(--text-primary); padding: 0.4rem; font-family: var(--font-mono); font-size: 0.75rem;">
-                    <input type="text" id="st-name" placeholder="Display Name" style="flex: 1; min-width: 140px; background: var(--bg-input); border: 1px solid var(--border-color); color: var(--text-primary); padding: 0.4rem; font-family: var(--font-mono); font-size: 0.75rem;">
-                    <button type="button" onclick="addShipType()" class="mono-text" style="background: var(--accent-primary); border: none; color: var(--bg-dark); padding: 0.4rem 0.75rem; cursor: pointer; font-size: 0.75rem; font-weight: bold;">ADD TYPE</button>
-                </div>
+        <!-- Starships → Ship Types -->
+        <div id="sec-ship-types" class="settings-section">
+            <h3>SHIP TYPES</h3>
+            <span class="text-muted mono-text" style="font-size: 0.7rem; display: block; margin-bottom: 1rem;">
+                Hull categories — drones, shuttles, cruisers, carriers, dreadnaughts. Each type defines a default slot budget, allowed hull size range, and baseline crew/energy/maintenance before modules are added.
+            </span>
+            <div id="ship-type-list"></div>
+            <div style="display: flex; gap: 0.5rem; margin-top: 0.75rem; flex-wrap: wrap;">
+                <input type="text" id="st-key" placeholder="key" style="width: 100px; background: var(--bg-input); border: 1px solid var(--border-color); color: var(--text-primary); padding: 0.4rem; font-family: var(--font-mono); font-size: 0.75rem;">
+                <input type="text" id="st-name" placeholder="Display Name" style="flex: 1; min-width: 140px; background: var(--bg-input); border: 1px solid var(--border-color); color: var(--text-primary); padding: 0.4rem; font-family: var(--font-mono); font-size: 0.75rem;">
+                <button type="button" onclick="addShipType()" class="mono-text" style="background: var(--accent-primary); border: none; color: var(--bg-dark); padding: 0.4rem 0.75rem; cursor: pointer; font-size: 0.75rem; font-weight: bold;">ADD TYPE</button>
             </div>
+        </div>
 
-            <!-- Module Sections -->
-            <div style="margin-bottom: 2rem;">
-                <div class="mono-text text-muted" style="font-size: 0.7rem; margin-bottom: 0.75rem; letter-spacing: 1px;">SHIP MODULE SECTIONS <span style="text-transform: none;">(tier families — 1 per class)</span></div>
-                <div id="module-section-list"></div>
-                <div style="display: flex; gap: 0.5rem; margin-top: 0.75rem; flex-wrap: wrap;">
-                    <input type="text" id="sec-key" placeholder="key" style="width: 140px; background: var(--bg-input); border: 1px solid var(--border-color); color: var(--text-primary); padding: 0.4rem; font-family: var(--font-mono); font-size: 0.75rem;">
-                    <input type="text" id="sec-name" placeholder="Display Name" style="flex: 1; min-width: 160px; background: var(--bg-input); border: 1px solid var(--border-color); color: var(--text-primary); padding: 0.4rem; font-family: var(--font-mono); font-size: 0.75rem;">
-                    <button type="button" onclick="addModuleSection()" class="mono-text" style="background: var(--accent-primary); border: none; color: var(--bg-dark); padding: 0.4rem 0.75rem; cursor: pointer; font-size: 0.75rem; font-weight: bold;">ADD SECTION</button>
-                </div>
+        <!-- Starships → Module Sections -->
+        <div id="sec-module-sections" class="settings-section">
+            <h3>MODULE SECTIONS</h3>
+            <span class="text-muted mono-text" style="font-size: 0.7rem; display: block; margin-bottom: 1rem;">
+                Tier families — each section holds up to 5 module levels, and only one tier from a section can be installed on a class at a time. Use for weapon ladders (Fighter Guns L1–L5), shield tiers, armour tiers, etc.
+            </span>
+            <div id="module-section-list"></div>
+            <div style="display: flex; gap: 0.5rem; margin-top: 0.75rem; flex-wrap: wrap;">
+                <input type="text" id="sec-key" placeholder="key" style="width: 140px; background: var(--bg-input); border: 1px solid var(--border-color); color: var(--text-primary); padding: 0.4rem; font-family: var(--font-mono); font-size: 0.75rem;">
+                <input type="text" id="sec-name" placeholder="Display Name" style="flex: 1; min-width: 160px; background: var(--bg-input); border: 1px solid var(--border-color); color: var(--text-primary); padding: 0.4rem; font-family: var(--font-mono); font-size: 0.75rem;">
+                <button type="button" onclick="addModuleSection()" class="mono-text" style="background: var(--accent-primary); border: none; color: var(--bg-dark); padding: 0.4rem 0.75rem; cursor: pointer; font-size: 0.75rem; font-weight: bold;">ADD SECTION</button>
             </div>
+        </div>
 
-            <!-- Ship Modules -->
-            <div>
-                <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 0.75rem; gap: 0.5rem;">
-                    <div class="mono-text text-muted" style="font-size: 0.7rem; letter-spacing: 1px;">SHIP MODULES</div>
-                    <select id="sm-filter-category" onchange="loadShipModules()" class="mono-text" style="background: var(--bg-input); border: 1px solid var(--border-color); color: var(--text-primary); padding: 0.3rem; font-size: 0.7rem;">
-                        <option value="">All categories</option>
-                        <option value="propulsion">Propulsion</option>
-                        <option value="power">Power</option>
-                        <option value="weapons">Weapons</option>
-                        <option value="defense">Defense</option>
-                        <option value="sensors">Sensors</option>
-                        <option value="quarters">Crew Quarters</option>
-                        <option value="cargo">Cargo</option>
-                        <option value="hangar">Hangar / Bay</option>
-                        <option value="command">Command &amp; Control</option>
-                        <option value="special">Special</option>
-                    </select>
-                </div>
-                <div id="ship-module-list"></div>
-                <div style="display: flex; gap: 0.5rem; margin-top: 0.75rem; flex-wrap: wrap;">
-                    <input type="text" id="sm-key" placeholder="key" style="width: 100px; background: var(--bg-input); border: 1px solid var(--border-color); color: var(--text-primary); padding: 0.4rem; font-family: var(--font-mono); font-size: 0.75rem;">
-                    <input type="text" id="sm-name" placeholder="Display Name" style="flex: 1; min-width: 140px; background: var(--bg-input); border: 1px solid var(--border-color); color: var(--text-primary); padding: 0.4rem; font-family: var(--font-mono); font-size: 0.75rem;">
-                    <select id="sm-category" class="mono-text" style="background: var(--bg-input); border: 1px solid var(--border-color); color: var(--text-primary); padding: 0.4rem; font-size: 0.75rem;">
-                        <option value="propulsion">Propulsion</option>
-                        <option value="power">Power</option>
-                        <option value="weapons">Weapons</option>
-                        <option value="defense">Defense</option>
-                        <option value="sensors">Sensors</option>
-                        <option value="quarters">Crew Quarters</option>
-                        <option value="cargo">Cargo</option>
-                        <option value="hangar">Hangar / Bay</option>
-                        <option value="command">Command &amp; Control</option>
-                        <option value="special" selected>Special</option>
-                    </select>
-                    <button type="button" onclick="addShipModule()" class="mono-text" style="background: var(--accent-primary); border: none; color: var(--bg-dark); padding: 0.4rem 0.75rem; cursor: pointer; font-size: 0.75rem; font-weight: bold;">ADD MODULE</button>
-                </div>
+        <!-- Starships → Ship Modules -->
+        <div id="sec-ship-modules" class="settings-section">
+            <h3>SHIP MODULES</h3>
+            <span class="text-muted mono-text" style="font-size: 0.7rem; display: block; margin-bottom: 1rem;">
+                Individual module rows. Each entry defines its slot cost, crew/energy/maintenance deltas, ship type restrictions, build XP, and optionally a section + level when it belongs to a tier family.
+            </span>
+            <div style="display: flex; align-items: center; justify-content: flex-end; margin-bottom: 0.75rem;">
+                <select id="sm-filter-category" onchange="loadShipModules()" class="mono-text" style="background: var(--bg-input); border: 1px solid var(--border-color); color: var(--text-primary); padding: 0.3rem; font-size: 0.7rem;">
+                    <option value="">All categories</option>
+                    <option value="propulsion">Propulsion</option>
+                    <option value="power">Power</option>
+                    <option value="weapons">Weapons</option>
+                    <option value="defense">Defense</option>
+                    <option value="sensors">Sensors</option>
+                    <option value="quarters">Crew Quarters</option>
+                    <option value="cargo">Cargo</option>
+                    <option value="hangar">Hangar / Bay</option>
+                    <option value="command">Command &amp; Control</option>
+                    <option value="special">Special</option>
+                </select>
+            </div>
+            <div id="ship-module-list"></div>
+            <div style="display: flex; gap: 0.5rem; margin-top: 0.75rem; flex-wrap: wrap;">
+                <input type="text" id="sm-key" placeholder="key" style="width: 100px; background: var(--bg-input); border: 1px solid var(--border-color); color: var(--text-primary); padding: 0.4rem; font-family: var(--font-mono); font-size: 0.75rem;">
+                <input type="text" id="sm-name" placeholder="Display Name" style="flex: 1; min-width: 140px; background: var(--bg-input); border: 1px solid var(--border-color); color: var(--text-primary); padding: 0.4rem; font-family: var(--font-mono); font-size: 0.75rem;">
+                <select id="sm-category" class="mono-text" style="background: var(--bg-input); border: 1px solid var(--border-color); color: var(--text-primary); padding: 0.4rem; font-size: 0.75rem;">
+                    <option value="propulsion">Propulsion</option>
+                    <option value="power">Power</option>
+                    <option value="weapons">Weapons</option>
+                    <option value="defense">Defense</option>
+                    <option value="sensors">Sensors</option>
+                    <option value="quarters">Crew Quarters</option>
+                    <option value="cargo">Cargo</option>
+                    <option value="hangar">Hangar / Bay</option>
+                    <option value="command">Command &amp; Control</option>
+                    <option value="special" selected>Special</option>
+                </select>
+                <button type="button" onclick="addShipModule()" class="mono-text" style="background: var(--accent-primary); border: none; color: var(--bg-dark); padding: 0.4rem 0.75rem; cursor: pointer; font-size: 0.75rem; font-weight: bold;">ADD MODULE</button>
             </div>
         </div>
 
