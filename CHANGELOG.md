@@ -1,5 +1,19 @@
 # Changelog
 
+## v0.13.2
+- Starship class editor shipped as a standalone /starships/ page (Release C of 7)
+- New STARSHIPS link in the main nav, visible to all authenticated users
+- Class list sidebar grouped into "MY AGENCY" and "SHARED" (GM-owned classes visible to everyone)
+- NEW button creates a class; GM superusers can optionally flag it as shared
+- Class editor panel: name, ship type picker, size stepper, description, base build XP, required successes, lock toggle (GM), delete button
+- Live derived stats: slot usage bar (green → amber → red), required crew, energy, maintenance, build XP total, SUB/FTL status pills
+- Warnings panel color-coded by severity: over slot budget, missing sublight/FTL/power, out-of-range size, modules restricted to other ship types, modules too big for the hull
+- Installed modules list with slot/crew breakdown, quantity stepper, and remove button
+- Add-module dropdown grouped by category, with slot cost in each option label
+- Soft vs hard slot-budget enforcement honours the Settings → Starships toggle — 422 response on hard-fail returns the class with `_enforced_errors`
+- Ships and Fleets tabs rendered but disabled as placeholders for Releases D and E
+- Avoided touching the Babel-standalone agency sheet entirely; classes live on their own page to sidestep transpilation risk
+
 ## v0.13.1
 - Settings → Starships tab: Ship Types and Ship Modules catalogue editors (Release B of 7)
 - Both catalogues reuse the reorder / expand-edit pattern from ResourceType

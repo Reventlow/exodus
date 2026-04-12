@@ -1,0 +1,374 @@
+{% extends "base.html" %}
+
+{% block title %}STARSHIP BAY // BLACKLOG.NET{% endblock %}
+
+{% block content %}
+<style>
+    .ship-layout { display: grid; grid-template-columns: 320px 1fr; gap: 1rem; padding: 1rem; min-height: calc(100vh - 80px); }
+    .ship-sidebar { border: 1px solid var(--border-color); padding: 0.75rem; border-radius: var(--radius-sm); }
+    .ship-main    { border: 1px solid var(--border-color); padding: 1rem; border-radius: var(--radius-sm); }
+    .ship-tab { padding: 0.4rem 0.8rem; border: 1px solid var(--border-color); background: transparent; color: var(--text-primary); font-family: var(--font-mono); font-size: 0.75rem; cursor: pointer; letter-spacing: 1px; }
+    .ship-tab.active { background: var(--accent-primary); color: var(--bg-dark); border-color: var(--accent-primary); }
+    .class-row { padding: 0.5rem 0.6rem; border: 1px solid var(--border-color); border-radius: var(--radius-sm); margin-bottom: 0.35rem; cursor: pointer; }
+    .class-row.selected { border-color: var(--accent-primary); background: rgba(6, 182, 212, 0.08); }
+    .class-row .ship-class-name { font-size: 0.85rem; color: var(--text-primary); }
+    .class-row .ship-class-meta { font-size: 0.6rem; color: var(--text-muted); margin-top: 0.15rem; }
+    .slot-bar { height: 10px; background: rgba(255,255,255,0.08); border-radius: 5px; overflow: hidden; }
+    .slot-bar-fill { height: 100%; transition: width 0.2s; border-radius: 5px; }
+    .stat-pill { display: inline-flex; align-items: center; gap: 0.35rem; padding: 0.25rem 0.55rem; border: 1px solid var(--border-color); border-radius: var(--radius-sm); font-size: 0.7rem; color: var(--text-primary); background: rgba(255,255,255,0.02); }
+    .warn-error { border-color: #ef4444; color: #ef4444; }
+    .warn-warn  { border-color: #f59e0b; color: #f59e0b; }
+    .warn-info  { border-color: #06b6d4; color: #06b6d4; }
+    .module-row { display: flex; align-items: center; gap: 0.5rem; padding: 0.35rem 0.45rem; border: 1px solid var(--border-color); border-radius: var(--radius-sm); margin-bottom: 0.25rem; }
+    .pill-cat { font-size: 0.55rem; color: var(--accent-primary); border: 1px solid var(--accent-primary); padding: 0.05rem 0.3rem; min-width: 5rem; text-align: center; }
+    .mono-input { background: var(--bg-input); border: 1px solid var(--border-color); color: var(--text-primary); padding: 0.35rem; font-family: var(--font-mono); font-size: 0.75rem; }
+    .btn-primary { background: var(--accent-primary); border: none; color: var(--bg-dark); padding: 0.4rem 0.9rem; cursor: pointer; font-family: var(--font-mono); font-size: 0.72rem; font-weight: bold; letter-spacing: 1px; }
+    .btn-ghost   { background: transparent; border: 1px solid var(--border-color); color: var(--text-primary); padding: 0.3rem 0.7rem; cursor: pointer; font-family: var(--font-mono); font-size: 0.7rem; }
+    .btn-danger  { background: transparent; border: 1px solid var(--accent-danger); color: var(--accent-danger); padding: 0.2rem 0.5rem; cursor: pointer; font-family: var(--font-mono); font-size: 0.65rem; }
+</style>
+
+<div class="ship-layout">
+    <!-- SIDEBAR — class list -->
+    <div class="ship-sidebar">
+        <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 0.75rem;">
+            <h3 class="mono-text" style="color: var(--accent-primary); font-size: 0.85rem; letter-spacing: 1px; margin: 0;">CLASSES</h3>
+            <button class="btn-primary" onclick="createClass()">NEW</button>
+        </div>
+        <div id="class-list"><span class="mono-text text-muted" style="font-size: 0.75rem;">Loading…</span></div>
+    </div>
+
+    <!-- MAIN — editor -->
+    <div class="ship-main">
+        <div style="display: flex; gap: 0.5rem; margin-bottom: 1rem;">
+            <button class="ship-tab active" data-tab="classes">CLASSES</button>
+            <button class="ship-tab" data-tab="ships" disabled title="Release D">SHIPS</button>
+            <button class="ship-tab" data-tab="fleets" disabled title="Release E">FLEETS</button>
+        </div>
+        <div id="class-editor">
+            <div class="mono-text text-muted" style="font-size: 0.85rem; text-align: center; padding: 3rem 1rem;">
+                Select a class from the sidebar, or press NEW to design one.
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+const IS_SUPERUSER = {{ is_superuser|yesno:"true,false" }};
+var CURRENT_CLASS_ID = null;
+var CLASSES_CACHE = [];
+var SHIP_TYPES = [];
+var SHIP_MODULES = [];
+
+function csrfToken() {
+    return document.querySelector('[name=csrfmiddlewaretoken]')?.value
+        || document.cookie.match(/csrftoken=([^;]+)/)?.[1]
+        || '';
+}
+
+function api(path, opts) {
+    opts = opts || {};
+    opts.headers = Object.assign({}, opts.headers || {}, {
+        'Content-Type': 'application/json',
+        'X-CSRFToken': csrfToken(),
+    });
+    return fetch(path, opts).then(function(r) {
+        return r.json().then(function(d) {
+            if (!r.ok && !opts.allowError) {
+                alert((d && d.error) || ('Error ' + r.status));
+                throw d;
+            }
+            return d;
+        });
+    });
+}
+
+function loadCatalogues() {
+    return Promise.all([
+        api('/api/starships/ship-types/'),
+        api('/api/starships/modules/'),
+    ]).then(function(results) {
+        SHIP_TYPES = results[0];
+        SHIP_MODULES = results[1];
+    });
+}
+
+function loadClasses() {
+    return api('/api/starships/classes/').then(function(classes) {
+        CLASSES_CACHE = classes;
+        renderClassList();
+    });
+}
+
+function renderClassList() {
+    var html = '';
+    var mine = CLASSES_CACHE.filter(function(c) { return !c.is_shared; });
+    var shared = CLASSES_CACHE.filter(function(c) { return c.is_shared; });
+    function group(label, arr) {
+        if (!arr.length) return '';
+        var h = '<div class="mono-text text-muted" style="font-size: 0.58rem; letter-spacing: 1px; margin: 0.6rem 0 0.3rem 0;">' + label + '</div>';
+        arr.forEach(function(c) {
+            var selected = c.id === CURRENT_CLASS_ID ? 'selected' : '';
+            h += '<div class="class-row ' + selected + '" onclick="selectClass(' + c.id + ')">' +
+                '<div class="ship-class-name mono-text">' + c.name + '</div>' +
+                '<div class="ship-class-meta mono-text">' + c.ship_type_name + ' \u00B7 size ' + c.size + (c.is_locked ? ' \u00B7 LOCKED' : '') + '</div>' +
+                '</div>';
+        });
+        return h;
+    }
+    html += group('MY AGENCY', mine);
+    html += group('SHARED', shared);
+    if (!CLASSES_CACHE.length) html = '<span class="mono-text text-muted" style="font-size: 0.75rem;">No classes yet. Press NEW to design one.</span>';
+    document.getElementById('class-list').innerHTML = html;
+}
+
+function selectClass(id) {
+    CURRENT_CLASS_ID = id;
+    renderClassList();
+    api('/api/starships/classes/' + id + '/').then(renderClassEditor);
+}
+
+function createClass() {
+    if (!SHIP_TYPES.length) { alert('No ship types defined. Seed the catalogue first.'); return; }
+    var name = prompt('Class name (e.g. "Vigilant-class Cruiser"):');
+    if (!name) return;
+    // Pick type via a simple prompt for now — dedicated UI can come later.
+    var typeList = SHIP_TYPES.map(function(t, i) { return (i + 1) + ') ' + t.name; }).join('\n');
+    var pick = prompt('Ship type:\n' + typeList + '\n\nEnter number:');
+    var idx = parseInt(pick, 10) - 1;
+    if (isNaN(idx) || idx < 0 || idx >= SHIP_TYPES.length) return;
+    var shipType = SHIP_TYPES[idx];
+    var payload = {
+        name: name,
+        ship_type_id: shipType.id,
+        size: shipType.min_size,
+        is_shared: false,
+    };
+    if (IS_SUPERUSER && confirm('Create as SHARED class (null agency, visible to all)? Cancel = agency-owned.')) {
+        payload.is_shared = true;
+    }
+    api('/api/starships/classes/', { method: 'POST', body: JSON.stringify(payload) }).then(function(cls) {
+        return loadClasses().then(function() { selectClass(cls.id); });
+    });
+}
+
+function renderClassEditor(cls) {
+    if (!cls) {
+        document.getElementById('class-editor').innerHTML =
+            '<div class="mono-text text-muted" style="font-size: 0.85rem; text-align: center; padding: 3rem 1rem;">Select a class from the sidebar.</div>';
+        return;
+    }
+    var readOnly = cls.is_locked || (!IS_SUPERUSER && (cls.is_shared || false));
+    var stats = cls.stats;
+    var pct = Math.min(100, Math.round((stats.slots_used / Math.max(1, stats.slot_budget)) * 100));
+    var barColor = stats.slots_used > stats.slot_budget ? '#ef4444'
+        : pct >= 80 ? '#f59e0b' : '#22c55e';
+
+    var html = '';
+
+    // Header row
+    html += '<div style="display: flex; align-items: flex-start; gap: 0.75rem; margin-bottom: 0.75rem; flex-wrap: wrap;">';
+    html += '<div style="flex: 1 1 300px;">';
+    html += '<input data-field="name" value="' + escapeHtml(cls.name) + '" ' + (readOnly ? 'disabled' : '') + ' class="mono-input" style="width: 100%; font-size: 1rem; padding: 0.5rem;">';
+    html += '<div class="mono-text text-muted" style="font-size: 0.6rem; margin-top: 0.3rem;">' +
+        (cls.is_shared ? 'SHARED (GM-owned)' : (cls.created_by_name || '')) +
+        (cls.is_locked ? ' \u00B7 LOCKED' : '') +
+        ' \u00B7 updated ' + (cls.updated_at ? cls.updated_at.slice(0, 10) : '—') +
+        '</div>';
+    html += '</div>';
+
+    // Ship type + size
+    html += '<div style="display: flex; gap: 0.5rem; align-items: flex-end;">';
+    html += '<div style="display: flex; flex-direction: column; gap: 0.15rem;">';
+    html += '<label class="text-muted mono-text" style="font-size: 0.58rem; letter-spacing: 0.5px;">SHIP TYPE</label>';
+    html += '<select data-field="ship_type_id" ' + (readOnly ? 'disabled' : '') + ' class="mono-input">';
+    SHIP_TYPES.forEach(function(t) {
+        html += '<option value="' + t.id + '"' + (t.id === cls.ship_type_id ? ' selected' : '') + '>' + t.name + '</option>';
+    });
+    html += '</select></div>';
+    html += '<div style="display: flex; flex-direction: column; gap: 0.15rem; width: 80px;">';
+    html += '<label class="text-muted mono-text" style="font-size: 0.58rem; letter-spacing: 0.5px;">SIZE</label>';
+    html += '<input type="number" data-field="size" value="' + cls.size + '" ' + (readOnly ? 'disabled' : '') + ' class="mono-input">';
+    html += '</div>';
+    html += '<button onclick="saveClassHeader()" ' + (readOnly ? 'disabled' : '') + ' class="btn-primary">SAVE</button>';
+    if (IS_SUPERUSER) {
+        html += '<button onclick="toggleLock()" class="btn-ghost">' + (cls.is_locked ? 'UNLOCK' : 'LOCK') + '</button>';
+    }
+    if (!readOnly || IS_SUPERUSER) {
+        html += '<button onclick="deleteClass()" class="btn-danger" style="padding: 0.3rem 0.6rem;">DELETE</button>';
+    }
+    html += '</div>';  // end type+size
+    html += '</div>';  // end header row
+
+    // Stats row
+    html += '<div style="display: flex; gap: 0.4rem; flex-wrap: wrap; margin-bottom: 0.5rem;">';
+    html += '<span class="stat-pill"><span class="mono-text text-muted">SLOTS</span> ' + stats.slots_used + '/' + stats.slot_budget + '</span>';
+    html += '<span class="stat-pill"><span class="mono-text text-muted">CREW</span> ' + stats.required_crew + '</span>';
+    html += '<span class="stat-pill"><span class="mono-text text-muted">ENERGY</span> ' + stats.energy + '</span>';
+    html += '<span class="stat-pill"><span class="mono-text text-muted">MAINT</span> ' + stats.maintenance + '</span>';
+    html += '<span class="stat-pill' + (stats.has_sublight ? '' : ' warn-warn') + '">SUB ' + (stats.has_sublight ? 'OK' : 'MISSING') + '</span>';
+    html += '<span class="stat-pill' + (stats.has_ftl ? '' : ' warn-info') + '">FTL ' + (stats.has_ftl ? 'OK' : 'MISSING') + '</span>';
+    html += '<span class="stat-pill"><span class="mono-text text-muted">BUILD XP</span> ' + stats.build_cost_xp_total + '</span>';
+    html += '<span class="stat-pill"><span class="mono-text text-muted">SUCCESSES NEEDED</span> ' + cls.build_required_successes + '</span>';
+    html += '</div>';
+
+    // Slot bar
+    html += '<div class="slot-bar" style="margin-bottom: 0.75rem;">';
+    html += '<div class="slot-bar-fill" style="width: ' + pct + '%; background: ' + barColor + ';"></div>';
+    html += '</div>';
+
+    // Warnings
+    if (stats.warnings.length) {
+        html += '<div style="display: flex; flex-wrap: wrap; gap: 0.35rem; margin-bottom: 0.75rem;">';
+        stats.warnings.forEach(function(w) {
+            html += '<span class="stat-pill warn-' + w.severity + '">' + w.code.toUpperCase() + ': ' + escapeHtml(w.message) + '</span>';
+        });
+        html += '</div>';
+    }
+
+    // Build cost & successes editor
+    html += '<div style="display: flex; gap: 0.5rem; margin-bottom: 1rem; align-items: flex-end;">';
+    html += '<div style="display: flex; flex-direction: column; gap: 0.15rem;">';
+    html += '<label class="text-muted mono-text" style="font-size: 0.58rem;">BASE BUILD XP</label>';
+    html += '<input type="number" data-field="build_cost_xp" value="' + cls.build_cost_xp + '" ' + (readOnly ? 'disabled' : '') + ' class="mono-input">';
+    html += '</div>';
+    html += '<div style="display: flex; flex-direction: column; gap: 0.15rem;">';
+    html += '<label class="text-muted mono-text" style="font-size: 0.58rem;">SUCCESSES NEEDED</label>';
+    html += '<input type="number" data-field="build_required_successes" value="' + cls.build_required_successes + '" ' + (readOnly ? 'disabled' : '') + ' class="mono-input">';
+    html += '</div>';
+    html += '<div style="flex: 1; display: flex; flex-direction: column; gap: 0.15rem;">';
+    html += '<label class="text-muted mono-text" style="font-size: 0.58rem;">DESCRIPTION</label>';
+    html += '<input type="text" data-field="description" value="' + escapeHtml(cls.description || '') + '" ' + (readOnly ? 'disabled' : '') + ' class="mono-input">';
+    html += '</div>';
+    html += '</div>';
+
+    // Module list
+    html += '<div class="mono-text text-muted" style="font-size: 0.6rem; letter-spacing: 1px; margin-bottom: 0.3rem;">INSTALLED MODULES</div>';
+    html += '<div id="module-list">';
+    if (!cls.modules.length) {
+        html += '<div class="mono-text text-muted" style="font-size: 0.75rem; font-style: italic; padding: 0.75rem 0;">No modules installed yet.</div>';
+    }
+    cls.modules.forEach(function(cm) {
+        html += '<div class="module-row">';
+        html += '<span class="pill-cat mono-text">' + (cm.module_category_label || cm.module_category) + '</span>';
+        html += '<span class="mono-text" style="font-size: 0.8rem; flex: 1; color: var(--text-primary);">' + escapeHtml(cm.module_name) + '</span>';
+        html += '<span class="mono-text text-muted" style="font-size: 0.6rem;">' + (cm.slot_cost * cm.quantity) + ' slots</span>';
+        html += '<span class="mono-text text-muted" style="font-size: 0.6rem;">crew ' + (cm.crew_delta >= 0 ? '+' : '') + (cm.crew_delta * cm.quantity) + '</span>';
+        if (cm.provides_sublight) html += '<span class="stat-pill" style="font-size: 0.55rem;">SUB</span>';
+        if (cm.provides_ftl) html += '<span class="stat-pill" style="font-size: 0.55rem;">FTL</span>';
+        if (!readOnly) {
+            html += '<input type="number" value="' + cm.quantity + '" min="0" onchange="updateQty(' + cm.id + ', this.value)" class="mono-input" style="width: 56px; padding: 0.2rem;">';
+            html += '<button onclick="removeModule(' + cm.id + ')" class="btn-danger">X</button>';
+        } else {
+            html += '<span class="mono-text text-muted" style="font-size: 0.65rem;">x' + cm.quantity + '</span>';
+        }
+        html += '</div>';
+    });
+    html += '</div>';
+
+    // Add module panel
+    if (!readOnly) {
+        html += '<div style="display: flex; gap: 0.4rem; margin-top: 0.75rem; align-items: center; flex-wrap: wrap;">';
+        html += '<select id="add-module-select" class="mono-input">';
+        var byCat = {};
+        SHIP_MODULES.forEach(function(m) { (byCat[m.category_label] = byCat[m.category_label] || []).push(m); });
+        Object.keys(byCat).forEach(function(cat) {
+            html += '<optgroup label="' + cat + '">';
+            byCat[cat].forEach(function(m) {
+                html += '<option value="' + m.id + '">' + m.name + ' (' + m.slot_cost + ' slots)</option>';
+            });
+            html += '</optgroup>';
+        });
+        html += '</select>';
+        html += '<input type="number" id="add-module-qty" value="1" min="1" class="mono-input" style="width: 60px;">';
+        html += '<button onclick="addModule()" class="btn-primary">ADD MODULE</button>';
+        html += '</div>';
+    }
+
+    document.getElementById('class-editor').innerHTML = html;
+}
+
+function escapeHtml(s) {
+    return (s == null ? '' : String(s))
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;');
+}
+
+function collectHeaderFields() {
+    var editor = document.getElementById('class-editor');
+    var payload = {};
+    editor.querySelectorAll('[data-field]').forEach(function(el) {
+        var v = el.value;
+        if (el.type === 'number') v = parseInt(v, 10);
+        if (el.dataset.field === 'ship_type_id') v = parseInt(v, 10);
+        payload[el.dataset.field] = v;
+    });
+    return payload;
+}
+
+function saveClassHeader() {
+    if (CURRENT_CLASS_ID == null) return;
+    var payload = collectHeaderFields();
+    fetch('/api/starships/classes/' + CURRENT_CLASS_ID + '/', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrfToken() },
+        body: JSON.stringify(payload),
+    }).then(function(r) {
+        return r.json().then(function(d) { return { ok: r.ok, status: r.status, data: d }; });
+    }).then(function(result) {
+        if (!result.ok && result.status !== 422) {
+            alert((result.data && result.data.error) || ('Error ' + result.status));
+            return;
+        }
+        if (result.status === 422) {
+            alert('Save blocked by slot-budget enforcement:\n\n' +
+                (result.data._enforced_errors || []).map(function(e) { return '• ' + e.message; }).join('\n'));
+        }
+        renderClassEditor(result.data);
+        loadClasses();
+    });
+}
+
+function toggleLock() {
+    api('/api/starships/classes/' + CURRENT_CLASS_ID + '/', {
+        method: 'PUT',
+        body: JSON.stringify({ is_locked: !CLASSES_CACHE.find(function(c) { return c.id === CURRENT_CLASS_ID; }).is_locked }),
+    }).then(function(cls) { renderClassEditor(cls); loadClasses(); });
+}
+
+function deleteClass() {
+    if (!confirm('Delete this class? Hulls built from it will block the delete.')) return;
+    api('/api/starships/classes/' + CURRENT_CLASS_ID + '/', { method: 'DELETE' }).then(function() {
+        CURRENT_CLASS_ID = null;
+        loadClasses().then(function() { renderClassEditor(null); });
+    });
+}
+
+function addModule() {
+    var moduleId = parseInt(document.getElementById('add-module-select').value, 10);
+    var qty = parseInt(document.getElementById('add-module-qty').value, 10) || 1;
+    api('/api/starships/classes/' + CURRENT_CLASS_ID + '/modules/', {
+        method: 'POST',
+        body: JSON.stringify({ module_id: moduleId, quantity: qty }),
+    }).then(function() { selectClass(CURRENT_CLASS_ID); });
+}
+
+function updateQty(cmId, value) {
+    api('/api/starships/classes/' + CURRENT_CLASS_ID + '/modules/' + cmId + '/', {
+        method: 'PUT',
+        body: JSON.stringify({ quantity: parseInt(value, 10) || 0 }),
+    }).then(function() { selectClass(CURRENT_CLASS_ID); });
+}
+
+function removeModule(cmId) {
+    api('/api/starships/classes/' + CURRENT_CLASS_ID + '/modules/' + cmId + '/', {
+        method: 'DELETE',
+    }).then(function() { selectClass(CURRENT_CLASS_ID); });
+}
+
+// Boot
+loadCatalogues().then(loadClasses);
+</script>
+{% csrf_token %}
+{% endblock %}

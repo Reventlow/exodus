@@ -1,18 +1,18 @@
-"""Views for the starships application — Release B catalogues.
+"""Views for the starships application.
 
-Ships the two superuser-facing catalogues (ShipType + ShipModule) as
-JSON CRUD endpoints. The settings UI in templates/site_settings.html
-talks to these. Releases C–F add class/fleet/instance endpoints.
+Release B shipped the ShipType + ShipModule settings catalogues.
+Release C adds the StarshipClass editor: class CRUD, module install
+endpoints, derived-stat computation, and the /starships/ page view.
 """
 
 import json
 
 from django.contrib.auth.decorators import login_required
-from django.http import JsonResponse
-from django.shortcuts import get_object_or_404
-from django.views.decorators.http import require_http_methods
+from django.http import HttpResponseForbidden, JsonResponse
+from django.shortcuts import get_object_or_404, render
+from django.views.decorators.http import require_GET, require_http_methods
 
-from .models import ShipModule, ShipType
+from .models import ClassModule, ShipModule, ShipType, StarshipClass
 
 
 # ---------------------------------------------------------------------------
@@ -225,3 +225,417 @@ def api_ship_module_detail(request, pk):
         return err
     m.save()
     return JsonResponse(_serialize_ship_module(m))
+
+
+# ---------------------------------------------------------------------------
+# Starship classes — derived stats + CRUD
+# ---------------------------------------------------------------------------
+
+def _user_agency(user):
+    """Resolve a player's agency via character workspace assignment."""
+    # Reuse the starmap helper so the behaviour is identical across apps.
+    from starmap.views import _get_user_agency
+    return _get_user_agency(user)
+
+
+def _visible_classes(user):
+    """QuerySet of classes the user may view.
+
+    Superusers see everything. Players see shared classes (created_by
+    null) plus classes owned by their own agency.
+    """
+    qs = StarshipClass.objects.select_related("ship_type", "created_by")
+    if user.is_superuser:
+        return qs
+    agency = _user_agency(user)
+    if agency is None:
+        return qs.filter(created_by__isnull=True)
+    from django.db.models import Q
+    return qs.filter(Q(created_by__isnull=True) | Q(created_by=agency))
+
+
+def _can_edit_class(user, cls):
+    """Write permission: superuser always, agency owner for their own classes."""
+    if user.is_superuser:
+        return True
+    if cls.is_locked:
+        return False
+    if cls.created_by_id is None:
+        return False  # shared classes are GM-owned
+    agency = _user_agency(user)
+    return agency is not None and agency.id == cls.created_by_id
+
+
+def compute_class_stats(cls):
+    """Compute derived stats + warnings for a StarshipClass.
+
+    Everything is summed off the installed ClassModules so the UI can
+    show live totals without duplicating logic in JavaScript.
+    """
+    from exodus.models import SiteSettings
+    enforce = SiteSettings.load().enforce_ship_slot_budget
+
+    ship_type = cls.ship_type
+    class_modules = (
+        cls.class_modules
+        .select_related("module")
+        .order_by("position", "id")
+    )
+
+    slot_budget = ship_type.default_slot_budget
+    slots_used = 0
+    required_crew = ship_type.base_crew
+    energy = ship_type.base_energy
+    maintenance = ship_type.base_maintenance
+    has_sublight = False
+    has_ftl = False
+    has_power = False
+    build_cost_total = cls.build_cost_xp
+
+    for cm in class_modules:
+        qty = max(0, cm.quantity or 0)
+        m = cm.module
+        slots_used += m.slot_cost * qty
+        required_crew += m.crew_delta * qty
+        energy += m.energy_delta * qty
+        maintenance += m.maintenance_delta * qty
+        build_cost_total += m.build_cost_xp_delta * qty
+        if m.provides_sublight and qty > 0:
+            has_sublight = True
+        if m.provides_ftl and qty > 0:
+            has_ftl = True
+        if m.category == "power" and qty > 0:
+            has_power = True
+
+    warnings = []
+
+    if slots_used > slot_budget:
+        warnings.append({
+            "severity": "error" if enforce else "warn",
+            "code": "over_budget",
+            "message": f"Over slot budget ({slots_used}/{slot_budget}).",
+        })
+
+    if not has_sublight:
+        warnings.append({
+            "severity": "warn",
+            "code": "no_sublight",
+            "message": "No sublight drive — cannot manoeuvre.",
+        })
+
+    if ship_type.key != "drone" and not has_ftl:
+        warnings.append({
+            "severity": "info",
+            "code": "no_ftl",
+            "message": "No FTL drive — cannot jump systems.",
+        })
+
+    if not has_power and energy > 0:
+        warnings.append({
+            "severity": "warn",
+            "code": "no_power",
+            "message": "No power source — modules have no energy to draw.",
+        })
+
+    if cls.size < ship_type.min_size or cls.size > ship_type.max_size:
+        warnings.append({
+            "severity": "error" if enforce else "warn",
+            "code": "bad_size",
+            "message": (
+                f"Size {cls.size} out of range for {ship_type.name} "
+                f"({ship_type.min_size}-{ship_type.max_size})."
+            ),
+        })
+
+    # Modules restricted to other ship types
+    wrong_type = []
+    for cm in class_modules:
+        allowed = cm.module.restricted_to_types or []
+        if allowed and ship_type.key not in allowed:
+            wrong_type.append(cm.module.name)
+    if wrong_type:
+        warnings.append({
+            "severity": "error" if enforce else "warn",
+            "code": "wrong_type",
+            "message": "Modules not allowed on this ship type: " + ", ".join(wrong_type),
+        })
+
+    # Modules below min hull size
+    too_big_for_hull = [
+        cm.module.name for cm in class_modules
+        if cm.module.min_hull_size > cls.size
+    ]
+    if too_big_for_hull:
+        warnings.append({
+            "severity": "warn",
+            "code": "hull_too_small",
+            "message": "Hull too small for: " + ", ".join(too_big_for_hull),
+        })
+
+    return {
+        "slot_budget": slot_budget,
+        "slots_used": slots_used,
+        "slots_free": slot_budget - slots_used,
+        "required_crew": required_crew,
+        "energy": energy,
+        "maintenance": maintenance,
+        "has_sublight": has_sublight,
+        "has_ftl": has_ftl,
+        "has_power": has_power,
+        "build_cost_xp_total": build_cost_total,
+        "enforce_slot_budget": enforce,
+        "warnings": warnings,
+    }
+
+
+def _serialize_class_module(cm):
+    return {
+        "id": cm.id,
+        "module_id": cm.module_id,
+        "module_key": cm.module.key,
+        "module_name": cm.module.name,
+        "module_category": cm.module.category,
+        "module_category_label": cm.module.get_category_display(),
+        "slot_cost": cm.module.slot_cost,
+        "crew_delta": cm.module.crew_delta,
+        "energy_delta": cm.module.energy_delta,
+        "maintenance_delta": cm.module.maintenance_delta,
+        "provides_sublight": cm.module.provides_sublight,
+        "provides_ftl": cm.module.provides_ftl,
+        "build_cost_xp_delta": cm.module.build_cost_xp_delta,
+        "quantity": cm.quantity,
+        "notes": cm.notes,
+        "position": cm.position,
+    }
+
+
+def _serialize_class(cls, include_modules=True, include_stats=True):
+    data = {
+        "id": cls.id,
+        "name": cls.name,
+        "description": cls.description,
+        "ship_type_id": cls.ship_type_id,
+        "ship_type_key": cls.ship_type.key,
+        "ship_type_name": cls.ship_type.name,
+        "size": cls.size,
+        "is_locked": cls.is_locked,
+        "build_cost_xp": cls.build_cost_xp,
+        "build_required_successes": cls.build_required_successes,
+        "created_by_id": cls.created_by_id,
+        "created_by_name": cls.created_by.name if cls.created_by else None,
+        "is_shared": cls.created_by_id is None,
+        "created_at": cls.created_at.isoformat() if cls.created_at else None,
+        "updated_at": cls.updated_at.isoformat() if cls.updated_at else None,
+    }
+    if include_modules:
+        data["modules"] = [
+            _serialize_class_module(cm)
+            for cm in cls.class_modules.select_related("module").order_by("position", "id")
+        ]
+    if include_stats:
+        data["stats"] = compute_class_stats(cls)
+    return data
+
+
+@login_required
+@require_http_methods(["GET", "POST"])
+def api_classes(request):
+    """List visible classes, or create a new one."""
+    if request.method == "GET":
+        qs = _visible_classes(request.user).order_by("name")
+        return JsonResponse(
+            [_serialize_class(c, include_modules=False) for c in qs],
+            safe=False,
+        )
+
+    # POST — create
+    try:
+        body = json.loads(request.body)
+    except json.JSONDecodeError:
+        return JsonResponse({"error": "Invalid JSON"}, status=400)
+
+    name = (body.get("name") or "").strip()
+    if not name:
+        return JsonResponse({"error": "name required"}, status=400)
+
+    ship_type_id = body.get("ship_type_id")
+    if not ship_type_id:
+        return JsonResponse({"error": "ship_type_id required"}, status=400)
+    try:
+        ship_type = ShipType.objects.get(pk=ship_type_id)
+    except ShipType.DoesNotExist:
+        return JsonResponse({"error": "ship_type_id not found"}, status=400)
+
+    is_shared = bool(body.get("is_shared", False))
+    if is_shared and not request.user.is_superuser:
+        return JsonResponse(
+            {"error": "Only GMs can create shared classes"}, status=403,
+        )
+    owner = None if is_shared else _user_agency(request.user)
+    if owner is None and not is_shared:
+        return JsonResponse(
+            {"error": "No agency found for user — cannot own a class"}, status=400,
+        )
+
+    cls = StarshipClass(
+        name=name,
+        ship_type=ship_type,
+        size=int(body.get("size", ship_type.min_size)),
+        description=body.get("description", ""),
+        created_by=owner,
+        build_cost_xp=int(body.get("build_cost_xp", 0)),
+        build_required_successes=int(body.get("build_required_successes", 5)),
+    )
+    cls.save()
+    return JsonResponse(_serialize_class(cls), status=201)
+
+
+@login_required
+@require_http_methods(["GET", "PUT", "DELETE"])
+def api_class_detail(request, pk):
+    cls = get_object_or_404(
+        StarshipClass.objects.select_related("ship_type", "created_by"),
+        pk=pk,
+    )
+
+    # View permission
+    if not request.user.is_superuser:
+        agency = _user_agency(request.user)
+        if cls.created_by_id is not None and (agency is None or agency.id != cls.created_by_id):
+            return JsonResponse({"error": "Not visible"}, status=404)
+
+    if request.method == "GET":
+        return JsonResponse(_serialize_class(cls))
+
+    if not _can_edit_class(request.user, cls):
+        return JsonResponse({"error": "Permission denied"}, status=403)
+
+    if request.method == "DELETE":
+        if cls.hulls.exists():
+            return JsonResponse(
+                {"error": "Cannot delete: class has commissioned hulls."},
+                status=400,
+            )
+        cls.delete()
+        return JsonResponse({"ok": True})
+
+    # PUT
+    try:
+        body = json.loads(request.body)
+    except json.JSONDecodeError:
+        return JsonResponse({"error": "Invalid JSON"}, status=400)
+
+    for field in ("name", "description"):
+        if field in body:
+            setattr(cls, field, body[field])
+    for field in ("size", "build_cost_xp", "build_required_successes"):
+        if field in body:
+            try:
+                setattr(cls, field, int(body[field]))
+            except (TypeError, ValueError):
+                return JsonResponse(
+                    {"error": f"{field} must be an integer"}, status=400,
+                )
+    if "ship_type_id" in body:
+        try:
+            cls.ship_type = ShipType.objects.get(pk=body["ship_type_id"])
+        except ShipType.DoesNotExist:
+            return JsonResponse({"error": "ship_type_id not found"}, status=400)
+    if "is_locked" in body and request.user.is_superuser:
+        cls.is_locked = bool(body["is_locked"])
+
+    # Hard-enforce slot budget on save if the site setting demands it.
+    cls.save()
+    stats = compute_class_stats(cls)
+    if stats["enforce_slot_budget"]:
+        errors = [w for w in stats["warnings"] if w["severity"] == "error"]
+        if errors:
+            # Rollback by re-loading — we already saved, so the caller
+            # can live with a successful write + blocking error. Return
+            # the class with error warnings so the UI can show them.
+            return JsonResponse(
+                {**_serialize_class(cls), "_enforced_errors": errors},
+                status=422,
+            )
+    return JsonResponse(_serialize_class(cls))
+
+
+# ---------------------------------------------------------------------------
+# ClassModule — install / remove / update
+# ---------------------------------------------------------------------------
+
+@login_required
+@require_http_methods(["POST"])
+def api_class_add_module(request, pk):
+    cls = get_object_or_404(StarshipClass, pk=pk)
+    if not _can_edit_class(request.user, cls):
+        return JsonResponse({"error": "Permission denied"}, status=403)
+    try:
+        body = json.loads(request.body)
+    except json.JSONDecodeError:
+        return JsonResponse({"error": "Invalid JSON"}, status=400)
+    module_id = body.get("module_id")
+    if not module_id:
+        return JsonResponse({"error": "module_id required"}, status=400)
+    try:
+        module = ShipModule.objects.get(pk=module_id)
+    except ShipModule.DoesNotExist:
+        return JsonResponse({"error": "module_id not found"}, status=400)
+    position = cls.class_modules.count()
+    cm = ClassModule.objects.create(
+        starship_class=cls,
+        module=module,
+        quantity=max(1, int(body.get("quantity", 1))),
+        notes=body.get("notes", ""),
+        position=position,
+    )
+    return JsonResponse(_serialize_class_module(cm), status=201)
+
+
+@login_required
+@require_http_methods(["PUT", "DELETE"])
+def api_class_module_detail(request, pk, cm_id):
+    cls = get_object_or_404(StarshipClass, pk=pk)
+    if not _can_edit_class(request.user, cls):
+        return JsonResponse({"error": "Permission denied"}, status=403)
+    cm = get_object_or_404(ClassModule, pk=cm_id, starship_class=cls)
+    if request.method == "DELETE":
+        cm.delete()
+        # Re-pack positions so the grid stays dense.
+        for i, other in enumerate(cls.class_modules.order_by("position", "id")):
+            if other.position != i:
+                other.position = i
+                other.save(update_fields=["position"])
+        return JsonResponse({"ok": True})
+    try:
+        body = json.loads(request.body)
+    except json.JSONDecodeError:
+        return JsonResponse({"error": "Invalid JSON"}, status=400)
+    if "quantity" in body:
+        try:
+            cm.quantity = max(0, int(body["quantity"]))
+        except (TypeError, ValueError):
+            return JsonResponse({"error": "quantity must be an integer"}, status=400)
+    if "notes" in body:
+        cm.notes = body["notes"]
+    if "position" in body:
+        try:
+            cm.position = int(body["position"])
+        except (TypeError, ValueError):
+            return JsonResponse({"error": "position must be an integer"}, status=400)
+    cm.save()
+    return JsonResponse(_serialize_class_module(cm))
+
+
+# ---------------------------------------------------------------------------
+# Standalone page
+# ---------------------------------------------------------------------------
+
+@login_required
+@require_GET
+def starships_page(request):
+    """Standalone starships hub — classes editor for now; ships and
+    fleets tabs will land in Releases D and E."""
+    return render(request, "starships/page.html", {
+        "is_superuser": request.user.is_superuser,
+    })
