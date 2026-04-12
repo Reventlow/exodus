@@ -131,6 +131,14 @@ class SiteSettings(models.Model):
         default="agency",
         help_text="Council voting mode: 'agency' (agencies vote) or 'player' (individual players/NPCs vote).",
     )
+    enforce_ship_slot_budget = models.BooleanField(
+        default=False,
+        help_text=(
+            "If true, the starship class editor rejects designs that exceed "
+            "their ShipType's slot budget. If false, it only warns — useful "
+            "for sketching in-progress designs."
+        ),
+    )
 
     # Nav bar label customisation
     label_dispatch = models.CharField(max_length=50, default="DISPATCH", blank=True)

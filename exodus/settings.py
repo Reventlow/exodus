@@ -29,6 +29,7 @@ INSTALLED_APPS = [
     "npcs",
     "news",
     "starmap",
+    "starships",
     "exodus",
 ]
 

@@ -1,5 +1,16 @@
 # Changelog
 
+## v0.13.0
+- New **starships** app — schema, migrations, and seed data for the upcoming starship module system (Release A of 7)
+- Six new models: ShipType, ShipModule, StarshipClass, ClassModule, Starship, Fleet
+- Real ShipModule table (not a JSON catalogue) so modules can be queried and reordered without DB blob rewrites
+- Seeded 7 ship types (drone / solo / shuttle / cruiser / support / carrier / dreadnaught) and 18 starter modules across propulsion, power, weapons, defense, sensors, quarters, cargo, command, and hangar categories
+- Hangar modules (drone bay, fighter bay) restricted to carrier/support via restricted_to_types JSON list
+- StarshipClass carries build_cost_xp + build_required_successes (FTL-project-style construction rolls)
+- Starship carries current_successes for under-construction state and auto-promotion, plus location FK → StarSystem for the star map overlay in Release D
+- SiteSettings gains enforce_ship_slot_budget toggle — when false, class editor warns on overshoots; when true, rejects them
+- No UI yet — Release B will add the catalogue editors in Settings > Starships
+
 ## v0.12.58
 - Star map planet rows now show a color-coded life badge (PREBIO / BACT / CELL / PLANT / ANIMAL / INTEL) next to the planet type
 - "None" and "unknown" lifeType render muted so only real life stands out
