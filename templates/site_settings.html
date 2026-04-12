@@ -485,6 +485,20 @@
                 <button type="submit" class="mono-text" style="margin-top: 0.75rem; background: var(--accent-primary); color: var(--bg-dark); border: none; padding: 0.4rem 0.9rem; cursor: pointer; font-weight: bold; font-size: 0.75rem; letter-spacing: 1px;">SAVE TOGGLE</button>
             </div>
 
+            <!-- Legacy fleet import -->
+            <div style="margin-bottom: 1.5rem; padding: 1rem; border: 1px solid var(--border-color); border-radius: var(--radius-sm);">
+                <div class="mono-text text-muted" style="font-size: 0.7rem; margin-bottom: 0.5rem; letter-spacing: 1px;">LEGACY FLEET IMPORT</div>
+                <div id="legacy-status" class="mono-text text-muted" style="font-size: 0.7rem; margin-bottom: 0.5rem;">Checking…</div>
+                <div style="display: flex; gap: 0.5rem; flex-wrap: wrap;">
+                    <button type="button" onclick="previewLegacyImport()" class="mono-text" style="background: transparent; border: 1px solid var(--border-color); color: var(--text-primary); padding: 0.4rem 0.8rem; cursor: pointer; font-size: 0.72rem;">PREVIEW (DRY RUN)</button>
+                    <button type="button" id="legacy-import-btn" onclick="runLegacyImport(false)" class="mono-text" style="background: var(--accent-primary); border: none; color: var(--bg-dark); padding: 0.4rem 0.8rem; cursor: pointer; font-size: 0.72rem; font-weight: bold;">IMPORT LEGACY FLEET</button>
+                    <button type="button" onclick="runLegacyImport(true)" class="mono-text" style="background: transparent; border: 1px solid var(--accent-warning); color: var(--accent-warning); padding: 0.4rem 0.8rem; cursor: pointer; font-size: 0.72rem;" title="Re-import even agencies already tagged">FORCE RE-IMPORT</button>
+                </div>
+                <span class="text-muted mono-text" style="font-size: 0.65rem; display: block; margin-top: 0.5rem;">
+                    Reads each Agency.fleet JSON blob and creates matching StarshipClass + Starship records, tagging imported hulls with [legacy-import] in notes. The JSON blob itself is left untouched for Release G to clean up.
+                </span>
+            </div>
+
             <!-- Ship Types -->
             <div style="margin-bottom: 2rem;">
                 <div class="mono-text text-muted" style="font-size: 0.7rem; margin-bottom: 0.75rem; letter-spacing: 1px;">SHIP TYPES</div>
@@ -1088,6 +1102,85 @@ function moveShipModule(id, delta) {
 }
 
 loadShipModules();
+
+// --- Legacy fleet import ---
+function refreshLegacyStatus() {
+    fetch('/api/starships/legacy-status/').then(function(r) {
+        if (!r.ok) throw new Error();
+        return r.json();
+    }).then(function(data) {
+        var el = document.getElementById('legacy-status');
+        var btn = document.getElementById('legacy-import-btn');
+        if (!el || !btn) return;
+        var lines = [];
+        lines.push('Pending entries: ' + data.pending_entries);
+        if (data.already_imported) lines.push('Already imported: ' + data.already_imported);
+        if (data.agencies_pending && data.agencies_pending.length) {
+            lines.push('Agencies pending: ' + data.agencies_pending.map(function(a) {
+                return a.agency_name + ' (' + a.entries + ')';
+            }).join(', '));
+        }
+        el.textContent = lines.join(' \u00B7 ');
+        btn.textContent = 'IMPORT LEGACY FLEET' + (data.pending_entries ? ' (' + data.pending_entries + ')' : '');
+        btn.disabled = data.pending_entries === 0;
+        btn.style.opacity = data.pending_entries === 0 ? '0.5' : '1';
+    }).catch(function() {
+        var el = document.getElementById('legacy-status');
+        if (el) el.textContent = 'Status unavailable.';
+    });
+}
+
+function _legacyImport(payload) {
+    return fetch('/api/starships/import-legacy/', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'X-CSRFToken': getCsrf() },
+        body: JSON.stringify(payload),
+    }).then(function(r) { return r.json(); });
+}
+
+function _summariseLegacyResult(result) {
+    var t = result.totals;
+    var tag = result.dry_run ? ' (DRY RUN)' : '';
+    var lines = [
+        'Legacy fleet import' + tag + ':',
+        '  Agencies processed: ' + t.agencies_processed,
+        '  Agencies skipped  : ' + t.agencies_skipped,
+        '  Entries processed : ' + t.entries_processed,
+        '  Classes created   : ' + t.classes_created,
+        '  Classes reused    : ' + t.classes_reused,
+        '  Ships created     : ' + t.ships_created,
+        '  Warnings          : ' + t.warnings,
+        '  Errors            : ' + t.errors,
+    ];
+    // Include per-agency notes for anything non-trivial.
+    (result.reports || []).forEach(function(r) {
+        if (!r.warnings.length && !r.errors.length) return;
+        lines.push('');
+        lines.push('[' + r.agency_name + ']' + (r.skipped ? ' skipped' : ''));
+        r.warnings.forEach(function(w) { lines.push('  warn: ' + w); });
+        r.errors.forEach(function(e) { lines.push('  error: ' + e); });
+    });
+    return lines.join('\n');
+}
+
+function previewLegacyImport() {
+    _legacyImport({ dry_run: true }).then(function(result) {
+        alert(_summariseLegacyResult(result));
+    });
+}
+
+function runLegacyImport(force) {
+    var msg = force
+        ? 'Force-reimport? This will add duplicate tagged hulls on any agency that was already imported.'
+        : 'Run the legacy fleet importer now? This creates real Starship records tagged [legacy-import] and can be rolled back by deleting them.';
+    if (!confirm(msg)) return;
+    _legacyImport({ force: !!force }).then(function(result) {
+        alert(_summariseLegacyResult(result));
+        refreshLegacyStatus();
+    });
+}
+
+refreshLegacyStatus();
 
 // Civilisations
 var TECH_LABELS = { type_0: 'Type 0', type_i: 'Type I', type_ii: 'Type II', type_iii: 'Type III' };

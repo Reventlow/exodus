@@ -1,5 +1,16 @@
 # Changelog
 
+## v0.13.5
+- Legacy fleet import shipped (Release F of 7)
+- `python manage.py import_legacy_fleets` management command with --dry-run, --force, --agency flags
+- Settings → Starships now has a LEGACY FLEET IMPORT panel with status label, PREVIEW (dry run), IMPORT, and FORCE RE-IMPORT buttons
+- Button label shows "(N)" count of pending entries; disables when nothing is pending
+- API endpoints: GET /api/starships/legacy-status/, POST /api/starships/import-legacy/ (both superuser-only)
+- Imported hulls are tagged with "[legacy-import]" in notes so re-runs are idempotent by default
+- Fuzzy ship type matching on the legacy shipClass string: exact key/name match first, then substring rules (drone/solo/cruiser/carrier/dreadnaught etc.), with cruiser as the default fallback
+- Imports create per-agency StarshipClass entries named after the legacy string, so GMs can tune each immediately after import
+- Agency.fleet JSON blob is left untouched — Release G will hide it from the UI
+
 ## v0.13.4
 - Fleet grouping shipped (Release E of 7)
 - FLEETS tab on /starships/ with per-agency list, NEW button, fleet editor

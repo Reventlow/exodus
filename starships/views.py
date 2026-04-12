@@ -1028,6 +1028,39 @@ def api_fleet_detail(request, pk):
 
 
 # ---------------------------------------------------------------------------
+# Legacy fleet import (Release F)
+# ---------------------------------------------------------------------------
+
+@login_required
+@require_GET
+def api_legacy_status(request):
+    """Tell the settings UI how many legacy fleet entries are pending."""
+    if not request.user.is_superuser:
+        return JsonResponse({"error": "Permission denied"}, status=403)
+    from .legacy_import import legacy_status
+    return JsonResponse(legacy_status())
+
+
+@login_required
+@require_http_methods(["POST"])
+def api_legacy_import(request):
+    """Run the legacy fleet importer for all agencies (or one)."""
+    if not request.user.is_superuser:
+        return JsonResponse({"error": "Permission denied"}, status=403)
+    try:
+        body = json.loads(request.body) if request.body else {}
+    except json.JSONDecodeError:
+        return JsonResponse({"error": "Invalid JSON"}, status=400)
+    from .legacy_import import import_all_legacy_fleets
+    result = import_all_legacy_fleets(
+        dry_run=bool(body.get("dry_run", False)),
+        force=bool(body.get("force", False)),
+        agency_id=body.get("agency_id"),
+    )
+    return JsonResponse(result)
+
+
+# ---------------------------------------------------------------------------
 # Standalone page
 # ---------------------------------------------------------------------------
 

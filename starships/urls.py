@@ -62,4 +62,8 @@ urlpatterns = [
         views.api_fleet_detail,
         name="api-fleet-detail",
     ),
+
+    # Release F — legacy fleet import
+    path("api/starships/legacy-status/", views.api_legacy_status, name="api-legacy-status"),
+    path("api/starships/import-legacy/", views.api_legacy_import, name="api-legacy-import"),
 ]
