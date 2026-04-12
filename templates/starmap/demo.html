@@ -751,14 +751,32 @@
                     return;
                 }
                 planetListDiv.style.display = "block";
+                // Life classification → colour + short label. Matches the
+                // Django model choices in characters/npcs; unknown/none
+                // render as muted so only real life stands out.
+                var LIFE_STYLE = {
+                    none:        { color: "var(--text-muted)", label: "" },
+                    unknown:     { color: "var(--text-muted)", label: "?" },
+                    prebiotic:   { color: "#a855f7", label: "PREBIO" },
+                    bacterial:   { color: "#06b6d4", label: "BACT" },
+                    cellular:    { color: "#22c55e", label: "CELL" },
+                    plant:       { color: "#16a34a", label: "PLANT" },
+                    animal:      { color: "#f59e0b", label: "ANIMAL" },
+                    intelligent: { color: "#ef4444", label: "INTEL" },
+                };
                 var rows = "";
                 planets.forEach(function(p) {
+                    var lifeCfg = LIFE_STYLE[p.lifeType] || LIFE_STYLE.unknown;
+                    var lifeSpan = lifeCfg.label
+                        ? "<span title='Life: " + p.lifeType + "' style='color:" + lifeCfg.color + ";border:1px solid " + lifeCfg.color + ";padding:0 0.25rem;font-size:0.55rem;margin-left:0.3rem;'>" + lifeCfg.label + "</span>"
+                        : "";
                     var badges = "";
                     if (p.water) badges += "<span title='Liquid water' style='color:#06b6d4;margin-left:0.3rem;'>\u{1F4A7}</span>";
                     if (p.habitable) badges += "<span title='Habitable zone' style='color:#22c55e;margin-left:0.2rem;'>\u{1F30D}</span>";
                     rows += "<div style='display:flex;align-items:center;gap:0.4rem;font-size:0.7rem;padding:0.15rem 0;'>" +
                         "<span style='color:var(--text-primary);flex:1;'>" + p.name + "</span>" +
                         "<span style='color:var(--text-muted);font-size:0.6rem;'>" + (p.planetType || "") + "</span>" +
+                        lifeSpan +
                         badges +
                         "</div>";
                 });

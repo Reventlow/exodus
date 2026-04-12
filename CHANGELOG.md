@@ -1,5 +1,9 @@
 # Changelog
 
+## v0.12.58
+- Star map planet rows now show a color-coded life badge (PREBIO / BACT / CELL / PLANT / ANIMAL / INTEL) next to the planet type
+- "None" and "unknown" lifeType render muted so only real life stands out
+
 ## v0.12.57
 - Fix: star map planet list and count were hidden for GMs on unscanned stars — now GMs see ground truth unconditionally (detected via scanLevelTruth flag from the serializer)
 
