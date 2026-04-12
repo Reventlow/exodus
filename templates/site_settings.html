@@ -596,21 +596,88 @@ function deleteCity(id) { if (!confirm('Delete this city map?')) return; fetch('
 loadCityList();
 
 // Resource types
+// Set of ids whose edit panel is open — persists across reloads within a tab.
+var RT_OPEN = {};
+
+function rtFieldHtml(t, field, label, type, hint) {
+    var val = t[field];
+    if (val === null || val === undefined) val = '';
+    var inputType = type || 'text';
+    return '<div style="display: flex; flex-direction: column; gap: 0.15rem;">' +
+        '<label class="text-muted mono-text" style="font-size: 0.58rem; letter-spacing: 0.5px;">' + label + (hint ? ' <span style="text-transform: none; letter-spacing: 0;">(' + hint + ')</span>' : '') + '</label>' +
+        '<input type="' + inputType + '" data-field="' + field + '" value="' + String(val).replace(/"/g, '&quot;') + '" ' +
+        (inputType === 'number' ? 'step="' + (field === 'rarity_weight' ? '0.05' : '1') + '"' : '') +
+        ' style="background: var(--bg-input); border: 1px solid var(--border-color); color: var(--text-primary); padding: 0.35rem; font-family: var(--font-mono); font-size: 0.72rem;">' +
+        '</div>';
+}
+
 function loadResourceTypes() {
     fetch('/api/starmap/resource-types/').then(function(r) { return r.json(); }).then(function(types) {
         var html = '';
         types.forEach(function(t) {
-            html += '<div style="display: flex; align-items: center; gap: 0.5rem; padding: 0.4rem 0; border-bottom: 1px solid var(--border-color);">';
+            var open = !!RT_OPEN[t.id];
+            // Summary row
+            html += '<div data-rt-row="' + t.id + '" style="border-bottom: 1px solid var(--border-color);">';
+            html += '<div style="display: flex; align-items: center; gap: 0.5rem; padding: 0.4rem 0;">';
             html += '<span style="display: inline-block; width: 12px; height: 12px; border-radius: 50%; background: ' + t.color + ';"></span>';
             html += '<span class="mono-text" style="font-size: 0.8rem; color: var(--text-primary); flex: 1;">' + (t.icon ? t.icon + ' ' : '') + t.name + '</span>';
-            html += '<span class="mono-text text-muted" style="font-size: 0.65rem;">' + t.key + '</span>';
+            html += '<span class="mono-text text-muted" style="font-size: 0.65rem;">' + t.typical_min + '\u2013' + t.typical_max + ' ' + (t.unit_label || 'units') + '</span>';
+            html += '<span class="mono-text text-muted" style="font-size: 0.65rem;">\u00D7' + (t.rarity_weight != null ? t.rarity_weight.toFixed(2) : '1.00') + '</span>';
+            html += '<button onclick="toggleResourceType(' + t.id + ')" class="mono-text" style="background: transparent; border: 1px solid var(--border-color); color: var(--text-primary); padding: 0.15rem 0.4rem; cursor: pointer; font-size: 0.6rem;">' + (open ? 'HIDE' : 'EDIT') + '</button>';
             html += '<button onclick="deleteResourceType(' + t.id + ')" class="mono-text" style="background: transparent; border: 1px solid var(--accent-danger); color: var(--accent-danger); padding: 0.15rem 0.4rem; cursor: pointer; font-size: 0.6rem;">X</button>';
+            html += '</div>';
+            // Expanded edit panel
+            if (open) {
+                html += '<div data-rt-edit="' + t.id + '" style="padding: 0.6rem 0.5rem 0.9rem 1.4rem; display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 0.55rem;">';
+                html += rtFieldHtml(t, 'name', 'DISPLAY NAME', 'text');
+                html += rtFieldHtml(t, 'key', 'KEY', 'text');
+                html += rtFieldHtml(t, 'icon', 'ICON', 'text');
+                html += rtFieldHtml(t, 'unit_label', 'UNIT LABEL', 'text', 'e.g. carrier loads');
+                html += rtFieldHtml(t, 'unit_description', 'UNIT MEANING', 'text', 'what one unit represents');
+                html += '<div style="display: flex; flex-direction: column; gap: 0.15rem;">' +
+                    '<label class="text-muted mono-text" style="font-size: 0.58rem; letter-spacing: 0.5px;">COLOR</label>' +
+                    '<input type="color" data-field="color" value="' + t.color + '" style="height: 32px; background: var(--bg-input); border: 1px solid var(--border-color); cursor: pointer;">' +
+                    '</div>';
+                html += rtFieldHtml(t, 'typical_min', 'TYPICAL MIN', 'number', 'galaxy low');
+                html += rtFieldHtml(t, 'typical_max', 'TYPICAL MAX', 'number', 'galaxy high');
+                html += rtFieldHtml(t, 'rarity_weight', 'RARITY WEIGHT', 'number', '0\u20131, chance to appear');
+                html += rtFieldHtml(t, 'scan_bracket_wide', 'SCAN BRACKET WIDE', 'number', '+/- at lvl 1');
+                html += rtFieldHtml(t, 'scan_bracket_narrow', 'SCAN BRACKET NARROW', 'number', '+/- at lvl 2');
+                html += rtFieldHtml(t, 'order', 'SORT ORDER', 'number');
+                html += '<div style="grid-column: 1 / -1; display: flex; justify-content: flex-end; gap: 0.5rem; margin-top: 0.25rem;">';
+                html += '<button onclick="saveResourceType(' + t.id + ')" class="mono-text" style="background: var(--accent-primary); border: none; color: var(--bg-dark); padding: 0.35rem 0.9rem; cursor: pointer; font-size: 0.72rem; font-weight: bold; letter-spacing: 1px;">SAVE</button>';
+                html += '</div>';
+                html += '</div>';
+            }
             html += '</div>';
         });
         if (!types.length) html = '<span class="mono-text text-muted" style="font-size: 0.8rem;">No resource types defined.</span>';
         document.getElementById('resource-type-list').innerHTML = html;
     });
 }
+
+function toggleResourceType(id) {
+    RT_OPEN[id] = !RT_OPEN[id];
+    loadResourceTypes();
+}
+
+function saveResourceType(id) {
+    var panel = document.querySelector('[data-rt-edit="' + id + '"]');
+    if (!panel) return;
+    var payload = {};
+    panel.querySelectorAll('[data-field]').forEach(function(input) {
+        payload[input.dataset.field] = input.value;
+    });
+    fetch('/api/starmap/resource-types/' + id + '/', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json', 'X-CSRFToken': getCsrf() },
+        body: JSON.stringify(payload),
+    }).then(function(r) { return r.json(); }).then(function(d) {
+        if (d.error) { alert(d.error); return; }
+        loadResourceTypes();
+    });
+}
+
 function addResourceType() {
     var key = document.getElementById('rt-key').value.trim();
     var name = document.getElementById('rt-name').value.trim();
@@ -621,12 +688,17 @@ function addResourceType() {
     }).then(function(r) { return r.json(); }).then(function(d) {
         if (d.error) { alert(d.error); return; }
         document.getElementById('rt-key').value = ''; document.getElementById('rt-name').value = ''; document.getElementById('rt-icon').value = '';
+        // Open the freshly created row so the GM can tune it immediately.
+        if (d.id) RT_OPEN[d.id] = true;
         loadResourceTypes();
     });
 }
 function deleteResourceType(id) {
     if (!confirm('Delete this resource type?')) return;
-    fetch('/api/starmap/resource-types/' + id + '/', { method: 'DELETE', headers: { 'X-CSRFToken': getCsrf() } }).then(function() { loadResourceTypes(); });
+    fetch('/api/starmap/resource-types/' + id + '/', { method: 'DELETE', headers: { 'X-CSRFToken': getCsrf() } }).then(function() {
+        delete RT_OPEN[id];
+        loadResourceTypes();
+    });
 }
 loadResourceTypes();
 

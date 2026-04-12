@@ -1,5 +1,11 @@
 # Changelog
 
+## v0.12.51
+- Settings: resource types now expose full tuning in-app — unit label & meaning, typical min/max, rarity weight, scan brackets (wide/narrow), sort order
+- Expandable edit panel per resource type with SAVE button; freshly added types auto-open for tuning
+- Summary row shows "min–max unit ×rarity" at a glance
+- GMs no longer need Django admin to dial galaxy-wide resource abundance
+
 ## v0.12.50
 - Fix: agencies migration 0032 crashed on fresh DBs with "duplicate column name: agency_id" because 0031 already creates the FK in its final form — made 0032 a no-op, dependency chain preserved
 

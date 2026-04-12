@@ -732,6 +732,25 @@ def api_seed_systems(request):
 # ---------------------------------------------------------------------------
 
 @login_required
+def _serialize_resource_type(t):
+    """Return the full ResourceType payload including tuning fields."""
+    return {
+        "id": t.id,
+        "key": t.key,
+        "name": t.name,
+        "color": t.color,
+        "icon": t.icon,
+        "order": t.order,
+        "unit_label": t.unit_label,
+        "unit_description": t.unit_description,
+        "typical_min": t.typical_min,
+        "typical_max": t.typical_max,
+        "rarity_weight": t.rarity_weight,
+        "scan_bracket_wide": t.scan_bracket_wide,
+        "scan_bracket_narrow": t.scan_bracket_narrow,
+    }
+
+
 @require_http_methods(["GET", "POST"])
 def api_resource_types(request):
     """List or create resource types."""
@@ -739,8 +758,7 @@ def api_resource_types(request):
 
     if request.method == "GET":
         types = ResourceType.objects.all()
-        data = [{"id": t.id, "key": t.key, "name": t.name, "color": t.color, "icon": t.icon, "order": t.order} for t in types]
-        return JsonResponse(data, safe=False)
+        return JsonResponse([_serialize_resource_type(t) for t in types], safe=False)
 
     if not request.user.is_superuser:
         return JsonResponse({"error": "Permission denied"}, status=403)
@@ -755,8 +773,15 @@ def api_resource_types(request):
         color=body.get("color", "#00ff88"),
         icon=body.get("icon", ""),
         order=body.get("order", 0),
+        unit_label=body.get("unit_label", "units"),
+        unit_description=body.get("unit_description", ""),
+        typical_min=body.get("typical_min", 0),
+        typical_max=body.get("typical_max", 100),
+        rarity_weight=body.get("rarity_weight", 1.0),
+        scan_bracket_wide=body.get("scan_bracket_wide", 40),
+        scan_bracket_narrow=body.get("scan_bracket_narrow", 15),
     )
-    return JsonResponse({"id": t.id, "key": t.key, "name": t.name, "color": t.color, "icon": t.icon, "order": t.order}, status=201)
+    return JsonResponse(_serialize_resource_type(t), status=201)
 
 
 @login_required
@@ -776,13 +801,28 @@ def api_resource_type_detail(request, pk):
         body = json.loads(request.body)
     except json.JSONDecodeError:
         return JsonResponse({"error": "Invalid JSON"}, status=400)
-    if "name" in body: t.name = body["name"]
-    if "color" in body: t.color = body["color"]
-    if "icon" in body: t.icon = body["icon"]
-    if "order" in body: t.order = body["order"]
-    if "key" in body: t.key = body["key"]
+
+    # Core fields
+    for field in ("name", "color", "icon", "order", "key",
+                  "unit_label", "unit_description"):
+        if field in body:
+            setattr(t, field, body[field])
+    # Numeric fields — coerce so the client can send strings from <input>
+    for field in ("typical_min", "typical_max",
+                  "scan_bracket_wide", "scan_bracket_narrow"):
+        if field in body:
+            try:
+                setattr(t, field, int(body[field]))
+            except (TypeError, ValueError):
+                return JsonResponse({"error": f"{field} must be an integer"}, status=400)
+    if "rarity_weight" in body:
+        try:
+            t.rarity_weight = float(body["rarity_weight"])
+        except (TypeError, ValueError):
+            return JsonResponse({"error": "rarity_weight must be a number"}, status=400)
+
     t.save()
-    return JsonResponse({"id": t.id, "key": t.key, "name": t.name, "color": t.color, "icon": t.icon, "order": t.order})
+    return JsonResponse(_serialize_resource_type(t))
 
 
 # ---------------------------------------------------------------------------
