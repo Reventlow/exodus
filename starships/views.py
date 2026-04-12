@@ -478,11 +478,25 @@ def api_classes(request):
         return JsonResponse(
             {"error": "Only GMs can create shared classes"}, status=403,
         )
-    owner = None if is_shared else _user_agency(request.user)
-    if owner is None and not is_shared:
-        return JsonResponse(
-            {"error": "No agency found for user — cannot own a class"}, status=400,
-        )
+    # Owner resolution:
+    #   - is_shared=True       → created_by null (GM-shared)
+    #   - GM + created_by_agency_id → that specific agency
+    #   - otherwise             → user's own agency
+    owner = None
+    if not is_shared:
+        override = body.get("created_by_agency_id")
+        if override and request.user.is_superuser:
+            from agencies.models import Agency
+            try:
+                owner = Agency.objects.get(pk=override)
+            except Agency.DoesNotExist:
+                return JsonResponse({"error": "created_by_agency_id not found"}, status=400)
+        else:
+            owner = _user_agency(request.user)
+        if owner is None:
+            return JsonResponse(
+                {"error": "No agency found for user — cannot own a class"}, status=400,
+            )
 
     cls = StarshipClass(
         name=name,

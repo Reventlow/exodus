@@ -1,5 +1,13 @@
 # Changelog
 
+## v0.13.7
+- GMs can now create starship classes, fleets, and ship instances for any agency (not just their own)
+- NEW class prompt asks "which agency owns this class?" with a numbered picker (0 = SHARED)
+- NEW fleet prompt asks for target agency
+- BUILD HULL from a shared class asks which agency receives the hull; agency-owned classes inherit their class's agency
+- Class sidebar groups by owning agency name (with SHARED bucket pinned at bottom) so GMs can scan multi-agency catalogues
+- Backend: api_classes POST accepts created_by_agency_id for superusers; api_fleets and api_ships already supported agency_id override
+
 ## v0.13.6
 - Legacy Agency.fleet TableModule removed from the agency sheet (Release G of 7 — final)
 - Replaced with a small info card linking to the Starships page

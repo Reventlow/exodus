@@ -89,6 +89,7 @@ var SHIPS_CACHE = [];
 var FLEETS_CACHE = [];
 var SHIP_TYPES = [];
 var SHIP_MODULES = [];
+var AGENCIES_CACHE = [];        // superuser only, loaded at boot
 var STAR_SYSTEMS_CACHE = null;  // lazy-loaded for the location dropdown
 
 var STATUS_COLORS = {
@@ -124,13 +125,38 @@ function api(path, opts) {
 }
 
 function loadCatalogues() {
-    return Promise.all([
+    var calls = [
         api('/api/starships/ship-types/'),
         api('/api/starships/modules/'),
-    ]).then(function(results) {
+    ];
+    if (IS_SUPERUSER) calls.push(loadAgencies());
+    return Promise.all(calls).then(function(results) {
         SHIP_TYPES = results[0];
         SHIP_MODULES = results[1];
     });
+}
+
+function loadAgencies() {
+    return fetch('/api/agencies/').then(function(r) {
+        return r.ok ? r.json() : [];
+    }).then(function(data) {
+        AGENCIES_CACHE = Array.isArray(data) ? data : (data.results || []);
+        return AGENCIES_CACHE;
+    }).catch(function() { AGENCIES_CACHE = []; return AGENCIES_CACHE; });
+}
+
+function pickAgencyPrompt(label) {
+    // Returns an agency id or 'shared' or null (cancelled).
+    if (!IS_SUPERUSER || !AGENCIES_CACHE.length) return Promise.resolve(null);
+    var list = AGENCIES_CACHE.map(function(a, i) { return (i + 1) + ') ' + a.name; }).join('\n');
+    var pick = prompt(label + '\n\n0) SHARED (null agency)\n' + list + '\n\nEnter number:');
+    if (pick == null) return Promise.resolve('cancelled');
+    var idx = parseInt(pick, 10);
+    if (isNaN(idx)) return Promise.resolve(null);
+    if (idx === 0) return Promise.resolve('shared');
+    idx = idx - 1;
+    if (idx < 0 || idx >= AGENCIES_CACHE.length) return Promise.resolve(null);
+    return Promise.resolve(AGENCIES_CACHE[idx].id);
 }
 
 function loadClasses() {
@@ -365,17 +391,37 @@ function buildHullFromClass(classId) {
     var name = prompt('Hull name for this ' + cls.name + ':');
     if (!name) return;
     var hullNumber = prompt('Hull number (optional, can leave blank):') || '';
-    api('/api/starships/ships/', {
-        method: 'POST',
-        body: JSON.stringify({
+
+    // Target agency resolution:
+    //   * agency-owned class: hull inherits that class's agency
+    //   * shared class + GM : ask which agency
+    //   * shared class + player: server-side _user_agency() handles it
+    var targetAgencyPromise;
+    if (!cls.is_shared && cls.created_by_id) {
+        targetAgencyPromise = Promise.resolve(cls.created_by_id);
+    } else if (IS_SUPERUSER && AGENCIES_CACHE.length) {
+        targetAgencyPromise = pickAgencyPrompt('Which agency owns the new hull?').then(function(pick) {
+            if (pick === 'cancelled' || pick === 'shared' || pick == null) return null;
+            return pick;
+        });
+    } else {
+        targetAgencyPromise = Promise.resolve(null);
+    }
+
+    targetAgencyPromise.then(function(agencyId) {
+        var payload = {
             starship_class_id: classId,
             name: name,
             hull_number: hullNumber,
-        }),
-    }).then(function(ship) {
-        CURRENT_SHIP_ID = ship.id;
-        switchTab('ships');
-        return loadShips().then(function() { selectShip(ship.id); });
+        };
+        if (agencyId != null) payload.agency_id = agencyId;
+        api('/api/starships/ships/', {
+            method: 'POST', body: JSON.stringify(payload),
+        }).then(function(ship) {
+            CURRENT_SHIP_ID = ship.id;
+            switchTab('ships');
+            return loadShips().then(function() { selectShip(ship.id); });
+        });
     });
 }
 
@@ -432,12 +478,19 @@ function createFleet() {
     var name = prompt('Fleet name (e.g. "First Expeditionary"):');
     if (!name) return;
     var commander = prompt('Commander (optional):') || '';
-    api('/api/starships/fleets/', {
-        method: 'POST',
-        body: JSON.stringify({ name: name, commander: commander }),
-    }).then(function(fleet) {
-        CURRENT_FLEET_ID = fleet.id;
-        loadFleets().then(function() { selectFleet(fleet.id); });
+    // GMs choose which agency owns the fleet; players fall through
+    // to server-side _user_agency(). "0) SHARED" doesn't apply to
+    // fleets — they must belong to an agency — so treat it as cancel.
+    pickAgencyPrompt('Which agency owns this fleet?').then(function(owner) {
+        if (owner === 'cancelled' || owner === 'shared') return;
+        var payload = { name: name, commander: commander };
+        if (typeof owner === 'number') payload.agency_id = owner;
+        api('/api/starships/fleets/', {
+            method: 'POST', body: JSON.stringify(payload),
+        }).then(function(fleet) {
+            CURRENT_FLEET_ID = fleet.id;
+            loadFleets().then(function() { selectFleet(fleet.id); });
+        });
     });
 }
 
@@ -568,23 +621,32 @@ function unassignShipFromFleet(shipId) {
 }
 
 function renderClassList() {
+    // Group by owning agency name so GMs who can see multiple agencies
+    // get one heading per owner plus a SHARED bucket.
+    var groups = {};
+    var ORDER = [];
+    CLASSES_CACHE.forEach(function(c) {
+        var key = c.is_shared ? 'SHARED' : (c.created_by_name || 'UNASSIGNED');
+        if (!(key in groups)) { groups[key] = []; ORDER.push(key); }
+        groups[key].push(c);
+    });
+    // SHARED always last, everything else keeps first-seen order.
+    ORDER.sort(function(a, b) {
+        if (a === 'SHARED') return 1;
+        if (b === 'SHARED') return -1;
+        return 0;
+    });
     var html = '';
-    var mine = CLASSES_CACHE.filter(function(c) { return !c.is_shared; });
-    var shared = CLASSES_CACHE.filter(function(c) { return c.is_shared; });
-    function group(label, arr) {
-        if (!arr.length) return '';
-        var h = '<div class="mono-text text-muted" style="font-size: 0.58rem; letter-spacing: 1px; margin: 0.6rem 0 0.3rem 0;">' + label + '</div>';
-        arr.forEach(function(c) {
+    ORDER.forEach(function(label) {
+        html += '<div class="mono-text text-muted" style="font-size: 0.58rem; letter-spacing: 1px; margin: 0.6rem 0 0.3rem 0;">' + escapeHtml(label.toUpperCase()) + '</div>';
+        groups[label].forEach(function(c) {
             var selected = c.id === CURRENT_CLASS_ID ? 'selected' : '';
-            h += '<div class="class-row ' + selected + '" onclick="selectClass(' + c.id + ')">' +
-                '<div class="ship-class-name mono-text">' + c.name + '</div>' +
-                '<div class="ship-class-meta mono-text">' + c.ship_type_name + ' \u00B7 size ' + c.size + (c.is_locked ? ' \u00B7 LOCKED' : '') + '</div>' +
+            html += '<div class="class-row ' + selected + '" onclick="selectClass(' + c.id + ')">' +
+                '<div class="ship-class-name mono-text">' + escapeHtml(c.name) + '</div>' +
+                '<div class="ship-class-meta mono-text">' + escapeHtml(c.ship_type_name) + ' \u00B7 size ' + c.size + (c.is_locked ? ' \u00B7 LOCKED' : '') + '</div>' +
                 '</div>';
         });
-        return h;
-    }
-    html += group('MY AGENCY', mine);
-    html += group('SHARED', shared);
+    });
     if (!CLASSES_CACHE.length) html = '<span class="mono-text text-muted" style="font-size: 0.75rem;">No classes yet. Press NEW to design one.</span>';
     document.getElementById('class-list').innerHTML = html;
 }
@@ -599,7 +661,6 @@ function createClass() {
     if (!SHIP_TYPES.length) { alert('No ship types defined. Seed the catalogue first.'); return; }
     var name = prompt('Class name (e.g. "Vigilant-class Cruiser"):');
     if (!name) return;
-    // Pick type via a simple prompt for now — dedicated UI can come later.
     var typeList = SHIP_TYPES.map(function(t, i) { return (i + 1) + ') ' + t.name; }).join('\n');
     var pick = prompt('Ship type:\n' + typeList + '\n\nEnter number:');
     var idx = parseInt(pick, 10) - 1;
@@ -611,11 +672,15 @@ function createClass() {
         size: shipType.min_size,
         is_shared: false,
     };
-    if (IS_SUPERUSER && confirm('Create as SHARED class (null agency, visible to all)? Cancel = agency-owned.')) {
-        payload.is_shared = true;
-    }
-    api('/api/starships/classes/', { method: 'POST', body: JSON.stringify(payload) }).then(function(cls) {
-        return loadClasses().then(function() { selectClass(cls.id); });
+    var pickedPromise = pickAgencyPrompt('Which agency owns this class?');
+    pickedPromise.then(function(owner) {
+        if (owner === 'cancelled') return;  // user cancelled the picker
+        if (owner === 'shared') { payload.is_shared = true; }
+        else if (typeof owner === 'number') { payload.created_by_agency_id = owner; }
+        // owner === null → fall back to user's own agency (backend default)
+        api('/api/starships/classes/', { method: 'POST', body: JSON.stringify(payload) }).then(function(cls) {
+            return loadClasses().then(function() { selectClass(cls.id); });
+        });
     });
 }
 
