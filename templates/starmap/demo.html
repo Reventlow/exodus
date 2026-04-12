@@ -725,19 +725,23 @@
         var scanColor = scanLevel === 0 ? "#666" : scanLevel === 1 ? "#ef4444" : scanLevel === 2 ? "#f59e0b" : "#22c55e";
         scanEl.innerHTML = "Scan: <span style='color:" + scanColor + "'>" + scanLabel + "</span>";
 
+        // GMs see ground truth regardless of scan state — the serializer
+        // only emits scanLevelTruth for superusers.
+        var isGM = star.scanLevelTruth !== undefined;
+
         var planetsEl = document.getElementById("info-planets");
-        if (scanLevel > 0 || star.isSol) {
-            planetsEl.textContent = "Planets: " + (star.planets || "?");
+        if (isGM || scanLevel > 0 || star.isSol) {
+            planetsEl.textContent = "Planets: " + (star.planets != null ? star.planets : "?");
         } else {
             planetsEl.textContent = "";
         }
 
-        // Planet-of-interest list. Only fetched for real API stars (demo
-        // fallback stars have no id) and only when the system has been
-        // scanned or is Sol — same gate as the count line.
+        // Planet-of-interest list. Fetched for real API stars (demo
+        // fallback stars have no id). GMs see the list unconditionally;
+        // players only when the system has been scanned or is Sol.
         var planetListDiv = document.getElementById("info-planet-list");
         var planetRowsDiv = document.getElementById("planet-rows");
-        if (star.id != null && (scanLevel > 0 || star.isSol)) {
+        if (star.id != null && (isGM || scanLevel > 0 || star.isSol)) {
             ensurePlanetList(star.id, function(planets) {
                 // Abort if the user has hovered a different star since this
                 // fetch was kicked off — otherwise the panel flickers.

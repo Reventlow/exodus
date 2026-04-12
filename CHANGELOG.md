@@ -1,5 +1,8 @@
 # Changelog
 
+## v0.12.57
+- Fix: star map planet list and count were hidden for GMs on unscanned stars — now GMs see ground truth unconditionally (detected via scanLevelTruth flag from the serializer)
+
 ## v0.12.56
 - Star map info panel now lists planets of interest (name, type, water/habitable badges) when a star has been scanned
 - Planet list is fetched lazily and cached per star id so the hover loop stays quiet
