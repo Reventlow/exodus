@@ -93,6 +93,10 @@
         <div class="detail" id="info-spectral"></div>
         <div class="detail" id="info-planets"></div>
         <div class="detail" id="info-scan"></div>
+        <div id="info-planet-list" style="margin-top: 0.5rem; display: none;">
+            <div class="label" style="margin-bottom: 0.3rem;">PLANETS OF INTEREST</div>
+            <div id="planet-rows"></div>
+        </div>
         <div id="info-resources" style="margin-top: 0.5rem; display: none;">
             <div class="label" style="margin-bottom: 0.3rem;">RESOURCE PROBABILITY</div>
             <div id="resource-bars"></div>
@@ -650,6 +654,29 @@
         addToRoute(hoveredStar);
     }
 
+    // Planet list cache — one entry per star id. Populated lazily so the
+    // hover loop that calls updateInfoPanel doesn't hammer the API.
+    // null = not fetched yet, [] = fetched and empty, array = ready.
+    var PLANET_CACHE = {};
+
+    function ensurePlanetList(starId, onReady) {
+        if (PLANET_CACHE[starId] !== undefined) {
+            onReady(PLANET_CACHE[starId]);
+            return;
+        }
+        PLANET_CACHE[starId] = null;  // in-flight marker
+        fetch('/api/starmap/systems/' + starId + '/planets/').then(function(r) {
+            if (!r.ok) return [];
+            return r.json();
+        }).then(function(planets) {
+            PLANET_CACHE[starId] = planets || [];
+            onReady(PLANET_CACHE[starId]);
+        }).catch(function() {
+            PLANET_CACHE[starId] = [];
+            onReady([]);
+        });
+    }
+
     // Fallback used until the ResourceType catalogue loads from the API.
     // Also used if the endpoint is unreachable (demo mode / logged-out).
     var RESOURCE_LABELS = {
@@ -703,6 +730,38 @@
             planetsEl.textContent = "Planets: " + (star.planets || "?");
         } else {
             planetsEl.textContent = "";
+        }
+
+        // Planet-of-interest list. Only fetched for real API stars (demo
+        // fallback stars have no id) and only when the system has been
+        // scanned or is Sol — same gate as the count line.
+        var planetListDiv = document.getElementById("info-planet-list");
+        var planetRowsDiv = document.getElementById("planet-rows");
+        if (star.id != null && (scanLevel > 0 || star.isSol)) {
+            ensurePlanetList(star.id, function(planets) {
+                // Abort if the user has hovered a different star since this
+                // fetch was kicked off — otherwise the panel flickers.
+                if (!hoveredStar || hoveredStar.id !== star.id) return;
+                if (!planets.length) {
+                    planetListDiv.style.display = "none";
+                    return;
+                }
+                planetListDiv.style.display = "block";
+                var rows = "";
+                planets.forEach(function(p) {
+                    var badges = "";
+                    if (p.water) badges += "<span title='Liquid water' style='color:#06b6d4;margin-left:0.3rem;'>\u{1F4A7}</span>";
+                    if (p.habitable) badges += "<span title='Habitable zone' style='color:#22c55e;margin-left:0.2rem;'>\u{1F30D}</span>";
+                    rows += "<div style='display:flex;align-items:center;gap:0.4rem;font-size:0.7rem;padding:0.15rem 0;'>" +
+                        "<span style='color:var(--text-primary);flex:1;'>" + p.name + "</span>" +
+                        "<span style='color:var(--text-muted);font-size:0.6rem;'>" + (p.planetType || "") + "</span>" +
+                        badges +
+                        "</div>";
+                });
+                planetRowsDiv.innerHTML = rows;
+            });
+        } else {
+            planetListDiv.style.display = "none";
         }
 
         var resDiv = document.getElementById("info-resources");

@@ -1,5 +1,10 @@
 # Changelog
 
+## v0.12.56
+- Star map info panel now lists planets of interest (name, type, water/habitable badges) when a star has been scanned
+- Planet list is fetched lazily and cached per star id so the hover loop stays quiet
+- Filtering respects existing rules: superusers see all, players see only discovered + visible planets
+
 ## v0.12.55
 - Star map: resource bars now render in the order defined in Settings > Star Map
 - Resource names, colors, and icons on the map come from the ResourceType catalogue, so GM edits in settings flow through to the map without code changes
