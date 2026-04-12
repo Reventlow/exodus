@@ -1,5 +1,8 @@
 # Changelog
 
+## v0.12.50
+- Fix: agencies migration 0032 crashed on fresh DBs with "duplicate column name: agency_id" because 0031 already creates the FK in its final form — made 0032 a no-op, dependency chain preserved
+
 ## v0.12.49
 - Rebuild-only release (no code changes)
 
