@@ -1,5 +1,10 @@
 # Changelog
 
+## v0.12.54
+- Settings: up/down arrow buttons on each resource type row to reorder the list
+- Reorder rewrites every row's order field with its new index, so ties (e.g. freshly added types with order=0) move correctly
+- First/last row arrows are disabled to avoid out-of-bounds moves
+
 ## v0.12.53
 - Fix: resource types list endpoint was broken since v0.12.51 because @login_required was accidentally decorating a helper instead of the view — settings page now loads resource types again
 

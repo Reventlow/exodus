@@ -598,6 +598,9 @@ loadCityList();
 // Resource types
 // Set of ids whose edit panel is open — persists across reloads within a tab.
 var RT_OPEN = {};
+// Last-loaded list, used by the up/down reorder buttons so they know
+// which resource is above/below without another fetch.
+var RT_CACHE = [];
 
 function rtFieldHtml(t, field, label, type, hint) {
     var val = t[field];
@@ -613,12 +616,21 @@ function rtFieldHtml(t, field, label, type, hint) {
 
 function loadResourceTypes() {
     fetch('/api/starmap/resource-types/').then(function(r) { return r.json(); }).then(function(types) {
+        RT_CACHE = types.slice();
         var html = '';
-        types.forEach(function(t) {
+        types.forEach(function(t, idx) {
             var open = !!RT_OPEN[t.id];
+            var isFirst = idx === 0;
+            var isLast = idx === types.length - 1;
+            var arrowBase = 'background: transparent; border: 1px solid var(--border-color); color: var(--text-primary); padding: 0.1rem 0.35rem; cursor: pointer; font-size: 0.65rem; line-height: 1;';
+            var disabledStyle = 'opacity: 0.3; cursor: not-allowed;';
             // Summary row
             html += '<div data-rt-row="' + t.id + '" style="border-bottom: 1px solid var(--border-color);">';
             html += '<div style="display: flex; align-items: center; gap: 0.5rem; padding: 0.4rem 0;">';
+            html += '<div style="display: flex; flex-direction: column; gap: 0.1rem;">';
+            html += '<button onclick="moveResourceType(' + t.id + ', -1)" ' + (isFirst ? 'disabled' : '') + ' class="mono-text" style="' + arrowBase + (isFirst ? disabledStyle : '') + '" title="Move up">\u25B2</button>';
+            html += '<button onclick="moveResourceType(' + t.id + ', 1)" ' + (isLast ? 'disabled' : '') + ' class="mono-text" style="' + arrowBase + (isLast ? disabledStyle : '') + '" title="Move down">\u25BC</button>';
+            html += '</div>';
             html += '<span style="display: inline-block; width: 12px; height: 12px; border-radius: 50%; background: ' + t.color + ';"></span>';
             html += '<span class="mono-text" style="font-size: 0.8rem; color: var(--text-primary); flex: 1;">' + (t.icon ? t.icon + ' ' : '') + t.name + '</span>';
             html += '<span class="mono-text text-muted" style="font-size: 0.65rem;">' + t.typical_min + '\u2013' + t.typical_max + ' ' + (t.unit_label || 'units') + '</span>';
@@ -659,6 +671,29 @@ function loadResourceTypes() {
 function toggleResourceType(id) {
     RT_OPEN[id] = !RT_OPEN[id];
     loadResourceTypes();
+}
+
+function moveResourceType(id, delta) {
+    // delta = -1 to move up, +1 to move down. Rather than swap 'order'
+    // values (which is a no-op when rows are tied on order), rebuild
+    // the list order and write every row's order as its new index.
+    var idx = RT_CACHE.findIndex(function(t) { return t.id === id; });
+    if (idx < 0) return;
+    var targetIdx = idx + delta;
+    if (targetIdx < 0 || targetIdx >= RT_CACHE.length) return;
+
+    var reordered = RT_CACHE.slice();
+    var moved = reordered.splice(idx, 1)[0];
+    reordered.splice(targetIdx, 0, moved);
+
+    Promise.all(reordered.map(function(t, i) {
+        if (t.order === i) return Promise.resolve();  // already correct, skip
+        return fetch('/api/starmap/resource-types/' + t.id + '/', {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json', 'X-CSRFToken': getCsrf() },
+            body: JSON.stringify({ order: i }),
+        });
+    })).then(function() { loadResourceTypes(); });
 }
 
 function saveResourceType(id) {
