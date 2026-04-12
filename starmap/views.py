@@ -99,11 +99,25 @@ def api_star_system_detail(request, pk):
 
     for field in ["name", "spectral_type"]:
         if field in body:
-            setattr(star, field.replace("_", "_"), body[field])
+            setattr(star, field, body[field])
     if "planets" in body:
         star.planets = body["planets"]
     if "resources" in body:
-        star.resources = body["resources"]
+        # Accept either {key: int} (compact) or {key: {value: int}} (GM
+        # serializer shape). Always store as compact integers so ground
+        # truth stays shape-stable regardless of what the client sent.
+        raw = body["resources"] or {}
+        cleaned = {}
+        for key, val in raw.items():
+            if isinstance(val, dict):
+                val = val.get("value", 0)
+            try:
+                cleaned[key] = int(val)
+            except (TypeError, ValueError):
+                return JsonResponse(
+                    {"error": f"resources.{key} must be an integer"}, status=400,
+                )
+        star.resources = cleaned
     if "scanLevelTruth" in body:
         star.scan_level_truth = body["scanLevelTruth"]
     star.save()

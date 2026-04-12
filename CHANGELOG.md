@@ -1,5 +1,12 @@
 # Changelog
 
+## v0.12.52
+- Settings: per-star ground-truth resources are now editable from the Star Map page
+- Pick a star from the planet dropdown to see every configured resource with its current value, unit, and typical range
+- Numeric inputs + SAVE button write straight to the star's resources; missing values render as 0
+- Fixed resource display which was broken after the unit refactor (was rendering "[object Object]%")
+- Write path accepts either {key: int} or {key: {value}} and always stores compact integers
+
 ## v0.12.51
 - Settings: resource types now expose full tuning in-app — unit label & meaning, typical min/max, rarity weight, scan brackets (wide/narrow), sort order
 - Expandable edit panel per resource type with SAVE button; freshly added types auto-open for tuning

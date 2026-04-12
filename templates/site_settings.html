@@ -774,34 +774,46 @@ function loadPlanets() {
     if (!starId) { listDiv.innerHTML = ''; formDiv.style.display = 'none'; resDiv.style.display = 'none'; return; }
     formDiv.style.display = 'block';
 
-    // Load star resources
-    fetch('/api/starmap/systems/' + starId + '/').then(function(r) { return r.json(); }).then(function(star) {
+    // Load star resources — editable per ResourceType row.
+    // Fetches the star AND the resource-type catalogue in parallel so we
+    // render every defined resource, including ones the star has zero of.
+    Promise.all([
+        fetch('/api/starmap/systems/' + starId + '/').then(function(r) { return r.json(); }),
+        fetch('/api/starmap/resource-types/').then(function(r) { return r.json(); }),
+    ]).then(function(results) {
+        var star = results[0];
+        var types = results[1] || [];
         var res = star.resources || {};
-        var keys = Object.keys(res);
-        if (keys.length === 0) {
-            resDiv.style.display = 'none';
-            return;
-        }
         resDiv.style.display = 'block';
-        var html = '<div class="mono-text text-muted" style="font-size: 0.6rem; letter-spacing: 1px; margin-bottom: 0.4rem;">RESOURCES — ' + star.name + '</div>';
-        html += '<div style="display: flex; flex-wrap: wrap; gap: 0.5rem;">';
-        keys.forEach(function(k) {
-            var val = res[k];
-            var barColor = '#00ff88';
-            // Try to match resource type color
-            html += '<div style="min-width: 100px; flex: 1;">';
-            html += '<div style="display: flex; justify-content: space-between; margin-bottom: 0.15rem;">';
-            html += '<span class="mono-text" style="font-size: 0.65rem; color: var(--text-muted);">' + k + '</span>';
-            html += '<span class="mono-text" style="font-size: 0.65rem; color: var(--text-primary);">' + val + '%</span>';
+        var html = '<div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 0.5rem;">';
+        html += '<div class="mono-text text-muted" style="font-size: 0.6rem; letter-spacing: 1px;">GROUND TRUTH RESOURCES &mdash; ' + star.name + '</div>';
+        html += '<button onclick="saveStarResources(' + starId + ')" class="mono-text" style="background: var(--accent-primary); border: none; color: var(--bg-dark); padding: 0.3rem 0.75rem; cursor: pointer; font-size: 0.65rem; font-weight: bold; letter-spacing: 1px;">SAVE</button>';
+        html += '</div>';
+        html += '<div data-star-resources="' + starId + '" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 0.5rem;">';
+        if (!types.length) {
+            html += '<span class="mono-text text-muted" style="font-size: 0.7rem;">No resource types defined. Add some above first.</span>';
+        }
+        types.forEach(function(t) {
+            // GM serializer returns {key: {value, unit}}; legacy data may
+            // still be {key: int}. Handle both.
+            var cell = res[t.key];
+            var current = 0;
+            if (cell && typeof cell === 'object') current = cell.value || 0;
+            else if (typeof cell === 'number') current = cell;
+            html += '<div style="display: flex; flex-direction: column; gap: 0.15rem; padding: 0.4rem; border: 1px solid var(--border-color); border-radius: var(--radius-sm);">';
+            html += '<div style="display: flex; align-items: center; gap: 0.35rem;">';
+            html += '<span style="display:inline-block; width: 10px; height: 10px; border-radius: 50%; background: ' + t.color + ';"></span>';
+            html += '<span class="mono-text" style="font-size: 0.7rem; color: var(--text-primary); flex: 1;">' + (t.icon ? t.icon + ' ' : '') + t.name + '</span>';
             html += '</div>';
-            html += '<div style="height: 4px; background: rgba(255,255,255,0.08); border-radius: 2px; overflow: hidden;">';
-            html += '<div style="width: ' + Math.max(2, val) + '%; height: 100%; background: var(--accent-primary); border-radius: 2px;"></div>';
-            html += '</div></div>';
+            html += '<div style="display: flex; align-items: center; gap: 0.35rem;">';
+            html += '<input type="number" step="1" data-rt-key="' + t.key + '" value="' + current + '" style="flex: 1; background: var(--bg-input); border: 1px solid var(--border-color); color: var(--text-primary); padding: 0.3rem; font-family: var(--font-mono); font-size: 0.75rem;">';
+            html += '<span class="mono-text text-muted" style="font-size: 0.6rem; min-width: 4.5rem;">' + (t.unit_label || 'units') + '</span>';
+            html += '</div>';
+            html += '<div class="mono-text text-muted" style="font-size: 0.55rem;">typical ' + t.typical_min + '\u2013' + t.typical_max + '</div>';
+            html += '</div>';
         });
         html += '</div>';
-        if (star.planets !== undefined) {
-            html += '<div class="mono-text text-muted" style="font-size: 0.6rem; margin-top: 0.4rem;">Planets: ' + star.planets + ' · Spectral: ' + (star.spectral || '?') + ' · ' + (star.dist || 0).toFixed(1) + ' ly</div>';
-        }
+        html += '<div class="mono-text text-muted" style="font-size: 0.6rem; margin-top: 0.5rem;">Planets: ' + (star.planets != null ? star.planets : '?') + ' \u00B7 Spectral: ' + (star.spectral || '?') + ' \u00B7 ' + (star.dist || 0).toFixed(1) + ' ly</div>';
         resDiv.innerHTML = html;
     });
 
@@ -823,6 +835,24 @@ function loadPlanets() {
         });
         if (!planets.length) html = '<span class="mono-text text-muted" style="font-size: 0.8rem;">No planets registered for this system.</span>';
         listDiv.innerHTML = html;
+    });
+}
+
+function saveStarResources(starId) {
+    var panel = document.querySelector('[data-star-resources="' + starId + '"]');
+    if (!panel) return;
+    var payload = {};
+    panel.querySelectorAll('[data-rt-key]').forEach(function(input) {
+        var v = parseInt(input.value, 10);
+        payload[input.dataset.rtKey] = isNaN(v) ? 0 : v;
+    });
+    fetch('/api/starmap/systems/' + starId + '/', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json', 'X-CSRFToken': getCsrf() },
+        body: JSON.stringify({ resources: payload }),
+    }).then(function(r) { return r.json(); }).then(function(d) {
+        if (d.error) { alert(d.error); return; }
+        loadPlanets();
     });
 }
 
