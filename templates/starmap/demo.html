@@ -650,6 +650,8 @@
         addToRoute(hoveredStar);
     }
 
+    // Fallback used until the ResourceType catalogue loads from the API.
+    // Also used if the endpoint is unreachable (demo mode / logged-out).
     var RESOURCE_LABELS = {
         ice: { name: "Water Ice", color: "#06b6d4", icon: "\u2744" },
         metals: { name: "Metallic Ore", color: "#f59e0b", icon: "\u2692" },
@@ -658,6 +660,27 @@
         hydrocarbons: { name: "Hydrocarbons", color: "#f97316", icon: "\u25C6" },
         exotic: { name: "Exotic Matter", color: "#ef4444", icon: "\u2736" },
     };
+    // Ordered list of resource keys for rendering. Replaced with the
+    // ResourceType catalogue (ordered by `order` field) once the API
+    // responds, so GM changes in Settings > Star Map show up here too.
+    var RESOURCE_KEYS = ["ice", "metals", "rareEarth", "helium3", "hydrocarbons", "exotic"];
+
+    fetch('/api/starmap/resource-types/').then(function(r) {
+        if (r.ok) return r.json();
+        return null;
+    }).then(function(types) {
+        if (!types || !types.length) return;
+        RESOURCE_KEYS = types.map(function(t) { return t.key; });
+        types.forEach(function(t) {
+            RESOURCE_LABELS[t.key] = {
+                name: t.name,
+                color: t.color || "#00ff88",
+                icon: t.icon || "",
+            };
+        });
+        // Re-render the info panel if something is currently shown.
+        if (typeof hoveredStar !== "undefined" && hoveredStar) updateInfoPanel(hoveredStar);
+    }).catch(function() {});
 
     function updateInfoPanel(star) {
         document.getElementById("info-name").textContent = star.isEndgame
@@ -693,7 +716,7 @@
 
         resDiv.style.display = "block";
         var html = "";
-        var keys = ["ice", "metals", "rareEarth", "helium3", "hydrocarbons", "exotic"];
+        var keys = RESOURCE_KEYS;
         // Bar width scales to the largest value in the displayed set so the
         // bars stay meaningful across wildly different unit ranges
         // (helium-3 canisters vs kt of ore).
@@ -708,7 +731,7 @@
         if (peak <= 0) peak = 1;
         for (var i = 0; i < keys.length; i++) {
             var key = keys[i];
-            var cfg = RESOURCE_LABELS[key];
+            var cfg = RESOURCE_LABELS[key] || { name: key, color: "#00ff88", icon: "" };
             var cell2 = displayed[key];
             // Accept three shapes: {min,max,unit} (scan bracket),
             // {value,unit} (GM ground truth), or plain integer (demo fallback).

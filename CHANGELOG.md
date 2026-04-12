@@ -1,5 +1,10 @@
 # Changelog
 
+## v0.12.55
+- Star map: resource bars now render in the order defined in Settings > Star Map
+- Resource names, colors, and icons on the map come from the ResourceType catalogue, so GM edits in settings flow through to the map without code changes
+- Hardcoded fallback kept for unauthenticated demo views
+
 ## v0.12.54
 - Settings: up/down arrow buttons on each resource type row to reorder the list
 - Reorder rewrites every row's order field with its new index, so ties (e.g. freshly added types with order=0) move correctly
