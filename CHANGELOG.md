@@ -1,5 +1,14 @@
 # Changelog
 
+## v0.12.48
+- Star map resources: absolute unit quantities instead of 0–100 percentages
+- ResourceType gains unit_label, typical_min/max, rarity_weight, scan brackets
+- Seeded six canonical resources: ice (carrier loads), metals (kt ore), rare earths, helium-3 (canisters), hydrocarbons (tanks), exotic matter (fragments)
+- Scan levels return {min, max, unit} brackets — level 3 is exact
+- Procedural seeder uses per-resource ranges modulated by scarcity factor
+- Star info panel shows "20–60 carrier loads" instead of "42%"
+- First release after git/production sync — prior v0.11.x and v0.12.0–0.12.47 entries not in this changelog
+
 ## v0.10.6
 - Fix: agency page Babel crash — removed template literals and IIFEs from JSX
 
