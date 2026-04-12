@@ -90,6 +90,10 @@
             <button class="sidebar-item" onclick="showSection('starmap-config', this)">Star Map</button>
         </div>
         <div class="sidebar-group">
+            <div class="sidebar-group-label">SHIPS</div>
+            <button class="sidebar-item" onclick="showSection('starships-config', this)">Starships</button>
+        </div>
+        <div class="sidebar-group">
             <div class="sidebar-group-label danger">ADMIN</div>
             <button class="sidebar-item" onclick="showSection('impersonate', this)">View As Player</button>
             <button class="sidebar-item danger" onclick="showSection('transfer', this)">Transfer Player</button>
@@ -464,6 +468,73 @@
             </div>
         </div>
 
+        <!-- Starships Config -->
+        <div id="sec-starships-config" class="settings-section">
+            <h3>STARSHIPS CONFIGURATION</h3>
+
+            <!-- Slot budget enforcement toggle — this one lives in the outer form. -->
+            <div style="margin-bottom: 1.5rem; padding: 1rem; border: 1px solid var(--border-color); border-radius: var(--radius-sm);">
+                <label style="display: flex; align-items: center; gap: 0.75rem; cursor: pointer;">
+                    <input type="checkbox" name="enforce_ship_slot_budget" {% if settings_obj.enforce_ship_slot_budget %}checked{% endif %}
+                        style="width: 20px; height: 20px; accent-color: var(--accent-primary);">
+                    <span class="mono-text" style="font-size: 0.9rem; color: var(--text-primary);">ENFORCE SLOT BUDGET</span>
+                </label>
+                <span class="text-muted mono-text" style="font-size: 0.7rem; display: block; margin-top: 0.5rem; padding-left: 2.75rem;">
+                    When on, the class editor rejects designs that exceed the ship type's slot budget. When off, it only warns — useful for sketching in-progress designs.
+                </span>
+                <button type="submit" class="mono-text" style="margin-top: 0.75rem; background: var(--accent-primary); color: var(--bg-dark); border: none; padding: 0.4rem 0.9rem; cursor: pointer; font-weight: bold; font-size: 0.75rem; letter-spacing: 1px;">SAVE TOGGLE</button>
+            </div>
+
+            <!-- Ship Types -->
+            <div style="margin-bottom: 2rem;">
+                <div class="mono-text text-muted" style="font-size: 0.7rem; margin-bottom: 0.75rem; letter-spacing: 1px;">SHIP TYPES</div>
+                <div id="ship-type-list"></div>
+                <div style="display: flex; gap: 0.5rem; margin-top: 0.75rem; flex-wrap: wrap;">
+                    <input type="text" id="st-key" placeholder="key" style="width: 100px; background: var(--bg-input); border: 1px solid var(--border-color); color: var(--text-primary); padding: 0.4rem; font-family: var(--font-mono); font-size: 0.75rem;">
+                    <input type="text" id="st-name" placeholder="Display Name" style="flex: 1; min-width: 140px; background: var(--bg-input); border: 1px solid var(--border-color); color: var(--text-primary); padding: 0.4rem; font-family: var(--font-mono); font-size: 0.75rem;">
+                    <button type="button" onclick="addShipType()" class="mono-text" style="background: var(--accent-primary); border: none; color: var(--bg-dark); padding: 0.4rem 0.75rem; cursor: pointer; font-size: 0.75rem; font-weight: bold;">ADD TYPE</button>
+                </div>
+            </div>
+
+            <!-- Ship Modules -->
+            <div>
+                <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 0.75rem; gap: 0.5rem;">
+                    <div class="mono-text text-muted" style="font-size: 0.7rem; letter-spacing: 1px;">SHIP MODULES</div>
+                    <select id="sm-filter-category" onchange="loadShipModules()" class="mono-text" style="background: var(--bg-input); border: 1px solid var(--border-color); color: var(--text-primary); padding: 0.3rem; font-size: 0.7rem;">
+                        <option value="">All categories</option>
+                        <option value="propulsion">Propulsion</option>
+                        <option value="power">Power</option>
+                        <option value="weapons">Weapons</option>
+                        <option value="defense">Defense</option>
+                        <option value="sensors">Sensors</option>
+                        <option value="quarters">Crew Quarters</option>
+                        <option value="cargo">Cargo</option>
+                        <option value="hangar">Hangar / Bay</option>
+                        <option value="command">Command &amp; Control</option>
+                        <option value="special">Special</option>
+                    </select>
+                </div>
+                <div id="ship-module-list"></div>
+                <div style="display: flex; gap: 0.5rem; margin-top: 0.75rem; flex-wrap: wrap;">
+                    <input type="text" id="sm-key" placeholder="key" style="width: 100px; background: var(--bg-input); border: 1px solid var(--border-color); color: var(--text-primary); padding: 0.4rem; font-family: var(--font-mono); font-size: 0.75rem;">
+                    <input type="text" id="sm-name" placeholder="Display Name" style="flex: 1; min-width: 140px; background: var(--bg-input); border: 1px solid var(--border-color); color: var(--text-primary); padding: 0.4rem; font-family: var(--font-mono); font-size: 0.75rem;">
+                    <select id="sm-category" class="mono-text" style="background: var(--bg-input); border: 1px solid var(--border-color); color: var(--text-primary); padding: 0.4rem; font-size: 0.75rem;">
+                        <option value="propulsion">Propulsion</option>
+                        <option value="power">Power</option>
+                        <option value="weapons">Weapons</option>
+                        <option value="defense">Defense</option>
+                        <option value="sensors">Sensors</option>
+                        <option value="quarters">Crew Quarters</option>
+                        <option value="cargo">Cargo</option>
+                        <option value="hangar">Hangar / Bay</option>
+                        <option value="command">Command &amp; Control</option>
+                        <option value="special" selected>Special</option>
+                    </select>
+                    <button type="button" onclick="addShipModule()" class="mono-text" style="background: var(--accent-primary); border: none; color: var(--bg-dark); padding: 0.4rem 0.75rem; cursor: pointer; font-size: 0.75rem; font-weight: bold;">ADD MODULE</button>
+                </div>
+            </div>
+        </div>
+
         <!-- Impersonate -->
         <div id="sec-impersonate" class="settings-section">
             <h3>VIEW AS PLAYER</h3>
@@ -736,6 +807,287 @@ function deleteResourceType(id) {
     });
 }
 loadResourceTypes();
+
+// -----------------------------------------------------------------
+// Starships: Ship Types + Ship Modules catalogue editors
+// -----------------------------------------------------------------
+var ST_OPEN = {};    // expanded ShipType rows
+var SM_OPEN = {};    // expanded ShipModule rows
+var ST_CACHE = [];   // last-loaded ship types, for reorder arrows
+var SM_CACHE = [];   // last-loaded ship modules
+
+function stField(obj, field, label, type, hint) {
+    var val = obj[field];
+    if (val === null || val === undefined) val = '';
+    var inputType = type || 'text';
+    return '<div style="display: flex; flex-direction: column; gap: 0.15rem;">' +
+        '<label class="text-muted mono-text" style="font-size: 0.58rem; letter-spacing: 0.5px;">' + label + (hint ? ' <span style="text-transform: none; letter-spacing: 0;">(' + hint + ')</span>' : '') + '</label>' +
+        '<input type="' + inputType + '" data-field="' + field + '" value="' + String(val).replace(/"/g, '&quot;') + '" ' +
+        (inputType === 'number' ? 'step="1"' : '') +
+        ' style="background: var(--bg-input); border: 1px solid var(--border-color); color: var(--text-primary); padding: 0.35rem; font-family: var(--font-mono); font-size: 0.72rem;">' +
+        '</div>';
+}
+
+// --- Ship Types ---
+function loadShipTypes() {
+    fetch('/api/starships/ship-types/').then(function(r) { return r.json(); }).then(function(types) {
+        ST_CACHE = types.slice();
+        var html = '';
+        types.forEach(function(t, idx) {
+            var open = !!ST_OPEN[t.id];
+            var isFirst = idx === 0;
+            var isLast = idx === types.length - 1;
+            var arrowBase = 'background: transparent; border: 1px solid var(--border-color); color: var(--text-primary); padding: 0.1rem 0.35rem; cursor: pointer; font-size: 0.65rem; line-height: 1;';
+            var disabledStyle = 'opacity: 0.3; cursor: not-allowed;';
+
+            html += '<div style="border-bottom: 1px solid var(--border-color);">';
+            html += '<div style="display: flex; align-items: center; gap: 0.5rem; padding: 0.4rem 0;">';
+            html += '<div style="display: flex; flex-direction: column; gap: 0.1rem;">';
+            html += '<button type="button" onclick="moveShipType(' + t.id + ',-1)" ' + (isFirst ? 'disabled' : '') + ' class="mono-text" style="' + arrowBase + (isFirst ? disabledStyle : '') + '" title="Move up">\u25B2</button>';
+            html += '<button type="button" onclick="moveShipType(' + t.id + ',1)" ' + (isLast ? 'disabled' : '') + ' class="mono-text" style="' + arrowBase + (isLast ? disabledStyle : '') + '" title="Move down">\u25BC</button>';
+            html += '</div>';
+            html += '<span class="mono-text" style="font-size: 0.8rem; color: var(--text-primary); flex: 1;">' + t.name + '</span>';
+            html += '<span class="mono-text text-muted" style="font-size: 0.65rem;">slots ' + t.default_slot_budget + '</span>';
+            html += '<span class="mono-text text-muted" style="font-size: 0.65rem;">size ' + t.min_size + '\u2013' + t.max_size + '</span>';
+            html += '<span class="mono-text text-muted" style="font-size: 0.65rem;">crew ' + t.base_crew + '</span>';
+            html += '<button type="button" onclick="toggleShipType(' + t.id + ')" class="mono-text" style="background: transparent; border: 1px solid var(--border-color); color: var(--text-primary); padding: 0.15rem 0.4rem; cursor: pointer; font-size: 0.6rem;">' + (open ? 'HIDE' : 'EDIT') + '</button>';
+            html += '<button type="button" onclick="deleteShipType(' + t.id + ')" class="mono-text" style="background: transparent; border: 1px solid var(--accent-danger); color: var(--accent-danger); padding: 0.15rem 0.4rem; cursor: pointer; font-size: 0.6rem;">X</button>';
+            html += '</div>';
+
+            if (open) {
+                html += '<div data-st-edit="' + t.id + '" style="padding: 0.6rem 0.5rem 0.9rem 1.4rem; display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 0.55rem;">';
+                html += stField(t, 'name', 'DISPLAY NAME', 'text');
+                html += stField(t, 'key', 'KEY', 'text');
+                html += stField(t, 'default_slot_budget', 'SLOT BUDGET', 'number');
+                html += stField(t, 'min_size', 'MIN SIZE', 'number');
+                html += stField(t, 'max_size', 'MAX SIZE', 'number');
+                html += stField(t, 'base_crew', 'BASE CREW', 'number');
+                html += stField(t, 'base_energy', 'BASE ENERGY', 'number');
+                html += stField(t, 'base_maintenance', 'BASE MAINT.', 'number');
+                html += stField(t, 'order', 'ORDER', 'number');
+                html += '<div style="grid-column: 1 / -1;">' +
+                    '<label class="text-muted mono-text" style="font-size: 0.58rem; letter-spacing: 0.5px;">DESCRIPTION</label>' +
+                    '<textarea data-field="description" rows="2" style="width: 100%; background: var(--bg-input); border: 1px solid var(--border-color); color: var(--text-primary); padding: 0.35rem; font-family: var(--font-mono); font-size: 0.72rem; resize: vertical;">' + (t.description || '') + '</textarea>' +
+                    '</div>';
+                html += '<div style="grid-column: 1 / -1; display: flex; justify-content: flex-end;">';
+                html += '<button type="button" onclick="saveShipType(' + t.id + ')" class="mono-text" style="background: var(--accent-primary); border: none; color: var(--bg-dark); padding: 0.35rem 0.9rem; cursor: pointer; font-size: 0.72rem; font-weight: bold; letter-spacing: 1px;">SAVE</button>';
+                html += '</div>';
+                html += '</div>';
+            }
+            html += '</div>';
+        });
+        if (!types.length) html = '<span class="mono-text text-muted" style="font-size: 0.8rem;">No ship types defined.</span>';
+        document.getElementById('ship-type-list').innerHTML = html;
+    });
+}
+
+function toggleShipType(id) { ST_OPEN[id] = !ST_OPEN[id]; loadShipTypes(); }
+
+function saveShipType(id) {
+    var panel = document.querySelector('[data-st-edit="' + id + '"]');
+    if (!panel) return;
+    var payload = {};
+    panel.querySelectorAll('[data-field]').forEach(function(input) {
+        payload[input.dataset.field] = input.value;
+    });
+    fetch('/api/starships/ship-types/' + id + '/', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json', 'X-CSRFToken': getCsrf() },
+        body: JSON.stringify(payload),
+    }).then(function(r) { return r.json(); }).then(function(d) {
+        if (d.error) { alert(d.error); return; }
+        loadShipTypes();
+    });
+}
+
+function addShipType() {
+    var key = document.getElementById('st-key').value.trim();
+    var name = document.getElementById('st-name').value.trim();
+    if (!key || !name) { alert('Key and name required.'); return; }
+    fetch('/api/starships/ship-types/', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'X-CSRFToken': getCsrf() },
+        body: JSON.stringify({ key: key, name: name }),
+    }).then(function(r) { return r.json(); }).then(function(d) {
+        if (d.error) { alert(d.error); return; }
+        document.getElementById('st-key').value = '';
+        document.getElementById('st-name').value = '';
+        if (d.id) ST_OPEN[d.id] = true;
+        loadShipTypes();
+    });
+}
+
+function deleteShipType(id) {
+    if (!confirm('Delete this ship type? Classes using it will block the delete.')) return;
+    fetch('/api/starships/ship-types/' + id + '/', {
+        method: 'DELETE', headers: { 'X-CSRFToken': getCsrf() },
+    }).then(function() { delete ST_OPEN[id]; loadShipTypes(); });
+}
+
+function moveShipType(id, delta) {
+    var idx = ST_CACHE.findIndex(function(t) { return t.id === id; });
+    if (idx < 0) return;
+    var targetIdx = idx + delta;
+    if (targetIdx < 0 || targetIdx >= ST_CACHE.length) return;
+    var reordered = ST_CACHE.slice();
+    var moved = reordered.splice(idx, 1)[0];
+    reordered.splice(targetIdx, 0, moved);
+    Promise.all(reordered.map(function(t, i) {
+        if (t.order === i) return Promise.resolve();
+        return fetch('/api/starships/ship-types/' + t.id + '/', {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json', 'X-CSRFToken': getCsrf() },
+            body: JSON.stringify({ order: i }),
+        });
+    })).then(function() { loadShipTypes(); });
+}
+
+loadShipTypes();
+
+// --- Ship Modules ---
+function loadShipModules() {
+    var filter = document.getElementById('sm-filter-category').value;
+    fetch('/api/starships/modules/').then(function(r) { return r.json(); }).then(function(modules) {
+        SM_CACHE = modules.slice();
+        if (filter) modules = modules.filter(function(m) { return m.category === filter; });
+        var html = '';
+        modules.forEach(function(m, idx) {
+            var open = !!SM_OPEN[m.id];
+            var isFirst = idx === 0;
+            var isLast = idx === modules.length - 1;
+            var arrowBase = 'background: transparent; border: 1px solid var(--border-color); color: var(--text-primary); padding: 0.1rem 0.35rem; cursor: pointer; font-size: 0.65rem; line-height: 1;';
+            var disabledStyle = 'opacity: 0.3; cursor: not-allowed;';
+
+            html += '<div style="border-bottom: 1px solid var(--border-color);">';
+            html += '<div style="display: flex; align-items: center; gap: 0.5rem; padding: 0.4rem 0;">';
+            html += '<div style="display: flex; flex-direction: column; gap: 0.1rem;">';
+            html += '<button type="button" onclick="moveShipModule(' + m.id + ',-1)" ' + (isFirst ? 'disabled' : '') + ' class="mono-text" style="' + arrowBase + (isFirst ? disabledStyle : '') + '" title="Move up">\u25B2</button>';
+            html += '<button type="button" onclick="moveShipModule(' + m.id + ',1)" ' + (isLast ? 'disabled' : '') + ' class="mono-text" style="' + arrowBase + (isLast ? disabledStyle : '') + '" title="Move down">\u25BC</button>';
+            html += '</div>';
+            html += '<span class="mono-text" style="font-size: 0.65rem; color: var(--accent-primary); border: 1px solid var(--accent-primary); padding: 0.05rem 0.3rem; min-width: 5.5rem; text-align: center;">' + (m.category_label || m.category) + '</span>';
+            html += '<span class="mono-text" style="font-size: 0.8rem; color: var(--text-primary); flex: 1;">' + m.name + '</span>';
+            html += '<span class="mono-text text-muted" style="font-size: 0.65rem;">slots ' + m.slot_cost + '</span>';
+            html += '<span class="mono-text text-muted" style="font-size: 0.65rem;">crew ' + (m.crew_delta >= 0 ? '+' : '') + m.crew_delta + '</span>';
+            html += '<span class="mono-text text-muted" style="font-size: 0.65rem;">pwr ' + (m.energy_delta >= 0 ? '+' : '') + m.energy_delta + '</span>';
+            if (m.provides_sublight) html += '<span class="mono-text" style="font-size: 0.55rem; color: #22c55e; border: 1px solid #22c55e; padding: 0.05rem 0.2rem;">SUB</span>';
+            if (m.provides_ftl) html += '<span class="mono-text" style="font-size: 0.55rem; color: #c084fc; border: 1px solid #c084fc; padding: 0.05rem 0.2rem;">FTL</span>';
+            html += '<button type="button" onclick="toggleShipModule(' + m.id + ')" class="mono-text" style="background: transparent; border: 1px solid var(--border-color); color: var(--text-primary); padding: 0.15rem 0.4rem; cursor: pointer; font-size: 0.6rem;">' + (open ? 'HIDE' : 'EDIT') + '</button>';
+            html += '<button type="button" onclick="deleteShipModule(' + m.id + ')" class="mono-text" style="background: transparent; border: 1px solid var(--accent-danger); color: var(--accent-danger); padding: 0.15rem 0.4rem; cursor: pointer; font-size: 0.6rem;">X</button>';
+            html += '</div>';
+
+            if (open) {
+                html += '<div data-sm-edit="' + m.id + '" style="padding: 0.6rem 0.5rem 0.9rem 1.4rem; display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 0.55rem;">';
+                html += stField(m, 'name', 'DISPLAY NAME', 'text');
+                html += stField(m, 'key', 'KEY', 'text');
+                // Category select
+                html += '<div style="display: flex; flex-direction: column; gap: 0.15rem;">' +
+                    '<label class="text-muted mono-text" style="font-size: 0.58rem; letter-spacing: 0.5px;">CATEGORY</label>' +
+                    '<select data-field="category" style="background: var(--bg-input); border: 1px solid var(--border-color); color: var(--text-primary); padding: 0.35rem; font-family: var(--font-mono); font-size: 0.72rem;">' +
+                    ['propulsion','power','weapons','defense','sensors','quarters','cargo','hangar','command','special'].map(function(cat) {
+                        return '<option value="' + cat + '"' + (m.category === cat ? ' selected' : '') + '>' + cat + '</option>';
+                    }).join('') +
+                    '</select></div>';
+                html += stField(m, 'slot_cost', 'SLOT COST', 'number');
+                html += stField(m, 'crew_delta', 'CREW \u0394', 'number');
+                html += stField(m, 'energy_delta', 'ENERGY \u0394', 'number');
+                html += stField(m, 'maintenance_delta', 'MAINT. \u0394', 'number');
+                html += stField(m, 'min_hull_size', 'MIN HULL SIZE', 'number');
+                html += stField(m, 'build_cost_xp_delta', 'BUILD COST XP', 'number');
+                html += stField(m, 'xp_cost', 'RESEARCH XP', 'number');
+                html += stField(m, 'order', 'ORDER', 'number');
+                // Sublight / FTL flags
+                html += '<div style="display: flex; flex-direction: column; gap: 0.2rem;">' +
+                    '<label class="text-muted mono-text" style="font-size: 0.58rem; letter-spacing: 0.5px;">FLAGS</label>' +
+                    '<label style="display: flex; align-items: center; gap: 0.3rem;"><input type="checkbox" data-field="provides_sublight" ' + (m.provides_sublight ? 'checked' : '') + '> <span class="mono-text" style="font-size: 0.65rem;">SUBLIGHT</span></label>' +
+                    '<label style="display: flex; align-items: center; gap: 0.3rem;"><input type="checkbox" data-field="provides_ftl" ' + (m.provides_ftl ? 'checked' : '') + '> <span class="mono-text" style="font-size: 0.65rem;">FTL</span></label>' +
+                    '</div>';
+                // Restricted types (CSV input)
+                html += '<div style="grid-column: span 2;">' +
+                    '<label class="text-muted mono-text" style="font-size: 0.58rem; letter-spacing: 0.5px;">RESTRICTED TO TYPES <span style="text-transform: none;">(comma-separated keys, empty = all)</span></label>' +
+                    '<input type="text" data-field="restricted_to_types" value="' + ((m.restricted_to_types || []).join(',')).replace(/"/g, '&quot;') + '" style="width: 100%; background: var(--bg-input); border: 1px solid var(--border-color); color: var(--text-primary); padding: 0.35rem; font-family: var(--font-mono); font-size: 0.72rem;">' +
+                    '</div>';
+                // Description
+                html += '<div style="grid-column: 1 / -1;">' +
+                    '<label class="text-muted mono-text" style="font-size: 0.58rem; letter-spacing: 0.5px;">DESCRIPTION</label>' +
+                    '<textarea data-field="description" rows="2" style="width: 100%; background: var(--bg-input); border: 1px solid var(--border-color); color: var(--text-primary); padding: 0.35rem; font-family: var(--font-mono); font-size: 0.72rem; resize: vertical;">' + (m.description || '') + '</textarea>' +
+                    '</div>';
+                html += '<div style="grid-column: 1 / -1; display: flex; justify-content: flex-end;">';
+                html += '<button type="button" onclick="saveShipModule(' + m.id + ')" class="mono-text" style="background: var(--accent-primary); border: none; color: var(--bg-dark); padding: 0.35rem 0.9rem; cursor: pointer; font-size: 0.72rem; font-weight: bold; letter-spacing: 1px;">SAVE</button>';
+                html += '</div>';
+                html += '</div>';
+            }
+            html += '</div>';
+        });
+        if (!modules.length) html = '<span class="mono-text text-muted" style="font-size: 0.8rem;">No modules in this category.</span>';
+        document.getElementById('ship-module-list').innerHTML = html;
+    });
+}
+
+function toggleShipModule(id) { SM_OPEN[id] = !SM_OPEN[id]; loadShipModules(); }
+
+function saveShipModule(id) {
+    var panel = document.querySelector('[data-sm-edit="' + id + '"]');
+    if (!panel) return;
+    var payload = {};
+    panel.querySelectorAll('[data-field]').forEach(function(input) {
+        if (input.type === 'checkbox') payload[input.dataset.field] = input.checked;
+        else payload[input.dataset.field] = input.value;
+    });
+    fetch('/api/starships/modules/' + id + '/', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json', 'X-CSRFToken': getCsrf() },
+        body: JSON.stringify(payload),
+    }).then(function(r) { return r.json(); }).then(function(d) {
+        if (d.error) { alert(d.error); return; }
+        loadShipModules();
+    });
+}
+
+function addShipModule() {
+    var key = document.getElementById('sm-key').value.trim();
+    var name = document.getElementById('sm-name').value.trim();
+    if (!key || !name) { alert('Key and name required.'); return; }
+    var category = document.getElementById('sm-category').value;
+    fetch('/api/starships/modules/', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'X-CSRFToken': getCsrf() },
+        body: JSON.stringify({ key: key, name: name, category: category }),
+    }).then(function(r) { return r.json(); }).then(function(d) {
+        if (d.error) { alert(d.error); return; }
+        document.getElementById('sm-key').value = '';
+        document.getElementById('sm-name').value = '';
+        if (d.id) SM_OPEN[d.id] = true;
+        loadShipModules();
+    });
+}
+
+function deleteShipModule(id) {
+    if (!confirm('Delete this module? Classes using it will block the delete.')) return;
+    fetch('/api/starships/modules/' + id + '/', {
+        method: 'DELETE', headers: { 'X-CSRFToken': getCsrf() },
+    }).then(function() { delete SM_OPEN[id]; loadShipModules(); });
+}
+
+function moveShipModule(id, delta) {
+    // Reorder within the full catalogue, not the filtered view.
+    var idx = SM_CACHE.findIndex(function(m) { return m.id === id; });
+    if (idx < 0) return;
+    var targetIdx = idx + delta;
+    if (targetIdx < 0 || targetIdx >= SM_CACHE.length) return;
+    var reordered = SM_CACHE.slice();
+    var moved = reordered.splice(idx, 1)[0];
+    reordered.splice(targetIdx, 0, moved);
+    Promise.all(reordered.map(function(m, i) {
+        if (m.order === i) return Promise.resolve();
+        return fetch('/api/starships/modules/' + m.id + '/', {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json', 'X-CSRFToken': getCsrf() },
+            body: JSON.stringify({ order: i }),
+        });
+    })).then(function() { loadShipModules(); });
+}
+
+loadShipModules();
 
 // Civilisations
 var TECH_LABELS = { type_0: 'Type 0', type_i: 'Type I', type_ii: 'Type II', type_iii: 'Type III' };

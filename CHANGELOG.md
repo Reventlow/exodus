@@ -1,5 +1,14 @@
 # Changelog
 
+## v0.13.1
+- Settings → Starships tab: Ship Types and Ship Modules catalogue editors (Release B of 7)
+- Both catalogues reuse the reorder / expand-edit pattern from ResourceType
+- Ship Types expose slot budget, size bounds, baseline crew/energy/maintenance
+- Ship Modules expose slot cost, crew/energy/maintenance deltas, sublight/FTL flags, min hull size, build-cost XP delta, research XP, category, and restricted-to-types (comma-separated key list)
+- Category filter dropdown on the module list, add-module form includes a category picker
+- SiteSettings "enforce slot budget" toggle exposed here (used by Release C's class editor)
+- SUB/FTL pill badges in the module summary rows
+
 ## v0.13.0
 - New **starships** app — schema, migrations, and seed data for the upcoming starship module system (Release A of 7)
 - Six new models: ShipType, ShipModule, StarshipClass, ClassModule, Starship, Fleet
