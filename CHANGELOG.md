@@ -1,5 +1,15 @@
 # Changelog
 
+## v0.14.1
+- spacebattle REST API + MCP tools (Release B of 7)
+- Endpoints: /api/spacebattle/battles/, /battles/<id>/, /start/, /next-turn/, /end/, /log/, /simulate/
+- Participant actions: /participants/, /participants/<id>/, /move/, /fire/, /apply-damage/
+- Every mutating endpoint supports ?dry_run=true — projects state without persisting, so balance sims don't corrupt canonical ship records
+- /simulate/ runs a pure-function toy combat model over the current battle state and returns aggregate stats (player_win_rate, avg_rounds, avg hull remaining). Safe for high-QPS balance work.
+- Initiative uses d10 + ship_type.initiative_bonus, ties broken by smaller ship size
+- Damage deltas write straight through to Starship.maintenance_state / current_crew / status, with every before/after state captured in BattleLog for Release G rollback
+- Parallel commit to exodus-mcp adds list_battles / get_battle / create_battle / add_battle_participant / start_battle / battle_next_turn / move_participant / fire_weapon / apply_battle_damage / simulate_battle / get_battle_log MCP tools
+
 ## v0.14.0
 - New **spacebattle** app — schema and migrations for the hex-grid tactical battle system (Release A of 7)
 - Three models: Battle (top-level engagement), BattleParticipant (ship on the grid), BattleLog (append-only action log)
