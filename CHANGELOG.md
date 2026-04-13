@@ -1,5 +1,13 @@
 # Changelog
 
+## v0.14.2
+- Spacebattle list + canvas grid view (Release C of 7)
+- /spacebattle/ battle list page with NEW BATTLE button (staff only)
+- /spacebattle/<id>/ battle view with three-panel layout: info/initiative/participants, HTML5 Canvas hex grid, action log
+- Pointy-top axial hex grid rendering, participant tokens drawn as coloured discs (cyan players, red enemies, grey neutral)
+- START / NEXT TURN / END battle controls (staff)
+- BATTLES nav link next to STARSHIPS (gated on show_starships site setting)
+
 ## v0.14.1
 - spacebattle REST API + MCP tools (Release B of 7)
 - Endpoints: /api/spacebattle/battles/, /battles/<id>/, /start/, /next-turn/, /end/, /log/, /simulate/

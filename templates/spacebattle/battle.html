@@ -1,0 +1,296 @@
+{% extends "base.html" %}
+
+{% block title %}{{ battle_name }} // BATTLE{% endblock %}
+
+{% block content %}
+<style>
+    .battle-layout {
+        display: grid;
+        grid-template-columns: 260px 1fr 280px;
+        gap: 0.75rem;
+        padding: 0.75rem;
+        min-height: calc(100vh - 80px);
+    }
+    .panel {
+        border: 1px solid var(--border-color);
+        padding: 0.75rem;
+        border-radius: var(--radius-sm);
+        background: var(--bg-panel, rgba(10,12,20,0.6));
+        overflow: auto;
+    }
+    .panel h3 { margin: 0 0 0.5rem 0; font-size: 0.8rem; color: var(--accent-primary); letter-spacing: 1px; }
+    #canvas-wrap {
+        border: 1px solid var(--border-color);
+        border-radius: var(--radius-sm);
+        padding: 0.25rem;
+        background: #04060a;
+        display: flex;
+        align-items: flex-start;
+        justify-content: flex-start;
+        overflow: auto;
+    }
+    #battle-canvas { display: block; }
+    .log-entry {
+        font-family: var(--font-mono);
+        font-size: 0.65rem;
+        color: var(--text-muted);
+        padding: 0.2rem 0;
+        border-bottom: 1px dotted var(--border-color);
+    }
+    .log-entry .action {
+        display: inline-block;
+        min-width: 4.5rem;
+        color: var(--accent-primary);
+        text-transform: uppercase;
+        letter-spacing: 1px;
+    }
+    .participant-row {
+        display: flex; align-items: center; gap: 0.4rem;
+        padding: 0.35rem 0.5rem;
+        border: 1px solid var(--border-color);
+        border-radius: var(--radius-sm);
+        margin-bottom: 0.3rem;
+        cursor: pointer;
+        transition: border-color 0.1s;
+    }
+    .participant-row.selected { border-color: var(--accent-primary); background: rgba(6,182,212,0.08); }
+    .side-players { border-left: 3px solid #06b6d4; }
+    .side-enemies { border-left: 3px solid #ef4444; }
+    .side-neutral { border-left: 3px solid var(--text-muted); }
+</style>
+
+<div class="battle-layout">
+    <!-- LEFT: info + initiative + participants -->
+    <div class="panel">
+        <h3 id="header-name">Loading…</h3>
+        <div id="header-meta" class="mono-text text-muted" style="font-size: 0.65rem;"></div>
+
+        <div style="display: flex; gap: 0.3rem; flex-wrap: wrap; margin-top: 0.6rem;">
+            {% if is_staff %}
+            <button onclick="startBattle()" id="btn-start" class="mono-text" style="background: var(--accent-primary); border: none; color: var(--bg-dark); padding: 0.3rem 0.6rem; cursor: pointer; font-size: 0.65rem; font-weight: bold;">START</button>
+            <button onclick="nextTurn()" id="btn-next" class="mono-text" style="background: transparent; border: 1px solid var(--border-color); color: var(--text-primary); padding: 0.3rem 0.6rem; cursor: pointer; font-size: 0.65rem;">NEXT TURN</button>
+            <button onclick="endBattle()" id="btn-end" class="mono-text" style="background: transparent; border: 1px solid var(--accent-danger); color: var(--accent-danger); padding: 0.3rem 0.6rem; cursor: pointer; font-size: 0.65rem;">END</button>
+            {% endif %}
+        </div>
+
+        <h3 style="margin-top: 1rem;">INITIATIVE</h3>
+        <div id="initiative-list" class="mono-text text-muted" style="font-size: 0.65rem;">—</div>
+
+        <h3 style="margin-top: 1rem;">PARTICIPANTS</h3>
+        <div id="participant-list"></div>
+    </div>
+
+    <!-- CENTER: canvas -->
+    <div id="canvas-wrap">
+        <canvas id="battle-canvas" width="800" height="600"></canvas>
+    </div>
+
+    <!-- RIGHT: action log -->
+    <div class="panel">
+        <h3>ACTION LOG</h3>
+        <div id="log-body"></div>
+    </div>
+</div>
+
+<script>
+const BATTLE_ID = {{ battle_id }};
+const IS_STAFF = {{ is_staff|yesno:"true,false" }};
+var BATTLE = null;
+var SELECTED_PARTICIPANT_ID = null;
+
+function csrfToken() {
+    return document.cookie.match(/csrftoken=([^;]+)/)?.[1] || '';
+}
+
+function api(path, opts) {
+    opts = opts || {};
+    opts.headers = Object.assign({}, opts.headers || {}, {
+        'Content-Type': 'application/json',
+        'X-CSRFToken': csrfToken(),
+    });
+    return fetch(path, opts).then(function(r) {
+        return r.json().then(function(d) {
+            if (!r.ok) { alert((d && d.error) || ('Error ' + r.status)); throw d; }
+            return d;
+        });
+    });
+}
+
+function escapeHtml(s) {
+    return (s == null ? '' : String(s)).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+// ---- Hex math ---------------------------------------------------------
+// Axial q,r with pointy-top hexes. (q,r) → screen (x,y):
+//   x = size * sqrt(3) * (q + r/2)
+//   y = size * 1.5 * r
+const HEX_SIZE = 24;
+function hexToPixel(q, r) {
+    var x = HEX_SIZE * Math.sqrt(3) * (q + r / 2);
+    var y = HEX_SIZE * 1.5 * r;
+    return [x + HEX_SIZE + 4, y + HEX_SIZE + 4];
+}
+
+function drawHex(ctx, cx, cy, size, fill, stroke) {
+    ctx.beginPath();
+    for (var i = 0; i < 6; i++) {
+        var a = (Math.PI / 180) * (60 * i - 30);
+        var x = cx + size * Math.cos(a);
+        var y = cy + size * Math.sin(a);
+        if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+    }
+    ctx.closePath();
+    if (fill) { ctx.fillStyle = fill; ctx.fill(); }
+    if (stroke) { ctx.strokeStyle = stroke; ctx.lineWidth = 1; ctx.stroke(); }
+}
+
+function sideColor(side) {
+    return side === 'players' ? '#06b6d4'
+        : side === 'enemies' ? '#ef4444'
+        : 'var(--text-muted)';
+}
+
+function render() {
+    if (!BATTLE) return;
+    var canvas = document.getElementById('battle-canvas');
+    var w = Math.ceil(HEX_SIZE * Math.sqrt(3) * (BATTLE.grid_width + 0.5) + HEX_SIZE);
+    var h = Math.ceil(HEX_SIZE * 1.5 * BATTLE.grid_height + HEX_SIZE * 2);
+    canvas.width = w;
+    canvas.height = h;
+    var ctx = canvas.getContext('2d');
+    ctx.clearRect(0, 0, w, h);
+
+    // Grid
+    for (var r = 0; r < BATTLE.grid_height; r++) {
+        for (var q = 0; q < BATTLE.grid_width; q++) {
+            var p = hexToPixel(q, r);
+            drawHex(ctx, p[0], p[1], HEX_SIZE, 'rgba(20,30,50,0.3)', 'rgba(80,100,140,0.35)');
+        }
+    }
+
+    // Participants
+    (BATTLE.participants || []).forEach(function(pt) {
+        var p = hexToPixel(pt.q, pt.r);
+        var color = pt.token_color || (pt.side === 'players' ? '#06b6d4' : pt.side === 'enemies' ? '#ef4444' : '#888');
+        // Token disc
+        ctx.beginPath();
+        ctx.arc(p[0], p[1], HEX_SIZE * 0.55, 0, Math.PI * 2);
+        ctx.fillStyle = color;
+        ctx.globalAlpha = pt.id === SELECTED_PARTICIPANT_ID ? 1.0 : 0.85;
+        ctx.fill();
+        ctx.globalAlpha = 1.0;
+        // Selection ring
+        if (pt.id === SELECTED_PARTICIPANT_ID) {
+            ctx.beginPath();
+            ctx.arc(p[0], p[1], HEX_SIZE * 0.65, 0, Math.PI * 2);
+            ctx.strokeStyle = '#ffffff';
+            ctx.lineWidth = 2;
+            ctx.stroke();
+        }
+        // Label
+        ctx.fillStyle = '#04060a';
+        ctx.font = 'bold 10px monospace';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        var label = pt.token_icon || pt.starship_name.slice(0, 3).toUpperCase();
+        ctx.fillText(label, p[0], p[1]);
+    });
+}
+
+function renderHeader() {
+    document.getElementById('header-name').textContent = BATTLE.name;
+    document.getElementById('header-meta').innerHTML =
+        'Status: <span style="color:' +
+        (BATTLE.status === 'active' ? '#22c55e' : BATTLE.status === 'concluded' ? '#f59e0b' : 'var(--text-muted)') +
+        '">' + BATTLE.status.toUpperCase() + '</span> \u00B7 Round ' + BATTLE.round_number +
+        ' \u00B7 Grid ' + BATTLE.grid_width + '\u00D7' + BATTLE.grid_height;
+}
+
+function renderInitiative() {
+    var order = BATTLE.initiative_order || [];
+    if (!order.length) {
+        document.getElementById('initiative-list').innerHTML = '<span class="mono-text text-muted" style="font-size:0.65rem;">— not rolled —</span>';
+        return;
+    }
+    var partsById = {};
+    (BATTLE.participants || []).forEach(function(p) { partsById[p.id] = p; });
+    var html = '';
+    order.forEach(function(pid, idx) {
+        var p = partsById[pid];
+        if (!p) return;
+        var active = idx === BATTLE.active_participant_index;
+        var color = sideColor(p.side);
+        html += '<div style="display:flex;align-items:center;gap:0.3rem;padding:0.15rem 0;' +
+            (active ? 'background:rgba(6,182,212,0.15);border-left:2px solid var(--accent-primary);padding-left:0.3rem;' : '') +
+            '">' +
+            '<span style="color:' + color + ';font-size:0.6rem;">' + (p.initiative_result != null ? p.initiative_result : '?') + '</span>' +
+            '<span style="flex:1;color:var(--text-primary);font-size:0.65rem;">' + escapeHtml(p.starship_name) + '</span>' +
+            '</div>';
+    });
+    document.getElementById('initiative-list').innerHTML = html;
+}
+
+function renderParticipants() {
+    var html = '';
+    (BATTLE.participants || []).forEach(function(p) {
+        var selected = p.id === SELECTED_PARTICIPANT_ID ? 'selected' : '';
+        html += '<div class="participant-row side-' + p.side + ' ' + selected + '" onclick="selectParticipant(' + p.id + ')">';
+        html += '<div style="flex:1;">';
+        html += '<div class="mono-text" style="font-size: 0.72rem; color: var(--text-primary);">' + escapeHtml(p.starship_name) + '</div>';
+        html += '<div class="mono-text text-muted" style="font-size: 0.58rem;">' + escapeHtml(p.starship_class_name) + ' \u00B7 (' + p.q + ',' + p.r + ') \u00B7 hull ' + p.maintenance_state + '%</div>';
+        html += '</div>';
+        html += '</div>';
+    });
+    if (!html) html = '<span class="mono-text text-muted" style="font-size: 0.65rem;">None yet.</span>';
+    document.getElementById('participant-list').innerHTML = html;
+}
+
+function renderLog() {
+    var entries = BATTLE.log || [];
+    var html = '';
+    entries.slice().reverse().forEach(function(e) {
+        html += '<div class="log-entry">' +
+            '<span class="action">' + e.action_type + '</span> ' +
+            'r' + e.round_number + ' — ' +
+            escapeHtml(e.message) +
+            '</div>';
+    });
+    if (!html) html = '<span class="mono-text text-muted" style="font-size: 0.65rem;">No events yet.</span>';
+    document.getElementById('log-body').innerHTML = html;
+}
+
+function selectParticipant(id) {
+    SELECTED_PARTICIPANT_ID = id;
+    renderParticipants();
+    render();
+}
+
+function loadBattle() {
+    return api('/api/spacebattle/battles/' + BATTLE_ID + '/?log_limit=50').then(function(data) {
+        BATTLE = data;
+        renderHeader();
+        renderInitiative();
+        renderParticipants();
+        renderLog();
+        render();
+    });
+}
+
+function startBattle() {
+    if (!confirm('Start battle? Rolls initial initiative.')) return;
+    api('/api/spacebattle/battles/' + BATTLE_ID + '/start/', { method: 'POST', body: '{}' })
+        .then(loadBattle);
+}
+function nextTurn() {
+    api('/api/spacebattle/battles/' + BATTLE_ID + '/next-turn/', { method: 'POST' })
+        .then(loadBattle);
+}
+function endBattle() {
+    if (!confirm('End this battle?')) return;
+    api('/api/spacebattle/battles/' + BATTLE_ID + '/end/', { method: 'POST' })
+        .then(loadBattle);
+}
+
+loadBattle();
+</script>
+{% endblock %}

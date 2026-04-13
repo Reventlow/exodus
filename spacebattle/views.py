@@ -18,10 +18,10 @@ import random
 
 from django.contrib.auth.decorators import login_required
 from django.db import transaction
-from django.http import JsonResponse
-from django.shortcuts import get_object_or_404
+from django.http import HttpResponseForbidden, JsonResponse
+from django.shortcuts import get_object_or_404, render
 from django.utils import timezone
-from django.views.decorators.http import require_http_methods
+from django.views.decorators.http import require_GET, require_http_methods
 
 from .models import Battle, BattleLog, BattleParticipant
 
@@ -926,3 +926,30 @@ def api_battle_simulate(request, pk):
     results["player_win_rate"] = results["player_wins"] / iterations
     results["enemy_win_rate"] = results["enemy_wins"] / iterations
     return JsonResponse(results)
+
+
+# ---------------------------------------------------------------------------
+# Page views
+# ---------------------------------------------------------------------------
+
+@login_required
+@require_GET
+def battles_list_page(request):
+    """Battle list landing page — shows battles visible to the user."""
+    return render(request, "spacebattle/list.html", {
+        "is_staff": request.user.is_staff,
+    })
+
+
+@login_required
+@require_GET
+def battle_page(request, pk):
+    """Single battle view — canvas + side panels."""
+    battle = get_object_or_404(Battle, pk=pk)
+    if not _can_view_battle(request.user, battle):
+        return HttpResponseForbidden("ACCESS DENIED")
+    return render(request, "spacebattle/battle.html", {
+        "battle_id": battle.id,
+        "battle_name": battle.name,
+        "is_staff": request.user.is_staff,
+    })

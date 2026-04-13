@@ -7,6 +7,10 @@ from . import views
 app_name = "spacebattle"
 
 urlpatterns = [
+    # Pages
+    path("spacebattle/", views.battles_list_page, name="list"),
+    path("spacebattle/<int:pk>/", views.battle_page, name="detail"),
+
     # Battles
     path("api/spacebattle/battles/", views.api_battles, name="api-battles"),
     path(

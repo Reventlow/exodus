@@ -1,0 +1,84 @@
+{% extends "base.html" %}
+
+{% block title %}BATTLES // BLACKLOG.NET{% endblock %}
+
+{% block content %}
+<style>
+    .battle-list { padding: 1rem; max-width: 1000px; margin: 0 auto; }
+    .battle-row {
+        display: flex; align-items: center; gap: 1rem;
+        padding: 0.8rem 1rem; border: 1px solid var(--border-color);
+        border-radius: var(--radius-sm); margin-bottom: 0.5rem;
+        cursor: pointer; transition: border-color 0.15s;
+    }
+    .battle-row:hover { border-color: var(--accent-primary); }
+    .battle-status {
+        display: inline-block; padding: 0.2rem 0.6rem;
+        font-size: 0.65rem; font-family: var(--font-mono); letter-spacing: 1px;
+        border: 1px solid; min-width: 5rem; text-align: center;
+    }
+    .st-setup { color: var(--text-muted); }
+    .st-active { color: #22c55e; border-color: #22c55e; }
+    .st-concluded { color: #f59e0b; border-color: #f59e0b; }
+</style>
+
+<div class="battle-list">
+    <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 1rem;">
+        <h2 class="mono-text" style="color: var(--accent-primary); letter-spacing: 2px; margin: 0;">SPACE BATTLES</h2>
+        {% if is_staff %}
+        <button onclick="createBattle()" class="mono-text" style="background: var(--accent-primary); border: none; color: var(--bg-dark); padding: 0.5rem 1rem; cursor: pointer; font-weight: bold; letter-spacing: 1px;">NEW BATTLE</button>
+        {% endif %}
+    </div>
+    <div id="battle-list-body"><span class="mono-text text-muted">Loading…</span></div>
+</div>
+
+<script>
+function csrfToken() {
+    return document.cookie.match(/csrftoken=([^;]+)/)?.[1] || '';
+}
+
+function loadBattles() {
+    fetch('/api/spacebattle/battles/').then(function(r) { return r.json(); }).then(function(battles) {
+        var html = '';
+        battles.forEach(function(b) {
+            var stClass = 'st-' + b.status;
+            var date = b.created_at ? b.created_at.slice(0, 10) : '';
+            html += '<div class="battle-row" onclick="window.location = \'/spacebattle/' + b.id + '/\'">';
+            html += '<span class="battle-status ' + stClass + '">' + b.status.toUpperCase() + '</span>';
+            html += '<div style="flex: 1;">';
+            html += '<div class="mono-text" style="font-size: 0.95rem; color: var(--text-primary);">' + escapeHtml(b.name) + '</div>';
+            html += '<div class="mono-text text-muted" style="font-size: 0.65rem;">round ' + b.round_number + ' \u00B7 ' + b.grid_width + '\u00D7' + b.grid_height + ' grid \u00B7 created ' + date + '</div>';
+            html += '</div>';
+            html += '</div>';
+        });
+        if (!battles.length) {
+            html = '<div class="mono-text text-muted" style="text-align: center; padding: 3rem;">No battles yet.</div>';
+        }
+        document.getElementById('battle-list-body').innerHTML = html;
+    }).catch(function() {
+        document.getElementById('battle-list-body').innerHTML = '<div class="mono-text" style="color: var(--accent-danger);">Failed to load battles.</div>';
+    });
+}
+
+function createBattle() {
+    var name = prompt('Battle name:');
+    if (!name) return;
+    var width = parseInt(prompt('Grid width (default 20):') || '20', 10);
+    var height = parseInt(prompt('Grid height (default 15):') || '15', 10);
+    fetch('/api/spacebattle/battles/', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrfToken() },
+        body: JSON.stringify({ name: name, grid_width: width, grid_height: height }),
+    }).then(function(r) { return r.json(); }).then(function(b) {
+        if (b.error) { alert(b.error); return; }
+        window.location = '/spacebattle/' + b.id + '/';
+    });
+}
+
+function escapeHtml(s) {
+    return (s == null ? '' : String(s)).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+loadBattles();
+</script>
+{% endblock %}
