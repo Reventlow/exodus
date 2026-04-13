@@ -86,10 +86,14 @@
         <canvas id="battle-canvas" width="800" height="600"></canvas>
     </div>
 
-    <!-- RIGHT: action log -->
+    <!-- RIGHT: selection details + action log -->
     <div class="panel">
-        <h3>ACTION LOG</h3>
-        <div id="log-body"></div>
+        <h3 id="detail-title">SELECTION</h3>
+        <div id="detail-body" class="mono-text text-muted" style="font-size: 0.7rem;">Nothing selected.</div>
+        <div id="detail-actions" style="margin-top: 0.5rem; display: flex; flex-direction: column; gap: 0.35rem;"></div>
+
+        <h3 style="margin-top: 1rem;">ACTION LOG</h3>
+        <div id="log-body" style="max-height: 40vh; overflow-y: auto;"></div>
     </div>
 </div>
 
@@ -124,6 +128,10 @@ var BATTLE = null;
 var SELECTED_PARTICIPANT_ID = null;
 var BATTLE_SOCKET = null;
 var CANVAS_EL = null;
+// "move" = clicks move selection; "fire" = next click on an enemy
+// logs a fire action and returns to move mode.
+var ACTION_MODE = 'move';
+var PENDING_WEAPON_KEY = '';
 
 function csrfToken() {
     return document.cookie.match(/csrftoken=([^;]+)/)?.[1] || '';
@@ -288,8 +296,77 @@ function renderLog() {
 
 function selectParticipant(id) {
     SELECTED_PARTICIPANT_ID = id;
+    ACTION_MODE = 'move';
+    PENDING_WEAPON_KEY = '';
     renderParticipants();
+    renderDetail();
     render();
+}
+
+function renderDetail() {
+    var el = document.getElementById('detail-body');
+    var actions = document.getElementById('detail-actions');
+    if (SELECTED_PARTICIPANT_ID == null || !BATTLE) {
+        el.textContent = 'Nothing selected.';
+        actions.innerHTML = '';
+        return;
+    }
+    var p = (BATTLE.participants || []).find(function(x) { return x.id === SELECTED_PARTICIPANT_ID; });
+    if (!p) { el.textContent = 'Selection not found.'; actions.innerHTML = ''; return; }
+    var html = '<div class="mono-text" style="color: var(--text-primary); font-size: 0.8rem;">' + escapeHtml(p.starship_name) + '</div>';
+    html += '<div class="mono-text text-muted" style="font-size: 0.6rem;">' + escapeHtml(p.starship_class_name) + ' \u00B7 ' + escapeHtml(p.ship_type_name) + '</div>';
+    html += '<div class="mono-text text-muted" style="font-size: 0.6rem; margin-top: 0.35rem;">';
+    html += 'pos (' + p.q + ',' + p.r + ') \u00B7 facing ' + p.facing + '<br>';
+    html += 'hull ' + p.maintenance_state + '% \u00B7 crew ' + p.current_crew + '<br>';
+    html += 'ship status ' + p.ship_status + ' \u00B7 battle ' + p.status + '<br>';
+    html += 'side ' + p.side + ' \u00B7 agency ' + escapeHtml(p.agency_name || '—');
+    html += '</div>';
+    if (ACTION_MODE === 'fire') {
+        html += '<div class="mono-text" style="color: #ef4444; font-size: 0.65rem; margin-top: 0.4rem;">\u26A1 CLICK A TARGET TOKEN TO FIRE</div>';
+    }
+    el.innerHTML = html;
+
+    var acts = '';
+    // Fire button — any viewer whose selection they can command
+    acts += '<button onclick="enterFireMode()" class="mono-text" style="background: transparent; border: 1px solid #ef4444; color: #ef4444; padding: 0.35rem 0.6rem; cursor: pointer; font-size: 0.65rem;">DECLARE FIRE</button>';
+    if (IS_STAFF) {
+        acts += '<button onclick="openDamagePrompt()" class="mono-text" style="background: transparent; border: 1px solid #f59e0b; color: #f59e0b; padding: 0.35rem 0.6rem; cursor: pointer; font-size: 0.65rem;">APPLY DAMAGE…</button>';
+    }
+    actions.innerHTML = acts;
+}
+
+function enterFireMode() {
+    if (SELECTED_PARTICIPANT_ID == null) return;
+    PENDING_WEAPON_KEY = prompt('Weapon key (optional, leave blank for "weapons"):') || '';
+    ACTION_MODE = 'fire';
+    renderDetail();
+}
+
+function openDamagePrompt() {
+    if (SELECTED_PARTICIPANT_ID == null) return;
+    var p = (BATTLE.participants || []).find(function(x) { return x.id === SELECTED_PARTICIPANT_ID; });
+    if (!p) return;
+    var hullStr = prompt('Hull delta (negative = damage, positive = repair):', '-10');
+    if (hullStr == null) return;
+    var hullDelta = parseInt(hullStr, 10) || 0;
+    var crewStr = prompt('Crew delta (negative = casualties):', '0');
+    if (crewStr == null) return;
+    var crewDelta = parseInt(crewStr, 10) || 0;
+    var message = prompt('GM note (optional):', '');
+    if (message == null) return;
+    api(
+        '/api/spacebattle/battles/' + BATTLE_ID +
+        '/participants/' + SELECTED_PARTICIPANT_ID + '/apply-damage/',
+        {
+            method: 'POST',
+            body: JSON.stringify({
+                hull_delta: hullDelta,
+                crew_delta: crewDelta,
+                message: message,
+            }),
+        },
+    );
+    // The broadcast from the server will refresh the board.
 }
 
 function loadBattle() {
@@ -298,6 +375,7 @@ function loadBattle() {
         renderHeader();
         renderInitiative();
         renderParticipants();
+        renderDetail();
         renderLog();
         render();
         attachCanvasHandlers();
@@ -337,24 +415,42 @@ function onCanvasClick(ev) {
     var hex = pixelToHex(px, py);
     var q = hex[0], r = hex[1];
     if (q < 0 || r < 0 || q >= BATTLE.grid_width || r >= BATTLE.grid_height) return;
-    // If a participant is already at this hex, select it.
     var clicked = (BATTLE.participants || []).find(function(p) {
         return p.q === q && p.r === r;
     });
-    if (clicked) {
-        SELECTED_PARTICIPANT_ID = clicked.id;
-        renderParticipants();
-        render();
+
+    // Fire mode: clicking a token fires at it, anything else cancels.
+    if (ACTION_MODE === 'fire') {
+        ACTION_MODE = 'move';
+        if (clicked && clicked.id !== SELECTED_PARTICIPANT_ID) {
+            api(
+                '/api/spacebattle/battles/' + BATTLE_ID +
+                '/participants/' + SELECTED_PARTICIPANT_ID + '/fire/',
+                {
+                    method: 'POST',
+                    body: JSON.stringify({
+                        target_id: clicked.id,
+                        weapon_key: PENDING_WEAPON_KEY,
+                    }),
+                },
+            );
+        }
+        PENDING_WEAPON_KEY = '';
+        renderDetail();
         return;
     }
-    // Otherwise if we have a selection, move it here.
+
+    // Normal mode: click a token to select, click a hex to move selection.
+    if (clicked) {
+        selectParticipant(clicked.id);
+        return;
+    }
     if (SELECTED_PARTICIPANT_ID == null) return;
     api(
         '/api/spacebattle/battles/' + BATTLE_ID +
         '/participants/' + SELECTED_PARTICIPANT_ID + '/move/',
         { method: 'POST', body: JSON.stringify({ q: q, r: r }) },
     );
-    // Broadcast will refresh the canvas via the websocket handler.
 }
 
 // ------------------------- WebSocket -------------------------
@@ -391,6 +487,7 @@ function handleParticipantEvent(p) {
     if (idx >= 0) BATTLE.participants[idx] = p;
     else BATTLE.participants.push(p);
     renderParticipants();
+    if (p.id === SELECTED_PARTICIPANT_ID) renderDetail();
     render();
 }
 

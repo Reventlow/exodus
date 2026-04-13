@@ -1,5 +1,12 @@
 # Changelog
 
+## v0.14.5
+- Spacebattle fire + damage adjudication (Release F of 7)
+- Right panel now shows the selected participant's details (class, hull %, crew, side, agency)
+- DECLARE FIRE button prompts for an optional weapon key then enters fire mode — next click on an enemy token logs a fire action
+- APPLY DAMAGE button (staff only) prompts for hull delta / crew delta / note and writes directly to the canonical Starship record, broadcasting the update over websocket
+- Every damage event captures before/after state in BattleLog for Release G rollback
+
 ## v0.14.4
 - Spacebattle live moves + websocket sync (Release E of 7)
 - Click a hex on the canvas to select the token in it; click an empty hex to move the selected token there
