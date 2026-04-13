@@ -1,5 +1,9 @@
 # Changelog
 
+## v0.14.9
+- Fix: spacebattle pages threw "Uncaught SyntaxError: Invalid or unexpected token" because the _terrain_render.html partial opened with a multi-line Django {# … #} comment which Django's template engine only parses as single-line, so the comment body leaked into the script block
+- Replaced with a plain JS /* … */ block comment so the content is inside the <script> section properly
+
 ## v0.14.8
 - Spacebattle terrain now has procedural per-type visuals instead of flat colored hexes
 - Asteroid fields render as scattered rocky chunks with shading; nebulas as overlapping coloured gradient blobs + speckle stars; debris fields as angled metal fragments; planets as shaded discs with crescent shadow and terminator line (5 palette variants); suns with radiating rays and a glowing core; gravity wells as concentric curvature arcs converging on a black dot; minefields as a grid of spiked mine markers; stations as hub + solar-panel arms; scenario zones as dashed hex outlines with a central Z; custom stays as the old colored fill + glyph

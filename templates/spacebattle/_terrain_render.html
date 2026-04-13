@@ -1,15 +1,16 @@
-{# Shared terrain visual rendering for spacebattle pages.
-
-   Include this partial inside a <script> block on any page that
-   draws the hex grid. It defines a single public function:
-
-       drawTerrainVisual(ctx, cx, cy, size, terrain)
-
-   Each terrain type gets a procedural shape painted onto the canvas
-   so you can tell an asteroid field from a nebula at a glance. The
-   pattern is deterministic per (q, r) so hexes don't shimmer between
-   renders.
-#}
+/*
+ * Shared terrain visual rendering for spacebattle pages.
+ *
+ * Include this partial inside a <script> block on any page that
+ * draws the hex grid. It defines a single public function:
+ *
+ *     drawTerrainVisual(ctx, cx, cy, size, terrain)
+ *
+ * Each terrain type gets a procedural shape painted onto the canvas
+ * so you can tell an asteroid field from a nebula at a glance. The
+ * pattern is deterministic per (q, r) so hexes don't shimmer between
+ * renders.
+ */
 
 // Deterministic PRNG seeded off hex coordinates so a given asteroid
 // field always scatters its rocks the same way between redraws.
