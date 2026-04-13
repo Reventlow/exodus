@@ -1,5 +1,12 @@
 # Changelog
 
+## v0.14.4
+- Spacebattle live moves + websocket sync (Release E of 7)
+- Click a hex on the canvas to select the token in it; click an empty hex to move the selected token there
+- Django Channels consumer at /ws/spacebattle/<id>/ fans out log + participant events to every connected viewer
+- Moves, damage, log notes, and initiative rolls broadcast server-side and clients apply the update without a full reload
+- Client auto-reconnects after 2s on drop
+
 ## v0.14.3
 - Spacebattle participant placement (Release D of 7)
 - PLACE button on the battle page opens a modal fleet picker

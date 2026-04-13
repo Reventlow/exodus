@@ -122,6 +122,8 @@ const BATTLE_ID = {{ battle_id }};
 const IS_STAFF = {{ is_staff|yesno:"true,false" }};
 var BATTLE = null;
 var SELECTED_PARTICIPANT_ID = null;
+var BATTLE_SOCKET = null;
+var CANVAS_EL = null;
 
 function csrfToken() {
     return document.cookie.match(/csrftoken=([^;]+)/)?.[1] || '';
@@ -298,7 +300,98 @@ function loadBattle() {
         renderParticipants();
         renderLog();
         render();
+        attachCanvasHandlers();
     });
+}
+
+// ------------------------- Canvas interaction -------------------------
+// Pixel → axial hex inverse of hexToPixel. Pointy-top hexes.
+function pixelToHex(px, py) {
+    var x = px - (HEX_SIZE + 4);
+    var y = py - (HEX_SIZE + 4);
+    var q = (Math.sqrt(3) / 3 * x - 1.0 / 3 * y) / HEX_SIZE;
+    var r = (2.0 / 3 * y) / HEX_SIZE;
+    // Axial round
+    var s = -q - r;
+    var rq = Math.round(q);
+    var rr = Math.round(r);
+    var rs = Math.round(s);
+    var dq = Math.abs(rq - q);
+    var dr = Math.abs(rr - r);
+    var ds = Math.abs(rs - s);
+    if (dq > dr && dq > ds) rq = -rr - rs;
+    else if (dr > ds) rr = -rq - rs;
+    return [rq, rr];
+}
+
+function attachCanvasHandlers() {
+    if (CANVAS_EL) return;
+    CANVAS_EL = document.getElementById('battle-canvas');
+    CANVAS_EL.addEventListener('click', onCanvasClick);
+}
+
+function onCanvasClick(ev) {
+    var rect = CANVAS_EL.getBoundingClientRect();
+    var px = ev.clientX - rect.left;
+    var py = ev.clientY - rect.top;
+    var hex = pixelToHex(px, py);
+    var q = hex[0], r = hex[1];
+    if (q < 0 || r < 0 || q >= BATTLE.grid_width || r >= BATTLE.grid_height) return;
+    // If a participant is already at this hex, select it.
+    var clicked = (BATTLE.participants || []).find(function(p) {
+        return p.q === q && p.r === r;
+    });
+    if (clicked) {
+        SELECTED_PARTICIPANT_ID = clicked.id;
+        renderParticipants();
+        render();
+        return;
+    }
+    // Otherwise if we have a selection, move it here.
+    if (SELECTED_PARTICIPANT_ID == null) return;
+    api(
+        '/api/spacebattle/battles/' + BATTLE_ID +
+        '/participants/' + SELECTED_PARTICIPANT_ID + '/move/',
+        { method: 'POST', body: JSON.stringify({ q: q, r: r }) },
+    );
+    // Broadcast will refresh the canvas via the websocket handler.
+}
+
+// ------------------------- WebSocket -------------------------
+function connectSocket() {
+    var proto = window.location.protocol === 'https:' ? 'wss' : 'ws';
+    var url = proto + '://' + window.location.host + '/ws/spacebattle/' + BATTLE_ID + '/';
+    BATTLE_SOCKET = new WebSocket(url);
+    BATTLE_SOCKET.onmessage = function(ev) {
+        var msg = JSON.parse(ev.data);
+        if (msg.type === 'log') handleLogEvent(msg.payload);
+        else if (msg.type === 'participant') handleParticipantEvent(msg.payload);
+    };
+    BATTLE_SOCKET.onclose = function() {
+        // Reconnect after 2s on any drop.
+        setTimeout(connectSocket, 2000);
+    };
+}
+
+function handleLogEvent(entry) {
+    if (!BATTLE) return;
+    BATTLE.log = BATTLE.log || [];
+    BATTLE.log.push(entry);
+    renderLog();
+    // Some log events also mean we should refresh the whole battle
+    // (initiative rolls, turn advances, participant additions).
+    if (["initiative", "turn_advance", "system", "damage", "status_change"].indexOf(entry.action_type) >= 0) {
+        loadBattle();
+    }
+}
+
+function handleParticipantEvent(p) {
+    if (!BATTLE || !BATTLE.participants) return;
+    var idx = BATTLE.participants.findIndex(function(x) { return x.id === p.id; });
+    if (idx >= 0) BATTLE.participants[idx] = p;
+    else BATTLE.participants.push(p);
+    renderParticipants();
+    render();
 }
 
 function startBattle() {
@@ -411,5 +504,6 @@ function addParticipant(shipId, rowEl) {
 }
 
 loadBattle();
+connectSocket();
 </script>
 {% endblock %}

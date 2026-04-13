@@ -156,8 +156,11 @@ def _serialize_log(entry):
 # ---------------------------------------------------------------------------
 
 def _log(battle, action_type, *, actor=None, data=None, message="", dry_run=False):
-    """Append a BattleLog entry. In dry_run mode, returns an ephemeral
-    dict that mimics the serialised shape but is never persisted."""
+    """Append a BattleLog entry and broadcast it to websocket viewers.
+
+    In dry_run mode the entry is not persisted, not broadcast, and
+    the returned dict uses id=None so callers know it was synthetic.
+    """
     if dry_run:
         return {
             "id": None,
@@ -178,9 +181,15 @@ def _log(battle, action_type, *, actor=None, data=None, message="", dry_run=Fals
         data=data or {},
         message=message,
     )
-    # Release E will hook a channels group_send here to broadcast
-    # over websockets. Left as a no-op for now.
-    return _serialize_log(entry)
+    serialised = _serialize_log(entry)
+    # Broadcast via Channels so every connected battle page updates
+    # without polling. Safe even when the channel layer is unavailable.
+    try:
+        from .consumers import broadcast_battle_event
+        broadcast_battle_event(battle.id, "log", serialised)
+    except Exception:
+        pass
+    return serialised
 
 
 # ---------------------------------------------------------------------------
@@ -467,6 +476,11 @@ def api_participant_move(request, battle_pk, pk):
         participant.r = new_r
         participant.facing = new_facing
         participant.save(update_fields=["q", "r", "facing"])
+        try:
+            from .consumers import broadcast_battle_event
+            broadcast_battle_event(battle.id, "participant", _serialize_participant(participant))
+        except Exception:
+            pass
 
     return JsonResponse({
         "participant": _serialize_participant(participant),
@@ -618,6 +632,11 @@ def api_participant_apply_damage(request, battle_pk, pk):
             if new_participant_status:
                 participant.status = new_participant_status
                 participant.save(update_fields=["status"])
+        try:
+            from .consumers import broadcast_battle_event
+            broadcast_battle_event(battle.id, "participant", _serialize_participant(participant))
+        except Exception:
+            pass
 
     return JsonResponse({
         "participant": _serialize_participant(participant),
