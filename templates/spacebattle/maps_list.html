@@ -1,0 +1,75 @@
+{% extends "base.html" %}
+
+{% block title %}BATTLE MAPS // BLACKLOG.NET{% endblock %}
+
+{% block content %}
+<style>
+    .map-list { padding: 1rem; max-width: 900px; margin: 0 auto; }
+    .map-row {
+        display: flex; align-items: center; gap: 1rem;
+        padding: 0.8rem 1rem; border: 1px solid var(--border-color);
+        border-radius: var(--radius-sm); margin-bottom: 0.5rem;
+        cursor: pointer;
+    }
+    .map-row:hover { border-color: var(--accent-primary); }
+</style>
+
+<div class="map-list">
+    <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 1rem;">
+        <h2 class="mono-text" style="color: var(--accent-primary); letter-spacing: 2px; margin: 0;">BATTLE MAPS</h2>
+        <div style="display: flex; gap: 0.5rem;">
+            <a href="{% url 'spacebattle:list' %}" class="mono-text" style="background: transparent; border: 1px solid var(--border-color); color: var(--text-primary); padding: 0.5rem 1rem; text-decoration: none; letter-spacing: 1px;">← BATTLES</a>
+            <button onclick="createMap()" class="mono-text" style="background: var(--accent-primary); border: none; color: var(--bg-dark); padding: 0.5rem 1rem; cursor: pointer; font-weight: bold; letter-spacing: 1px;">NEW MAP</button>
+        </div>
+    </div>
+    <div id="map-list-body"><span class="mono-text text-muted">Loading…</span></div>
+</div>
+
+<script>
+function csrfToken() { return document.cookie.match(/csrftoken=([^;]+)/)?.[1] || ''; }
+function escapeHtml(s) { return (s == null ? '' : String(s)).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+
+function loadMaps() {
+    fetch('/api/spacebattle/battle-maps/').then(function(r) { return r.json(); }).then(function(maps) {
+        var html = '';
+        maps.forEach(function(m) {
+            html += '<div class="map-row" onclick="window.location = \'/spacebattle/maps/' + m.id + '/\'">';
+            html += '<div style="flex:1;">';
+            html += '<div class="mono-text" style="font-size: 0.95rem; color: var(--text-primary);">' + escapeHtml(m.name) + '</div>';
+            html += '<div class="mono-text text-muted" style="font-size: 0.65rem;">' + m.grid_width + '\u00D7' + m.grid_height + ' grid \u00B7 ' + m.terrain_count + ' terrain features</div>';
+            if (m.description) html += '<div class="mono-text text-muted" style="font-size: 0.6rem; margin-top: 0.2rem;">' + escapeHtml(m.description) + '</div>';
+            html += '</div>';
+            html += '<button onclick="event.stopPropagation(); deleteMap(' + m.id + ', \'' + escapeHtml(m.name).replace(/\'/g, '\\\'') + '\')" class="mono-text" style="background: transparent; border: 1px solid var(--accent-danger); color: var(--accent-danger); padding: 0.3rem 0.6rem; cursor: pointer; font-size: 0.65rem;">DELETE</button>';
+            html += '</div>';
+        });
+        if (!maps.length) html = '<div class="mono-text text-muted" style="text-align: center; padding: 3rem;">No maps yet.</div>';
+        document.getElementById('map-list-body').innerHTML = html;
+    });
+}
+
+function createMap() {
+    var name = prompt('Map name:');
+    if (!name) return;
+    var width = parseInt(prompt('Grid width:', '20'), 10) || 20;
+    var height = parseInt(prompt('Grid height:', '15'), 10) || 15;
+    fetch('/api/spacebattle/battle-maps/', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrfToken() },
+        body: JSON.stringify({ name: name, grid_width: width, grid_height: height }),
+    }).then(function(r) { return r.json(); }).then(function(m) {
+        if (m.error) { alert(m.error); return; }
+        window.location = '/spacebattle/maps/' + m.id + '/';
+    });
+}
+
+function deleteMap(id, name) {
+    if (!confirm('Delete map "' + name + '"?')) return;
+    fetch('/api/spacebattle/battle-maps/' + id + '/', {
+        method: 'DELETE',
+        headers: { 'X-CSRFToken': csrfToken() },
+    }).then(loadMaps);
+}
+
+loadMaps();
+</script>
+{% endblock %}

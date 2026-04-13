@@ -73,8 +73,30 @@
             <button onclick="openPlacementModal()" id="btn-place" class="mono-text" style="background: transparent; border: 1px solid var(--accent-primary); color: var(--accent-primary); padding: 0.3rem 0.6rem; cursor: pointer; font-size: 0.65rem;">PLACE</button>
             <button onclick="rollbackBattle()" id="btn-rollback" class="mono-text" style="background: transparent; border: 1px solid #f59e0b; color: #f59e0b; padding: 0.3rem 0.6rem; cursor: pointer; font-size: 0.65rem;">UNDO</button>
             <button onclick="forkBattle()" id="btn-fork" class="mono-text" style="background: transparent; border: 1px solid var(--border-color); color: var(--text-primary); padding: 0.3rem 0.6rem; cursor: pointer; font-size: 0.65rem;">FORK</button>
+            {% if is_superuser %}
+            <button onclick="toggleTerrainMode()" id="btn-terrain" class="mono-text" style="background: transparent; border: 1px solid #8a7a6a; color: #8a7a6a; padding: 0.3rem 0.6rem; cursor: pointer; font-size: 0.65rem;">TERRAIN</button>
+            <button onclick="openMapPicker()" id="btn-map" class="mono-text" style="background: transparent; border: 1px solid var(--border-color); color: var(--text-primary); padding: 0.3rem 0.6rem; cursor: pointer; font-size: 0.65rem;">APPLY MAP</button>
+            {% endif %}
             {% endif %}
         </div>
+        {% if is_superuser %}
+        <div id="terrain-toolbar" style="display: none; margin-top: 0.5rem; padding: 0.5rem; border: 1px solid #8a7a6a; border-radius: var(--radius-sm);">
+            <div class="mono-text text-muted" style="font-size: 0.58rem; margin-bottom: 0.3rem;">TERRAIN TYPE</div>
+            <select id="terrain-type-select" class="mono-text" style="width: 100%; background: var(--bg-input); border: 1px solid var(--border-color); color: var(--text-primary); padding: 0.3rem; font-size: 0.7rem;">
+                <option value="asteroid">Asteroid Field</option>
+                <option value="nebula">Nebula</option>
+                <option value="debris">Debris Field</option>
+                <option value="planet">Planet / Moon</option>
+                <option value="sun">Star / Sun Hazard</option>
+                <option value="gravity_well">Gravity Well</option>
+                <option value="minefield">Minefield</option>
+                <option value="station">Station / Platform</option>
+                <option value="zone">Scenario Zone</option>
+                <option value="custom">Custom</option>
+            </select>
+            <div class="mono-text text-muted" style="font-size: 0.55rem; margin-top: 0.35rem;">Click empty hex to place. Click terrain to delete. ESC or TERRAIN button to exit.</div>
+        </div>
+        {% endif %}
 
         <h3 style="margin-top: 1rem;">INITIATIVE</h3>
         <div id="initiative-list" class="mono-text text-muted" style="font-size: 0.65rem;">—</div>
@@ -126,14 +148,33 @@
 <script>
 const BATTLE_ID = {{ battle_id }};
 const IS_STAFF = {{ is_staff|yesno:"true,false" }};
+const IS_SUPERUSER = {{ is_superuser|yesno:"true,false" }};
 var BATTLE = null;
 var SELECTED_PARTICIPANT_ID = null;
 var BATTLE_SOCKET = null;
 var CANVAS_EL = null;
 // "move" = clicks move selection; "fire" = next click on an enemy
-// logs a fire action and returns to move mode.
+// logs a fire action and returns to move mode; "terrain" = click places
+// terrain of TERRAIN_PLACE_TYPE, click existing terrain to remove.
 var ACTION_MODE = 'move';
 var PENDING_WEAPON_KEY = '';
+var TERRAIN_PLACE_TYPE = 'asteroid';
+var TERRAIN_INDEX = {};  // keyed by "q,r" for fast hex lookup
+
+var TERRAIN_DEFAULTS = {
+    asteroid:     { color: '#8a7a6a', icon: '\u2689' },  // small rock cluster
+    nebula:       { color: '#9a4aff', icon: '\u2601' },  // cloud
+    debris:       { color: '#6b7280', icon: '\u2699' },  // gear-ish fragments
+    planet:       { color: '#3b82f6', icon: '\u25CF' },  // solid disc
+    sun:          { color: '#fbbf24', icon: '\u2600' },
+    gravity_well: { color: '#7c3aed', icon: '\u29BE' },
+    minefield:    { color: '#ef4444', icon: '\u2738' },
+    station:      { color: '#14b8a6', icon: '\u29C7' },
+    zone:         { color: '#22c55e', icon: '\u2B1C' },
+    custom:       { color: '#94a3b8', icon: '\u25A2' },
+};
+function terrainColor(t) { return t.color || (TERRAIN_DEFAULTS[t.terrain_type] || TERRAIN_DEFAULTS.custom).color; }
+function terrainIcon(t) { return t.icon || (TERRAIN_DEFAULTS[t.terrain_type] || TERRAIN_DEFAULTS.custom).icon; }
 
 function csrfToken() {
     return document.cookie.match(/csrftoken=([^;]+)/)?.[1] || '';
@@ -204,6 +245,37 @@ function render() {
             drawHex(ctx, p[0], p[1], HEX_SIZE, 'rgba(20,30,50,0.3)', 'rgba(80,100,140,0.35)');
         }
     }
+
+    // Terrain — drawn between grid and participants so tokens ride on top
+    TERRAIN_INDEX = {};
+    (BATTLE.terrain || []).forEach(function(t) {
+        TERRAIN_INDEX[t.q + ',' + t.r] = t;
+        var p = hexToPixel(t.q, t.r);
+        var col = terrainColor(t);
+        // Filled hex with alpha so the grid still shows through
+        drawHex(ctx, p[0], p[1], HEX_SIZE, col + (col.startsWith('#') ? '' : ''), col);
+        // Override alpha — drawHex uses ctx.fillStyle directly so we
+        // redraw the fill path manually with globalAlpha.
+        ctx.save();
+        ctx.globalAlpha = 0.35;
+        ctx.beginPath();
+        for (var i = 0; i < 6; i++) {
+            var a = (Math.PI / 180) * (60 * i - 30);
+            var x = p[0] + HEX_SIZE * Math.cos(a);
+            var y = p[1] + HEX_SIZE * Math.sin(a);
+            if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+        }
+        ctx.closePath();
+        ctx.fillStyle = col;
+        ctx.fill();
+        ctx.restore();
+        // Glyph
+        ctx.fillStyle = col;
+        ctx.font = 'bold 14px monospace';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText(terrainIcon(t), p[0], p[1]);
+    });
 
     // Participants
     (BATTLE.participants || []).forEach(function(pt) {
@@ -421,6 +493,21 @@ function onCanvasClick(ev) {
         return p.q === q && p.r === r;
     });
 
+    // Terrain mode: place or delete a terrain hex.
+    if (ACTION_MODE === 'terrain') {
+        var existing = TERRAIN_INDEX[q + ',' + r];
+        if (existing) {
+            api('/api/spacebattle/battles/' + BATTLE_ID + '/terrain/' + existing.id + '/', { method: 'DELETE' });
+        } else {
+            var tt = document.getElementById('terrain-type-select').value;
+            api('/api/spacebattle/battles/' + BATTLE_ID + '/terrain/', {
+                method: 'POST',
+                body: JSON.stringify({ q: q, r: r, terrain_type: tt }),
+            });
+        }
+        return;
+    }
+
     // Fire mode: clicking a token fires at it, anything else cancels.
     if (ACTION_MODE === 'fire') {
         ACTION_MODE = 'move';
@@ -464,6 +551,9 @@ function connectSocket() {
         var msg = JSON.parse(ev.data);
         if (msg.type === 'log') handleLogEvent(msg.payload);
         else if (msg.type === 'participant') handleParticipantEvent(msg.payload);
+        else if (msg.type === 'terrain_added' || msg.type === 'terrain_updated' || msg.type === 'terrain_removed') {
+            handleTerrainEvent(msg.type, msg.payload);
+        }
     };
     BATTLE_SOCKET.onclose = function() {
         // Reconnect after 2s on any drop.
@@ -491,6 +581,50 @@ function handleParticipantEvent(p) {
     renderParticipants();
     if (p.id === SELECTED_PARTICIPANT_ID) renderDetail();
     render();
+}
+
+function handleTerrainEvent(msgType, payload) {
+    if (!BATTLE) return;
+    BATTLE.terrain = BATTLE.terrain || [];
+    if (msgType === 'terrain_added' || msgType === 'terrain_updated') {
+        var idx = BATTLE.terrain.findIndex(function(t) { return t.id === payload.id; });
+        if (idx >= 0) BATTLE.terrain[idx] = payload;
+        else BATTLE.terrain.push(payload);
+    } else if (msgType === 'terrain_removed') {
+        BATTLE.terrain = BATTLE.terrain.filter(function(t) { return t.id !== payload.id; });
+    }
+    render();
+}
+
+function toggleTerrainMode() {
+    if (ACTION_MODE === 'terrain') {
+        ACTION_MODE = 'move';
+        document.getElementById('terrain-toolbar').style.display = 'none';
+        document.getElementById('btn-terrain').style.background = 'transparent';
+    } else {
+        ACTION_MODE = 'terrain';
+        SELECTED_PARTICIPANT_ID = null;
+        document.getElementById('terrain-toolbar').style.display = 'block';
+        document.getElementById('btn-terrain').style.background = 'rgba(138,122,106,0.3)';
+        renderDetail();
+        renderParticipants();
+        render();
+    }
+}
+
+function openMapPicker() {
+    api('/api/spacebattle/battle-maps/').then(function(maps) {
+        if (!maps.length) { alert('No saved maps yet. Create one from /spacebattle/maps/'); return; }
+        var list = maps.map(function(m, i) { return (i + 1) + ') ' + m.name + ' (' + m.grid_width + 'x' + m.grid_height + ', ' + m.terrain_count + ' terrain)'; }).join('\n');
+        var pick = prompt('Which map to apply?\n\n' + list + '\n\nEnter number:');
+        var idx = parseInt(pick, 10) - 1;
+        if (isNaN(idx) || idx < 0 || idx >= maps.length) return;
+        if (!confirm('Apply "' + maps[idx].name + '"? This will CLEAR existing terrain and resize the grid.')) return;
+        api('/api/spacebattle/battle-maps/' + maps[idx].id + '/apply/', {
+            method: 'POST',
+            body: JSON.stringify({ battle_id: BATTLE_ID, clear_existing: true }),
+        }).then(loadBattle);
+    });
 }
 
 function startBattle() {

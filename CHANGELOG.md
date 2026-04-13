@@ -1,5 +1,17 @@
 # Changelog
 
+## v0.14.7
+- Space battle terrain, templates, and reusable battle maps
+- New models: BattleTerrain (per-hex, unique per (battle, q, r)), TerrainTemplate (reusable relative-offset stamps), BattleMap (full saved space map with grid dims + terrain list)
+- Ten terrain types seeded as choices: asteroid, nebula, debris, planet, sun, gravity well, minefield, station, zone, custom — each with a default color + unicode glyph that can be overridden per instance
+- Terrain is **visual-only** — mechanics are GM-adjudicated; metadata JSONField reserved for a future rules engine
+- Battle page TERRAIN button (superuser-only) toggles placement mode with a terrain type dropdown; click empty hex to place, click existing to delete
+- APPLY MAP button pops a saved map picker and replaces the battle's grid + terrain in one call
+- BATTLE MAPS nav link (superuser-only) opens a list of saved maps with full canvas editor at /spacebattle/maps/<id>/
+- Map editor: click to paint terrain, rename/resize/clear/save, trims out-of-bounds terrain on resize
+- Terrain changes broadcast as terrain_added / terrain_updated / terrain_removed websocket events so live viewers update without reload
+- API: /terrain/ CRUD, /terrain-stamp/ applies a TerrainTemplate at a chosen origin (skips occupied hexes unless replace=true), /terrain-templates/ CRUD, /battle-maps/ CRUD, /battle-maps/<id>/apply/ copies grid + terrain onto a target battle
+
 ## v0.14.6
 - Spacebattle rollback + fork (Release G of 7 — feature complete)
 - POST /battles/<id>/rollback/ undoes the last N non-reverted log entries; damage entries restore the before-snapshot of maintenance_state/current_crew/status from the log payload; move entries reset q/r/facing; other action types are just marked reverted

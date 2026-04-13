@@ -23,7 +23,10 @@ from django.shortcuts import get_object_or_404, render
 from django.utils import timezone
 from django.views.decorators.http import require_GET, require_http_methods
 
-from .models import Battle, BattleLog, BattleParticipant
+from .models import (
+    Battle, BattleLog, BattleMap, BattleParticipant, BattleTerrain,
+    TerrainTemplate,
+)
 
 
 # ---------------------------------------------------------------------------
@@ -128,6 +131,9 @@ def _serialize_battle(battle, include_participants=True, include_log=False, log_
             "starship__agency",
         ).all()
         data["participants"] = [_serialize_participant(p) for p in parts]
+        data["terrain"] = [
+            _serialize_terrain(t) for t in battle.terrain_features.all()
+        ]
     if include_log:
         qs = battle.log_entries.all().order_by("id")
         if log_limit is not None:
@@ -1087,6 +1093,370 @@ def api_battle_fork(request, pk):
 
 
 # ---------------------------------------------------------------------------
+# Terrain — per-battle hex features (Release v0.14.7)
+# ---------------------------------------------------------------------------
+
+def _serialize_terrain(t):
+    return {
+        "id": t.id,
+        "battle_id": t.battle_id,
+        "q": t.q,
+        "r": t.r,
+        "terrain_type": t.terrain_type,
+        "terrain_type_label": t.get_terrain_type_display(),
+        "display_name": t.display_name,
+        "color": t.color,
+        "icon": t.icon,
+        "notes": t.notes,
+        "metadata": t.metadata or {},
+    }
+
+
+def _broadcast_terrain(battle_id, event_type, payload):
+    try:
+        from .consumers import broadcast_battle_event
+        broadcast_battle_event(battle_id, event_type, payload)
+    except Exception:
+        pass
+
+
+@login_required
+@require_http_methods(["GET", "POST"])
+def api_battle_terrain(request, battle_pk):
+    battle = get_object_or_404(Battle, pk=battle_pk)
+    if not _can_view_battle(request.user, battle):
+        return JsonResponse({"error": "Not visible"}, status=404)
+
+    if request.method == "GET":
+        return JsonResponse(
+            [_serialize_terrain(t) for t in battle.terrain_features.all()],
+            safe=False,
+        )
+
+    # POST — placement is superuser-only
+    if not request.user.is_superuser:
+        return JsonResponse({"error": "Permission denied"}, status=403)
+    try:
+        body = json.loads(request.body)
+    except json.JSONDecodeError:
+        return JsonResponse({"error": "Invalid JSON"}, status=400)
+
+    q = int(body.get("q", 0))
+    r = int(body.get("r", 0))
+    if not (0 <= q < battle.grid_width and 0 <= r < battle.grid_height):
+        return JsonResponse({"error": "coordinates out of bounds"}, status=400)
+
+    existing = battle.terrain_features.filter(q=q, r=r).first()
+    if existing:
+        return JsonResponse(
+            {"error": "terrain already exists at this hex", "existing_id": existing.id},
+            status=400,
+        )
+
+    t = BattleTerrain.objects.create(
+        battle=battle,
+        q=q, r=r,
+        terrain_type=body.get("terrain_type", "asteroid"),
+        display_name=body.get("display_name", ""),
+        color=body.get("color", ""),
+        icon=body.get("icon", ""),
+        notes=body.get("notes", ""),
+        metadata=body.get("metadata") or {},
+    )
+    data = _serialize_terrain(t)
+    _broadcast_terrain(battle.id, "terrain_added", data)
+    return JsonResponse(data, status=201)
+
+
+@login_required
+@require_http_methods(["PUT", "DELETE"])
+def api_battle_terrain_detail(request, battle_pk, pk):
+    battle = get_object_or_404(Battle, pk=battle_pk)
+    terrain = get_object_or_404(BattleTerrain, pk=pk, battle=battle)
+    if not request.user.is_superuser:
+        return JsonResponse({"error": "Permission denied"}, status=403)
+
+    if request.method == "DELETE":
+        _broadcast_terrain(battle.id, "terrain_removed", {"id": terrain.id})
+        terrain.delete()
+        return JsonResponse({"ok": True})
+
+    try:
+        body = json.loads(request.body)
+    except json.JSONDecodeError:
+        return JsonResponse({"error": "Invalid JSON"}, status=400)
+    for field in ("terrain_type", "display_name", "color", "icon", "notes"):
+        if field in body:
+            setattr(terrain, field, body[field])
+    if "metadata" in body and isinstance(body["metadata"], dict):
+        terrain.metadata = body["metadata"]
+    terrain.save()
+    data = _serialize_terrain(terrain)
+    _broadcast_terrain(battle.id, "terrain_updated", data)
+    return JsonResponse(data)
+
+
+@login_required
+@require_http_methods(["POST"])
+def api_battle_terrain_stamp(request, battle_pk):
+    """Stamp a TerrainTemplate onto a battle at a given origin.
+
+    Body: {template_id, origin_q, origin_r, replace: bool?}
+    """
+    battle = get_object_or_404(Battle, pk=battle_pk)
+    if not request.user.is_superuser:
+        return JsonResponse({"error": "Permission denied"}, status=403)
+    try:
+        body = json.loads(request.body)
+    except json.JSONDecodeError:
+        return JsonResponse({"error": "Invalid JSON"}, status=400)
+
+    template = get_object_or_404(TerrainTemplate, pk=body.get("template_id"))
+    origin_q = int(body.get("origin_q", 0))
+    origin_r = int(body.get("origin_r", 0))
+    replace = bool(body.get("replace", False))
+
+    created = []
+    skipped = []
+    with transaction.atomic():
+        for offset in (template.hexes or []):
+            tq = origin_q + int(offset.get("q", 0))
+            tr = origin_r + int(offset.get("r", 0))
+            if not (0 <= tq < battle.grid_width and 0 <= tr < battle.grid_height):
+                skipped.append({"q": tq, "r": tr, "reason": "out of bounds"})
+                continue
+            existing = battle.terrain_features.filter(q=tq, r=tr).first()
+            if existing:
+                if replace:
+                    existing.delete()
+                else:
+                    skipped.append({"q": tq, "r": tr, "reason": "occupied"})
+                    continue
+            t = BattleTerrain.objects.create(
+                battle=battle,
+                q=tq, r=tr,
+                terrain_type=offset.get("terrain_type", "asteroid"),
+                display_name=offset.get("display_name", ""),
+                color=offset.get("color", ""),
+                icon=offset.get("icon", ""),
+                notes=offset.get("notes", ""),
+            )
+            created.append(_serialize_terrain(t))
+
+    for t in created:
+        _broadcast_terrain(battle.id, "terrain_added", t)
+    _log(
+        battle, "system",
+        data={"template_id": template.id, "created": len(created), "skipped": len(skipped)},
+        message=f"Stamped template '{template.name}' at ({origin_q},{origin_r}) — placed {len(created)}, skipped {len(skipped)}.",
+    )
+    return JsonResponse({"created": created, "skipped": skipped})
+
+
+# ---------------------------------------------------------------------------
+# TerrainTemplate CRUD
+# ---------------------------------------------------------------------------
+
+def _serialize_template(t):
+    return {
+        "id": t.id,
+        "name": t.name,
+        "description": t.description,
+        "hexes": t.hexes or [],
+        "hex_count": len(t.hexes or []),
+        "created_by_id": t.created_by_id,
+        "created_at": t.created_at.isoformat() if t.created_at else None,
+        "updated_at": t.updated_at.isoformat() if t.updated_at else None,
+    }
+
+
+@login_required
+@require_http_methods(["GET", "POST"])
+def api_terrain_templates(request):
+    if request.method == "GET":
+        return JsonResponse(
+            [_serialize_template(t) for t in TerrainTemplate.objects.all()],
+            safe=False,
+        )
+    if not request.user.is_superuser:
+        return JsonResponse({"error": "Permission denied"}, status=403)
+    try:
+        body = json.loads(request.body)
+    except json.JSONDecodeError:
+        return JsonResponse({"error": "Invalid JSON"}, status=400)
+    name = (body.get("name") or "").strip()
+    if not name:
+        return JsonResponse({"error": "name required"}, status=400)
+    t = TerrainTemplate.objects.create(
+        name=name,
+        description=body.get("description", ""),
+        hexes=body.get("hexes") or [],
+        created_by=request.user,
+    )
+    return JsonResponse(_serialize_template(t), status=201)
+
+
+@login_required
+@require_http_methods(["GET", "PUT", "DELETE"])
+def api_terrain_template_detail(request, pk):
+    t = get_object_or_404(TerrainTemplate, pk=pk)
+    if request.method == "GET":
+        return JsonResponse(_serialize_template(t))
+    if not request.user.is_superuser:
+        return JsonResponse({"error": "Permission denied"}, status=403)
+    if request.method == "DELETE":
+        t.delete()
+        return JsonResponse({"ok": True})
+    try:
+        body = json.loads(request.body)
+    except json.JSONDecodeError:
+        return JsonResponse({"error": "Invalid JSON"}, status=400)
+    for field in ("name", "description"):
+        if field in body:
+            setattr(t, field, body[field])
+    if "hexes" in body:
+        if not isinstance(body["hexes"], list):
+            return JsonResponse({"error": "hexes must be a list"}, status=400)
+        t.hexes = body["hexes"]
+    t.save()
+    return JsonResponse(_serialize_template(t))
+
+
+# ---------------------------------------------------------------------------
+# BattleMap CRUD + apply-to-battle
+# ---------------------------------------------------------------------------
+
+def _serialize_battlemap(m):
+    return {
+        "id": m.id,
+        "name": m.name,
+        "description": m.description,
+        "grid_width": m.grid_width,
+        "grid_height": m.grid_height,
+        "terrain": m.terrain or [],
+        "terrain_count": len(m.terrain or []),
+        "created_by_id": m.created_by_id,
+        "created_at": m.created_at.isoformat() if m.created_at else None,
+        "updated_at": m.updated_at.isoformat() if m.updated_at else None,
+    }
+
+
+@login_required
+@require_http_methods(["GET", "POST"])
+def api_battle_maps(request):
+    if request.method == "GET":
+        return JsonResponse(
+            [_serialize_battlemap(m) for m in BattleMap.objects.all()],
+            safe=False,
+        )
+    if not request.user.is_superuser:
+        return JsonResponse({"error": "Permission denied"}, status=403)
+    try:
+        body = json.loads(request.body)
+    except json.JSONDecodeError:
+        return JsonResponse({"error": "Invalid JSON"}, status=400)
+    name = (body.get("name") or "").strip()
+    if not name:
+        return JsonResponse({"error": "name required"}, status=400)
+    m = BattleMap.objects.create(
+        name=name,
+        description=body.get("description", ""),
+        grid_width=int(body.get("grid_width", 20)),
+        grid_height=int(body.get("grid_height", 15)),
+        terrain=body.get("terrain") or [],
+        created_by=request.user,
+    )
+    return JsonResponse(_serialize_battlemap(m), status=201)
+
+
+@login_required
+@require_http_methods(["GET", "PUT", "DELETE"])
+def api_battle_map_detail(request, pk):
+    m = get_object_or_404(BattleMap, pk=pk)
+    if request.method == "GET":
+        return JsonResponse(_serialize_battlemap(m))
+    if not request.user.is_superuser:
+        return JsonResponse({"error": "Permission denied"}, status=403)
+    if request.method == "DELETE":
+        m.delete()
+        return JsonResponse({"ok": True})
+    try:
+        body = json.loads(request.body)
+    except json.JSONDecodeError:
+        return JsonResponse({"error": "Invalid JSON"}, status=400)
+    for field in ("name", "description"):
+        if field in body:
+            setattr(m, field, body[field])
+    for field in ("grid_width", "grid_height"):
+        if field in body:
+            try:
+                setattr(m, field, int(body[field]))
+            except (TypeError, ValueError):
+                return JsonResponse({"error": f"{field} must be an integer"}, status=400)
+    if "terrain" in body:
+        if not isinstance(body["terrain"], list):
+            return JsonResponse({"error": "terrain must be a list"}, status=400)
+        m.terrain = body["terrain"]
+    m.save()
+    return JsonResponse(_serialize_battlemap(m))
+
+
+@login_required
+@require_http_methods(["POST"])
+def api_battle_map_apply(request, pk):
+    """Copy a BattleMap's grid size + terrain onto a target battle.
+
+    Body: {battle_id: int, clear_existing: bool?}
+    """
+    battle_map = get_object_or_404(BattleMap, pk=pk)
+    if not request.user.is_superuser:
+        return JsonResponse({"error": "Permission denied"}, status=403)
+    try:
+        body = json.loads(request.body)
+    except json.JSONDecodeError:
+        return JsonResponse({"error": "Invalid JSON"}, status=400)
+    battle = get_object_or_404(Battle, pk=body.get("battle_id"))
+    clear_existing = bool(body.get("clear_existing", True))
+
+    with transaction.atomic():
+        battle.grid_width = battle_map.grid_width
+        battle.grid_height = battle_map.grid_height
+        battle.save(update_fields=["grid_width", "grid_height"])
+        if clear_existing:
+            battle.terrain_features.all().delete()
+        created = []
+        for item in (battle_map.terrain or []):
+            tq = int(item.get("q", 0))
+            tr = int(item.get("r", 0))
+            if not (0 <= tq < battle.grid_width and 0 <= tr < battle.grid_height):
+                continue
+            if not clear_existing and battle.terrain_features.filter(q=tq, r=tr).exists():
+                continue
+            t = BattleTerrain.objects.create(
+                battle=battle,
+                q=tq, r=tr,
+                terrain_type=item.get("terrain_type", "asteroid"),
+                display_name=item.get("display_name", ""),
+                color=item.get("color", ""),
+                icon=item.get("icon", ""),
+                notes=item.get("notes", ""),
+            )
+            created.append(_serialize_terrain(t))
+
+    for t in created:
+        _broadcast_terrain(battle.id, "terrain_added", t)
+    _log(
+        battle, "system",
+        data={"map_id": battle_map.id, "map_name": battle_map.name, "created": len(created)},
+        message=f"Applied map '{battle_map.name}' — placed {len(created)} terrain features.",
+    )
+    return JsonResponse({
+        "battle": _serialize_battle(battle, include_participants=False),
+        "terrain_count": len(created),
+    })
+
+
+# ---------------------------------------------------------------------------
 # Page views
 # ---------------------------------------------------------------------------
 
@@ -1110,4 +1480,27 @@ def battle_page(request, pk):
         "battle_id": battle.id,
         "battle_name": battle.name,
         "is_staff": request.user.is_staff,
+        "is_superuser": request.user.is_superuser,
+    })
+
+
+@login_required
+@require_GET
+def battle_maps_list_page(request):
+    """List of saved battle maps (superuser only)."""
+    if not request.user.is_superuser:
+        return HttpResponseForbidden("ACCESS DENIED")
+    return render(request, "spacebattle/maps_list.html", {})
+
+
+@login_required
+@require_GET
+def battle_map_editor_page(request, pk):
+    """Canvas-based editor for a single battle map (superuser only)."""
+    if not request.user.is_superuser:
+        return HttpResponseForbidden("ACCESS DENIED")
+    battle_map = get_object_or_404(BattleMap, pk=pk)
+    return render(request, "spacebattle/map_editor.html", {
+        "map_id": battle_map.id,
+        "map_name": battle_map.name,
     })

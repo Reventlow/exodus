@@ -150,6 +150,129 @@ class BattleParticipant(models.Model):
         return f"{self.starship.name} @ ({self.q},{self.r}) [{self.side}]"
 
 
+class BattleTerrain(models.Model):
+    """A single terrain feature occupying one hex of a battle grid.
+
+    Visual-only in v0.14.7 — the canvas renders a coloured hex fill
+    and glyph but mechanics (LOS blocking, movement cost, damage per
+    turn) are GM-adjudicated. The metadata JSONField is reserved for
+    a future rules engine to hook into without further migrations.
+    """
+
+    TERRAIN_CHOICES = [
+        ("asteroid", "Asteroid Field"),
+        ("nebula", "Nebula"),
+        ("debris", "Debris Field"),
+        ("planet", "Planet / Moon"),
+        ("sun", "Star / Sun Hazard"),
+        ("gravity_well", "Gravity Well"),
+        ("minefield", "Minefield"),
+        ("station", "Station / Platform"),
+        ("zone", "Scenario Zone"),
+        ("custom", "Custom"),
+    ]
+
+    battle = models.ForeignKey(
+        Battle, on_delete=models.CASCADE, related_name="terrain_features",
+    )
+    q = models.IntegerField()
+    r = models.IntegerField()
+    terrain_type = models.CharField(
+        max_length=30, choices=TERRAIN_CHOICES, default="asteroid",
+    )
+    display_name = models.CharField(max_length=200, blank=True, default="")
+    color = models.CharField(
+        max_length=20, blank=True, default="",
+        help_text="Override hex colour. Empty = default per terrain type.",
+    )
+    icon = models.CharField(
+        max_length=20, blank=True, default="",
+        help_text="Override unicode glyph. Empty = default per terrain type.",
+    )
+    notes = models.TextField(blank=True, default="")
+    metadata = models.JSONField(
+        default=dict, blank=True,
+        help_text="Rule hooks (blocks_los, movement_cost, damage_per_turn) — reserved.",
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["battle", "r", "q"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["battle", "q", "r"],
+                name="unique_terrain_per_hex",
+            ),
+        ]
+
+    def __str__(self):
+        return f"{self.get_terrain_type_display()} @ ({self.q},{self.r})"
+
+
+class TerrainTemplate(models.Model):
+    """A reusable stamp — a relative pattern of terrain hexes.
+
+    Stamping a template at origin (q0, r0) creates BattleTerrain rows
+    at (q0 + offset_q, r0 + offset_r) for every entry in `hexes`.
+    Templates live outside any specific battle so they can be reused.
+    """
+
+    name = models.CharField(max_length=200, unique=True)
+    description = models.TextField(blank=True, default="")
+    hexes = models.JSONField(
+        default=list, blank=True,
+        help_text=(
+            "List of {q, r, terrain_type, display_name?, color?, icon?} "
+            "with q/r as offsets from the template origin (0,0)."
+        ),
+    )
+    created_by = models.ForeignKey(
+        "auth.User", on_delete=models.SET_NULL,
+        null=True, blank=True, related_name="terrain_templates",
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["name"]
+
+    def __str__(self):
+        return f"{self.name} ({len(self.hexes or [])} hexes)"
+
+
+class BattleMap(models.Model):
+    """A full saved space map — grid dims + terrain, reusable across battles.
+
+    Apply-to-battle copies the grid size and the terrain list onto a
+    target Battle, optionally wiping existing terrain first. Useful
+    for prepping set-piece engagements before a session.
+    """
+
+    name = models.CharField(max_length=200, unique=True)
+    description = models.TextField(blank=True, default="")
+    grid_width = models.IntegerField(default=20)
+    grid_height = models.IntegerField(default=15)
+    terrain = models.JSONField(
+        default=list, blank=True,
+        help_text=(
+            "Absolute-coordinate terrain list: "
+            "[{q, r, terrain_type, display_name?, color?, icon?, notes?}]."
+        ),
+    )
+    created_by = models.ForeignKey(
+        "auth.User", on_delete=models.SET_NULL,
+        null=True, blank=True, related_name="battle_maps",
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["name"]
+
+    def __str__(self):
+        return f"{self.name} ({self.grid_width}x{self.grid_height})"
+
+
 class BattleLog(models.Model):
     """Append-only event log.
 

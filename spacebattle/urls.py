@@ -10,6 +10,8 @@ urlpatterns = [
     # Pages
     path("spacebattle/", views.battles_list_page, name="list"),
     path("spacebattle/<int:pk>/", views.battle_page, name="detail"),
+    path("spacebattle/maps/", views.battle_maps_list_page, name="maps"),
+    path("spacebattle/maps/<int:pk>/", views.battle_map_editor_page, name="map-editor"),
 
     # Battles
     path("api/spacebattle/battles/", views.api_battles, name="api-battles"),
@@ -52,6 +54,52 @@ urlpatterns = [
         "api/spacebattle/battles/<int:pk>/fork/",
         views.api_battle_fork,
         name="api-battle-fork",
+    ),
+
+    # Terrain — per-battle
+    path(
+        "api/spacebattle/battles/<int:battle_pk>/terrain/",
+        views.api_battle_terrain,
+        name="api-battle-terrain",
+    ),
+    path(
+        "api/spacebattle/battles/<int:battle_pk>/terrain/<int:pk>/",
+        views.api_battle_terrain_detail,
+        name="api-battle-terrain-detail",
+    ),
+    path(
+        "api/spacebattle/battles/<int:battle_pk>/terrain-stamp/",
+        views.api_battle_terrain_stamp,
+        name="api-battle-terrain-stamp",
+    ),
+
+    # Terrain templates
+    path(
+        "api/spacebattle/terrain-templates/",
+        views.api_terrain_templates,
+        name="api-terrain-templates",
+    ),
+    path(
+        "api/spacebattle/terrain-templates/<int:pk>/",
+        views.api_terrain_template_detail,
+        name="api-terrain-template-detail",
+    ),
+
+    # Battle maps
+    path(
+        "api/spacebattle/battle-maps/",
+        views.api_battle_maps,
+        name="api-battle-maps",
+    ),
+    path(
+        "api/spacebattle/battle-maps/<int:pk>/",
+        views.api_battle_map_detail,
+        name="api-battle-map-detail",
+    ),
+    path(
+        "api/spacebattle/battle-maps/<int:pk>/apply/",
+        views.api_battle_map_apply,
+        name="api-battle-map-apply",
     ),
 
     # Participants

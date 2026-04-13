@@ -2,7 +2,10 @@
 
 from django.contrib import admin
 
-from .models import Battle, BattleLog, BattleParticipant
+from .models import (
+    Battle, BattleLog, BattleMap, BattleParticipant, BattleTerrain,
+    TerrainTemplate,
+)
 
 
 class BattleParticipantInline(admin.TabularInline):
@@ -30,6 +33,24 @@ class BattleParticipantAdmin(admin.ModelAdmin):
     ]
     list_filter = ["battle", "side", "status"]
     search_fields = ["starship__name"]
+
+
+@admin.register(BattleTerrain)
+class BattleTerrainAdmin(admin.ModelAdmin):
+    list_display = ["battle", "terrain_type", "q", "r", "display_name"]
+    list_filter = ["terrain_type", "battle"]
+
+
+@admin.register(TerrainTemplate)
+class TerrainTemplateAdmin(admin.ModelAdmin):
+    list_display = ["name", "created_by", "created_at"]
+    search_fields = ["name"]
+
+
+@admin.register(BattleMap)
+class BattleMapAdmin(admin.ModelAdmin):
+    list_display = ["name", "grid_width", "grid_height", "created_by", "updated_at"]
+    search_fields = ["name"]
 
 
 @admin.register(BattleLog)

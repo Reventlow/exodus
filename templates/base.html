@@ -121,6 +121,9 @@
                 {% if SHOW_STARSHIPS or user.is_staff %}
                     <a href="{% url 'starships:page' %}" style="font-size: 0.8rem; color: var(--text-muted);">STARSHIPS</a>
                     <a href="{% url 'spacebattle:list' %}" style="font-size: 0.8rem; color: var(--text-muted);">BATTLES</a>
+                    {% if user.is_superuser %}
+                    <a href="{% url 'spacebattle:maps' %}" style="font-size: 0.8rem; color: var(--text-muted);">BATTLE MAPS</a>
+                    {% endif %}
                 {% endif %}
                 {% for cm in CITY_MAPS %}
                     <a href="{% url 'starmap:citymap' cm.id %}" style="font-size: 0.8rem; color: var(--text-muted);">{{ cm.name|upper }}</a>
