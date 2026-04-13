@@ -39,6 +39,7 @@ def _serialize_ship_type(t):
         "base_crew": t.base_crew,
         "base_energy": t.base_energy,
         "base_maintenance": t.base_maintenance,
+        "initiative_bonus": t.initiative_bonus,
         "order": t.order,
     }
 
@@ -85,7 +86,8 @@ def _serialize_ship_module_section(s):
 
 INT_FIELDS_SHIP_TYPE = (
     "default_slot_budget", "min_size", "max_size",
-    "base_crew", "base_energy", "base_maintenance", "order",
+    "base_crew", "base_energy", "base_maintenance",
+    "initiative_bonus", "order",
 )
 
 INT_FIELDS_SHIP_MODULE = (

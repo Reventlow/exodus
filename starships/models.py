@@ -38,6 +38,10 @@ class ShipType(models.Model):
     base_crew = models.IntegerField(default=0)
     base_energy = models.IntegerField(default=0)
     base_maintenance = models.IntegerField(default=0)
+    initiative_bonus = models.IntegerField(
+        default=0,
+        help_text="Bonus added to a d10 initiative roll in combat. Smaller ships get a larger bonus.",
+    )
     order = models.IntegerField(default=0)
 
     class Meta:

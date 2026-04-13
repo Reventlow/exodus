@@ -1,5 +1,14 @@
 # Changelog
 
+## v0.14.0
+- New **spacebattle** app — schema and migrations for the hex-grid tactical battle system (Release A of 7)
+- Three models: Battle (top-level engagement), BattleParticipant (ship on the grid), BattleLog (append-only action log)
+- Participants draw from the live Starship table via a PROTECT-guarded FK, so damage applied in battle flows back to canonical hulls
+- Unique constraint prevents the same ship from being placed twice in one battle
+- Configurable grid_width/grid_height per battle (default 20×15)
+- ShipType gains initiative_bonus field; seeded per canonical type (drone +5 → titan −3)
+- No UI yet — Release B adds REST + MCP, Release C adds the page
+
 ## v0.13.12
 - Eight more tiered module sections seeded (L1–L5 each): Titan Cannon, Bridge, Anti-Small-Craft Missiles, Torpedo Launcher, Drone Bay (tiered), Solo Craft Bay, Manoeuvring Thrusters, Sublight Engines
 - New **Titan** ship type (32-slot capital hull, size 9–12, 400 base crew); Titan Cannons restricted to titan + dreadnaught
