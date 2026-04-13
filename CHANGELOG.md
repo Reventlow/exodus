@@ -1,5 +1,12 @@
 # Changelog
 
+## v0.13.12
+- Eight more tiered module sections seeded (L1–L5 each): Titan Cannon, Bridge, Anti-Small-Craft Missiles, Torpedo Launcher, Drone Bay (tiered), Solo Craft Bay, Manoeuvring Thrusters, Sublight Engines
+- New **Titan** ship type (32-slot capital hull, size 9–12, 400 base crew); Titan Cannons restricted to titan + dreadnaught
+- Drone Bay and Solo Craft Bay tiers restricted to carrier + titan
+- Every tier of Sublight Engines sets provides_sublight, so a ship with any tier passes the "no sublight drive" warning
+- Tier names follow the evocative naming pattern from v0.13.9 (e.g. Titan Cannon L1 Light Mass Driver → L5 Godbreaker Cannon)
+
 ## v0.13.11
 - Settings → Ship Modules: grouped by section instead of a flat list
 - Each tier family (Fighter Guns, Main Guns, Shields, Armour, Sensors) is a collapsible group header with its own heading and count; click the chevron to fold it away
