@@ -43,6 +43,16 @@ urlpatterns = [
         views.api_battle_simulate,
         name="api-battle-simulate",
     ),
+    path(
+        "api/spacebattle/battles/<int:pk>/rollback/",
+        views.api_battle_rollback,
+        name="api-battle-rollback",
+    ),
+    path(
+        "api/spacebattle/battles/<int:pk>/fork/",
+        views.api_battle_fork,
+        name="api-battle-fork",
+    ),
 
     # Participants
     path(

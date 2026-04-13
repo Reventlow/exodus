@@ -948,6 +948,145 @@ def api_battle_simulate(request, pk):
 
 
 # ---------------------------------------------------------------------------
+# Rollback + fork (Release G)
+# ---------------------------------------------------------------------------
+
+@login_required
+@require_http_methods(["POST"])
+def api_battle_rollback(request, pk):
+    """Undo the last N non-reverted log entries.
+
+    Damage entries restore the starship's maintenance_state, current_crew,
+    and status from the before-snapshot stored in the log payload. Move
+    entries reset the participant's q/r/facing. Non-reversible entry
+    types (system, note, initiative, turn_advance, fire) are simply
+    marked reverted without a state change.
+
+    Body: {count: int}  — number of entries to undo (default 1).
+    """
+    battle = get_object_or_404(Battle, pk=pk)
+    if not _can_edit_battle(request.user, battle):
+        return JsonResponse({"error": "Permission denied"}, status=403)
+
+    try:
+        body = json.loads(request.body) if request.body else {}
+    except json.JSONDecodeError:
+        return JsonResponse({"error": "Invalid JSON"}, status=400)
+    count = max(1, min(200, int(body.get("count", 1))))
+
+    candidates = list(
+        battle.log_entries.filter(is_reverted=False)
+        .order_by("-id")[:count]
+    )
+    if not candidates:
+        return JsonResponse({"error": "nothing to rollback"}, status=400)
+
+    reverted = 0
+    notes = []
+    with transaction.atomic():
+        for entry in candidates:
+            if entry.action_type == "damage" and entry.actor_participant_id:
+                before = (entry.data or {}).get("before") or {}
+                participant = (
+                    BattleParticipant.objects.select_related("starship")
+                    .filter(pk=entry.actor_participant_id).first()
+                )
+                if participant and before:
+                    ship = participant.starship
+                    if "maintenance_state" in before:
+                        ship.maintenance_state = before["maintenance_state"]
+                    if "current_crew" in before:
+                        ship.current_crew = before["current_crew"]
+                    if "ship_status" in before:
+                        ship.status = before["ship_status"]
+                    ship.save(update_fields=[
+                        "maintenance_state", "current_crew", "status", "updated_at",
+                    ])
+                    if "participant_status" in before:
+                        participant.status = before["participant_status"]
+                        participant.save(update_fields=["status"])
+                    notes.append(
+                        f"Reverted damage on {ship.name} back to "
+                        f"{before.get('maintenance_state')}% hull."
+                    )
+            elif entry.action_type == "move" and entry.actor_participant_id:
+                from_pos = (entry.data or {}).get("from") or {}
+                participant = BattleParticipant.objects.filter(
+                    pk=entry.actor_participant_id,
+                ).first()
+                if participant and from_pos:
+                    participant.q = int(from_pos.get("q", participant.q))
+                    participant.r = int(from_pos.get("r", participant.r))
+                    participant.facing = int(from_pos.get("facing", participant.facing))
+                    participant.save(update_fields=["q", "r", "facing"])
+                    notes.append(
+                        f"Reverted move on {participant.starship.name} to "
+                        f"({participant.q},{participant.r})."
+                    )
+            else:
+                notes.append(f"Marked {entry.action_type} entry reverted.")
+            entry.is_reverted = True
+            entry.save(update_fields=["is_reverted"])
+            reverted += 1
+
+    summary_entry = _log(
+        battle, "rollback",
+        data={"count": reverted, "notes": notes},
+        message=f"Rolled back {reverted} entr{'y' if reverted == 1 else 'ies'}.",
+    )
+    return JsonResponse({
+        "reverted": reverted,
+        "notes": notes,
+        "log_entry": summary_entry,
+        "battle": _serialize_battle(battle, include_log=True, log_limit=10),
+    })
+
+
+@login_required
+@require_http_methods(["POST"])
+def api_battle_fork(request, pk):
+    """Create a read-only clone of a battle for "what-if" sims.
+
+    The forked battle copies the name (+"(fork)"), grid size, and
+    every participant snapshot. The canonical Starship FKs are the
+    same as the source — damage in the fork DOES still flow through
+    to the real hulls, so dry_run=true is still the right tool for
+    balance sims. Fork is useful when you want to branch a shared
+    setup to two GMs running different scenarios from it.
+    """
+    source = get_object_or_404(Battle, pk=pk)
+    if not _can_edit_battle(request.user, source):
+        return JsonResponse({"error": "Permission denied"}, status=403)
+
+    with transaction.atomic():
+        clone = Battle.objects.create(
+            name=f"{source.name} (fork)",
+            game_date=source.game_date,
+            grid_width=source.grid_width,
+            grid_height=source.grid_height,
+            notes=source.notes,
+            metadata=dict(source.metadata or {}, forked_from=source.id),
+            created_by=request.user,
+        )
+        for p in source.participants.all():
+            BattleParticipant.objects.create(
+                battle=clone,
+                starship=p.starship,
+                side=p.side,
+                q=p.q, r=p.r, facing=p.facing,
+                token_color=p.token_color,
+                token_icon=p.token_icon,
+                notes=p.notes,
+                position_order=p.position_order,
+            )
+        _log(
+            clone, "system",
+            message=f"Forked from battle #{source.id} ({source.name}).",
+        )
+    return JsonResponse(_serialize_battle(clone))
+
+
+# ---------------------------------------------------------------------------
 # Page views
 # ---------------------------------------------------------------------------
 

@@ -71,6 +71,8 @@
             <button onclick="nextTurn()" id="btn-next" class="mono-text" style="background: transparent; border: 1px solid var(--border-color); color: var(--text-primary); padding: 0.3rem 0.6rem; cursor: pointer; font-size: 0.65rem;">NEXT TURN</button>
             <button onclick="endBattle()" id="btn-end" class="mono-text" style="background: transparent; border: 1px solid var(--accent-danger); color: var(--accent-danger); padding: 0.3rem 0.6rem; cursor: pointer; font-size: 0.65rem;">END</button>
             <button onclick="openPlacementModal()" id="btn-place" class="mono-text" style="background: transparent; border: 1px solid var(--accent-primary); color: var(--accent-primary); padding: 0.3rem 0.6rem; cursor: pointer; font-size: 0.65rem;">PLACE</button>
+            <button onclick="rollbackBattle()" id="btn-rollback" class="mono-text" style="background: transparent; border: 1px solid #f59e0b; color: #f59e0b; padding: 0.3rem 0.6rem; cursor: pointer; font-size: 0.65rem;">UNDO</button>
+            <button onclick="forkBattle()" id="btn-fork" class="mono-text" style="background: transparent; border: 1px solid var(--border-color); color: var(--text-primary); padding: 0.3rem 0.6rem; cursor: pointer; font-size: 0.65rem;">FORK</button>
             {% endif %}
         </div>
 
@@ -504,6 +506,27 @@ function endBattle() {
     if (!confirm('End this battle?')) return;
     api('/api/spacebattle/battles/' + BATTLE_ID + '/end/', { method: 'POST' })
         .then(loadBattle);
+}
+
+function rollbackBattle() {
+    var count = parseInt(prompt('How many log entries to undo?', '1'), 10);
+    if (isNaN(count) || count < 1) return;
+    api('/api/spacebattle/battles/' + BATTLE_ID + '/rollback/', {
+        method: 'POST', body: JSON.stringify({ count: count }),
+    }).then(function(result) {
+        alert('Reverted ' + result.reverted + ' entr' + (result.reverted === 1 ? 'y' : 'ies') + '.');
+        loadBattle();
+    });
+}
+
+function forkBattle() {
+    if (!confirm('Fork this battle into a new one for "what-if" play?')) return;
+    api('/api/spacebattle/battles/' + BATTLE_ID + '/fork/', { method: 'POST' })
+        .then(function(forked) {
+            if (confirm('Forked as battle #' + forked.id + '. Open it now?')) {
+                window.location = '/spacebattle/' + forked.id + '/';
+            }
+        });
 }
 
 // ------------------------- Placement modal -------------------------

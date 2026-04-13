@@ -1,5 +1,12 @@
 # Changelog
 
+## v0.14.6
+- Spacebattle rollback + fork (Release G of 7 — feature complete)
+- POST /battles/<id>/rollback/ undoes the last N non-reverted log entries; damage entries restore the before-snapshot of maintenance_state/current_crew/status from the log payload; move entries reset q/r/facing; other action types are just marked reverted
+- POST /battles/<id>/fork/ creates a read-only clone of a battle with the same participants for what-if scenarios
+- UNDO and FORK buttons (staff-only) in the battle page controls
+- The 7-release spacebattle feature ships complete across v0.14.0–0.14.6
+
 ## v0.14.5
 - Spacebattle fire + damage adjudication (Release F of 7)
 - Right panel now shows the selected participant's details (class, hull %, crew, side, agency)
