@@ -146,6 +146,8 @@
 </div>
 
 <script>
+{% include "spacebattle/_terrain_render.html" %}
+
 const BATTLE_ID = {{ battle_id }};
 const IS_STAFF = {{ is_staff|yesno:"true,false" }};
 const IS_SUPERUSER = {{ is_superuser|yesno:"true,false" }};
@@ -246,35 +248,15 @@ function render() {
         }
     }
 
-    // Terrain — drawn between grid and participants so tokens ride on top
+    // Terrain — drawn between grid and participants so tokens ride on top.
+    // drawTerrainVisual paints per-type procedural shapes from the
+    // shared _terrain_render partial (asteroid scatter, nebula
+    // gradient, planet disc, etc.) instead of a flat colored hex.
     TERRAIN_INDEX = {};
     (BATTLE.terrain || []).forEach(function(t) {
         TERRAIN_INDEX[t.q + ',' + t.r] = t;
         var p = hexToPixel(t.q, t.r);
-        var col = terrainColor(t);
-        // Filled hex with alpha so the grid still shows through
-        drawHex(ctx, p[0], p[1], HEX_SIZE, col + (col.startsWith('#') ? '' : ''), col);
-        // Override alpha — drawHex uses ctx.fillStyle directly so we
-        // redraw the fill path manually with globalAlpha.
-        ctx.save();
-        ctx.globalAlpha = 0.35;
-        ctx.beginPath();
-        for (var i = 0; i < 6; i++) {
-            var a = (Math.PI / 180) * (60 * i - 30);
-            var x = p[0] + HEX_SIZE * Math.cos(a);
-            var y = p[1] + HEX_SIZE * Math.sin(a);
-            if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
-        }
-        ctx.closePath();
-        ctx.fillStyle = col;
-        ctx.fill();
-        ctx.restore();
-        // Glyph
-        ctx.fillStyle = col;
-        ctx.font = 'bold 14px monospace';
-        ctx.textAlign = 'center';
-        ctx.textBaseline = 'middle';
-        ctx.fillText(terrainIcon(t), p[0], p[1]);
+        drawTerrainVisual(ctx, p[0], p[1], HEX_SIZE, t);
     });
 
     // Participants

@@ -1,5 +1,11 @@
 # Changelog
 
+## v0.14.8
+- Spacebattle terrain now has procedural per-type visuals instead of flat colored hexes
+- Asteroid fields render as scattered rocky chunks with shading; nebulas as overlapping coloured gradient blobs + speckle stars; debris fields as angled metal fragments; planets as shaded discs with crescent shadow and terminator line (5 palette variants); suns with radiating rays and a glowing core; gravity wells as concentric curvature arcs converging on a black dot; minefields as a grid of spiked mine markers; stations as hub + solar-panel arms; scenario zones as dashed hex outlines with a central Z; custom stays as the old colored fill + glyph
+- Rendering is deterministic per (q, r) via a hashed mulberry32 seed so tokens don't shimmer between redraws
+- New shared template partial spacebattle/_terrain_render.html exposes drawTerrainVisual() used by both the battle view and the map editor
+
 ## v0.14.7
 - Space battle terrain, templates, and reusable battle maps
 - New models: BattleTerrain (per-hex, unique per (battle, q, r)), TerrainTemplate (reusable relative-offset stamps), BattleMap (full saved space map with grid dims + terrain list)
