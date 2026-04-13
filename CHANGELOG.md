@@ -1,5 +1,14 @@
 # Changelog
 
+## v0.14.3
+- Spacebattle participant placement (Release D of 7)
+- PLACE button on the battle page opens a modal fleet picker
+- Fleets grouped by agency in an optgroup dropdown; an "Unassigned hulls" bucket collects ships not in a fleet
+- Side selector (PLAYERS / ENEMIES / NEUTRAL) applies to the next ship added
+- Ships already in the battle are shown disabled with an IN BATTLE label
+- Adding a ship POSTs to /api/spacebattle/battles/<id>/participants/ and reloads the board without closing the modal, so you can queue up a whole fleet in a few clicks
+- Ships land at (0,0) for now — Release E adds drag-to-move
+
 ## v0.14.2
 - Spacebattle list + canvas grid view (Release C of 7)
 - /spacebattle/ battle list page with NEW BATTLE button (staff only)

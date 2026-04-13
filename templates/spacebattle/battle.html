@@ -70,6 +70,7 @@
             <button onclick="startBattle()" id="btn-start" class="mono-text" style="background: var(--accent-primary); border: none; color: var(--bg-dark); padding: 0.3rem 0.6rem; cursor: pointer; font-size: 0.65rem; font-weight: bold;">START</button>
             <button onclick="nextTurn()" id="btn-next" class="mono-text" style="background: transparent; border: 1px solid var(--border-color); color: var(--text-primary); padding: 0.3rem 0.6rem; cursor: pointer; font-size: 0.65rem;">NEXT TURN</button>
             <button onclick="endBattle()" id="btn-end" class="mono-text" style="background: transparent; border: 1px solid var(--accent-danger); color: var(--accent-danger); padding: 0.3rem 0.6rem; cursor: pointer; font-size: 0.65rem;">END</button>
+            <button onclick="openPlacementModal()" id="btn-place" class="mono-text" style="background: transparent; border: 1px solid var(--accent-primary); color: var(--accent-primary); padding: 0.3rem 0.6rem; cursor: pointer; font-size: 0.65rem;">PLACE</button>
             {% endif %}
         </div>
 
@@ -89,6 +90,30 @@
     <div class="panel">
         <h3>ACTION LOG</h3>
         <div id="log-body"></div>
+    </div>
+</div>
+
+<!-- Placement modal -->
+<div id="place-modal" style="display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.7); z-index: 100; align-items: center; justify-content: center;">
+    <div style="background: var(--bg-panel, #0b0f1a); border: 1px solid var(--accent-primary); border-radius: var(--radius-sm); padding: 1rem; width: 520px; max-height: 80vh; overflow-y: auto;">
+        <h3 class="mono-text" style="color: var(--accent-primary); letter-spacing: 1px; margin: 0 0 0.75rem 0;">PLACE SHIPS</h3>
+        <div class="mono-text text-muted" style="font-size: 0.65rem; margin-bottom: 0.6rem;">
+            Pick a fleet, set the side, then click ships to add them. They land at (0,0) — drag or edit coordinates once Release E ships.
+        </div>
+        <div style="display: flex; gap: 0.4rem; margin-bottom: 0.6rem; flex-wrap: wrap;">
+            <select id="place-fleet" class="mono-text" style="flex:1; background: var(--bg-input); border: 1px solid var(--border-color); color: var(--text-primary); padding: 0.4rem; font-family: var(--font-mono); font-size: 0.72rem;">
+                <option value="">— pick a fleet —</option>
+            </select>
+            <select id="place-side" class="mono-text" style="background: var(--bg-input); border: 1px solid var(--border-color); color: var(--text-primary); padding: 0.4rem; font-family: var(--font-mono); font-size: 0.72rem;">
+                <option value="players">PLAYERS</option>
+                <option value="enemies">ENEMIES</option>
+                <option value="neutral">NEUTRAL</option>
+            </select>
+        </div>
+        <div id="place-ship-list" style="max-height: 40vh; overflow-y: auto; border: 1px solid var(--border-color); border-radius: var(--radius-sm); padding: 0.3rem;"></div>
+        <div style="display: flex; justify-content: flex-end; gap: 0.5rem; margin-top: 0.75rem;">
+            <button onclick="closePlacementModal()" class="mono-text" style="background: transparent; border: 1px solid var(--border-color); color: var(--text-primary); padding: 0.4rem 0.9rem; cursor: pointer; font-size: 0.72rem;">CLOSE</button>
+        </div>
     </div>
 </div>
 
@@ -289,6 +314,100 @@ function endBattle() {
     if (!confirm('End this battle?')) return;
     api('/api/spacebattle/battles/' + BATTLE_ID + '/end/', { method: 'POST' })
         .then(loadBattle);
+}
+
+// ------------------------- Placement modal -------------------------
+var FLEETS_CACHE = [];
+var SHIPS_BY_FLEET = {};
+
+function openPlacementModal() {
+    document.getElementById('place-modal').style.display = 'flex';
+    if (!FLEETS_CACHE.length) loadFleetsAndShips();
+    else renderFleetOptions();
+}
+
+function closePlacementModal() {
+    document.getElementById('place-modal').style.display = 'none';
+}
+
+function loadFleetsAndShips() {
+    Promise.all([
+        api('/api/starships/fleets/'),
+        api('/api/starships/ships/'),
+    ]).then(function(results) {
+        FLEETS_CACHE = results[0];
+        // Bucket ships by fleet_id (null → unassigned bucket)
+        SHIPS_BY_FLEET = {};
+        results[1].forEach(function(s) {
+            var key = s.fleet_id || 'unassigned';
+            (SHIPS_BY_FLEET[key] = SHIPS_BY_FLEET[key] || []).push(s);
+        });
+        renderFleetOptions();
+    });
+}
+
+function renderFleetOptions() {
+    var sel = document.getElementById('place-fleet');
+    var current = sel.value;
+    var html = '<option value="">— pick a fleet —</option>';
+    // Group by agency for legibility
+    var byAgency = {};
+    FLEETS_CACHE.forEach(function(f) {
+        (byAgency[f.agency_name || '—'] = byAgency[f.agency_name || '—'] || []).push(f);
+    });
+    Object.keys(byAgency).sort().forEach(function(agency) {
+        html += '<optgroup label="' + escapeHtml(agency) + '">';
+        byAgency[agency].forEach(function(f) {
+            html += '<option value="' + f.id + '">' + escapeHtml(f.name) + ' (' + f.ship_count + ' ships)</option>';
+        });
+        html += '</optgroup>';
+    });
+    // Also offer an "Unassigned" bucket for hulls not in a fleet
+    if ((SHIPS_BY_FLEET.unassigned || []).length) {
+        html += '<optgroup label="— Unassigned hulls —"><option value="unassigned">(all unassigned ships)</option></optgroup>';
+    }
+    sel.innerHTML = html;
+    if (current) sel.value = current;
+    sel.onchange = renderShipChoices;
+    renderShipChoices();
+}
+
+function renderShipChoices() {
+    var fleetKey = document.getElementById('place-fleet').value;
+    var container = document.getElementById('place-ship-list');
+    if (!fleetKey) {
+        container.innerHTML = '<span class="mono-text text-muted" style="font-size: 0.65rem;">Pick a fleet above to see its ships.</span>';
+        return;
+    }
+    var ships = SHIPS_BY_FLEET[fleetKey] || [];
+    if (!ships.length) {
+        container.innerHTML = '<span class="mono-text text-muted" style="font-size: 0.65rem;">No ships in this fleet.</span>';
+        return;
+    }
+    // Filter out ships already placed in this battle
+    var existingIds = new Set((BATTLE.participants || []).map(function(p) { return p.starship_id; }));
+    var html = '';
+    ships.forEach(function(s) {
+        var already = existingIds.has(s.id);
+        var disabled = already ? 'style="opacity:0.35; cursor:not-allowed;"' : '';
+        var handler = already ? '' : 'onclick="addParticipant(' + s.id + ', this)"';
+        html += '<div class="mono-text" ' + handler + ' ' + disabled + ' style="display:flex; align-items:center; gap:0.4rem; padding:0.35rem; border-bottom:1px solid var(--border-color); cursor:' + (already ? 'not-allowed' : 'pointer') + ';">';
+        html += '<span style="flex:1; color:var(--text-primary); font-size:0.75rem;">' + escapeHtml(s.name) + (s.hull_number ? ' <span class="text-muted" style="font-size:0.6rem;">(' + escapeHtml(s.hull_number) + ')</span>' : '') + '</span>';
+        html += '<span class="text-muted" style="font-size:0.58rem;">' + escapeHtml(s.starship_class_name) + '</span>';
+        html += already ? '<span style="font-size:0.55rem; color:var(--accent-primary);">IN BATTLE</span>' : '<span class="text-muted" style="font-size:0.55rem;">click to add</span>';
+        html += '</div>';
+    });
+    container.innerHTML = html;
+}
+
+function addParticipant(shipId, rowEl) {
+    var side = document.getElementById('place-side').value;
+    api('/api/spacebattle/battles/' + BATTLE_ID + '/participants/', {
+        method: 'POST',
+        body: JSON.stringify({ starship_id: shipId, side: side, q: 0, r: 0 }),
+    }).then(function() {
+        return loadBattle().then(renderShipChoices);
+    });
 }
 
 loadBattle();
