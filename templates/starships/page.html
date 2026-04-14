@@ -749,13 +749,37 @@ function renderClassEditor(cls) {
     var initStr = (stats.initiative_bonus >= 0 ? '+' : '') + stats.initiative_bonus;
     html += '<div style="display: flex; gap: 0.4rem; flex-wrap: wrap; margin-bottom: 0.5rem;">';
     html += '<span class="stat-pill" style="color:#22c55e;border-color:#22c55e;"><span class="mono-text text-muted">HEALTH</span> ' + stats.health + '</span>';
+    html += '<span class="stat-pill" style="color:#60a5fa;border-color:#60a5fa;"><span class="mono-text text-muted">SHIELD</span> ' + (stats.shield || 0) + '</span>';
     html += '<span class="stat-pill" style="color:#06b6d4;border-color:#06b6d4;"><span class="mono-text text-muted">SPEED</span> ' + stats.speed + '</span>';
     html += '<span class="stat-pill" style="color:#a855f7;border-color:#a855f7;"><span class="mono-text text-muted">DEFENSE</span> ' + stats.defense + '</span>';
     html += '<span class="stat-pill" style="color:#f59e0b;border-color:#f59e0b;"><span class="mono-text text-muted">ARMOR</span> ' + stats.armor + '</span>';
     html += '<span class="stat-pill" style="color:#38bdf8;border-color:#38bdf8;"><span class="mono-text text-muted">SCAN</span> ' + stats.scanning + '</span>';
+    html += '<span class="stat-pill" style="color:#facc15;border-color:#facc15;"><span class="mono-text text-muted">BATTERY</span> ' + (stats.battery_power || 0) + '</span>';
     html += '<span class="stat-pill" style="color:#cbd5e1;border-color:#cbd5e1;"><span class="mono-text text-muted">SIZE</span> ' + stats.size + '</span>';
     html += '<span class="stat-pill" style="color:#fbbf24;border-color:#fbbf24;"><span class="mono-text text-muted">INIT</span> ' + initStr + '</span>';
     html += '</div>';
+
+    // Arsenal — list of weapon modules with their individual profiles
+    if (stats.arsenal && stats.arsenal.length) {
+        html += '<div class="mono-text text-muted" style="font-size: 0.6rem; letter-spacing: 1px; margin: 0.25rem 0 0.3rem 0;">ARSENAL</div>';
+        html += '<div style="display: flex; flex-direction: column; gap: 0.2rem; margin-bottom: 0.6rem;">';
+        stats.arsenal.forEach(function(w) {
+            var bias = w.size_bias > 0 ? 'anti-large +' + w.size_bias
+                : w.size_bias < 0 ? 'anti-small ' + w.size_bias
+                : 'balanced';
+            var rangeStr = w.range + (w.min_range ? ' min ' + w.min_range : '');
+            var travelStr = w.travel_turns ? ' · travel ' + w.travel_turns + 't' : '';
+            var batStr = w.battery_cost ? ' · bat ' + w.battery_cost : '';
+            var qtyStr = w.quantity > 1 ? ' ×' + w.quantity : '';
+            html += '<div style="display:flex; align-items:center; gap:0.5rem; padding:0.3rem 0.5rem; border: 1px solid var(--border-color); border-radius: var(--radius-sm); font-size: 0.7rem;">';
+            html += '<span style="color:#ef4444; min-width: 2.5rem; text-align: center;">DMG ' + w.damage + '</span>';
+            html += '<span style="color: var(--text-primary); flex: 1;">' + escapeHtml(w.name) + qtyStr + '</span>';
+            html += '<span class="mono-text text-muted" style="font-size: 0.58rem;">rng ' + rangeStr + travelStr + batStr + '</span>';
+            html += '<span class="mono-text" style="font-size: 0.55rem; color: ' + (w.size_bias > 0 ? '#f59e0b' : w.size_bias < 0 ? '#06b6d4' : 'var(--text-muted)') + '; min-width: 6.5rem; text-align: right;">' + bias + '</span>';
+            html += '</div>';
+        });
+        html += '</div>';
+    }
 
     // Slot bar
     html += '<div class="slot-bar" style="margin-bottom: 0.75rem;">';

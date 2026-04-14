@@ -64,6 +64,14 @@ class ShipType(models.Model):
         default=2,
         help_text="Sensor rating — detection range and resolution before modules.",
     )
+    base_shield = models.IntegerField(
+        default=0,
+        help_text="Temporary hit-point pool (shield generators add to this).",
+    )
+    base_battery_power = models.IntegerField(
+        default=3,
+        help_text="Battery capacity — shields and heavy weapons drain it during combat.",
+    )
     order = models.IntegerField(default=0)
 
     class Meta:
@@ -144,6 +152,42 @@ class ShipModule(models.Model):
     )
     scanning_delta = models.IntegerField(
         default=0, help_text="Added to sensor rating.",
+    )
+    # Shield + battery plumbing. Shield modules add to the temp HP pool
+    # and typically raise battery_delta so there's capacity for them.
+    # battery_cost is the activation cost a weapon or shield charges
+    # every time it fires or sustains (interpretation left to the GM /
+    # rules engine).
+    shield_delta = models.IntegerField(
+        default=0, help_text="Added to the shield temp-HP pool.",
+    )
+    battery_delta = models.IntegerField(
+        default=0, help_text="Added to battery capacity.",
+    )
+    battery_cost = models.IntegerField(
+        default=0, help_text="Per-activation battery draw during combat.",
+    )
+    # Weapon profile. Zero damage means the module is not a weapon.
+    weapon_damage = models.IntegerField(
+        default=0, help_text="Base hit damage (before defense/armor).",
+    )
+    weapon_range = models.IntegerField(
+        default=0, help_text="Maximum hex range (0 = not a weapon / no range).",
+    )
+    weapon_min_range = models.IntegerField(
+        default=0, help_text="Minimum hex range — anti-air missiles etc. can't fire closer.",
+    )
+    weapon_size_bias = models.IntegerField(
+        default=0,
+        help_text=(
+            "Target-size bias. Positive = better vs LARGER targets "
+            "(main guns, torpedoes). Negative = better vs SMALLER targets "
+            "(fighter guns, AA missiles)."
+        ),
+    )
+    weapon_travel_turns = models.IntegerField(
+        default=0,
+        help_text="Projectile travel time in rounds. 0 = hitscan.",
     )
     provides_sublight = models.BooleanField(
         default=False,

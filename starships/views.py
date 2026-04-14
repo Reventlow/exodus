@@ -45,6 +45,8 @@ def _serialize_ship_type(t):
         "base_defense": t.base_defense,
         "base_armor": t.base_armor,
         "base_scanning": t.base_scanning,
+        "base_shield": t.base_shield,
+        "base_battery_power": t.base_battery_power,
         "order": t.order,
     }
 
@@ -66,6 +68,14 @@ def _serialize_ship_module(m):
         "defense_delta": m.defense_delta,
         "armor_delta": m.armor_delta,
         "scanning_delta": m.scanning_delta,
+        "shield_delta": m.shield_delta,
+        "battery_delta": m.battery_delta,
+        "battery_cost": m.battery_cost,
+        "weapon_damage": m.weapon_damage,
+        "weapon_range": m.weapon_range,
+        "weapon_min_range": m.weapon_min_range,
+        "weapon_size_bias": m.weapon_size_bias,
+        "weapon_travel_turns": m.weapon_travel_turns,
         "provides_sublight": m.provides_sublight,
         "provides_ftl": m.provides_ftl,
         "min_hull_size": m.min_hull_size,
@@ -99,12 +109,16 @@ INT_FIELDS_SHIP_TYPE = (
     "base_crew", "base_energy", "base_maintenance",
     "initiative_bonus",
     "base_health", "base_speed", "base_defense", "base_armor", "base_scanning",
+    "base_shield", "base_battery_power",
     "order",
 )
 
 INT_FIELDS_SHIP_MODULE = (
     "slot_cost", "crew_delta", "energy_delta", "maintenance_delta",
     "health_delta", "speed_delta", "defense_delta", "armor_delta", "scanning_delta",
+    "shield_delta", "battery_delta", "battery_cost",
+    "weapon_damage", "weapon_range", "weapon_min_range",
+    "weapon_size_bias", "weapon_travel_turns",
     "min_hull_size", "build_cost_xp_delta", "xp_cost", "level", "order",
 )
 
@@ -398,7 +412,10 @@ def compute_class_stats(cls):
     defense = ship_type.base_defense
     armor = ship_type.base_armor
     scanning = ship_type.base_scanning
+    shield = ship_type.base_shield
+    battery_power = ship_type.base_battery_power
     initiative_bonus = ship_type.initiative_bonus
+    arsenal = []  # list of weapon-module summaries for the editor/UI
     has_sublight = False
     has_ftl = False
     has_power = False
@@ -416,6 +433,25 @@ def compute_class_stats(cls):
         defense += m.defense_delta * qty
         armor += m.armor_delta * qty
         scanning += m.scanning_delta * qty
+        shield += m.shield_delta * qty
+        battery_power += m.battery_delta * qty
+        if m.weapon_damage > 0 and qty > 0:
+            arsenal.append({
+                "module_id": m.id,
+                "module_key": m.key,
+                "name": m.name,
+                "quantity": qty,
+                "damage": m.weapon_damage,
+                "range": m.weapon_range,
+                "min_range": m.weapon_min_range,
+                "size_bias": m.weapon_size_bias,
+                "travel_turns": m.weapon_travel_turns,
+                "battery_cost": m.battery_cost,
+                "category": m.category,
+                "section_key": m.section.key if m.section else None,
+                "section_name": m.section.name if m.section else None,
+                "level": m.level,
+            })
         build_cost_total += m.build_cost_xp_delta * qty
         if m.provides_sublight and qty > 0:
             has_sublight = True
@@ -431,6 +467,8 @@ def compute_class_stats(cls):
     armor = max(0, armor)
     health = max(1, health)
     scanning = max(0, scanning)
+    shield = max(0, shield)
+    battery_power = max(0, battery_power)
 
     warnings = []
 
@@ -509,6 +547,9 @@ def compute_class_stats(cls):
         "defense": defense,
         "armor": armor,
         "scanning": scanning,
+        "shield": shield,
+        "battery_power": battery_power,
+        "arsenal": arsenal,
         "initiative_bonus": initiative_bonus,
         "size": cls.size,
         "has_sublight": has_sublight,

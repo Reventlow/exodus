@@ -376,13 +376,34 @@ function renderDetail() {
     var initStr = ((p.class_initiative_bonus || 0) >= 0 ? '+' : '') + (p.class_initiative_bonus || 0);
     html += '<div style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.15rem 0.5rem; margin-top: 0.4rem; font-family: var(--font-mono); font-size: 0.6rem;">';
     html += '<span style="color: #22c55e;">HEALTH</span><span style="color: var(--text-primary); text-align:right;">' + (p.class_health != null ? p.class_health : '—') + '</span>';
+    html += '<span style="color: #60a5fa;">SHIELD</span><span style="color: var(--text-primary); text-align:right;">' + (p.class_shield != null ? p.class_shield : 0) + '</span>';
     html += '<span style="color: #06b6d4;">SPEED</span><span style="color: var(--text-primary); text-align:right;">' + (p.class_speed != null ? p.class_speed : '—') + '</span>';
     html += '<span style="color: #a855f7;">DEFENSE</span><span style="color: var(--text-primary); text-align:right;">' + (p.class_defense != null ? p.class_defense : '—') + '</span>';
     html += '<span style="color: #f59e0b;">ARMOR</span><span style="color: var(--text-primary); text-align:right;">' + (p.class_armor != null ? p.class_armor : '—') + '</span>';
     html += '<span style="color: #38bdf8;">SCAN</span><span style="color: var(--text-primary); text-align:right;">' + (p.class_scanning != null ? p.class_scanning : '—') + '</span>';
+    html += '<span style="color: #facc15;">BATTERY</span><span style="color: var(--text-primary); text-align:right;">' + (p.class_battery_power != null ? p.class_battery_power : 0) + '</span>';
     html += '<span style="color: #cbd5e1;">SIZE</span><span style="color: var(--text-primary); text-align:right;">' + (p.class_size != null ? p.class_size : '—') + '</span>';
     html += '<span style="color: #fbbf24;">INIT</span><span style="color: var(--text-primary); text-align:right;">' + initStr + '</span>';
     html += '</div>';
+    // Arsenal list for this participant's class
+    if (p.class_arsenal && p.class_arsenal.length) {
+        html += '<div class="mono-text text-muted" style="font-size: 0.55rem; letter-spacing: 1px; margin-top: 0.45rem; margin-bottom: 0.15rem;">ARSENAL</div>';
+        p.class_arsenal.forEach(function(w) {
+            var bias = w.size_bias > 0 ? '+L' : w.size_bias < 0 ? '-S' : 'B';
+            var rangeStr = w.range + (w.min_range ? '/' + w.min_range : '');
+            var extras = [];
+            if (w.travel_turns) extras.push(w.travel_turns + 't');
+            if (w.battery_cost) extras.push(w.battery_cost + 'bat');
+            var tail = extras.length ? ' · ' + extras.join(' ') : '';
+            var qtyStr = w.quantity > 1 ? ' ×' + w.quantity : '';
+            html += '<div style="display: flex; align-items: center; gap: 0.4rem; font-size: 0.58rem; padding: 0.1rem 0;">';
+            html += '<span style="color: #ef4444; min-width: 2.2rem;">' + w.damage + ' dmg</span>';
+            html += '<span style="color: var(--text-primary); flex: 1;">' + escapeHtml(w.name) + qtyStr + '</span>';
+            html += '<span class="mono-text text-muted">rng ' + rangeStr + tail + '</span>';
+            html += '<span class="mono-text" style="color:' + (w.size_bias > 0 ? '#f59e0b' : w.size_bias < 0 ? '#06b6d4' : 'var(--text-muted)') + '; min-width: 1.8rem; text-align: right;">' + bias + '</span>';
+            html += '</div>';
+        });
+    }
     html += '<div class="mono-text text-muted" style="font-size: 0.6rem; margin-top: 0.35rem;">';
     html += 'pos (' + p.q + ',' + p.r + ') \u00B7 facing ' + p.facing + '<br>';
     html += 'hull ' + p.maintenance_state + '% \u00B7 crew ' + p.current_crew + '<br>';

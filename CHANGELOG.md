@@ -1,11 +1,25 @@
+# Changelog
+
+## v0.14.12
+- Ship modules grow weapon and defence profiles — damage, range, size bias, shields, battery
+- ShipType gains base_shield and base_battery_power; drones 2 battery → titans 24
+- ShipModule gains shield_delta, battery_delta, battery_cost, weapon_damage, weapon_range, weapon_min_range, weapon_size_bias, weapon_travel_turns
+- Shields tier family now provides real temp-HP (L1 +3 → L5 +18) and raises battery capacity so you can actually run them
+- Fighter Guns are short-range anti-small (size_bias -2 to -3), Main Guns medium-range anti-large (+2 to +4), Titan Cannons capital spinal (+5 to +8 bias, 3-8 battery cost per fire)
+- Anti-Small-Craft Missiles enforce a minimum range — they can't fire closer than 2-3 hexes — with slow travel turns and strong anti-small bias (-3 to -5)
+- Torpedoes are long-range anti-large (+3 to +5), slow travel (1-3 turns), higher damage the further up the tier
+- Sensors already handled in v0.14.11 via scanning_delta
+- compute_class_stats returns shield, battery_power, and a new arsenal list of installed weapons with their individual profiles (damage/range/min_range/size_bias/travel/cost)
+- Class editor adds SHIELD and BATTERY pills next to HEALTH, plus a new ARSENAL block listing every installed weapon with its stat line
+- Settings → Ship Types / Ship Modules expose every new field for tuning
+- Battle detail panel grows SHIELD + BATTERY rows and a compact arsenal section per participant
+
 ## v0.14.11
 - Ship combat stats round out with **scanning** (sensor rating) and **size** (surfaced from the existing StarshipClass.size field)
 - ShipType gains base_scanning: drone 2 / solo 3 / shuttle 2 / cruiser 3 / support 4 / carrier 3 / dreadnaught 4 / titan 5
 - ShipModule gains scanning_delta; seeded: standalone sensor_array +1, Sensor Suites L1→L5 +1/+2/+3/+5/+8
 - compute_class_stats now returns scanning and size alongside the other combat stats
 - Class editor, settings Ship Type / Ship Module editors, and battle detail panel all show SCAN and SIZE pills next to HEALTH/SPEED/DEFENSE/ARMOR/INIT
-
-# Changelog
 
 ## v0.14.10
 - Ship combat stats: health, speed, defense, armor added to ShipType baselines and ShipModule deltas
