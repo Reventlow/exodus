@@ -907,6 +907,11 @@ function loadShipTypes() {
                 html += stField(t, 'base_crew', 'BASE CREW', 'number');
                 html += stField(t, 'base_energy', 'BASE ENERGY', 'number');
                 html += stField(t, 'base_maintenance', 'BASE MAINT.', 'number');
+                html += stField(t, 'base_health', 'BASE HEALTH', 'number', 'hit points');
+                html += stField(t, 'base_speed', 'BASE SPEED', 'number', 'hex moves / turn');
+                html += stField(t, 'base_defense', 'BASE DEFENSE', 'number', 'evasion rating');
+                html += stField(t, 'base_armor', 'BASE ARMOR', 'number', 'damage reduction');
+                html += stField(t, 'initiative_bonus', 'INIT BONUS', 'number', 'd10 roll modifier');
                 html += stField(t, 'order', 'ORDER', 'number');
                 html += '<div style="grid-column: 1 / -1;">' +
                     '<label class="text-muted mono-text" style="font-size: 0.58rem; letter-spacing: 0.5px;">DESCRIPTION</label>' +
@@ -1165,6 +1170,10 @@ function renderModuleEditPanel(m) {
     html += stField(m, 'crew_delta', 'CREW \u0394', 'number');
     html += stField(m, 'energy_delta', 'ENERGY \u0394', 'number');
     html += stField(m, 'maintenance_delta', 'MAINT. \u0394', 'number');
+    html += stField(m, 'health_delta', 'HEALTH \u0394', 'number');
+    html += stField(m, 'speed_delta', 'SPEED \u0394', 'number');
+    html += stField(m, 'defense_delta', 'DEFENSE \u0394', 'number');
+    html += stField(m, 'armor_delta', 'ARMOR \u0394', 'number');
     html += stField(m, 'min_hull_size', 'MIN HULL SIZE', 'number');
     html += stField(m, 'build_cost_xp_delta', 'BUILD COST XP', 'number');
     html += stField(m, 'xp_cost', 'RESEARCH XP', 'number');

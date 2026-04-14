@@ -42,6 +42,24 @@ class ShipType(models.Model):
         default=0,
         help_text="Bonus added to a d10 initiative roll in combat. Smaller ships get a larger bonus.",
     )
+    # Combat stats — smaller hulls tend to be fast/dodgy, bigger
+    # hulls tend to be tough/armoured. Modules add deltas.
+    base_health = models.IntegerField(
+        default=5,
+        help_text="Hit-point pool before module deltas.",
+    )
+    base_speed = models.IntegerField(
+        default=3,
+        help_text="Hexes of movement per turn (before thrusters).",
+    )
+    base_defense = models.IntegerField(
+        default=0,
+        help_text="Evasion rating — subtracted from an attacker's successes.",
+    )
+    base_armor = models.IntegerField(
+        default=0,
+        help_text="Damage reduction — subtracted from damage after defense.",
+    )
     order = models.IntegerField(default=0)
 
     class Meta:
@@ -106,6 +124,20 @@ class ShipModule(models.Model):
     )
     energy_delta = models.IntegerField(default=0)
     maintenance_delta = models.IntegerField(default=0)
+    # Combat stat contributions. Positive values improve the owning
+    # class; negative values tax it (e.g. a heavy gun slowing the ship).
+    health_delta = models.IntegerField(
+        default=0, help_text="Added to hit-point pool.",
+    )
+    speed_delta = models.IntegerField(
+        default=0, help_text="Added to movement range per turn.",
+    )
+    defense_delta = models.IntegerField(
+        default=0, help_text="Added to evasion rating.",
+    )
+    armor_delta = models.IntegerField(
+        default=0, help_text="Added to damage reduction.",
+    )
     provides_sublight = models.BooleanField(
         default=False,
         help_text="Class needs at least one module with this flag to manoeuvre.",

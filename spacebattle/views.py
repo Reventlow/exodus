@@ -72,6 +72,11 @@ def _can_command_participant(user, participant):
 def _serialize_participant(p):
     ss = p.starship
     cls = ss.starship_class
+    # Pull combat stats from the class — this is what the rules
+    # engine (and the simulator) actually uses. Computed per call
+    # so module edits propagate without manual cache busts.
+    from starships.views import compute_class_stats as _class_stats
+    stats = _class_stats(cls)
     return {
         "id": p.id,
         "battle_id": p.battle_id,
@@ -96,6 +101,12 @@ def _serialize_participant(p):
         "current_crew": ss.current_crew,
         "maintenance_state": ss.maintenance_state,
         "ship_status": ss.status,
+        # Combat stats from the class
+        "class_health": stats["health"],
+        "class_speed": stats["speed"],
+        "class_defense": stats["defense"],
+        "class_armor": stats["armor"],
+        "class_initiative_bonus": stats["initiative_bonus"],
         "notes": p.notes,
         "position_order": p.position_order,
     }
@@ -851,21 +862,31 @@ def api_battle_simulate(request, pk):
     seed = body.get("seed")
     master_rng = random.Random(seed) if seed is not None else random.Random()
 
-    # Snapshot participant stats; the sim never touches the DB.
+    # Snapshot participant stats, pulling combat values from
+    # compute_class_stats so every module's delta is respected.
+    from starships.views import compute_class_stats as _class_stats
     snapshot = []
     parts = battle.participants.select_related(
         "starship__starship_class__ship_type",
     ).all()
     for p in parts:
+        stats = _class_stats(p.starship.starship_class)
         snapshot.append({
             "id": p.id,
             "side": p.side,
-            "hull": p.starship.maintenance_state,
-            "crew": p.starship.current_crew,
-            "required_crew": p.starship.starship_class.build_required_successes * 10 or 10,
-            "initiative_bonus": p.starship.starship_class.ship_type.initiative_bonus,
+            "name": p.starship.name,
+            "type_key": p.starship.starship_class.ship_type.key,
             "size": p.starship.starship_class.size,
             "q": p.q, "r": p.r,
+            # Combat stats — straight from the stats bundle.
+            "health_max": stats["health"],
+            "health": stats["health"],
+            "speed": stats["speed"],
+            "defense": stats["defense"],
+            "armor": stats["armor"],
+            "initiative_bonus": stats["initiative_bonus"],
+            # Attack dice pool: hull size + 2. A drone gets 3,
+            # a titan gets ~12. Tuneable here, retune as rules evolve.
             "dice": max(1, p.starship.starship_class.size + 2),
         })
 
@@ -878,24 +899,32 @@ def api_battle_simulate(request, pk):
         "enemy_wins": 0,
         "draws": 0,
         "total_rounds": 0,
-        "avg_player_hull_remaining": 0.0,
-        "avg_enemy_hull_remaining": 0.0,
+        "avg_player_health_remaining": 0.0,
+        "avg_enemy_health_remaining": 0.0,
+        "avg_player_survivors": 0.0,
+        "avg_enemy_survivors": 0.0,
     }
 
     def _sim_once(rng):
+        """One fight to the death using the real stats.
+
+        Each round every alive unit rolls initiative (d10 + bonus),
+        acts in descending order, fires its dice pool at the nearest
+        enemy. Successes minus the target's defense become raw hits;
+        damage is max(0, hits - target.armor). Damage reduces health
+        until it hits zero and the unit drops out.
+        """
         units = [dict(u) for u in snapshot]
         for rnd in range(max_rounds):
-            # Roll initiative
             for u in units:
                 u["init"] = rng.randint(1, 10) + u["initiative_bonus"]
             units.sort(key=lambda u: (-u["init"], u["size"]))
-            # Each unit fires at nearest surviving opponent
             for u in units:
-                if u["hull"] <= 0 or u["side"] == "neutral":
+                if u["health"] <= 0 or u["side"] == "neutral":
                     continue
                 enemies = [
                     e for e in units
-                    if e["hull"] > 0
+                    if e["health"] > 0
                     and e["side"] != u["side"]
                     and e["side"] != "neutral"
                 ]
@@ -903,13 +932,12 @@ def api_battle_simulate(request, pk):
                     continue
                 enemies.sort(key=lambda e: _hex_distance(u["q"], u["r"], e["q"], e["r"]))
                 target = enemies[0]
-                # Storyteller-style roll — count 8-10 successes on dice pool
                 successes = sum(1 for _ in range(u["dice"]) if rng.randint(1, 10) >= 8)
-                damage = successes * 5  # each success = 5% hull
-                target["hull"] = max(0, target["hull"] - damage)
-            # Check victory
-            player_alive = any(u["side"] == "players" and u["hull"] > 0 for u in units)
-            enemy_alive = any(u["side"] == "enemies" and u["hull"] > 0 for u in units)
+                hits = max(0, successes - target["defense"])
+                damage = max(0, hits - target["armor"])
+                target["health"] = max(0, target["health"] - damage)
+            player_alive = any(u["side"] == "players" and u["health"] > 0 for u in units)
+            enemy_alive = any(u["side"] == "enemies" and u["health"] > 0 for u in units)
             if player_alive and not enemy_alive:
                 return "players", rnd + 1, units
             if enemy_alive and not player_alive:
@@ -918,8 +946,10 @@ def api_battle_simulate(request, pk):
                 return "draw", rnd + 1, units
         return "draw", max_rounds, units
 
-    player_hull_sum = 0.0
-    enemy_hull_sum = 0.0
+    player_hp_frac_sum = 0.0
+    enemy_hp_frac_sum = 0.0
+    player_survivor_sum = 0
+    enemy_survivor_sum = 0
     player_count = 0
     enemy_count = 0
     for _ in range(iterations):
@@ -935,18 +965,25 @@ def api_battle_simulate(request, pk):
             results["draws"] += 1
         for u in units:
             if u["side"] == "players":
-                player_hull_sum += u["hull"]
                 player_count += 1
+                player_hp_frac_sum += u["health"] / max(1, u["health_max"])
+                if u["health"] > 0:
+                    player_survivor_sum += 1
             elif u["side"] == "enemies":
-                enemy_hull_sum += u["hull"]
                 enemy_count += 1
+                enemy_hp_frac_sum += u["health"] / max(1, u["health_max"])
+                if u["health"] > 0:
+                    enemy_survivor_sum += 1
 
-    results["avg_player_hull_remaining"] = (
-        player_hull_sum / max(1, player_count)
+    # Percentage hull remaining across all sims
+    results["avg_player_health_remaining"] = (
+        100.0 * player_hp_frac_sum / max(1, player_count)
     )
-    results["avg_enemy_hull_remaining"] = (
-        enemy_hull_sum / max(1, enemy_count)
+    results["avg_enemy_health_remaining"] = (
+        100.0 * enemy_hp_frac_sum / max(1, enemy_count)
     )
+    results["avg_player_survivors"] = player_survivor_sum / iterations
+    results["avg_enemy_survivors"] = enemy_survivor_sum / iterations
     results["avg_rounds"] = results["total_rounds"] / iterations
     results["player_win_rate"] = results["player_wins"] / iterations
     results["enemy_win_rate"] = results["enemy_wins"] / iterations

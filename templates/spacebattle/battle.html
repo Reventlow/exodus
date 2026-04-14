@@ -371,6 +371,16 @@ function renderDetail() {
     if (!p) { el.textContent = 'Selection not found.'; actions.innerHTML = ''; return; }
     var html = '<div class="mono-text" style="color: var(--text-primary); font-size: 0.8rem;">' + escapeHtml(p.starship_name) + '</div>';
     html += '<div class="mono-text text-muted" style="font-size: 0.6rem;">' + escapeHtml(p.starship_class_name) + ' \u00B7 ' + escapeHtml(p.ship_type_name) + '</div>';
+    // Combat stat grid — from compute_class_stats, so module deltas
+    // show through live without a reload.
+    var initStr = ((p.class_initiative_bonus || 0) >= 0 ? '+' : '') + (p.class_initiative_bonus || 0);
+    html += '<div style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.15rem 0.5rem; margin-top: 0.4rem; font-family: var(--font-mono); font-size: 0.6rem;">';
+    html += '<span style="color: #22c55e;">HEALTH</span><span style="color: var(--text-primary); text-align:right;">' + (p.class_health != null ? p.class_health : '—') + '</span>';
+    html += '<span style="color: #06b6d4;">SPEED</span><span style="color: var(--text-primary); text-align:right;">' + (p.class_speed != null ? p.class_speed : '—') + '</span>';
+    html += '<span style="color: #a855f7;">DEFENSE</span><span style="color: var(--text-primary); text-align:right;">' + (p.class_defense != null ? p.class_defense : '—') + '</span>';
+    html += '<span style="color: #f59e0b;">ARMOR</span><span style="color: var(--text-primary); text-align:right;">' + (p.class_armor != null ? p.class_armor : '—') + '</span>';
+    html += '<span style="color: #fbbf24;">INIT</span><span style="color: var(--text-primary); text-align:right;">' + initStr + '</span>';
+    html += '</div>';
     html += '<div class="mono-text text-muted" style="font-size: 0.6rem; margin-top: 0.35rem;">';
     html += 'pos (' + p.q + ',' + p.r + ') \u00B7 facing ' + p.facing + '<br>';
     html += 'hull ' + p.maintenance_state + '% \u00B7 crew ' + p.current_crew + '<br>';

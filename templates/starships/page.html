@@ -733,8 +733,8 @@ function renderClassEditor(cls) {
     html += '</div>';  // end type+size
     html += '</div>';  // end header row
 
-    // Stats row
-    html += '<div style="display: flex; gap: 0.4rem; flex-wrap: wrap; margin-bottom: 0.5rem;">';
+    // Logistics stats
+    html += '<div style="display: flex; gap: 0.4rem; flex-wrap: wrap; margin-bottom: 0.35rem;">';
     html += '<span class="stat-pill"><span class="mono-text text-muted">SLOTS</span> ' + stats.slots_used + '/' + stats.slot_budget + '</span>';
     html += '<span class="stat-pill"><span class="mono-text text-muted">CREW</span> ' + stats.required_crew + '</span>';
     html += '<span class="stat-pill"><span class="mono-text text-muted">ENERGY</span> ' + stats.energy + '</span>';
@@ -743,6 +743,16 @@ function renderClassEditor(cls) {
     html += '<span class="stat-pill' + (stats.has_ftl ? '' : ' warn-info') + '">FTL ' + (stats.has_ftl ? 'OK' : 'MISSING') + '</span>';
     html += '<span class="stat-pill"><span class="mono-text text-muted">BUILD XP</span> ' + stats.build_cost_xp_total + '</span>';
     html += '<span class="stat-pill"><span class="mono-text text-muted">SUCCESSES NEEDED</span> ' + cls.build_required_successes + '</span>';
+    html += '</div>';
+
+    // Combat stats — the v0.14.10 ladder
+    var initStr = (stats.initiative_bonus >= 0 ? '+' : '') + stats.initiative_bonus;
+    html += '<div style="display: flex; gap: 0.4rem; flex-wrap: wrap; margin-bottom: 0.5rem;">';
+    html += '<span class="stat-pill" style="color:#22c55e;border-color:#22c55e;"><span class="mono-text text-muted">HEALTH</span> ' + stats.health + '</span>';
+    html += '<span class="stat-pill" style="color:#06b6d4;border-color:#06b6d4;"><span class="mono-text text-muted">SPEED</span> ' + stats.speed + '</span>';
+    html += '<span class="stat-pill" style="color:#a855f7;border-color:#a855f7;"><span class="mono-text text-muted">DEFENSE</span> ' + stats.defense + '</span>';
+    html += '<span class="stat-pill" style="color:#f59e0b;border-color:#f59e0b;"><span class="mono-text text-muted">ARMOR</span> ' + stats.armor + '</span>';
+    html += '<span class="stat-pill" style="color:#fbbf24;border-color:#fbbf24;"><span class="mono-text text-muted">INIT</span> ' + initStr + '</span>';
     html += '</div>';
 
     // Slot bar

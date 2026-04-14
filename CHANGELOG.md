@@ -1,5 +1,15 @@
 # Changelog
 
+## v0.14.10
+- Ship combat stats: health, speed, defense, armor added to ShipType baselines and ShipModule deltas
+- Smaller hulls ship with more speed, defense, and initiative; bigger hulls ship with more health and armor. Seeded ladder: drone 3 HP / 6 speed / 5 def / 0 armor → titan 100 HP / 1 speed / 0 def / 8 armor
+- Tiered Armour modules L1-5 add 1→6 armor (heavier tiers shave speed); tiered Shields L1-5 add 1→4 defense and 3→18 HP; tiered Manoeuvring Thrusters L1-5 add 1→3 speed + matching defense; tiered Sublight Engines L1-5 add 1→5 speed; heavy guns (main_gun L4/L5, titan cannon L3-5) apply a speed penalty
+- compute_class_stats now returns health/speed/defense/armor/initiative_bonus alongside the existing totals
+- Class editor (Starships page) shows a second stat row with colour-coded HEALTH / SPEED / DEFENSE / ARMOR / INIT pills
+- Settings → Ship Types editor exposes the new baselines; Settings → Ship Modules editor exposes the new deltas
+- Battle detail panel shows a 2-column combat stat grid per selected participant, live through compute_class_stats so module edits propagate without reload
+- Simulator rewritten to use real stats: attack successes minus target.defense are raw hits, damage is max(0, hits − target.armor) applied to health. Results now report avg_player_survivors / enemy_survivors and avg hull % as fractions
+
 ## v0.14.9
 - Fix: spacebattle pages threw "Uncaught SyntaxError: Invalid or unexpected token" because the _terrain_render.html partial opened with a multi-line Django {# … #} comment which Django's template engine only parses as single-line, so the comment body leaked into the script block
 - Replaced with a plain JS /* … */ block comment so the content is inside the <script> section properly

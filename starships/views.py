@@ -40,6 +40,10 @@ def _serialize_ship_type(t):
         "base_energy": t.base_energy,
         "base_maintenance": t.base_maintenance,
         "initiative_bonus": t.initiative_bonus,
+        "base_health": t.base_health,
+        "base_speed": t.base_speed,
+        "base_defense": t.base_defense,
+        "base_armor": t.base_armor,
         "order": t.order,
     }
 
@@ -56,6 +60,10 @@ def _serialize_ship_module(m):
         "crew_delta": m.crew_delta,
         "energy_delta": m.energy_delta,
         "maintenance_delta": m.maintenance_delta,
+        "health_delta": m.health_delta,
+        "speed_delta": m.speed_delta,
+        "defense_delta": m.defense_delta,
+        "armor_delta": m.armor_delta,
         "provides_sublight": m.provides_sublight,
         "provides_ftl": m.provides_ftl,
         "min_hull_size": m.min_hull_size,
@@ -87,11 +95,14 @@ def _serialize_ship_module_section(s):
 INT_FIELDS_SHIP_TYPE = (
     "default_slot_budget", "min_size", "max_size",
     "base_crew", "base_energy", "base_maintenance",
-    "initiative_bonus", "order",
+    "initiative_bonus",
+    "base_health", "base_speed", "base_defense", "base_armor",
+    "order",
 )
 
 INT_FIELDS_SHIP_MODULE = (
     "slot_cost", "crew_delta", "energy_delta", "maintenance_delta",
+    "health_delta", "speed_delta", "defense_delta", "armor_delta",
     "min_hull_size", "build_cost_xp_delta", "xp_cost", "level", "order",
 )
 
@@ -380,6 +391,11 @@ def compute_class_stats(cls):
     required_crew = ship_type.base_crew
     energy = ship_type.base_energy
     maintenance = ship_type.base_maintenance
+    health = ship_type.base_health
+    speed = ship_type.base_speed
+    defense = ship_type.base_defense
+    armor = ship_type.base_armor
+    initiative_bonus = ship_type.initiative_bonus
     has_sublight = False
     has_ftl = False
     has_power = False
@@ -392,6 +408,10 @@ def compute_class_stats(cls):
         required_crew += m.crew_delta * qty
         energy += m.energy_delta * qty
         maintenance += m.maintenance_delta * qty
+        health += m.health_delta * qty
+        speed += m.speed_delta * qty
+        defense += m.defense_delta * qty
+        armor += m.armor_delta * qty
         build_cost_total += m.build_cost_xp_delta * qty
         if m.provides_sublight and qty > 0:
             has_sublight = True
@@ -399,6 +419,13 @@ def compute_class_stats(cls):
             has_ftl = True
         if m.category == "power" and qty > 0:
             has_power = True
+
+    # Floor combat stats at zero — modules can nudge them negative
+    # but a ship with speed 0 just can't move; it doesn't go backwards.
+    speed = max(0, speed)
+    defense = max(0, defense)
+    armor = max(0, armor)
+    health = max(1, health)
 
     warnings = []
 
@@ -472,6 +499,11 @@ def compute_class_stats(cls):
         "required_crew": required_crew,
         "energy": energy,
         "maintenance": maintenance,
+        "health": health,
+        "speed": speed,
+        "defense": defense,
+        "armor": armor,
+        "initiative_bonus": initiative_bonus,
         "has_sublight": has_sublight,
         "has_ftl": has_ftl,
         "has_power": has_power,
