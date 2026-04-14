@@ -106,6 +106,8 @@ def _serialize_participant(p):
         "class_speed": stats["speed"],
         "class_defense": stats["defense"],
         "class_armor": stats["armor"],
+        "class_scanning": stats["scanning"],
+        "class_size": stats["size"],
         "class_initiative_bonus": stats["initiative_bonus"],
         "notes": p.notes,
         "position_order": p.position_order,

@@ -44,6 +44,7 @@ def _serialize_ship_type(t):
         "base_speed": t.base_speed,
         "base_defense": t.base_defense,
         "base_armor": t.base_armor,
+        "base_scanning": t.base_scanning,
         "order": t.order,
     }
 
@@ -64,6 +65,7 @@ def _serialize_ship_module(m):
         "speed_delta": m.speed_delta,
         "defense_delta": m.defense_delta,
         "armor_delta": m.armor_delta,
+        "scanning_delta": m.scanning_delta,
         "provides_sublight": m.provides_sublight,
         "provides_ftl": m.provides_ftl,
         "min_hull_size": m.min_hull_size,
@@ -96,13 +98,13 @@ INT_FIELDS_SHIP_TYPE = (
     "default_slot_budget", "min_size", "max_size",
     "base_crew", "base_energy", "base_maintenance",
     "initiative_bonus",
-    "base_health", "base_speed", "base_defense", "base_armor",
+    "base_health", "base_speed", "base_defense", "base_armor", "base_scanning",
     "order",
 )
 
 INT_FIELDS_SHIP_MODULE = (
     "slot_cost", "crew_delta", "energy_delta", "maintenance_delta",
-    "health_delta", "speed_delta", "defense_delta", "armor_delta",
+    "health_delta", "speed_delta", "defense_delta", "armor_delta", "scanning_delta",
     "min_hull_size", "build_cost_xp_delta", "xp_cost", "level", "order",
 )
 
@@ -395,6 +397,7 @@ def compute_class_stats(cls):
     speed = ship_type.base_speed
     defense = ship_type.base_defense
     armor = ship_type.base_armor
+    scanning = ship_type.base_scanning
     initiative_bonus = ship_type.initiative_bonus
     has_sublight = False
     has_ftl = False
@@ -412,6 +415,7 @@ def compute_class_stats(cls):
         speed += m.speed_delta * qty
         defense += m.defense_delta * qty
         armor += m.armor_delta * qty
+        scanning += m.scanning_delta * qty
         build_cost_total += m.build_cost_xp_delta * qty
         if m.provides_sublight and qty > 0:
             has_sublight = True
@@ -426,6 +430,7 @@ def compute_class_stats(cls):
     defense = max(0, defense)
     armor = max(0, armor)
     health = max(1, health)
+    scanning = max(0, scanning)
 
     warnings = []
 
@@ -503,7 +508,9 @@ def compute_class_stats(cls):
         "speed": speed,
         "defense": defense,
         "armor": armor,
+        "scanning": scanning,
         "initiative_bonus": initiative_bonus,
+        "size": cls.size,
         "has_sublight": has_sublight,
         "has_ftl": has_ftl,
         "has_power": has_power,

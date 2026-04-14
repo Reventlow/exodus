@@ -60,6 +60,10 @@ class ShipType(models.Model):
         default=0,
         help_text="Damage reduction — subtracted from damage after defense.",
     )
+    base_scanning = models.IntegerField(
+        default=2,
+        help_text="Sensor rating — detection range and resolution before modules.",
+    )
     order = models.IntegerField(default=0)
 
     class Meta:
@@ -137,6 +141,9 @@ class ShipModule(models.Model):
     )
     armor_delta = models.IntegerField(
         default=0, help_text="Added to damage reduction.",
+    )
+    scanning_delta = models.IntegerField(
+        default=0, help_text="Added to sensor rating.",
     )
     provides_sublight = models.BooleanField(
         default=False,

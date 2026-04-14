@@ -1,3 +1,10 @@
+## v0.14.11
+- Ship combat stats round out with **scanning** (sensor rating) and **size** (surfaced from the existing StarshipClass.size field)
+- ShipType gains base_scanning: drone 2 / solo 3 / shuttle 2 / cruiser 3 / support 4 / carrier 3 / dreadnaught 4 / titan 5
+- ShipModule gains scanning_delta; seeded: standalone sensor_array +1, Sensor Suites L1→L5 +1/+2/+3/+5/+8
+- compute_class_stats now returns scanning and size alongside the other combat stats
+- Class editor, settings Ship Type / Ship Module editors, and battle detail panel all show SCAN and SIZE pills next to HEALTH/SPEED/DEFENSE/ARMOR/INIT
+
 # Changelog
 
 ## v0.14.10
