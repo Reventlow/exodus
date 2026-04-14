@@ -1,5 +1,12 @@
 # Changelog
 
+## v0.14.14
+- Battle map and map editor canvases support zoom in/out (40% – 250%)
+- Floating zoom toolbar in the top-left of the canvas with −/+/⟲ reset buttons and a percentage label
+- Ctrl/⌘ + mouse wheel zooms toward the cursor and keeps the hex under the pointer stable
+- Plain scroll / scrollbars still pan the wrap natively, so oversized grids don't need a dedicated drag mode
+- HEX_SIZE now derives from BASE_HEX_SIZE × VIEW_ZOOM via a live getter so all downstream math (hex/pixel conversions, drawHex, terrain visuals) picks up the zoom automatically
+
 ## v0.14.13
 - New **Battery Banks** module section with five tiers (L1 Basic Battery Bank → L5 Fusion Battery Core)
 - Adds battery capacity 3 / 6 / 10 / 15 / 25 with scaling slot, crew, energy, maintenance, and XP cost

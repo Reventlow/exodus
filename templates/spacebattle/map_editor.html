@@ -7,8 +7,25 @@
     .editor-layout { display: grid; grid-template-columns: 240px 1fr; gap: 0.75rem; padding: 0.75rem; min-height: calc(100vh - 80px); }
     .panel { border: 1px solid var(--border-color); padding: 0.75rem; border-radius: var(--radius-sm); overflow: auto; }
     .panel h3 { margin: 0 0 0.5rem 0; font-size: 0.8rem; color: var(--accent-primary); letter-spacing: 1px; }
-    #editor-canvas-wrap { border: 1px solid var(--border-color); border-radius: var(--radius-sm); padding: 0.25rem; background: #04060a; overflow: auto; }
+    #editor-canvas-wrap { position: relative; border: 1px solid var(--border-color); border-radius: var(--radius-sm); padding: 0.25rem; background: #04060a; overflow: auto; }
     #editor-canvas { display: block; }
+    .zoom-controls {
+        position: sticky;
+        top: 0.3rem;
+        left: 0.3rem;
+        align-self: flex-start;
+        z-index: 5;
+        display: inline-flex;
+        gap: 0.2rem;
+        background: rgba(4,6,10,0.8);
+        border: 1px solid var(--border-color);
+        border-radius: var(--radius-sm);
+        padding: 0.2rem;
+        margin-bottom: 0.2rem;
+    }
+    .zoom-controls button { background: transparent; border: 1px solid var(--border-color); color: var(--text-primary); padding: 0.15rem 0.45rem; cursor: pointer; font-family: var(--font-mono); font-size: 0.7rem; line-height: 1; }
+    .zoom-controls button:hover { border-color: var(--accent-primary); color: var(--accent-primary); }
+    .zoom-label { color: var(--text-muted); font-family: var(--font-mono); font-size: 0.65rem; padding: 0.15rem 0.35rem; }
 </style>
 
 <div class="editor-layout">
@@ -37,6 +54,12 @@
         <div class="mono-text text-muted" style="font-size: 0.55rem; margin-top: 0.3rem;">Click empty hex to place. Click existing hex to delete.</div>
     </div>
     <div id="editor-canvas-wrap">
+        <div class="zoom-controls">
+            <button type="button" onclick="zoomOut()" title="Zoom out">−</button>
+            <span class="zoom-label" id="zoom-label">100%</span>
+            <button type="button" onclick="zoomIn()" title="Zoom in">+</button>
+            <button type="button" onclick="resetZoom()" title="Reset zoom">⟲</button>
+        </div>
         <canvas id="editor-canvas" width="800" height="600"></canvas>
     </div>
 </div>
@@ -48,6 +71,11 @@ const MAP_ID = {{ map_id }};
 var MAP = null;
 var CANVAS_EL = null;
 var TERRAIN_INDEX = {};
+// Zoom state — same pattern as the battle view.
+var BASE_HEX_SIZE = 24;
+var VIEW_ZOOM = 1.0;
+var MIN_ZOOM = 0.4;
+var MAX_ZOOM = 2.5;
 
 var TERRAIN_DEFAULTS = {
     asteroid:     { color: '#8a7a6a', icon: '\u2689' },
@@ -72,11 +100,15 @@ function api(path, opts) {
     return fetch(path, opts).then(function(r) { return r.json().then(function(d) { if (!r.ok) { alert((d && d.error) || ('Error ' + r.status)); throw d; } return d; }); });
 }
 
-const HEX_SIZE = 24;
+Object.defineProperty(window, 'HEX_SIZE', {
+    get: function() { return BASE_HEX_SIZE * VIEW_ZOOM; },
+    configurable: true,
+});
 function hexToPixel(q, r) {
-    var x = HEX_SIZE * Math.sqrt(3) * (q + r / 2);
-    var y = HEX_SIZE * 1.5 * r;
-    return [x + HEX_SIZE + 4, y + HEX_SIZE + 4];
+    var s = HEX_SIZE;
+    var x = s * Math.sqrt(3) * (q + r / 2);
+    var y = s * 1.5 * r;
+    return [x + s + 4, y + s + 4];
 }
 function pixelToHex(px, py) {
     var x = px - (HEX_SIZE + 4);
@@ -128,6 +160,47 @@ function render() {
     });
 }
 
+function applyZoom(newZoom, opts) {
+    var clamped = Math.max(MIN_ZOOM, Math.min(MAX_ZOOM, newZoom));
+    if (clamped === VIEW_ZOOM) return;
+    var wrap = document.getElementById('editor-canvas-wrap');
+    var anchorX = opts && opts.anchorX != null ? opts.anchorX
+        : (wrap.scrollLeft + wrap.clientWidth / 2);
+    var anchorY = opts && opts.anchorY != null ? opts.anchorY
+        : (wrap.scrollTop + wrap.clientHeight / 2);
+    var ratio = clamped / VIEW_ZOOM;
+    VIEW_ZOOM = clamped;
+    render();
+    var newAnchorX = anchorX * ratio;
+    var newAnchorY = anchorY * ratio;
+    var viewX = opts && opts.viewX != null ? opts.viewX : wrap.clientWidth / 2;
+    var viewY = opts && opts.viewY != null ? opts.viewY : wrap.clientHeight / 2;
+    wrap.scrollLeft = newAnchorX - viewX;
+    wrap.scrollTop = newAnchorY - viewY;
+    var label = document.getElementById('zoom-label');
+    if (label) label.textContent = Math.round(VIEW_ZOOM * 100) + '%';
+}
+
+function zoomIn() { applyZoom(VIEW_ZOOM + 0.15); }
+function zoomOut() { applyZoom(VIEW_ZOOM - 0.15); }
+function resetZoom() { applyZoom(1.0); }
+
+function onCanvasWheel(ev) {
+    if (!(ev.ctrlKey || ev.metaKey)) return;
+    ev.preventDefault();
+    var wrap = document.getElementById('editor-canvas-wrap');
+    var rect = CANVAS_EL.getBoundingClientRect();
+    var pxInCanvas = ev.clientX - rect.left + wrap.scrollLeft;
+    var pyInCanvas = ev.clientY - rect.top + wrap.scrollTop;
+    var step = ev.deltaY > 0 ? -0.12 : 0.12;
+    applyZoom(VIEW_ZOOM + step, {
+        anchorX: pxInCanvas,
+        anchorY: pyInCanvas,
+        viewX: ev.clientX - wrap.getBoundingClientRect().left,
+        viewY: ev.clientY - wrap.getBoundingClientRect().top,
+    });
+}
+
 function onClick(ev) {
     var rect = CANVAS_EL.getBoundingClientRect();
     var hex = pixelToHex(ev.clientX - rect.left, ev.clientY - rect.top);
@@ -154,6 +227,7 @@ function load() {
         if (!CANVAS_EL) {
             CANVAS_EL = document.getElementById('editor-canvas');
             CANVAS_EL.addEventListener('click', onClick);
+            CANVAS_EL.addEventListener('wheel', onCanvasWheel, { passive: false });
         }
     });
 }

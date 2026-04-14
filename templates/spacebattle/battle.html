@@ -20,6 +20,7 @@
     }
     .panel h3 { margin: 0 0 0.5rem 0; font-size: 0.8rem; color: var(--accent-primary); letter-spacing: 1px; }
     #canvas-wrap {
+        position: relative;
         border: 1px solid var(--border-color);
         border-radius: var(--radius-sm);
         padding: 0.25rem;
@@ -30,6 +31,31 @@
         overflow: auto;
     }
     #battle-canvas { display: block; }
+    .zoom-controls {
+        position: sticky;
+        top: 0.3rem;
+        left: 0.3rem;
+        align-self: flex-start;
+        z-index: 5;
+        display: flex;
+        gap: 0.2rem;
+        background: rgba(4,6,10,0.8);
+        border: 1px solid var(--border-color);
+        border-radius: var(--radius-sm);
+        padding: 0.2rem;
+    }
+    .zoom-controls button {
+        background: transparent;
+        border: 1px solid var(--border-color);
+        color: var(--text-primary);
+        padding: 0.15rem 0.45rem;
+        cursor: pointer;
+        font-family: var(--font-mono);
+        font-size: 0.7rem;
+        line-height: 1;
+    }
+    .zoom-controls button:hover { border-color: var(--accent-primary); color: var(--accent-primary); }
+    .zoom-label { color: var(--text-muted); font-family: var(--font-mono); font-size: 0.65rem; padding: 0.15rem 0.35rem; }
     .log-entry {
         font-family: var(--font-mono);
         font-size: 0.65rem;
@@ -107,6 +133,12 @@
 
     <!-- CENTER: canvas -->
     <div id="canvas-wrap">
+        <div class="zoom-controls">
+            <button type="button" onclick="zoomOut()" title="Zoom out">−</button>
+            <span class="zoom-label" id="zoom-label">100%</span>
+            <button type="button" onclick="zoomIn()" title="Zoom in">+</button>
+            <button type="button" onclick="resetZoom()" title="Reset zoom">⟲</button>
+        </div>
         <canvas id="battle-canvas" width="800" height="600"></canvas>
     </div>
 
@@ -155,6 +187,13 @@ var BATTLE = null;
 var SELECTED_PARTICIPANT_ID = null;
 var BATTLE_SOCKET = null;
 var CANVAS_EL = null;
+// Zoom — HEX_SIZE is driven by BASE_HEX_SIZE * VIEW_ZOOM so the
+// existing hexToPixel/pixelToHex math stays honest and the wrap
+// div's native scrollbars handle panning for free.
+var BASE_HEX_SIZE = 24;
+var VIEW_ZOOM = 1.0;
+var MIN_ZOOM = 0.4;
+var MAX_ZOOM = 2.5;
 // "move" = clicks move selection; "fire" = next click on an enemy
 // logs a fire action and returns to move mode; "terrain" = click places
 // terrain of TERRAIN_PLACE_TYPE, click existing terrain to remove.
@@ -204,11 +243,18 @@ function escapeHtml(s) {
 // Axial q,r with pointy-top hexes. (q,r) → screen (x,y):
 //   x = size * sqrt(3) * (q + r/2)
 //   y = size * 1.5 * r
-const HEX_SIZE = 24;
+// HEX_SIZE is a live getter — BASE_HEX_SIZE * VIEW_ZOOM — so every
+// math path (hexToPixel, pixelToHex, drawHex) picks up the current
+// zoom without needing a second argument everywhere.
+Object.defineProperty(window, 'HEX_SIZE', {
+    get: function() { return BASE_HEX_SIZE * VIEW_ZOOM; },
+    configurable: true,
+});
 function hexToPixel(q, r) {
-    var x = HEX_SIZE * Math.sqrt(3) * (q + r / 2);
-    var y = HEX_SIZE * 1.5 * r;
-    return [x + HEX_SIZE + 4, y + HEX_SIZE + 4];
+    var s = HEX_SIZE;
+    var x = s * Math.sqrt(3) * (q + r / 2);
+    var y = s * 1.5 * r;
+    return [x + s + 4, y + s + 4];
 }
 
 function drawHex(ctx, cx, cy, size, fill, stroke) {
@@ -495,6 +541,54 @@ function attachCanvasHandlers() {
     if (CANVAS_EL) return;
     CANVAS_EL = document.getElementById('battle-canvas');
     CANVAS_EL.addEventListener('click', onCanvasClick);
+    CANVAS_EL.addEventListener('wheel', onCanvasWheel, { passive: false });
+}
+
+// ------------------------- Zoom -------------------------
+function applyZoom(newZoom, opts) {
+    var clamped = Math.max(MIN_ZOOM, Math.min(MAX_ZOOM, newZoom));
+    if (clamped === VIEW_ZOOM) return;
+    var wrap = document.getElementById('canvas-wrap');
+    // Preserve the hex under the cursor (or viewport centre) across
+    // the zoom change so the user isn't thrown to the origin.
+    var anchorX = opts && opts.anchorX != null ? opts.anchorX
+        : (wrap.scrollLeft + wrap.clientWidth / 2);
+    var anchorY = opts && opts.anchorY != null ? opts.anchorY
+        : (wrap.scrollTop + wrap.clientHeight / 2);
+    var ratio = clamped / VIEW_ZOOM;
+    VIEW_ZOOM = clamped;
+    render();
+    // Scale the anchor in canvas coords and recenter the viewport on it.
+    var newAnchorX = anchorX * ratio;
+    var newAnchorY = anchorY * ratio;
+    var viewX = opts && opts.viewX != null ? opts.viewX : wrap.clientWidth / 2;
+    var viewY = opts && opts.viewY != null ? opts.viewY : wrap.clientHeight / 2;
+    wrap.scrollLeft = newAnchorX - viewX;
+    wrap.scrollTop = newAnchorY - viewY;
+    var label = document.getElementById('zoom-label');
+    if (label) label.textContent = Math.round(VIEW_ZOOM * 100) + '%';
+}
+
+function zoomIn() { applyZoom(VIEW_ZOOM + 0.15); }
+function zoomOut() { applyZoom(VIEW_ZOOM - 0.15); }
+function resetZoom() { applyZoom(1.0); }
+
+function onCanvasWheel(ev) {
+    // Pinch-to-zoom or ctrl/cmd+wheel zooms; plain scroll still pans
+    // via the native wrap scrollbars.
+    if (!(ev.ctrlKey || ev.metaKey)) return;
+    ev.preventDefault();
+    var wrap = document.getElementById('canvas-wrap');
+    var rect = CANVAS_EL.getBoundingClientRect();
+    var pxInCanvas = ev.clientX - rect.left + wrap.scrollLeft;
+    var pyInCanvas = ev.clientY - rect.top + wrap.scrollTop;
+    var step = ev.deltaY > 0 ? -0.12 : 0.12;
+    applyZoom(VIEW_ZOOM + step, {
+        anchorX: pxInCanvas,
+        anchorY: pyInCanvas,
+        viewX: ev.clientX - wrap.getBoundingClientRect().left,
+        viewY: ev.clientY - wrap.getBoundingClientRect().top,
+    });
 }
 
 function onCanvasClick(ev) {
