@@ -1,5 +1,10 @@
 # Changelog
 
+## v0.14.13
+- New **Battery Banks** module section with five tiers (L1 Basic Battery Bank → L5 Fusion Battery Core)
+- Adds battery capacity 3 / 6 / 10 / 15 / 25 with scaling slot, crew, energy, maintenance, and XP cost
+- Drop any tier on a class to boost its combat battery_power pool so shields and heavy guns can sustain fire
+
 ## v0.14.12
 - Ship modules grow weapon and defence profiles — damage, range, size bias, shields, battery
 - ShipType gains base_shield and base_battery_power; drones 2 battery → titans 24
