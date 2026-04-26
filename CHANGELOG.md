@@ -1,5 +1,8 @@
 # Changelog
 
+## v0.14.50
+- Fix: the login roster was showing `__SYSTEM__` twice when a real Django user account named `__system__` (or `system`) existed in the database — the real burned user and the always-on synthetic row collided. The roster now defensively excludes any real user whose username matches the synthetic sentinel, so only the always-on `CRAWLING` row appears
+
 ## v0.14.49
 - Three new admin-only API endpoints for user profile management:
   - `GET /accounts/api/admin/users/` — list all users with profile + activity status

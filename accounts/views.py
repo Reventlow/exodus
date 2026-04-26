@@ -79,8 +79,12 @@ def _build_login_roster():
         "CRAWLING": 3, "INACTIVE": 4, "BURNED": 5,
     }
     rows = []
+    # Exclude any real user whose username collides with the synthetic
+    # sentinel (case-insensitive on `__system__` or `system`) so the
+    # always-on synthetic row appended below is the only SYSTEM line.
     users = (
-        User.objects.all()
+        User.objects.exclude(username__iexact="__system__")
+        .exclude(username__iexact="system")
         .select_related("profile")
         .prefetch_related("characters")
     )
