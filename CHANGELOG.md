@@ -1,5 +1,11 @@
 # Changelog
 
+## v0.14.38
+- New **`UserProfile.last_activity`** timestamp field, updated on every authenticated HTTP request via a new `LastActivityMiddleware`. Used for site-activity monitoring (e.g., "who has been on the site recently"). Each new action overwrites the previous timestamp
+- Implementation runs in the response phase (no added request latency), uses `QuerySet.update()` to touch only the timestamp column, and is **debounced to once per 30 seconds per user** so a player rapidly clicking, typing, or polling doesn't hammer the DB
+- Skipped silently for: anonymous users, MCP API requests (Bearer-token auth — that's tooling, not a human action), and static / media file paths. Errors are logged but never 500 the page
+- Migration `accounts/0002_userprofile_last_activity` adds the field with `db_index=True` so monitoring queries (e.g., "list users active in the last hour") are cheap
+
 ## v0.14.37
 - Fix: clearance-gate kicker on `/login/` now reads the **DIRECTORATE** value from `/settings/ → CLEARANCE GATE → TWEAKS` instead of the hardcoded `"DIRECTORATE OMEGA"`. Both the JS-on render and the no-JS fallback now show `DIRECTORATE {{ agency_name }}  //  PROJECT {{ op_codename }}`
 - Fix: granted-dossier copy in the post-login cinematic. Previously rendered `PROJECT:   PROJECT OMEGA-7` (duplicate "PROJECT" word). Now: `CLEARANCE: TIER-3 // DIRECTORATE <agency_name>` and `PROJECT:   <op_codename>`
