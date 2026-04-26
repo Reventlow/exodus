@@ -1,5 +1,9 @@
 # Changelog
 
+## v0.14.48
+- New `CRAWLING` status (muted ocher `#8a7656`) added to the login roster ladder. Sort order is now ACTIVE → STANDBY → DORMANT → **CRAWLING** → INACTIVE → BURNED
+- Synthetic `__SYSTEM__` row always present on the roster — `CRAWLING` status, `SYSTEMS SECURITY` node, `ALWAYS` uplink. The in-fiction systems-security daemon that never logs off but never quite gets full bandwidth either. Excluded from the active-count badge (it's not a real human)
+
 ## v0.14.47
 - The login roster now shows **`BURNED`** for users with `User.is_active=False` (operative left the group, kept on the roster for historical record). Sort order extended: ACTIVE → STANDBY → DORMANT → INACTIVE → **BURNED**. Status pill renders red via the existing `.s-burned` class
 - `LastActivityMiddleware._maybe_logout_inactive` now also kicks out users whose `is_active` has been cleared, even if their session cookie is still valid. Belt-and-braces: `is_active=False` already blocks fresh logins; this also closes the existing session on their next request

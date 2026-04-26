@@ -1236,6 +1236,8 @@ body.surface-splash .crt-curve {
 .s-standby  .status-pill { color: #ffb454; }
 .s-dormant  { color: #6c8aa0; }
 .s-dormant  .status-pill { color: #6c8aa0; }
+.s-crawling { color: #8a7656; }
+.s-crawling .status-pill { color: #8a7656; }
 .s-burned   { color: var(--accent-danger); }
 .s-burned   .status-pill { color: var(--accent-danger); }
 .s-inactive { color: #4a5568; opacity: 0.75; }

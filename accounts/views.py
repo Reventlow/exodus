@@ -63,11 +63,21 @@ def _build_login_roster():
     One row per user (active or burned), using their first character's
     name. Superusers appear as ``GM``. Burned operatives (``User.is_active
     = False`` — left the group, kept for historical record) appear at the
-    bottom of the list with status ``BURNED``. Sorted by status priority
-    then codename. Returns ``(rows, active_count)``.
+    bottom of the list with status ``BURNED``.
+
+    A synthetic ``__SYSTEM__`` row is always appended with status
+    ``CRAWLING`` and role ``SYSTEMS SECURITY`` — the in-fiction systems-
+    security daemon that never logs off. Excluded from the active-count
+    badge.
+
+    Sorted by status priority then codename. Returns
+    ``(rows, active_count)``.
     """
     now = timezone.now()
-    sort_order = {"ACTIVE": 0, "STANDBY": 1, "DORMANT": 2, "INACTIVE": 3, "BURNED": 4}
+    sort_order = {
+        "ACTIVE": 0, "STANDBY": 1, "DORMANT": 2,
+        "CRAWLING": 3, "INACTIVE": 4, "BURNED": 5,
+    }
     rows = []
     users = (
         User.objects.all()
@@ -102,8 +112,20 @@ def _build_login_roster():
             "node": node,
             "uplink": _format_since(delta_sec),
         })
+    # Always-on synthetic SYSTEM row. Not a real user — this is the
+    # systems-security daemon. Always CRAWLING, always there.
+    rows.append({
+        "codename": "__SYSTEM__",
+        "status": "CRAWLING",
+        "node": "SYSTEMS SECURITY",
+        "uplink": "ALWAYS",
+    })
     rows.sort(key=lambda r: (sort_order[r["status"]], r["codename"]))
-    active_count = sum(1 for r in rows if r["status"] == "ACTIVE")
+    # Active count counts real humans only; the SYSTEM row is decorative.
+    active_count = sum(
+        1 for r in rows
+        if r["status"] == "ACTIVE" and r["codename"] != "__SYSTEM__"
+    )
     return rows, active_count
 
 
