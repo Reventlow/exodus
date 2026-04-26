@@ -1,97 +1,161 @@
 /* ============================================================
-   BLACKLOG.NET // EXODUS — Design System
-   Dark high-tech "BLACKLOG.NET" aesthetic for WoD 2.0
+   BLACKLOG.NET // EXODUS — Design System (Wave 1)
+   Clearance-gate aesthetic: terminal/CRT chrome, JetBrains Mono +
+   VT323, EMERALD palette by default with per-palette overrides
+   driven by <html data-palette="..."> from SiteSettings.tweaks.
    ============================================================ */
 
 :root {
-    /* Political High Tech Theme Palette — Dark (default) */
-    --bg-dark: #0f172a;
-    --bg-panel: #1e293b;
-    --bg-input: #020617;
+    /* ----- New canonical clearance-gate tokens ----- */
+    --c-primary: #39ff7a;                /* EMERALD default accent */
+    --c-dim:     #0e3a1f;                /* dim accent (borders, dividers) */
+    --c-glow:    rgba(57, 255, 122, 0.55);
+    --c-soft:    rgba(57, 255, 122, 0.10);
 
-    /* Translucent panel/nav backgrounds (used by glass-panel + sticky nav) */
-    --bg-panel-translucent: rgba(30, 41, 59, 0.7);
-    --nav-bg: rgba(15, 23, 42, 0.9);
-    --nav-bg-mobile: rgba(15, 23, 42, 0.97);
+    --ink:       #c8e9d2;                /* primary text */
+    --ink-dim:   #5a8a76;                /* secondary text */
+    --ink-mute:  #355a4a;                /* tertiary / muted */
 
-    --text-primary: #f8fafc;
-    --text-secondary: #94a3b8;
-    --text-muted: #475569;
+    --bg:        #02080a;                /* dark void background */
+    --bg-2:      #06121a;                /* secondary panel base */
 
-    --accent-primary: #38bdf8;
-    /* Cyan/Blue */
-    --accent-glow: rgba(56, 189, 248, 0.3);
-    --accent-danger: #ef4444;
-    --accent-success: #22c55e;
-    --accent-warning: #eab308;
+    --font-mono:    'JetBrains Mono', 'Consolas', 'Monaco', 'Courier New', monospace;
+    --font-display: 'VT323', 'JetBrains Mono', monospace;
 
-    --border-color: #334155;
+    /* ----- Re-aliased legacy tokens — keep older selectors and
+       JSX inline styles working without rewriting them. ----- */
+    --bg-dark:   var(--bg);
+    --bg-panel:  rgba(2, 14, 9, 0.78);
+    --bg-input:  rgba(0, 0, 0, 0.55);
 
-    /* Map / canvas palette
-       (used by Leaflet world & city maps, hex battle canvas, Three.js star map) */
-    --map-void: #04060a;                          /* "space" / void background */
-    --map-void-leaflet: #0a0a0f;                  /* slightly lighter void for Leaflet bg */
-    --map-grid-fill: rgba(20, 30, 50, 0.3);       /* hex tile fill */
-    --map-grid-stroke: rgba(80, 100, 140, 0.35);  /* hex tile outline */
-    --map-axis: rgba(26, 26, 46, 1);              /* axis lines (Three.js) */
-    --map-route-faint: rgba(26, 58, 42, 0.35);    /* faint connection lines (Three.js) */
-    --label-shadow: rgba(0, 0, 0, 0.9);           /* halo around map text labels */
+    --bg-panel-translucent: rgba(2, 14, 9, 0.78);
+    --nav-bg:               rgba(2, 12, 8, 0.85);
+    --nav-bg-mobile:        rgba(2, 12, 8, 0.97);
 
-    --font-main: 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
-    --font-mono: 'Consolas', 'Monaco', 'Courier New', monospace;
+    --text-primary:   var(--ink);
+    --text-secondary: var(--ink-dim);
+    --text-muted:     var(--ink-mute);
+
+    --accent-primary: var(--c-primary);
+    --accent-glow:    var(--c-glow);
+    --accent-danger:  #ff4d5e;
+    --accent-success: var(--c-primary);
+    --accent-warning: #ffb454;
+
+    --border-color: var(--c-dim);
+
+    /* Map / canvas palette — UNCHANGED from prior versions. The
+       Leaflet world map, hex battle canvas, and Three.js star map
+       all key off these tokens; touching them risks regressions in
+       surfaces that Wave 1 explicitly does not touch. */
+    --map-void:         #04060a;
+    --map-void-leaflet: #0a0a0f;
+    --map-grid-fill:    rgba(20, 30, 50, 0.3);
+    --map-grid-stroke:  rgba(80, 100, 140, 0.35);
+    --map-axis:         rgba(26, 26, 46, 1);
+    --map-route-faint:  rgba(26, 58, 42, 0.35);
+    --label-shadow:     rgba(0, 0, 0, 0.9);
+
+    --font-main: var(--font-mono);
 
     --grid-spacing: 1rem;
-    --radius-sm: 4px;
-    --radius-md: 8px;
+    --radius-sm: 0;                      /* square corners everywhere */
+    --radius-md: 0;
 
     color-scheme: dark;
 }
 
 /* ============================================================
+   Per-palette overrides — driven by <html data-palette="...">
+   set from SiteSettings.tweaks.palette in base.html.
+   Mirrors clearance_gate.css so the rest of the app inherits
+   the same accent the login was rendered in.
+   ============================================================ */
+:root[data-palette="emerald"] {
+    --c-primary: #39ff7a; --c-dim: #0e3a1f;
+    --c-glow: rgba(57, 255, 122, 0.55); --c-soft: rgba(57, 255, 122, 0.10);
+}
+:root[data-palette="amber"] {
+    --c-primary: #ffb454; --c-dim: #3a2410;
+    --c-glow: rgba(255, 180, 84, 0.50); --c-soft: rgba(255, 180, 84, 0.10);
+}
+:root[data-palette="ice"] {
+    --c-primary: #7fdcff; --c-dim: #0e2a3a;
+    --c-glow: rgba(127, 220, 255, 0.50); --c-soft: rgba(127, 220, 255, 0.10);
+}
+:root[data-palette="blood"] {
+    --c-primary: #ff4d5e; --c-dim: #3a0e16;
+    --c-glow: rgba(255, 77, 94, 0.50); --c-soft: rgba(255, 77, 94, 0.10);
+}
+:root[data-palette="bone"] {
+    --c-primary: #e8e2cf; --c-dim: #2a2820;
+    --c-glow: rgba(232, 226, 207, 0.40); --c-soft: rgba(232, 226, 207, 0.08);
+}
+
+/* ============================================================
    Light Theme Override
-   Activated via <html data-theme="light"> (toggle in base.html).
-   Strategy:
-     - Flip backgrounds light, text dark.
-     - Darken accent-primary so the existing pattern of
-       `color: var(--bg-dark)` on `background: var(--accent-primary)`
-       still produces readable contrast (light text on darker accent).
-     - Darken accent-warning for the same reason (used by the
-       impersonation banner).
+   Activated via <html data-theme="light">. Keeps the new
+   clearance-gate token names but flips backgrounds light and
+   darkens the accent so accent-on-white text remains readable.
+   The map tokens flip to a pale "void" so terrain visuals pop
+   on a light page.
    ============================================================ */
 :root[data-theme="light"] {
-    --bg-dark: #f1f5f9;       /* page background — slate-100 */
-    --bg-panel: #ffffff;       /* card/panel surface */
-    --bg-input: #f8fafc;       /* input fields — slate-50 */
+    --bg:    #f1f5f9;
+    --bg-2:  #ffffff;
+    --ink:       #0f172a;
+    --ink-dim:   #475569;
+    --ink-mute:  #64748b;
 
+    /* Default emerald → darker for light-mode contrast.
+       Each palette overrides this again below. */
+    --c-primary: #0d8f3e;
+    --c-dim:     #cbd5e1;
+    --c-glow:    rgba(13, 143, 62, 0.25);
+    --c-soft:    rgba(13, 143, 62, 0.10);
+
+    --bg-input:             #f8fafc;
     --bg-panel-translucent: rgba(255, 255, 255, 0.78);
-    --nav-bg: rgba(248, 250, 252, 0.9);
-    --nav-bg-mobile: rgba(248, 250, 252, 0.97);
+    --nav-bg:               rgba(248, 250, 252, 0.9);
+    --nav-bg-mobile:        rgba(248, 250, 252, 0.97);
 
-    --text-primary: #0f172a;   /* slate-900 */
-    --text-secondary: #475569; /* slate-600 */
-    --text-muted: #64748b;     /* slate-500 — kept readable on light bg */
+    --accent-danger:  #dc2626;
+    --accent-success: #16a34a;
+    --accent-warning: #b45309;
 
-    --accent-primary: #0284c7; /* sky-600 — darker so white-ish text on it works */
-    --accent-glow: rgba(2, 132, 199, 0.25);
-    --accent-danger: #dc2626;  /* red-600 */
-    --accent-success: #16a34a; /* green-600 */
-    --accent-warning: #b45309; /* amber-700 — readable for light text */
-
-    --border-color: #cbd5e1;   /* slate-300 */
-
-    /* Map / canvas palette — light variant.
-       The "void" becomes a soft pale slate so terrain visuals
-       (which keep their semantic colors) still pop, while the
-       chrome (panels, grid lines, halos) blend with the page. */
-    --map-void: #e2e8f0;                          /* slate-200 — pale "space" */
-    --map-void-leaflet: #f1f5f9;                  /* slate-100 — Leaflet ocean/sky tone */
-    --map-grid-fill: rgba(148, 163, 184, 0.18);   /* slate-400 tint */
-    --map-grid-stroke: rgba(71, 85, 105, 0.45);   /* slate-600 outline */
-    --map-axis: rgba(148, 163, 184, 0.6);         /* lighter axis lines */
-    --map-route-faint: rgba(34, 197, 94, 0.35);   /* greenish faint lines */
-    --label-shadow: rgba(255, 255, 255, 0.95);    /* white halo for dark text */
+    --map-void:         #e2e8f0;
+    --map-void-leaflet: #f1f5f9;
+    --map-grid-fill:    rgba(148, 163, 184, 0.18);
+    --map-grid-stroke:  rgba(71, 85, 105, 0.45);
+    --map-axis:         rgba(148, 163, 184, 0.6);
+    --map-route-faint:  rgba(34, 197, 94, 0.35);
+    --label-shadow:     rgba(255, 255, 255, 0.95);
 
     color-scheme: light;
+}
+
+/* Light-mode palette tweaks — darker accent so on a pale page
+   accent-coloured text remains legible. Mirrors the dark blocks
+   above but with brand-neutral darker shades. */
+:root[data-theme="light"][data-palette="emerald"] {
+    --c-primary: #0d8f3e; --c-dim: #cbd5e1;
+    --c-glow: rgba(13, 143, 62, 0.25); --c-soft: rgba(13, 143, 62, 0.10);
+}
+:root[data-theme="light"][data-palette="amber"] {
+    --c-primary: #b45309; --c-dim: #cbd5e1;
+    --c-glow: rgba(180, 83, 9, 0.25); --c-soft: rgba(180, 83, 9, 0.10);
+}
+:root[data-theme="light"][data-palette="ice"] {
+    --c-primary: #0369a1; --c-dim: #cbd5e1;
+    --c-glow: rgba(3, 105, 161, 0.25); --c-soft: rgba(3, 105, 161, 0.10);
+}
+:root[data-theme="light"][data-palette="blood"] {
+    --c-primary: #b91c1c; --c-dim: #cbd5e1;
+    --c-glow: rgba(185, 28, 28, 0.25); --c-soft: rgba(185, 28, 28, 0.10);
+}
+:root[data-theme="light"][data-palette="bone"] {
+    --c-primary: #6b6655; --c-dim: #cbd5e1;
+    --c-glow: rgba(107, 102, 85, 0.25); --c-soft: rgba(107, 102, 85, 0.10);
 }
 
 * {
@@ -101,25 +165,52 @@
 }
 
 body {
-    background-color: var(--bg-dark);
-    color: var(--text-primary);
-    font-family: var(--font-main);
+    background-color: var(--bg);
+    color: var(--ink);
+    font-family: var(--font-mono);
     min-height: 100vh;
     overflow-x: hidden;
     line-height: 1.5;
+    -webkit-font-smoothing: antialiased;
+    background-image:
+        radial-gradient(ellipse at 50% 40%, rgba(0, 40, 20, 0.20), transparent 60%),
+        radial-gradient(ellipse at 80% 100%, var(--c-soft), transparent 50%),
+        linear-gradient(180deg, #020705 0%, #01100a 100%);
+    background-attachment: fixed;
 }
 
-/* Utility Classes for Theme */
+/* In light mode the radial wash above looks dirty — neutralise it. */
+:root[data-theme="light"] body {
+    background-image: none;
+}
+
+/* ============================================================
+   Glass Panel — clearance-gate "brackets" recipe.
+   Square corners, 1px dim border, and the four-edge box-shadow
+   stack from clearance_gate.css .brackets.
+   ============================================================ */
 .glass-panel {
     background: var(--bg-panel-translucent);
-    backdrop-filter: blur(10px);
-    border: 1px solid var(--border-color);
-    border-radius: var(--radius-md);
-    box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+    backdrop-filter: blur(3px);
+    border: 1px solid var(--c-dim);
+    border-radius: 0;
+    box-shadow:
+        0 0 0 1px rgba(0, 0, 0, 0.6),
+        0 30px 80px rgba(0, 0, 0, 0.55),
+        inset 0 0 50px rgba(0, 0, 0, 0.4),
+        inset 0 0 1px var(--c-soft);
 }
 
+:root[data-theme="light"] .glass-panel {
+    box-shadow:
+        0 0 0 1px rgba(0, 0, 0, 0.05),
+        0 4px 16px rgba(15, 23, 42, 0.10),
+        inset 0 0 1px var(--c-soft);
+}
+
+/* Tech border — keep the accent gradient line but tone down for tables */
 .tech-border {
-    border: 1px solid var(--border-color);
+    border: 1px solid var(--c-dim);
     position: relative;
 }
 
@@ -130,49 +221,26 @@ body {
     left: 0;
     width: 100%;
     height: 1px;
-    background: linear-gradient(90deg, transparent, var(--accent-primary), transparent);
-    opacity: 0.5;
+    background: linear-gradient(90deg, transparent, var(--c-primary), transparent);
+    opacity: 0.35;
 }
 
 .mono-text {
     font-family: var(--font-mono);
-    letter-spacing: 0.05em;
+    text-transform: uppercase;
+    letter-spacing: 0.18em;
 }
 
-.text-accent {
-    color: var(--accent-primary);
-}
-
-.text-danger {
-    color: var(--accent-danger);
-}
-
-.text-muted {
-    color: var(--text-muted);
-}
-
-.text-center {
-    text-align: center;
-}
+.text-accent  { color: var(--c-primary); }
+.text-danger  { color: var(--accent-danger); }
+.text-muted   { color: var(--ink-mute); }
+.text-center  { text-align: center; }
 
 /* Scrollbar */
-::-webkit-scrollbar {
-    width: 8px;
-    height: 8px;
-}
-
-::-webkit-scrollbar-track {
-    background: var(--bg-dark);
-}
-
-::-webkit-scrollbar-thumb {
-    background: var(--border-color);
-    border-radius: 4px;
-}
-
-::-webkit-scrollbar-thumb:hover {
-    background: var(--text-secondary);
-}
+::-webkit-scrollbar { width: 8px; height: 8px; }
+::-webkit-scrollbar-track { background: var(--bg); }
+::-webkit-scrollbar-thumb { background: var(--c-dim); border-radius: 0; }
+::-webkit-scrollbar-thumb:hover { background: var(--ink-dim); }
 
 /* App root container */
 #app-root {
@@ -182,9 +250,7 @@ body {
 }
 
 @media (max-width: 640px) {
-    #app-root {
-        padding: 0.75rem;
-    }
+    #app-root { padding: 0.75rem; }
 }
 
 /* Loading State & Boot Sequence */
@@ -194,18 +260,17 @@ body {
     align-items: center;
     justify-content: center;
     flex-direction: column;
-    color: var(--accent-primary);
+    color: var(--c-primary);
     background: #000;
     z-index: 9999;
     position: fixed;
-    top: 0;
-    left: 0;
+    top: 0; left: 0;
     width: 100%;
 }
 
 .boot-text {
     font-family: var(--font-mono);
-    color: var(--accent-primary);
+    color: var(--c-primary);
     font-size: 14px;
     white-space: pre;
     line-height: 1.2;
@@ -213,12 +278,12 @@ body {
 
 /* Redaction Effect */
 .classified {
-    background: var(--text-primary);
-    color: var(--text-primary);
+    background: var(--ink);
+    color: var(--ink);
     cursor: help;
     transition: all 0.3s ease;
     padding: 0 4px;
-    border-radius: 2px;
+    border-radius: 0;
     user-select: none;
 }
 
@@ -254,10 +319,10 @@ body {
     50%      { opacity: 0.3; }
 }
 
+@keyframes blink { 50% { opacity: 0; } }
+
 /* Fade-in for character sheet sections */
-.fade-in {
-    animation: fadeIn 0.3s ease-in;
-}
+.fade-in { animation: fadeIn 0.3s ease-in; }
 
 @keyframes fadeIn {
     from { opacity: 0; transform: translateY(10px); }
@@ -265,29 +330,154 @@ body {
 }
 
 /* ============================================================
-   Navigation Bar
+   Header strip / footer strip / dot pulse
+   Lifted from clearance_gate.css so they're available globally.
    ============================================================ */
+.strip {
+    position: relative;
+    z-index: 100;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 10px 20px;
+    font-size: 11px;
+    letter-spacing: 0.18em;
+    border-bottom: 1px solid var(--c-dim);
+    background: rgba(2, 12, 8, 0.7);
+    backdrop-filter: blur(2px);
+    text-transform: uppercase;
+    font-family: var(--font-mono);
+}
+.strip a { color: inherit; text-decoration: none; }
+.strip-l, .strip-r { display: flex; gap: 10px; align-items: center; }
+.strip-r > * + * { margin-left: 4px; }
+
+.dot {
+    width: 8px; height: 8px; border-radius: 50%;
+    display: inline-block;
+    background: var(--c-primary);
+    box-shadow: 0 0 8px var(--c-glow);
+    animation: pulse 1.4s ease-in-out infinite;
+}
+.dot.tiny { width: 6px; height: 6px; }
+
+.muted { color: var(--ink-mute); }
+
+.foot {
+    position: relative;
+    z-index: 100;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 8px 20px;
+    font-size: 10px;
+    letter-spacing: 0.22em;
+    border-top: 1px solid var(--c-dim);
+    background: rgba(2, 12, 8, 0.7);
+    backdrop-filter: blur(2px);
+    min-height: 32px;
+    text-transform: uppercase;
+    font-family: var(--font-mono);
+    color: var(--ink-dim);
+}
+.foot .grow { flex: 1; }
+.foot a { color: inherit; text-decoration: none; }
+.foot .build-badge {
+    cursor: pointer;
+    transition: color 0.15s, text-shadow 0.15s;
+}
+.foot .build-badge:hover {
+    color: var(--c-primary);
+    text-shadow: 0 0 6px var(--c-glow);
+}
+
+/* ============================================================
+   Subsystem rail — sits below the header strip and carries
+   the existing nav links (CHARACTERS / AGENCIES / NPCS / ...).
+   ============================================================ */
+.subsystem-rail {
+    position: relative;
+    z-index: 99;
+    display: flex;
+    gap: 0.75rem;
+    align-items: center;
+    flex-wrap: wrap;
+    padding: 0.4rem 1.25rem 0.5rem;
+    border-bottom: 1px solid var(--c-dim);
+    background: rgba(2, 12, 8, 0.55);
+    backdrop-filter: blur(2px);
+    font-family: var(--font-mono);
+    text-transform: uppercase;
+    letter-spacing: 0.18em;
+    font-size: 0.78rem;
+}
+
+.subsystem-rail a,
+.subsystem-rail button {
+    color: var(--ink-dim);
+    text-decoration: none;
+    background: none;
+    border: none;
+    cursor: pointer;
+    font: inherit;
+    text-transform: inherit;
+    letter-spacing: inherit;
+    transition: color 0.15s, text-shadow 0.15s;
+    padding: 0;
+}
+
+.subsystem-rail a:hover,
+.subsystem-rail button:hover {
+    color: var(--c-primary);
+    text-shadow: 0 0 6px var(--c-glow);
+}
+
+.subsystem-rail .sep {
+    color: var(--c-dim);
+}
+
+/* Comms unread badge — keep the corner-pip, restyle to square */
+.subsystem-rail .nav-badge,
+.strip .nav-badge {
+    position: absolute;
+    top: -6px; right: -10px;
+    background: var(--c-primary);
+    color: #02080a;
+    font-size: 0.6rem;
+    font-weight: 700;
+    min-width: 14px; height: 14px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0 3px;
+    font-family: var(--font-mono);
+    letter-spacing: 0;
+    box-shadow: 0 0 6px var(--c-glow);
+}
+
+/* Legacy nav-bar — kept defined so any straggling templates that
+   still render <nav class="nav-bar"> get a sane (square) look,
+   but base.html no longer uses it. */
 .nav-bar {
     display: flex;
     justify-content: space-between;
     align-items: center;
     padding: 1rem 2rem;
-    border-bottom: 1px solid var(--border-color);
+    border-bottom: 1px solid var(--c-dim);
     background: var(--nav-bg);
     backdrop-filter: blur(10px);
     position: sticky;
     top: 0;
     z-index: 100;
+    font-family: var(--font-mono);
+    text-transform: uppercase;
+    letter-spacing: 0.12em;
 }
 
-.nav-links {
-    display: flex;
-    gap: 1rem;
-    align-items: center;
-}
+.nav-links { display: flex; gap: 1rem; align-items: center; }
 
 .nav-links a, .nav-links button {
-    color: var(--text-secondary);
+    color: var(--ink-dim);
     text-decoration: none;
     font-family: var(--font-mono);
     font-size: 0.9rem;
@@ -295,13 +485,14 @@ body {
     border: none;
     cursor: pointer;
     transition: color 0.2s;
+    text-transform: inherit;
+    letter-spacing: inherit;
 }
 
 .nav-links a:hover, .nav-links button:hover {
-    color: var(--accent-primary);
+    color: var(--c-primary);
 }
 
-/* Hamburger button — hidden on desktop */
 .nav-burger {
     display: none;
     flex-direction: column;
@@ -318,53 +509,39 @@ body {
     display: block;
     width: 22px;
     height: 2px;
-    background: var(--text-secondary);
+    background: var(--ink-dim);
     transition: all 0.3s;
 }
 
-.nav-burger:hover span {
-    background: var(--accent-primary);
-}
+.nav-burger:hover span { background: var(--c-primary); }
 
-/* Mobile navigation */
-@media (max-width: 640px) {
-    .nav-burger {
-        display: flex;
-    }
+@media (max-width: 720px) {
+    .nav-burger { display: flex; }
 
-    .nav-links {
+    .subsystem-rail {
         display: none;
         position: absolute;
         top: 100%;
-        left: 0;
-        right: 0;
+        left: 0; right: 0;
         flex-direction: column;
-        background: var(--nav-bg-mobile);
-        backdrop-filter: blur(10px);
-        border-bottom: 1px solid var(--border-color);
-        padding: 1rem 2rem;
+        align-items: stretch;
         gap: 0;
+        padding: 0.75rem 1.25rem;
+        background: var(--nav-bg-mobile);
     }
 
-    .nav-links.nav-open {
-        display: flex;
-    }
+    .subsystem-rail.nav-open { display: flex; }
 
-    .nav-links a, .nav-links button {
-        display: block;
-        padding: 0.75rem 0;
-        border-bottom: 1px solid var(--border-color);
+    .subsystem-rail a,
+    .subsystem-rail button {
+        padding: 0.6rem 0;
+        border-bottom: 1px solid var(--c-dim);
         width: 100%;
         text-align: left;
     }
 
-    .nav-links a:last-child, .nav-links form:last-child button {
-        border-bottom: none;
-    }
-
-    .nav-links form {
-        display: block !important;
-    }
+    .subsystem-rail a:last-child { border-bottom: none; }
+    .subsystem-rail .sep { display: none; }
 }
 
 /* ============================================================
@@ -372,19 +549,20 @@ body {
    ============================================================ */
 .theme-toggle {
     background: none;
-    border: 1px solid var(--border-color);
-    color: var(--text-secondary);
+    border: 1px solid var(--c-dim);
+    color: var(--ink-dim);
     cursor: pointer;
     font-family: var(--font-mono);
     font-size: 0.85rem;
     padding: 2px 8px;
-    border-radius: var(--radius-sm);
+    border-radius: 0;
     line-height: 1.4;
     transition: color 0.2s, border-color 0.2s;
+    letter-spacing: 0.18em;
 }
 .theme-toggle:hover {
-    color: var(--accent-primary);
-    border-color: var(--accent-primary);
+    color: var(--c-primary);
+    border-color: var(--c-primary);
 }
 .theme-toggle .theme-icon-light { display: none; }
 .theme-toggle .theme-icon-dark  { display: inline; }
@@ -392,7 +570,7 @@ body {
 :root[data-theme="light"] .theme-toggle .theme-icon-dark  { display: none; }
 
 /* ============================================================
-   Authentication Forms
+   Authentication Forms (legacy — login surface uses its own CSS)
    ============================================================ */
 .auth-form {
     max-width: 400px;
@@ -403,90 +581,164 @@ body {
 .auth-form h2 {
     text-align: center;
     margin-bottom: 2rem;
-    font-family: var(--font-mono);
-    color: var(--accent-primary);
-    letter-spacing: 2px;
+    font-family: var(--font-display);
+    color: var(--c-primary);
+    letter-spacing: 0.12em;
+    text-shadow: 0 0 12px var(--c-glow);
 }
 
-.form-group {
-    margin-bottom: 1.5rem;
-}
+.form-group { margin-bottom: 1.5rem; }
 
 .form-group label {
     display: block;
     font-family: var(--font-mono);
-    color: var(--text-secondary);
-    font-size: 0.8rem;
-    margin-bottom: 0.5rem;
+    color: var(--ink-dim);
+    font-size: 0.7rem;
+    margin-bottom: 0.4rem;
     text-transform: uppercase;
+    letter-spacing: 0.22em;
 }
 
-.form-group input {
+.form-group input,
+.form-group textarea,
+.form-group select,
+input[type="text"],
+input[type="email"],
+input[type="password"],
+input[type="number"],
+input[type="search"],
+input[type="url"],
+input[type="date"],
+input[type="datetime-local"],
+textarea,
+select {
     width: 100%;
-    padding: 0.75rem;
-    background: var(--bg-input);
-    border: 1px solid var(--border-color);
-    color: var(--text-primary);
-    font-family: var(--font-main);
-    border-radius: var(--radius-sm);
-}
-
-.form-group input:focus {
-    outline: none;
-    border-color: var(--accent-primary);
-    box-shadow: 0 0 0 2px var(--accent-glow);
-}
-
-.btn-primary {
-    width: 100%;
-    padding: 0.75rem;
-    background: var(--accent-primary);
-    color: var(--bg-dark);
-    border: none;
-    font-weight: bold;
+    padding: 10px 12px;
+    background: rgba(0, 0, 0, 0.55);
+    border: 1px solid var(--c-dim);
+    color: var(--ink);
     font-family: var(--font-mono);
-    cursor: pointer;
+    font-size: 15px;
+    letter-spacing: 0.08em;
+    border-radius: 0;
+    caret-color: var(--c-primary);
+    outline: none;
+    transition: border-color 0.15s, box-shadow 0.15s;
+}
+
+.form-group input:focus,
+.form-group textarea:focus,
+.form-group select:focus,
+input:focus,
+textarea:focus,
+select:focus {
+    outline: none;
+    border-color: var(--c-primary);
+    box-shadow: 0 0 0 1px var(--c-primary), 0 0 18px var(--c-glow);
+}
+
+.form-group input::placeholder,
+input::placeholder,
+textarea::placeholder {
+    color: var(--ink-mute);
+    letter-spacing: 0.08em;
+}
+
+/* ============================================================
+   Buttons — primary + cyber, both square, mono-caps, accent fills.
+   ============================================================ */
+.btn-primary {
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 14px;
+    padding: 16px 24px;
+    background: var(--c-primary);
+    color: #02080a;
+    border: none;
+    font-family: var(--font-mono);
+    font-size: 13px;
+    font-weight: 700;
+    letter-spacing: 0.32em;
     text-transform: uppercase;
-    letter-spacing: 1px;
-    border-radius: var(--radius-sm);
+    cursor: pointer;
+    border-radius: 0;
+    box-shadow: 0 0 28px var(--c-glow), inset 0 0 12px rgba(255, 255, 255, 0.2);
+    transition: transform 0.08s, filter 0.15s;
+    overflow: hidden;
 }
 
-.btn-primary:hover {
-    filter: brightness(1.2);
+.btn-primary::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(120deg, transparent 30%, rgba(255, 255, 255, 0.4) 50%, transparent 70%);
+    transform: translateX(-100%);
+    transition: transform 0.8s;
+    pointer-events: none;
 }
 
+.btn-primary:hover:not(:disabled)::before { transform: translateX(100%); }
+.btn-primary:hover:not(:disabled) { filter: brightness(1.1); }
+.btn-primary:active:not(:disabled) { transform: translateY(1px); }
+
+.btn-primary:disabled {
+    background: var(--c-dim);
+    color: var(--ink-mute);
+    box-shadow: none;
+    cursor: not-allowed;
+}
+
+.btn-primary.danger {
+    background: var(--accent-danger);
+    color: #1a0006;
+    box-shadow: 0 0 28px rgba(255, 77, 94, 0.6);
+}
+
+/* btn-cyber — softer accent button used for secondary actions */
 .btn-cyber {
     display: inline-flex;
     align-items: center;
-    padding: 0.4rem 0.75rem;
-    background: rgba(56, 189, 248, 0.08);
-    color: var(--accent-primary);
-    border: 1px solid rgba(56, 189, 248, 0.25);
-    border-radius: var(--radius-sm);
+    padding: 0.5rem 0.9rem;
+    background: var(--c-soft);
+    color: var(--c-primary);
+    border: 1px solid var(--c-dim);
+    border-radius: 0;
     text-decoration: none;
     font-family: var(--font-mono);
-    transition: background 0.2s, border-color 0.2s, box-shadow 0.2s;
+    font-size: 0.85rem;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    transition: background 0.15s, border-color 0.15s, box-shadow 0.15s, color 0.15s;
+    cursor: pointer;
 }
 
 .btn-cyber:hover {
-    background: rgba(56, 189, 248, 0.15);
-    border-color: var(--accent-primary);
-    box-shadow: 0 0 8px var(--accent-glow);
-    color: var(--text-primary);
+    background: var(--c-soft);
+    border-color: var(--c-primary);
+    box-shadow: 0 0 12px var(--c-glow);
+    color: var(--ink);
     text-decoration: none;
 }
 
+/* Form errors block — mirrors clearance_gate .err */
 .form-errors {
-    background: rgba(239, 68, 68, 0.1);
     border: 1px solid var(--accent-danger);
-    padding: 1rem;
+    color: #ffb6bf;
+    padding: 8px 12px;
+    font-size: 11px;
+    letter-spacing: 0.16em;
+    background: rgba(80, 0, 10, 0.35);
     margin-bottom: 1rem;
-    border-radius: var(--radius-sm);
+    border-radius: 0;
+    font-family: var(--font-mono);
+    text-transform: uppercase;
 }
 
 .form-errors li {
     color: var(--accent-danger);
-    font-size: 0.9rem;
+    font-size: 11px;
     list-style: none;
 }
 
@@ -496,12 +748,15 @@ body {
 }
 
 .form-link a {
-    color: var(--accent-primary);
+    color: var(--c-primary);
     text-decoration: none;
+    text-shadow: 0 0 6px var(--c-glow);
 }
 
+.form-link a:hover { text-decoration: underline; }
+
 /* ============================================================
-   Django Messages
+   Django Messages — match clearance-gate .err / .err.success
    ============================================================ */
 .messages {
     list-style: none;
@@ -511,71 +766,357 @@ body {
 }
 
 .messages li {
-    padding: 0.75rem 1rem;
-    border-radius: var(--radius-sm);
+    padding: 8px 12px;
+    border-radius: 0;
     margin-bottom: 0.5rem;
     font-family: var(--font-mono);
-    font-size: 0.9rem;
+    font-size: 11px;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+    border: 1px solid var(--c-dim);
+    background: rgba(0, 0, 0, 0.35);
+    color: var(--ink);
 }
 
 .messages .success {
-    background: rgba(34, 197, 94, 0.1);
-    border: 1px solid var(--accent-success);
-    color: var(--accent-success);
+    border-color: var(--c-primary);
+    color: var(--c-primary);
+    background: rgba(0, 40, 20, 0.35);
 }
 
 .messages .error {
-    background: rgba(239, 68, 68, 0.1);
-    border: 1px solid var(--accent-danger);
-    color: var(--accent-danger);
+    border-color: var(--accent-danger);
+    color: #ffb6bf;
+    background: rgba(80, 0, 10, 0.35);
+}
+
+.messages .warning {
+    border-color: var(--accent-warning);
+    color: var(--accent-warning);
+    background: rgba(58, 36, 16, 0.35);
 }
 
 /* ============================================================
-   Save Status Indicator
+   Save Status Indicator — square, mono caps, accent borders
    ============================================================ */
 .save-status {
     font-family: var(--font-mono);
-    font-size: 0.8rem;
-    padding: 0.25rem 0.75rem;
-    border-radius: var(--radius-sm);
+    font-size: 9px;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    padding: 3px 8px;
+    border-radius: 0;
+    border: 1px solid currentColor;
     display: inline-flex;
     align-items: center;
     gap: 0.5rem;
+    background: rgba(0, 0, 0, 0.35);
 }
 
-.save-status.saved {
-    color: var(--accent-success);
-    border: 1px solid var(--accent-success);
+.save-status.saved   { color: var(--c-primary); }
+.save-status.saving  { color: var(--accent-warning); animation: pulse 1s infinite; }
+.save-status.unsaved { color: var(--accent-danger); }
+
+/* ============================================================
+   Effects layers — scanlines (always on, low alpha), and
+   opt-in vignette + crt-curve (only on body.surface-splash).
+   ============================================================ */
+.scanlines {
+    pointer-events: none;
+    position: fixed;
+    inset: 0;
+    background-image: repeating-linear-gradient(
+        180deg,
+        rgba(0, 0, 0, 0) 0px,
+        rgba(0, 0, 0, 0) 2px,
+        rgba(0, 0, 0, 0.08) 3px,
+        rgba(0, 0, 0, 0) 4px
+    );
+    mix-blend-mode: multiply;
+    z-index: 5;
 }
 
-.save-status.saving {
-    color: var(--accent-warning);
-    border: 1px solid var(--accent-warning);
-    animation: pulse 1s infinite;
+/* Light theme: the multiply blend turns into noise on a pale page */
+:root[data-theme="light"] .scanlines { display: none; }
+
+.vignette,
+.crt-curve { display: none; }
+
+body.surface-splash .vignette {
+    pointer-events: none;
+    position: fixed;
+    inset: 0;
+    display: block;
+    background: radial-gradient(ellipse at center,
+        transparent 35%,
+        rgba(0, 0, 0, 0.55) 75%,
+        rgba(0, 0, 0, 0.95) 100%);
+    z-index: 6;
 }
 
-.save-status.unsaved {
-    color: var(--accent-danger);
-    border: 1px solid var(--accent-danger);
+body.surface-splash .crt-curve {
+    pointer-events: none;
+    position: fixed;
+    inset: -20px;
+    display: block;
+    border-radius: 24px;
+    box-shadow:
+        inset 0 0 120px rgba(0, 0, 0, 0.7),
+        inset 0 0 30px rgba(0, 0, 0, 0.4);
+    z-index: 7;
 }
+
+/* ============================================================
+   Brackets card chrome — authority frame with 4 corner cuts.
+   Use:
+     <div class="brackets">
+       <span class="bk tl"></span><span class="bk tr"></span>
+       <span class="bk bl"></span><span class="bk br"></span>
+       ...content...
+     </div>
+   ============================================================ */
+.brackets {
+    position: relative;
+    background: rgba(2, 14, 9, 0.78);
+    backdrop-filter: blur(3px);
+    border: 1px solid var(--c-dim);
+    box-shadow:
+        0 0 0 1px rgba(0, 0, 0, 0.6),
+        0 30px 80px rgba(0, 0, 0, 0.55),
+        inset 0 0 50px rgba(0, 0, 0, 0.4),
+        inset 0 0 1px var(--c-soft);
+    padding: 24px;
+}
+
+:root[data-theme="light"] .brackets {
+    background: var(--bg-2);
+    box-shadow:
+        0 0 0 1px rgba(0, 0, 0, 0.04),
+        0 4px 16px rgba(15, 23, 42, 0.10),
+        inset 0 0 1px var(--c-soft);
+}
+
+.bk {
+    position: absolute;
+    width: 24px;
+    height: 24px;
+    border: 1px solid var(--c-primary);
+    box-shadow: 0 0 8px var(--c-glow);
+    pointer-events: none;
+}
+.bk.tl { top: -1px;    left: -1px;  border-right: none;  border-bottom: none; }
+.bk.tr { top: -1px;    right: -1px; border-left: none;   border-bottom: none; }
+.bk.bl { bottom: -1px; left: -1px;  border-right: none;  border-top: none; }
+.bk.br { bottom: -1px; right: -1px; border-left: none;   border-top: none; }
+
+/* ============================================================
+   Display headings — VT323 + accent kicker
+   ============================================================ */
+.kicker {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    letter-spacing: 0.32em;
+    text-transform: uppercase;
+    color: var(--c-primary);
+    text-shadow: 0 0 8px var(--c-glow);
+    margin-bottom: 14px;
+}
+
+.title {
+    font-family: var(--font-display);
+    font-size: 76px;
+    line-height: 0.9;
+    margin: 0 0 12px;
+    letter-spacing: 0.04em;
+    color: var(--ink);
+    text-shadow: 0 0 18px var(--c-glow);
+    display: flex;
+    gap: 12px;
+    align-items: baseline;
+}
+
+.title-sep { color: var(--c-primary); }
+
+.sub {
+    font-size: 11px;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    color: var(--ink-dim);
+    min-height: 14px;
+    margin-bottom: 24px;
+}
+
+/* ============================================================
+   Field primitives — mono inputs with caret + accent focus
+   ============================================================ */
+.field { display: flex; flex-direction: column; gap: 6px; }
+
+.field-label {
+    display: flex;
+    gap: 8px;
+    align-items: baseline;
+    font-family: var(--font-mono);
+    font-size: 10px;
+    letter-spacing: 0.22em;
+    text-transform: uppercase;
+    color: var(--ink-dim);
+}
+
+.field-arrow { color: var(--c-primary); }
+.field-spec  { margin-left: auto; color: var(--ink-mute); font-size: 9px; }
+
+.field-wrap {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    background: rgba(0, 0, 0, 0.55);
+    border: 1px solid var(--c-dim);
+    padding: 10px 12px;
+    position: relative;
+    transition: border-color 0.15s, box-shadow 0.15s;
+}
+
+.field-wrap:focus-within {
+    border-color: var(--c-primary);
+    box-shadow: 0 0 0 1px var(--c-primary), 0 0 18px var(--c-glow);
+}
+
+.field-prompt {
+    color: var(--c-primary);
+    text-shadow: 0 0 6px var(--c-glow);
+}
+
+.field-input {
+    flex: 1;
+    background: transparent;
+    border: none;
+    outline: none;
+    color: var(--ink);
+    font-family: var(--font-mono);
+    font-size: 15px;
+    letter-spacing: 0.08em;
+    caret-color: var(--c-primary);
+    padding: 0;
+}
+
+.field-input::placeholder {
+    color: var(--ink-mute);
+    letter-spacing: 0.08em;
+}
+
+.field-caret {
+    width: 9px;
+    height: 16px;
+    background: var(--c-primary);
+    opacity: 0;
+    box-shadow: 0 0 10px var(--c-glow);
+}
+
+.field-wrap:focus-within .field-caret {
+    opacity: 1;
+    animation: blink 1s steps(2) infinite;
+}
+
+/* ============================================================
+   Section header pattern: bullet + h3 + line + badge
+     <div class="block-head">
+       <span class="block-bullet">●</span>
+       <h3>OPERATIVES</h3>
+       <span class="block-line"></span>
+       <span class="block-badge">04 / 12</span>
+     </div>
+   ============================================================ */
+.block       { display: flex; flex-direction: column; gap: 10px; }
+
+.block-head {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-family: var(--font-mono);
+    font-size: 10px;
+    letter-spacing: 0.22em;
+    text-transform: uppercase;
+    color: var(--c-primary);
+    text-shadow: 0 0 6px var(--c-glow);
+}
+
+.block-head h3 {
+    margin: 0;
+    font-family: var(--font-mono);
+    font-size: 10px;
+    font-weight: 500;
+    letter-spacing: 0.22em;
+    text-transform: uppercase;
+    color: var(--ink);
+}
+
+.block-bullet { font-size: 8px; }
+
+.block-line {
+    flex: 1;
+    height: 1px;
+    background: linear-gradient(90deg, var(--c-dim), transparent);
+}
+
+.block-badge {
+    font-size: 9px;
+    border: 1px solid var(--c-dim);
+    padding: 2px 6px;
+    color: var(--c-primary);
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+}
+
+.block-body { font-size: 11px; }
+
+/* ============================================================
+   Status pills — for roster / dossier / state badges
+   ============================================================ */
+.status-pill {
+    display: inline-flex;
+    align-items: center;
+    font-family: var(--font-mono);
+    font-size: 9px;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+    padding: 2px 6px;
+    border: 1px solid currentColor;
+    border-radius: 0;
+    background: rgba(0, 0, 0, 0.25);
+}
+
+.s-active   { color: var(--c-primary); }
+.s-active   .status-pill { color: var(--c-primary); }
+.s-standby  { color: #ffb454; }
+.s-standby  .status-pill { color: #ffb454; }
+.s-dormant  { color: #6c8aa0; }
+.s-dormant  .status-pill { color: #6c8aa0; }
+.s-burned   { color: var(--accent-danger); }
+.s-burned   .status-pill { color: var(--accent-danger); }
+.s-inactive { color: #4a5568; opacity: 0.75; }
+.s-inactive .status-pill { color: #4a5568; opacity: 0.75; }
 
 /* ============================================================
    Dossier / Bio Markdown Content
    ============================================================ */
 .dossier-content {
-    color: var(--text-secondary);
+    color: var(--ink-dim);
     line-height: 1.8;
     font-size: 0.9rem;
     overflow-wrap: break-word;
     word-break: break-word;
+    font-family: var(--font-mono);
 }
 
 .dossier-content h1,
 .dossier-content h2,
 .dossier-content h3 {
-    color: var(--accent-primary);
+    color: var(--c-primary);
     font-family: var(--font-mono);
     margin: 1rem 0 0.5rem;
+    text-transform: uppercase;
+    letter-spacing: 0.18em;
+    text-shadow: 0 0 6px var(--c-glow);
 }
 
 .dossier-content h1 { font-size: 1.2rem; }
@@ -593,25 +1134,27 @@ body {
 .dossier-content li { margin-bottom: 0.25rem; }
 
 .dossier-content blockquote {
-    border-left: 2px solid var(--accent-primary);
+    border-left: 2px solid var(--c-primary);
     padding-left: 1rem;
     margin: 0.75rem 0;
-    color: var(--text-muted);
+    color: var(--ink-mute);
     font-style: italic;
 }
 
 .dossier-content code {
     background: rgba(0,0,0,0.3);
     padding: 0.15rem 0.4rem;
-    border-radius: 3px;
+    border-radius: 0;
     font-family: var(--font-mono);
     font-size: 0.85em;
+    color: var(--c-primary);
 }
 
 .dossier-content pre {
     background: rgba(0,0,0,0.3);
     padding: 1rem;
-    border-radius: var(--radius-sm);
+    border-radius: 0;
+    border-left: 2px solid var(--c-dim);
     overflow-x: auto;
     margin-bottom: 0.75rem;
 }
@@ -622,16 +1165,57 @@ body {
 }
 
 .dossier-content a {
-    color: var(--accent-primary);
+    color: var(--c-primary);
     text-decoration: none;
+    text-shadow: 0 0 6px var(--c-glow);
 }
 
 .dossier-content a:hover { text-decoration: underline; }
 
 .dossier-content hr {
     border: none;
-    border-top: 1px solid var(--border-color);
+    border-top: 1px dashed var(--c-dim);
     margin: 1rem 0;
 }
 
-.dossier-content strong { color: var(--text-primary); }
+.dossier-content strong { color: var(--ink); }
+
+/* ============================================================
+   Impersonation banner — the warning that an admin is "viewing
+   as" another user. Square, mono-caps, amber border.
+   ============================================================ */
+.impersonation-banner {
+    border: 1px solid var(--accent-warning);
+    color: var(--accent-warning);
+    background: rgba(58, 36, 16, 0.45);
+    padding: 8px 14px;
+    font-family: var(--font-mono);
+    font-size: 11px;
+    letter-spacing: 0.22em;
+    text-transform: uppercase;
+    text-align: center;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 1rem;
+}
+
+.impersonation-banner button {
+    background: rgba(0, 0, 0, 0.45);
+    color: var(--accent-warning);
+    border: 1px solid var(--accent-warning);
+    padding: 4px 10px;
+    cursor: pointer;
+    font-family: var(--font-mono);
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.22em;
+    text-transform: uppercase;
+    border-radius: 0;
+    transition: background 0.15s, color 0.15s;
+}
+
+.impersonation-banner button:hover {
+    background: var(--accent-warning);
+    color: #1a0d00;
+}

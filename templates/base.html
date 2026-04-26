@@ -1,6 +1,6 @@
 {% load static %}
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" data-palette="{{ TWEAKS.palette|default:'emerald' }}">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -16,6 +16,12 @@
             } catch (e) { /* localStorage may be blocked — fall back to dark default */ }
         })();
     </script>
+
+    <!-- Fonts: JetBrains Mono (UI) + VT323 (display headings).
+         preconnect cuts ~100ms off the first request to fonts.gstatic. -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&family=VT323&display=swap" rel="stylesheet">
 
     <!-- Foundation CSS -->
     <link rel="stylesheet" href="{% static 'css/foundation.css' %}">
@@ -71,132 +77,142 @@
         }
     </style>
 </head>
-<body>
-    <!-- Navigation Bar — Two-Row Command Interface -->
-    <nav class="nav-bar" style="flex-wrap: wrap; padding-bottom: 0;">
-        <!-- Command Row -->
-        <a href="/" class="mono-text text-accent" style="text-decoration: none; font-size: 1.1rem; letter-spacing: 2px;">
-            BLACKLOG.NET <span class="text-muted">//</span> EXODUS
-        </a>
-        {% if user.is_authenticated and NEXT_GAME_DATE %}
-        <span class="mono-text text-muted" style="font-size: 0.8rem; letter-spacing: 1px;">
-            NEXT SESSION <span class="text-accent">// {{ NEXT_GAME_DATE|date:"D d M" }}</span>
-        </span>
-        {% endif %}
-        {% if user.is_authenticated %}
-        <div class="nav-cmd" style="display: flex; gap: 1rem; align-items: center;">
-            <a href="/comms/" class="mono-text" style="position: relative; text-decoration: none; color: var(--text-secondary); font-size: 0.9rem;">
-                {{ NAV_COMMS }}
-                <span id="comms-badge" style="
-                    position: absolute; top: -6px; right: -10px;
-                    background: var(--accent-primary); color: var(--bg-dark);
-                    font-size: 0.65rem; font-weight: bold; min-width: 16px; height: 16px;
-                    border-radius: 8px; display: {% if COMMS_UNREAD > 0 %}inline-flex{% else %}none{% endif %};
-                    align-items: center; justify-content: center; padding: 0 4px;
-                    font-family: var(--font-mono);
-                ">{{ COMMS_UNREAD }}</span>
+<body class="surface-default {% block body_class %}{% endblock %}">
+
+    <!-- Always-on light scanlines overlay (alpha 0.08, lower than login). -->
+    <div class="scanlines"></div>
+    <!-- Opt-in via body.surface-splash. Hidden by default. -->
+    <div class="vignette"></div>
+    <div class="crt-curve"></div>
+
+    <!-- ============================================================
+         HEADER STRIP
+         Replaces the legacy two-row .nav-bar. Mirrors the clearance
+         gate: pulsing dot + brand on the left, session id + ops
+         online + UTC clock + build version on the right.
+         ============================================================ -->
+    <header class="strip" role="banner">
+        <div class="strip-l">
+            <span class="dot" aria-hidden="true"></span>
+            <a href="/" style="color: var(--ink);">
+                {{ TWEAKS.agency_name|default:"BLACKLOG.NET" }}
+                <span class="muted">//</span>
+                EXODUS
+                {% if user.is_authenticated %}
+                <span class="muted">//</span>
+                <span style="color: var(--c-primary); text-shadow: 0 0 6px var(--c-glow);">
+                    {{ STRIP_CODENAME|default:"OPERATIVE" }}
+                </span>
+                {% endif %}
             </a>
-            <a href="{% url 'accounts:profile' %}" class="mono-text" style="text-decoration: none; color: var(--text-secondary); font-size: 0.9rem;">PROFILE</a>
-            <form method="post" action="{% url 'accounts:logout' %}" style="display: inline;">
-                {% csrf_token %}
-                <button type="submit" class="mono-text" style="background: none; border: none; color: var(--text-secondary); cursor: pointer; font-size: 0.9rem; font-family: var(--font-mono);">LOGOUT</button>
-            </form>
-            <button type="button" id="theme-toggle" class="theme-toggle mono-text" aria-label="Toggle light/dark theme" title="Toggle light/dark theme">
+        </div>
+        <div class="strip-r">
+            {% if user.is_authenticated %}
+                <span class="muted">SES</span>
+                <span>{{ STRIP_SES|default:"—" }}</span>
+                <span class="muted">·</span>
+                <span class="muted">OPS</span>
+                <span>{{ STRIP_OPS_ONLINE|default:0 }}</span>
+                <span class="muted">·</span>
+            {% endif %}
+            <span class="muted">UTC</span>
+            <span id="strip-clock">--:--:--</span>
+            <span class="muted">·</span>
+            <span class="muted">BUILD</span>
+            <span>v{{ APP_VERSION }}</span>
+            <button type="button"
+                    id="theme-toggle"
+                    class="theme-toggle mono-text"
+                    aria-label="Toggle light/dark theme"
+                    title="Toggle light/dark theme"
+                    style="margin-left: 8px;">
                 <span class="theme-icon-dark">☀</span><span class="theme-icon-light">☾</span>
             </button>
+            <button type="button"
+                    class="nav-burger"
+                    aria-label="Menu"
+                    onclick="document.querySelector('.subsystem-rail').classList.toggle('nav-open')">
+                <span></span><span></span><span></span>
+            </button>
         </div>
-        {% else %}
-        <button type="button" id="theme-toggle" class="theme-toggle mono-text" aria-label="Toggle light/dark theme" title="Toggle light/dark theme" style="margin-left: auto;">
-            <span class="theme-icon-dark">☀</span><span class="theme-icon-light">☾</span>
-        </button>
-        {% endif %}
-        <button class="nav-burger" onclick="document.querySelector('.nav-subsystem').classList.toggle('nav-open')" aria-label="Menu">
-            <span></span><span></span><span></span>
-        </button>
-        <!-- Subsystem Row -->
-        <div class="nav-subsystem nav-links" style="
-            width: 100%; display: flex; gap: 0.75rem; align-items: center;
-            padding: 0.4rem 0 0.5rem 0; margin-top: 0.25rem;
-            border-top: 1px solid var(--border-color);
-            flex-wrap: wrap;
-        ">
-            {% if user.is_authenticated %}
-                <a href="/" style="font-size: 0.8rem; color: var(--text-muted);">{{ NAV_DISPATCH }}</a>
-                <a href="/characters/" style="font-size: 0.8rem; color: var(--text-muted);">{{ NAV_PLAYERS }}</a>
-                <a href="/agencies/" style="font-size: 0.8rem; color: var(--text-muted);">{{ NAV_AGENCIES }}</a>
-                {% if SHOW_COUNCIL or user.is_staff %}
-                <a href="/agencies/council/" style="font-size: 0.8rem; color: var(--text-muted);">{{ NAV_COUNCIL }}</a>
-                {% endif %}
-                <a href="/npcs/" style="font-size: 0.8rem; color: var(--text-muted);">{{ NAV_NPCS }}</a>
-                {% if SHOW_WORLD_MAP or user.is_staff %}
-                    <span class="mono-text" style="color: var(--border-color); font-size: 0.8rem;">|</span>
-                    <a href="/agencies/map/" style="font-size: 0.8rem; color: var(--text-muted);">WORLD MAP</a>
-                {% endif %}
-                {% if SHOW_STAR_MAP or user.is_staff %}
-                    <a href="{% url 'starmap:page' %}" style="font-size: 0.8rem; color: var(--text-muted);">STAR MAP</a>
-                {% endif %}
-                {% if SHOW_STARSHIPS or user.is_staff %}
-                    <a href="{% url 'starships:page' %}" style="font-size: 0.8rem; color: var(--text-muted);">STARSHIPS</a>
-                    <a href="{% url 'spacebattle:list' %}" style="font-size: 0.8rem; color: var(--text-muted);">BATTLES</a>
-                    {% if user.is_superuser %}
-                    <a href="{% url 'spacebattle:maps' %}" style="font-size: 0.8rem; color: var(--text-muted);">BATTLE MAPS</a>
-                    {% endif %}
-                {% endif %}
-                {% for cm in CITY_MAPS %}
-                    <a href="{% url 'starmap:citymap' cm.id %}" style="font-size: 0.8rem; color: var(--text-muted);">{{ cm.name|upper }}</a>
-                {% endfor %}
-                <span class="mono-text" style="color: var(--border-color); font-size: 0.8rem;">|</span>
-                <a href="{% url 'pulling-strings-page' %}" style="font-size: 0.8rem; color: var(--text-muted);">PULL STRINGS</a>
-                <a href="{% url 'merits-page' %}" style="font-size: 0.8rem; color: var(--text-muted);">MERITS</a>
-                {% if GM_BRIEFS_COUNT > 0 %}
-                    <span class="mono-text" style="color: var(--border-color); font-size: 0.8rem;">|</span>
-                    <a href="/my-briefs/" class="mono-text" style="position: relative; font-size: 0.8rem; color: var(--text-muted);">
-                        BRIEFS
-                        <span style="
-                            position: absolute; top: -6px; right: -10px;
-                            background: var(--accent-primary); color: var(--bg-dark);
-                            font-size: 0.6rem; font-weight: bold; min-width: 14px; height: 14px;
-                            border-radius: 7px; display: inline-flex;
-                            align-items: center; justify-content: center; padding: 0 3px;
-                            font-family: var(--font-mono);
-                        ">{{ GM_BRIEFS_COUNT }}</span>
-                    </a>
-                {% endif %}
-                {% if user.is_staff %}
-                    <span class="mono-text" style="color: var(--border-color); font-size: 0.8rem;">|</span>
-                    <a href="{% url 'site-settings' %}" style="font-size: 0.8rem; color: var(--text-muted);">SETTINGS</a>
-                    <a href="{% url 'admin:index' %}" style="font-size: 0.8rem; color: var(--text-muted);">ADMIN</a>
-                {% endif %}
-                {% if user.is_superuser %}
-                    <a href="/gm/" style="font-size: 0.8rem; color: var(--text-muted);">GM</a>
-                {% endif %}
-            {% else %}
-                <a href="{% url 'accounts:login' %}" style="font-size: 0.8rem; color: var(--text-muted);">LOGIN</a>
+    </header>
+
+    <!-- ============================================================
+         SUBSYSTEM RAIL
+         The primary nav links live here, mono-caps, dim border-bottom.
+         Same target URLs as the legacy .nav-bar — only the chrome
+         changed.
+         ============================================================ -->
+    <nav class="subsystem-rail" aria-label="Subsystem navigation">
+        {% if user.is_authenticated %}
+            <a href="/">{{ NAV_DISPATCH }}</a>
+            <a href="/characters/">{{ NAV_PLAYERS }}</a>
+            <a href="/agencies/">{{ NAV_AGENCIES }}</a>
+            {% if SHOW_COUNCIL or user.is_staff %}
+                <a href="/agencies/council/">{{ NAV_COUNCIL }}</a>
             {% endif %}
-        </div>
+            <a href="/npcs/">{{ NAV_NPCS }}</a>
+            <a href="/comms/" style="position: relative;">
+                {{ NAV_COMMS }}
+                <span id="comms-badge"
+                      class="nav-badge"
+                      style="display: {% if COMMS_UNREAD > 0 %}inline-flex{% else %}none{% endif %};">
+                    {{ COMMS_UNREAD }}
+                </span>
+            </a>
+            {% if SHOW_WORLD_MAP or user.is_staff %}
+                <span class="sep">|</span>
+                <a href="/agencies/map/">WORLD MAP</a>
+            {% endif %}
+            {% if SHOW_STAR_MAP or user.is_staff %}
+                <a href="{% url 'starmap:page' %}">STAR MAP</a>
+            {% endif %}
+            {% if SHOW_STARSHIPS or user.is_staff %}
+                <a href="{% url 'starships:page' %}">STARSHIPS</a>
+                <a href="{% url 'spacebattle:list' %}">BATTLES</a>
+                {% if user.is_superuser %}
+                    <a href="{% url 'spacebattle:maps' %}">BATTLE MAPS</a>
+                {% endif %}
+            {% endif %}
+            {% for cm in CITY_MAPS %}
+                <a href="{% url 'starmap:citymap' cm.id %}">{{ cm.name|upper }}</a>
+            {% endfor %}
+            <span class="sep">|</span>
+            <a href="{% url 'pulling-strings-page' %}">PULL STRINGS</a>
+            <a href="{% url 'merits-page' %}">MERITS</a>
+            {% if GM_BRIEFS_COUNT > 0 %}
+                <span class="sep">|</span>
+                <a href="/my-briefs/" style="position: relative;">
+                    BRIEFS
+                    <span class="nav-badge">{{ GM_BRIEFS_COUNT }}</span>
+                </a>
+            {% endif %}
+            <span class="sep">|</span>
+            <a href="{% url 'accounts:profile' %}">PROFILE</a>
+            <form method="post" action="{% url 'accounts:logout' %}" style="display: inline;">
+                {% csrf_token %}
+                <button type="submit">LOGOUT</button>
+            </form>
+            {% if user.is_staff %}
+                <span class="sep">|</span>
+                <a href="{% url 'site-settings' %}">SETTINGS</a>
+                <a href="{% url 'admin:index' %}">ADMIN</a>
+            {% endif %}
+            {% if user.is_superuser %}
+                <a href="/gm/">GM</a>
+            {% endif %}
+        {% else %}
+            <a href="{% url 'accounts:login' %}">LOGIN</a>
+        {% endif %}
     </nav>
 
-    <!-- Impersonation Banner -->
+    <!-- Impersonation Banner — clearance-gate amber warning treatment -->
     {% if IS_IMPERSONATING %}
-    <div style="
-        background: var(--accent-warning); color: var(--bg-dark);
-        padding: 0.5rem 1rem; text-align: center;
-        font-family: var(--font-mono); font-size: 0.85rem;
-        font-weight: bold; letter-spacing: 1px;
-        display: flex; align-items: center; justify-content: center; gap: 1rem;
-    ">
-        VIEWING AS {{ user.username|upper }}
+    <div class="impersonation-banner">
+        <span>VIEWING AS {{ user.username|upper }}</span>
         <form method="post" action="{% url 'stop-impersonation' %}" style="display: inline;">
             {% csrf_token %}
-            <button type="submit" style="
-                background: var(--bg-dark); color: var(--accent-warning);
-                border: none; padding: 0.3rem 0.75rem;
-                cursor: pointer; font-family: var(--font-mono);
-                font-size: 0.75rem; font-weight: bold;
-                letter-spacing: 1px; border-radius: var(--radius-sm);
-            ">
-                RETURN TO GM
-            </button>
+            <button type="submit">RETURN TO GM</button>
         </form>
     </div>
     {% endif %}
@@ -212,57 +228,70 @@
 
     {% block content %}{% endblock %}
 
-    <!-- Version Badge -->
-    <div id="version-badge" onclick="document.getElementById('changelog-modal').style.display='flex'"
-        style="
-            position: fixed; bottom: 1rem; right: 1rem;
-            font-family: var(--font-mono); font-size: 0.75rem;
-            color: var(--text-muted); cursor: pointer;
-            padding: 4px 10px; border: 1px solid var(--border-color);
-            border-radius: var(--radius-sm); background: var(--bg-panel);
-            transition: all 0.2s; z-index: 50;
-        "
-        onmouseover="this.style.color='var(--accent-primary)';this.style.borderColor='var(--accent-primary)'"
-        onmouseout="this.style.color='var(--text-muted)';this.style.borderColor='var(--border-color)'"
-    >v{{ APP_VERSION }}</div>
+    <!-- ============================================================
+         FOOTER STRIP
+         Replaces the floating .version-badge. Click the BUILD span
+         to open the changelog modal.
+         ============================================================ -->
+    <footer class="foot" role="contentinfo">
+        <span class="dot tiny" aria-hidden="true"></span>
+        {% if NEXT_GAME_DATE %}
+            <span class="muted">NEXT SESSION</span>
+            <span>{{ NEXT_GAME_DATE|date:"D d M" }}</span>
+            <span class="muted">·</span>
+        {% endif %}
+        <span class="muted">NODE</span>
+        <span>{{ TWEAKS.op_codename|default:"OMEGA-7" }}</span>
+        <span class="grow"></span>
+        <span class="muted">BUILD</span>
+        <span class="build-badge"
+              onclick="document.getElementById('changelog-modal').style.display='flex'"
+              title="View changelog">v{{ APP_VERSION }}</span>
+        <span class="muted">·</span>
+        <span class="muted">⏎ NAV</span>
+    </footer>
 
-    <!-- Changelog Modal -->
-    <div id="changelog-modal" onclick="if(event.target===this)this.style.display='none'"
-        style="
+    <!-- Changelog Modal — restyled with .brackets + .bk corners -->
+    <div id="changelog-modal"
+         onclick="if(event.target===this)this.style.display='none'"
+         style="
             display: none; position: fixed; top: 0; left: 0;
             width: 100%; height: 100%; z-index: 200;
-            background: rgba(0,0,0,0.7); backdrop-filter: blur(4px);
-            align-items: center; justify-content: center;
+            background: rgba(0, 0, 0, 0.78); backdrop-filter: blur(4px);
+            align-items: center; justify-content: center; padding: 24px;
         ">
-        <div class="glass-panel" style="
-            max-width: 600px; width: 90%; max-height: 80vh;
-            padding: 2rem; overflow-y: auto; position: relative;
+        <div class="brackets" style="
+            max-width: 640px; width: 100%; max-height: 80vh;
+            padding: 32px; overflow-y: auto;
         ">
-            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem; border-bottom: 1px solid var(--border-color); padding-bottom: 0.75rem;">
-                <h2 class="mono-text text-accent" style="font-size: 1.1rem; letter-spacing: 1px;">
-                    CHANGELOG <span class="text-muted">// v{{ APP_VERSION }}</span>
+            <span class="bk tl"></span><span class="bk tr"></span>
+            <span class="bk bl"></span><span class="bk br"></span>
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem; border-bottom: 1px dashed var(--c-dim); padding-bottom: 0.75rem;">
+                <h2 class="mono-text" style="font-size: 0.95rem; color: var(--c-primary); text-shadow: 0 0 6px var(--c-glow);">
+                    CHANGELOG <span class="muted">// v{{ APP_VERSION }}</span>
                 </h2>
                 <button onclick="document.getElementById('changelog-modal').style.display='none'"
-                    style="background: transparent; border: none; color: var(--text-muted); cursor: pointer; font-size: 1.2rem; font-family: var(--font-mono);">
+                    style="background: transparent; border: none; color: var(--ink-mute); cursor: pointer; font-size: 1.2rem; font-family: var(--font-mono);"
+                    aria-label="Close">
                     &times;
                 </button>
             </div>
-            <div id="changelog-content" style="color: var(--text-secondary); line-height: 1.8; font-size: 0.9rem;">
+            <div id="changelog-content" style="color: var(--ink-dim); line-height: 1.8; font-size: 0.85rem; font-family: var(--font-mono);">
             </div>
         </div>
     </div>
 
     <script>
-        // Simple markdown-to-HTML for changelog
+        // Render the CHANGELOG.md context var into the modal.
         (function() {
             const raw = "{{ CHANGELOG|escapejs }}";
             const lines = raw.split('\n');
             let html = '';
             for (const line of lines) {
                 if (line.startsWith('# ')) {
-                    // Skip the main title
+                    // skip the main title
                 } else if (line.startsWith('## ')) {
-                    html += '<h3 class="mono-text text-accent" style="margin-top: 1.5rem; margin-bottom: 0.5rem; font-size: 1rem;">' + line.slice(3) + '</h3>';
+                    html += '<h3 class="mono-text" style="margin-top: 1.5rem; margin-bottom: 0.5rem; font-size: 0.85rem; color: var(--c-primary); text-shadow: 0 0 6px var(--c-glow);">' + line.slice(3) + '</h3>';
                 } else if (line.startsWith('- ')) {
                     html += '<div style="padding-left: 1rem; margin-bottom: 0.25rem;">&bull; ' + line.slice(2) + '</div>';
                 } else if (line.trim() === '') {
@@ -273,6 +302,19 @@
             }
             document.getElementById('changelog-content').innerHTML = html;
         })();
+    </script>
+
+    <!-- Live UTC clock for the header strip -->
+    <script>
+    (function() {
+        var el = document.getElementById('strip-clock');
+        if (!el) return;
+        function tick() {
+            el.textContent = new Date().toISOString().slice(11, 19);
+        }
+        tick();
+        setInterval(tick, 1000);
+    })();
     </script>
 
     <!-- Theme toggle handler -->

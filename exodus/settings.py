@@ -67,6 +67,8 @@ TEMPLATES = [
                 "comms.context_processors.unread_count",
                 "exodus.context_processors.impersonation",
                 "exodus.context_processors.map_visibility",
+                "exodus.context_processors.tweaks",
+                "exodus.context_processors.session_chrome",
                 "gm_workspace.context_processors.shared_briefs_count",
             ],
         },
