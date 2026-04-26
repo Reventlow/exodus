@@ -722,6 +722,151 @@ textarea::placeholder {
     text-decoration: none;
 }
 
+/* Small / tiny variants for inline button rows, tag clouds, etc. */
+.btn-cyber.sm,
+.btn-primary.sm {
+    padding: 0.3rem 0.6rem;
+    font-size: 0.75rem;
+    letter-spacing: 0.14em;
+}
+.btn-cyber.tiny,
+.btn-primary.tiny {
+    padding: 0.18rem 0.42rem;
+    font-size: 0.65rem;
+    letter-spacing: 0.12em;
+}
+
+/* btn-ghost — transparent secondary button. Used for back-links,
+   close buttons, and inline cancel actions. Square corners; reads
+   as muted until hovered. */
+.btn-ghost {
+    display: inline-flex;
+    align-items: center;
+    padding: 0.4rem 0.8rem;
+    background: transparent;
+    color: var(--ink-dim);
+    border: 1px solid var(--c-dim);
+    border-radius: 0;
+    text-decoration: none;
+    font-family: var(--font-mono);
+    font-size: 0.8rem;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    transition: background 0.15s, border-color 0.15s, color 0.15s;
+    cursor: pointer;
+}
+.btn-ghost:hover {
+    background: var(--c-soft);
+    border-color: var(--c-primary);
+    color: var(--c-primary);
+    text-decoration: none;
+}
+
+/* .crumb — back-link breadcrumb primitive. Drop into the top of
+   admin / management pages. */
+.crumb {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+    color: var(--ink-dim);
+    font-family: var(--font-mono);
+    font-size: 0.75rem;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    text-decoration: none;
+}
+.crumb:hover { color: var(--c-primary); text-decoration: none; }
+.crumb::before { content: "<"; opacity: 0.7; }
+
+/* .seg / .seg-btn — segmented control. Used for view-mode pickers
+   and tab rows that aren't full pages. */
+.seg {
+    display: inline-flex;
+    border: 1px solid var(--c-dim);
+    border-radius: 0;
+    overflow: hidden;
+}
+.seg-btn {
+    background: transparent;
+    color: var(--ink-dim);
+    border: none;
+    padding: 0.4rem 0.8rem;
+    font-family: var(--font-mono);
+    font-size: 0.75rem;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    cursor: pointer;
+    transition: background 0.12s, color 0.12s;
+}
+.seg-btn + .seg-btn { border-left: 1px solid var(--c-dim); }
+.seg-btn:hover { background: var(--c-soft); color: var(--ink); }
+.seg-btn.active {
+    background: var(--c-soft);
+    color: var(--c-primary);
+    text-shadow: 0 0 6px var(--c-glow);
+}
+
+/* .rail-item — used by sidebars / channel lists / file lists where
+   one item is "current". Matches the GM workspace + comms thread
+   list + settings sidebar pattern. */
+.rail-item {
+    display: block;
+    padding: 0.5rem 0.75rem;
+    border-left: 2px solid transparent;
+    color: var(--ink-dim);
+    font-family: var(--font-mono);
+    font-size: 0.85rem;
+    letter-spacing: 0.12em;
+    text-decoration: none;
+    cursor: pointer;
+    transition: background 0.12s, border-color 0.12s, color 0.12s;
+}
+.rail-item:hover {
+    background: rgba(255, 255, 255, 0.02);
+    color: var(--ink);
+    text-decoration: none;
+}
+.rail-item.active {
+    background: var(--c-soft);
+    border-left-color: var(--c-primary);
+    color: var(--c-primary);
+    text-shadow: 0 0 6px var(--c-glow);
+}
+
+/* .toggle-row — checkbox + label + status-pill on one row. */
+.toggle-row {
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+    padding: 0.4rem 0;
+}
+.toggle-row > label { flex: 1; }
+.toggle-row input[type="checkbox"] { accent-color: var(--c-primary); }
+
+/* .block-head.danger — color-variant for danger-themed sections
+   (BIOSIGN MONITOR, ADMIN PANEL, COMPROMISED, etc.). Tints the
+   bullet, h3, and divider line in one hop. */
+.block-head.danger { color: var(--accent-danger); }
+.block-head.danger > h3 { color: var(--accent-danger); }
+.block-head.danger > .block-bullet { color: var(--accent-danger); }
+.block-head.danger > .block-line {
+    background: linear-gradient(90deg,
+        var(--accent-danger),
+        rgba(255, 77, 94, 0.0));
+}
+
+/* .brackets-tight — smaller bracket-frame for nested authority
+   cards (per-base headers, modals, etc.). Smaller corner pieces
+   and reduced padding. */
+.brackets-tight { padding: 16px 18px; }
+.brackets-tight > .bk { width: 14px; height: 14px; }
+
+/* Soft danger background — repeating pattern from many surfaces
+   that needed a tinted "danger card" panel. */
+:root {
+    --c-danger-soft: rgba(255, 77, 94, 0.08);
+}
+
 /* Form errors block — mirrors clearance_gate .err */
 .form-errors {
     border: 1px solid var(--accent-danger);

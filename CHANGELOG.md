@@ -1,5 +1,19 @@
 # Changelog
 
+## v0.14.46
+- **Wave 5 of the clearance-gate aesthetic rollout — polish.** Adds the utility classes that Waves 2–4 agents repeatedly improvised inline. Future template work picks them up automatically; existing inline styles keep working until refactored
+- New utility classes in `foundation.css`:
+  - `.btn-cyber.sm` / `.btn-cyber.tiny` (and `.btn-primary.sm` / `.tiny`) — small button variants for inline rows and tag clouds
+  - `.btn-ghost` — transparent secondary button for back-links and inline cancels
+  - `.crumb` — `< BACK` breadcrumb primitive with auto `<` glyph
+  - `.seg` + `.seg-btn` + `.seg-btn.active` — segmented control / tab row primitive
+  - `.rail-item` + `.rail-item.active` — sidebar / channel list / file list current-item pattern (GM workspace, comms threads, settings sidebar already use this shape)
+  - `.toggle-row` — checkbox + label + status-pill row pattern with palette-tinted accent
+  - `.block-head.danger` — color-variant for danger-themed sections (BIOSIGN MONITOR, ADMIN PANEL, COMPROMISED) that tints bullet + h3 + divider line in one hop
+  - `.brackets-tight` — smaller bracket-frame variant for nested authority cards
+- New token `--c-danger-soft: rgba(255, 77, 94, 0.08)` for danger card backgrounds (replaces several hardcoded `rgba(239, 68, 68, ...)` literals)
+- **Clearance-gate rollout complete.** Login, all hub/list pages, agency sheet (6 component files), character sheet, NPCs, comms, council, GM workspace, site settings, all maps, all battles, starships — every authenticated surface now reads as one product with the login screen. Five palettes (EMERALD/AMBER/ICE/BLOOD/BONE), three backdrops (login-only), tweaks tab in `/settings/`, light-theme support, square corners, JetBrains Mono + VT323
+
 ## v0.14.45
 - **Wave 4 of the clearance-gate aesthetic rollout — maps, battles, settings, starships.** 10 templates restyled across three parallel agents on disjoint files. Canvas, Three.js, Leaflet, and SVG terrain content untouched per spec — chrome-only restyle around them
 - Site settings (`site_settings.html`, ~1900L → 2054L): outer bracket frame around the whole shell, sidebar gets the rail-item active-pattern matching GM workspace, **17 `.block-head` section markers** (Game Date, Comms Lock, Map Visibility, Council, Nav Labels, Base Access, Clearance Gate / TWEAKS, City Maps, Star Map Config, Seed Star Systems, Starships, Ship Types, Module Sections, Ship Modules, View As Player, Transfer Player, Sidebar group), **14 status pills** for ENABLED/DISABLED/LOCKED/OPEN/UNLOCKED states. New TWEAKS scope note clarifies that palette propagates to the authenticated app via `<html data-palette>`
