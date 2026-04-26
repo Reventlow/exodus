@@ -1,5 +1,8 @@
 # Changelog
 
+## v0.14.42
+- New `UserProfile` admin registration at `/admin/accounts/userprofile/` — see every user's `last_activity` timestamp, computed status pill (ACTIVE / STANDBY / DORMANT / INACTIVE matching the login roster), and "since" delta. Also surfaces the same status column on the standard `/admin/auth/user/` list, with the profile (incl. avatar + last_activity) inlined on each user's edit page
+
 ## v0.14.41
 - **Wave 2 of the clearance-gate aesthetic rollout — hub & list surfaces.** 17 templates restyled across two parallel agents on disjoint file sets. ~22 bracket-frame cards, ~35 `.block-head` section markers, ~22 `.status-pill` indicators added. Every list / hub / authority page now reads native to the new aesthetic
 - News (`list.html`, `detail.html`) — DISPATCH surfaces with bracket-frame cards, `.kicker` / `.title` / `.sub` display heads, dispatch-count badges. Visibility tags converted to status pills (PUBLIC → `s-active`, EYES ONLY → `s-standby`, HIDDEN → `s-burned`)
