@@ -1,5 +1,8 @@
 # Changelog
 
+## v0.14.36
+- Branding labels in `/settings/` → `CLEARANCE GATE → TWEAKS` renamed: `AGENCY NAME` → `DIRECTORATE`, `OP CODENAME` → `PROJECT`. Matches the on-screen kicker copy "DIRECTORATE OMEGA // PROJECT EXODUS" so the field labels read as the operator's directorate and project assignment, not the brand. The underlying `tweaks` JSON keys (`agency_name`, `op_codename`) are unchanged — no migration required, existing values preserved
+
 ## v0.14.35
 - New **clearance-gate login surface** at `/login/` and `/register/` — terminal-aesthetic multi-stage flow (boot screen → login → authing cinematic → granted/denied splash). Animated agency-map background with continent point-in-poly dot grid, radar sweep, connection arcs, focal-node crosshair, and 14 fixed operative nodes; alternative code-rain backdrop with selectable glyph set (Katakana / Hex / Binary / ASCII)
 - Login submit is AJAX: the 3.3-second handshake cinematic plays AFTER the server confirms credentials, not before — the `<form method="POST">` fallback still works without JS for graceful degradation. The legacy 302-redirect path is unchanged
