@@ -1,7 +1,39 @@
 {% verbatim %}
 <script type="text/babel">
 const { useState, useEffect, useRef, useCallback, useMemo } = React;
-const { Icon, AutoSaveInput, Classified, VisibilityToggle, getCookie, getWorkspaceConfig } = window;
+const {
+    Icon, AutoSaveInput, Classified, VisibilityToggle,
+    getCookie, getCsrfToken, getWorkspaceConfig,
+    SectionSaveContext,
+} = window;
+
+// ----------------------------------------------------------------------
+// Phase 3 (multi-player concurrency) — base section field map
+//
+// updateBaseField(baseId, field, value) is the existing call site for every
+// per-base mutation. The map below tells us which section endpoint to PATCH
+// and how to shape the payload for that section. Most fields are 1:1, but:
+//   - `locationType` posts to /section/location/ (backend accepts both
+//     `location` and `locationType` keys, we send the canonical `location`).
+//   - `latitude` and `longitude` share the `geo` section.
+//   - `isHidden` -> `hidden` section (backend also accepts `isHidden`).
+//   - `hiddenSections` -> `classified` section (backend also accepts
+//     `hiddenSections`).
+// ----------------------------------------------------------------------
+const BASE_FIELD_TO_SECTION = {
+    name:            { section: 'name',         payloadKey: 'name' },
+    locationType:    { section: 'location',     payloadKey: 'location' },
+    merits:          { section: 'merits',       payloadKey: 'merits' },
+    facilities:      { section: 'facilities',   payloadKey: 'facilities' },
+    workspaces:      { section: 'workspaces',   payloadKey: 'workspaces' },
+    equipment:       { section: 'equipment',    payloadKey: 'equipment' },
+    departments:     { section: 'departments',  payloadKey: 'departments' },
+    notes:           { section: 'notes',        payloadKey: 'notes' },
+    latitude:        { section: 'geo',          payloadKey: 'latitude' },
+    longitude:       { section: 'geo',          payloadKey: 'longitude' },
+    isHidden:        { section: 'hidden',       payloadKey: 'hidden' },
+    hiddenSections:  { section: 'classified',   payloadKey: 'classified' },
+};
 
     // --- BASES MODULE ---
     const BASE_ACCENT = '#22c55e';
@@ -47,6 +79,10 @@ const { Icon, AutoSaveInput, Classified, VisibilityToggle, getCookie, getWorkspa
 
     const BasesModule = ({ bases: initialBases, baseConfig, baseConfigLookup, isNuclearPower, agencyId, onBasesChange, assignableCharacters, assignableNpcs, visibility, onToggleVis, classifiedBases }) => {
         const lookup = baseConfigLookup || {};
+        // Section-save context (Phase 3). May be null if BasesModule is ever
+        // rendered standalone outside AgencySheet — in that case we silently
+        // fall back to the legacy /bases/<id>/ PUT compat shim on the backend.
+        const sectionCtx = React.useContext(SectionSaveContext);
 
         // Mobile base detection: these merits/location types mean the base needs its own power
         const MOBILE_MERIT_KEYS = new Set(['new_merit_1774341649496', 'new_merit_1774341869469', 'new_merit_1774341977938', 'mobile_platform']);
@@ -169,32 +205,142 @@ const { Icon, AutoSaveInput, Classified, VisibilityToggle, getCookie, getWorkspa
             return { totalExp, totalSpace, usedSpace, freeSpace: totalSpace - usedSpace };
         };
 
-        const saveBase = (baseId, data) => {
-            if (saveTimers.current[baseId]) clearTimeout(saveTimers.current[baseId]);
-            saveTimers.current[baseId] = setTimeout(async () => {
-                try {
-                    const res = await fetch(`/api/agencies/${agencyId}/bases/${baseId}/`, {
-                        method: 'PUT', headers: headers(), body: JSON.stringify(data),
-                    });
-                    if (res.ok) {
-                        const updated = await res.json();
-                        updateBases(prev => prev.map(b => b.id === baseId ? updated : b));
+        // Apply a server-returned section value to a local base record.
+        // Most sections are 1:1, but `geo` returns {latitude, longitude}
+        // (we lifted lat/lng under one section), and `location` writes
+        // back to the `locationType` field name on the React side.
+        // Defined ahead of patchBaseSection for hoisting safety.
+        const _applyBaseSectionValue = (base, sectionKey, value, version) => {
+            const next = { ...base };
+            if (typeof version === 'number') next.version = version;
+            switch (sectionKey) {
+                case 'name':         next.name = value; break;
+                case 'location':     next.locationType = value; break;
+                case 'merits':       next.merits = value; break;
+                case 'facilities':   next.facilities = value; break;
+                case 'workspaces':   next.workspaces = value; break;
+                case 'equipment':    next.equipment = value; break;
+                case 'departments':  next.departments = value; break;
+                case 'notes':        next.notes = value; break;
+                case 'geo':
+                    if (value && typeof value === 'object') {
+                        if ('latitude' in value)  next.latitude  = value.latitude;
+                        if ('longitude' in value) next.longitude = value.longitude;
                     }
-                } catch (err) { console.error('Base save error:', err); }
-            }, 500);
+                    break;
+                case 'hidden':       next.isHidden = value; break;
+                case 'classified':   next.hiddenSections = value || []; break;
+                default:
+                    // Unknown section — leave base alone, log for triage.
+                    console.warn('Unknown base section_key in apply:', sectionKey);
+            }
+            return next;
         };
 
-        const saveBaseNow = async (baseId, data) => {
-            if (saveTimers.current[baseId]) clearTimeout(saveTimers.current[baseId]);
-            try {
+        // ---------------------------------------------------------------
+        // Phase 3 base-save core: PATCH a single section of a single base
+        // with optimistic concurrency (If-Match: <base.version>).
+        //
+        // After a successful PATCH the server returns the new section value
+        // and the bumped version. We slot the value back into the base
+        // record in local state. On 409 we let the SectionSaveContext
+        // conflict handler raise the banner; the user re-blurs to retry.
+        //
+        // Falls back to the legacy whole-base PUT only when the section
+        // context is unavailable (defensive — should not happen in prod).
+        // ---------------------------------------------------------------
+        const patchBaseSection = async (baseId, sectionKey, payload) => {
+            if (!sectionCtx) {
+                // Defensive: provider missing. Use legacy PUT with the full
+                // base record so we don't silently drop the write.
                 const res = await fetch(`/api/agencies/${agencyId}/bases/${baseId}/`, {
-                    method: 'PUT', headers: headers(), body: JSON.stringify(data),
+                    method: 'PUT', headers: headers(),
+                    body: JSON.stringify(payload || {}),
                 });
                 if (res.ok) {
                     const updated = await res.json();
                     updateBases(prev => prev.map(b => b.id === baseId ? updated : b));
                 }
-            } catch (err) { console.error('Base save error:', err); }
+                return;
+            }
+            const expected = sectionCtx.baseVersionsRef.current[baseId];
+            try {
+                const res = await fetch(
+                    `/api/agencies/${agencyId}/bases/${baseId}/section/${sectionKey}/`,
+                    {
+                        method: 'PATCH', credentials: 'same-origin',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'X-CSRFToken': getCsrfToken(),
+                            'If-Match': String(expected != null ? expected : 0),
+                        },
+                        body: JSON.stringify(payload || {}),
+                    }
+                );
+                if (res.status === 409) {
+                    const data = await res.json().catch(() => ({}));
+                    sectionCtx.baseVersionsRef.current[baseId] = data.current_version || 0;
+                    if (typeof sectionCtx.onConflict === 'function') {
+                        sectionCtx.onConflict(`base:${baseId}:${sectionKey}`, data.current_value, data.current_version);
+                    }
+                    // Update local state with the server's current_value so
+                    // the UI reflects what the other writer left behind.
+                    if (data.current_value !== undefined) {
+                        updateBases(prev => prev.map(b => {
+                            if (b.id !== baseId) return b;
+                            return _applyBaseSectionValue(b, sectionKey, data.current_value);
+                        }));
+                    }
+                    return;
+                }
+                if (!res.ok) {
+                    const body = await res.text().catch(() => '');
+                    console.error('Base section save failed', baseId, sectionKey, res.status, body);
+                    return;
+                }
+                const data = await res.json().catch(() => ({}));
+                if (typeof data.version === 'number') {
+                    sectionCtx.baseVersionsRef.current[baseId] = data.version;
+                }
+                // Slot the server's authoritative section value back into
+                // the local base record so derived UI (EXP totals, space
+                // bars) reflects what was actually written.
+                updateBases(prev => prev.map(b => {
+                    if (b.id !== baseId) return b;
+                    return _applyBaseSectionValue(b, sectionKey, data[sectionKey], data.version);
+                }));
+            } catch (err) {
+                console.error('Base section save error', baseId, sectionKey, err);
+            }
+        };
+
+        // Debounced wrapper for patchBaseSection — preserves the legacy
+        // ~500ms write coalescing on text inputs. Each (baseId, sectionKey)
+        // pair has its own timer slot.
+        const saveBaseSectionDebounced = (baseId, sectionKey, payload) => {
+            const timerKey = `${baseId}:${sectionKey}`;
+            if (saveTimers.current[timerKey]) clearTimeout(saveTimers.current[timerKey]);
+            saveTimers.current[timerKey] = setTimeout(() => {
+                patchBaseSection(baseId, sectionKey, payload);
+            }, 500);
+        };
+
+        // Immediate fire-and-await wrapper (for toggle buttons, where we
+        // want the network call to leave before React continues rendering).
+        const saveBaseSectionNow = async (baseId, sectionKey, payload) => {
+            const timerKey = `${baseId}:${sectionKey}`;
+            if (saveTimers.current[timerKey]) clearTimeout(saveTimers.current[timerKey]);
+            await patchBaseSection(baseId, sectionKey, payload);
+        };
+
+        // Multi-section convenience used by CLEAR BASE — PATCH each affected
+        // section in turn. Returns when they've all completed.
+        const saveBaseMultiSection = async (baseId, sections) => {
+            // sections: { [sectionKey]: payload }
+            for (const [sectionKey, payload] of Object.entries(sections)) {
+                // eslint-disable-next-line no-await-in-loop
+                await patchBaseSection(baseId, sectionKey, payload);
+            }
         };
 
         const createBase = async () => {
@@ -226,7 +372,40 @@ const { Icon, AutoSaveInput, Classified, VisibilityToggle, getCookie, getWorkspa
             updateBases(prev => prev.map(b => {
                 if (b.id !== baseId) return b;
                 const updated = { ...b, [field]: value };
-                saveBase(baseId, updated);
+                // Phase 3: route the write to the per-section endpoint so
+                // concurrent edits on the same base from another player
+                // surface as a 409 instead of silently overwriting.
+                const map = BASE_FIELD_TO_SECTION[field];
+                if (map) {
+                    const payload = { [map.payloadKey]: value };
+                    // Text-style fields use the debounced path so a quick
+                    // burst of keystrokes coalesces into one PATCH; toggles
+                    // (booleans/lists) flush immediately so the UI feels
+                    // responsive and the version counter advances right
+                    // away (otherwise rapid toggles can race).
+                    const isTextish = field === 'name' || field === 'notes' || field === 'latitude' || field === 'longitude';
+                    if (isTextish) {
+                        saveBaseSectionDebounced(baseId, map.section, payload);
+                    } else {
+                        saveBaseSectionNow(baseId, map.section, payload);
+                    }
+                } else {
+                    // Unmapped field — fall back to legacy whole-base PUT.
+                    // Logged loudly so we notice during testing.
+                    console.warn('updateBaseField: no section map for field', field, '— falling back to legacy PUT');
+                    if (saveTimers.current[baseId]) clearTimeout(saveTimers.current[baseId]);
+                    saveTimers.current[baseId] = setTimeout(async () => {
+                        try {
+                            const res = await fetch(`/api/agencies/${agencyId}/bases/${baseId}/`, {
+                                method: 'PUT', headers: headers(), body: JSON.stringify(updated),
+                            });
+                            if (res.ok) {
+                                const fresh = await res.json();
+                                updateBases(prev2 => prev2.map(b2 => b2.id === baseId ? fresh : b2));
+                            }
+                        } catch (err) { console.error('Base legacy save error:', err); }
+                    }, 500);
+                }
                 return updated;
             }));
         };
@@ -265,7 +444,8 @@ const { Icon, AutoSaveInput, Classified, VisibilityToggle, getCookie, getWorkspa
                 return f;
             });
             updateBases(prev => prev.map(b => b.id !== baseId ? b : { ...b, facilities: newFacilities }));
-            saveBaseNow(baseId, { ...base, facilities: newFacilities });
+            // Phase 3: PATCH only the facilities section.
+            saveBaseSectionNow(baseId, 'facilities', { facilities: newFacilities });
         };
 
         const toggleWorkspacePower = (baseId, idx) => {
@@ -276,7 +456,8 @@ const { Icon, AutoSaveInput, Classified, VisibilityToggle, getCookie, getWorkspa
                 return w;
             });
             updateBases(prev => prev.map(b => b.id !== baseId ? b : { ...b, workspaces: newWs }));
-            saveBaseNow(baseId, { ...base, workspaces: newWs });
+            // Phase 3: PATCH only the workspaces section.
+            saveBaseSectionNow(baseId, 'workspaces', { workspaces: newWs });
         };
 
         const addWorkspace = (baseId, level) => {
@@ -1154,13 +1335,23 @@ const { Icon, AutoSaveInput, Classified, VisibilityToggle, getCookie, getWorkspa
                                     <button onClick={() => {
                                         const costs = calcBaseCosts(base);
                                         if (!confirm('CLEAR ALL CHOICES on "' + base.name + '"?\n\nThis will remove:\n- Location type\n- All merits\n- All facilities\n- All workspaces\n- All equipment\n\nEXP returned: ' + costs.totalExp + '\n\nDepartments and notes will be kept.\n\nAre you sure?')) return;
-                                        saveBase(base.id, {
-                                            locationType: '',
-                                            merits: [],
-                                            facilities: [],
-                                            workspaces: [],
-                                            equipment: [],
+                                        // Phase 3: CLEAR BASE touches five sections
+                                        // — fire each as its own PATCH so optimistic
+                                        // concurrency works section-by-section. They
+                                        // serialise through the agency row lock on
+                                        // the backend.
+                                        saveBaseMultiSection(base.id, {
+                                            location:   { location: '' },
+                                            merits:     { merits: [] },
+                                            facilities: { facilities: [] },
+                                            workspaces: { workspaces: [] },
+                                            equipment:  { equipment: [] },
                                         });
+                                        // Optimistically clear local state so the UI
+                                        // reflects the change while PATCHes flush.
+                                        updateBases(prev => prev.map(b => b.id !== base.id ? b : {
+                                            ...b, locationType: '', merits: [], facilities: [], workspaces: [], equipment: [],
+                                        }));
                                     }}
                                         className="mono-text"
                                         style={{

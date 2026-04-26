@@ -1,5 +1,98 @@
 # Changelog
 
+## v0.14.32
+- Fix: **multi-player concurrent edits to agency / base sections no longer silently overwrite each other.** When two players added different items to the same Bifrost base, the second player's write was being silently dropped (the old `existing.issubset(proposed)` guard rejected the proposal but didn't surface the rejection). Reported symptom: "when more than one player was updating the bases in Bifrost it didn't save correctly"
+- New per-section `PATCH` endpoints under `/api/agencies/<id>/section/<key>/` (12 agency-level keys: header / alliance / notes / integrity / attributes / specializations / merits / flaws / assets / fleet / history / admin-flags) and `/api/agencies/<id>/bases/<base_id>/section/<key>/` (11 base-section keys), each with optimistic concurrency control via HTTP `If-Match` header. Stale writes return `409 Conflict` with the current version and value; the React frontend shows an inline yellow banner ("another user updated this section — refreshed") and re-hydrates the affected section. Implementation uses atomic compare-and-swap on the version column so it's correct on SQLite (where `select_for_update()` is a no-op)
+- Migration `agencies/0035_add_section_versioning` adds `Agency.section_versions` (per-section version map) and `Base.version` (row-level counter). SQLite tuned for safe concurrent writes: WAL journal mode, `synchronous=NORMAL`, `transaction_mode="IMMEDIATE"`, 20-second busy timeout. Test database now file-based for reliable concurrent test coverage
+- Player rule clarified: non-admin players on player-agency bases can ADD merits / facilities / equipment but cannot REMOVE them. Removal attempts now return an explicit `403 Forbidden` instead of the old silent drop
+- Legacy `PUT /api/agencies/<id>/` and `PUT /api/agencies/<id>/bases/<base_id>/` endpoints still work as compatibility shims (now atomic and version-bumping) so MCP tools and any older code paths keep working. Frontend agency sheet adds `useSectionSave` and `useBaseSectionSave` hooks in `_utilities.html` plus a dispatcher in `_app.html` that automatically routes existing module saves to the right section endpoint with `If-Match`
+- New regression test suite `agencies/tests/test_section_concurrency.py` — 27 tests across 6 classes including a live-server race test that fires two concurrent `PATCH`es at the same base section and asserts exactly one wins with `200` and one returns `409`. Permanent guard against the Bifrost bug
+
+## v0.14.31
+- Light/dark theme now applies to **all map types** — World Map (Leaflet), City Map (Leaflet), Star Map (Three.js), Battle Map and Battle Map Editor (canvas hex grids). Toggling the theme repaints the void background, grid lines, axis lines, and FTL route connection lines without a page reload
+- Terrain visuals (planets, nebulae, asteroids, suns, debris, etc.) and token side colors (cyan players, red enemies) keep their semantic colors in both themes — they're like icons, not chrome
+- Added a shared `--map-void` / `--map-grid-fill` / `--map-grid-stroke` / `--map-axis` / `--map-route-faint` / `--label-shadow` CSS palette in `foundation.css` and a `themechange` custom event dispatched by the toggle so canvas/Three.js scenes can re-render
+
+## v0.14.30
+- New **light/dark mode toggle** in the top nav (☀ / ☾). Theme preference is persisted in `localStorage` and applied before paint to avoid a flash of dark content on first load
+- Added a `[data-theme="light"]` palette in `static/css/foundation.css` that flips backgrounds, text, and borders, and darkens `--accent-primary` / `--accent-warning` so the existing pattern of `color: var(--bg-dark)` on accent-colored buttons/badges/banners stays readable in light mode
+- Replaced three hardcoded `rgba()` panel/nav backgrounds with new translucent CSS variables (`--bg-panel-translucent`, `--nav-bg`, `--nav-bg-mobile`) so glass panels and the sticky nav theme correctly
+
+## v0.14.29
+- Fix: **Fringe Science Lab** facility disappeared from the live BaseConfig (overwritten by a subsequent admin-UI save of the config JSON). Science characters with the Fringe Science Labs pulling string could not see or build the facility because the definition itself was missing from the config
+- New migration `agencies/0034_reseed_fringe_lab_facility` re-adds the entry idempotently on container start
+- Bundles the v0.14.28 fix (base `hidden_sections` incorrectly redacting player-agency bases; v0.14.28 tag was built but never reached production)
+
+## v0.14.28
+- Fix: base `hidden_sections` (a GM-only redaction tool for NPC bases) was incorrectly applied to player-agency owners too. Result: if a section was flagged on a player-agency base (e.g. via the cyber terminal hack-reveal flow, or a mis-click in the GM UI), the base's own members saw the section as CLASSIFIED and could not add facilities / merits / equipment there. `serialize_base` now bypasses `hidden_sections` when the base's agency is a player agency, matching how `is_field_visible` already handles field-level visibility
+- Observed on Bifrost's Grimmorgap base, where rasmus (Bisgård) saw all facilities classified and couldn't build
+
+## v0.14.27
+- Site Settings → new **BASE ACCESS** tab with one toggle per character class (soldier, science, engineer, fixer, AI). Checking a box unlocks that class's class-locked base-building items (locations, merits, facilities, equipment) for every character
+- Intended for campaigns that lack a character of a given class — GMs can open up the mechanics instead of leaving them inaccessible. Superusers are unaffected (always see everything); "general" items remain available to everyone
+- Flags are stored on the `SiteSettings` singleton as a JSON map and honored by `serialize_base_config()` when it filters per-class visibility
+- Migration `exodus/0015_sitesettings_class_unlock_flags`
+
+## v0.14.26
+- GM Workspace Timeline tool at `/gm/timeline/` — chronological events (Session / Plot Beat / World Event / Note) with in-game date auto-sort, type chips, type filter, markdown description, tags
+- GM Workspace Campaign Log tool at `/gm/campaign-log/` — per-session recaps with session number, real-world played-at date, in-game date, markdown summary, tags. "+ NEW" auto-increments the session number
+- Both tools share the same EDIT / SPLIT / PREVIEW mode toggle, auto-save, and list-plus-editor shell as Story Ideas
+- Sidebar extracted to a reusable partial `_sidebar.html` so all three GM tools show identical navigation with an active-state highlight based on the current page
+
+## v0.14.25
+- GM Story Ideas editor: replaced the single PREVIEW button with a proper segmented EDIT | SPLIT | PREVIEW toggle. SPLIT shows the markdown textarea and the rendered preview side-by-side for long notes
+- Selected view mode is remembered across notes and reloads via localStorage
+
+## v0.14.24
+- Wrap GM workspace + briefs React/JSX blocks in `{% verbatim %}` so Django's template parser leaves the JSX object literals alone (was producing a 500 TemplateSyntaxError on `/gm/story-ideas/`)
+
+## v0.14.23
+- New GM Workspace at `/gm/` — superuser-only React SPA with sidebar for future GM tools. First tool is "Story Ideas": titled, tagged, pinnable markdown notes with live preview, auto-save, and full CRUD
+- GMs can selectively share specific notes with specific players via a multi-select toggle, or share with all players in one click
+- New player-facing page at `/my-briefs/` — read-only list and detail view of notes shared with the logged-in player, rendered as markdown
+- BRIEFS nav link appears for players only when they have at least one brief shared with them, with a count badge next to it
+- GM nav link appears for superusers, next to SETTINGS / ADMIN
+- New `gm_workspace` Django app with `StoryIdea` model, `/api/gm/story-ideas/` and `/api/my-briefs/` endpoints, superuser-gated backend with 404 (not 403) on player access to non-shared briefs to avoid leaking existence
+
+## v0.14.22
+- Agency HISTORY table's DECISION and CONSEQUENCE columns render as wrapping textareas instead of single-line inputs, so long narrative entries are readable and editable in place
+
+## v0.14.21
+- Fix character XP donation double-counting — donating XP to an agency was deducting the amount twice (once from `character.experience` on the backend, once from `remaining` on the frontend via the XpTransferLog sum). A 15 XP donation ended up costing 30 XP of surplus
+- `character.experience` is now the stable "total earned" and is no longer decremented on donation; the XpTransferLog is the sole source of truth for donations (matching how the frontend has always displayed it)
+- Frontend donate check now validates against actual surplus (`remaining`) instead of raw earned, with a clearer "you have N available to donate" message
+- Retractions (admin-only negative transfers) still work correctly — the log sum decreases, freeing up surplus naturally
+
+## v0.14.20
+- Fix comms edit/delete CSRF 403: removed redundant `headers` from `api()` calls that overwrote the default CSRF token
+
+## v0.14.19
+- Superusers can now edit message content and thread titles inline in comms
+- Pencil icon (&#9998;) appears next to the thread title and each message timestamp for staff users
+- Clicking opens an inline editor with SAVE/ESC controls (Enter saves, Escape cancels)
+- Superusers can also delete individual messages via the &#10005; icon next to each message
+- Edited messages show an "(edited)" indicator next to the timestamp
+- New `edited_at` field on Message model tracks when a message was last edited
+- New API endpoint `PUT/DELETE /api/comms/threads/<id>/messages/<msg_id>/` for message editing/deletion
+- Edits and deletions are broadcast to WebSocket clients in the thread
+
+## v0.14.18
+- News dispatch editor now shows player names in the EYES ONLY PLAYER dropdown. The templates were reading `u.username`, but `/api/comms/users/` returns `{id, displayName, portrait}` — so options rendered blank. Fixed in both the create form (`list.html`) and the edit form (`detail.html`) with a `displayName || username || User ${id}` fallback chain
+
+## v0.14.17
+- NPC dossier creation (`POST /api/npcs/`) now accepts any agency, not just non-player agencies. The prior `is_player_agency=False` filter silently dropped the agency link when admins tried to create a dossier for a Bifrost NPC, leaving an unlinked record
+- Admin access is already required, and the superuser update path already allowed any agency, so the create path was inconsistent
+
+## v0.14.16
+- News dispatches now auto-derive `game_date_sort` from the free-text IN-GAME DATE field on create and update, so UI-entered dates like "May 5, 2036" or "9 February 2036, Evening" land in the correct chronological slot without needing a separate sort key
+- Uses `dateutil.parser` with `fuzzy=True`, falls back to 2036-01-01 anchor when only partial info is given, ignores unparseable input
+- Adds `python-dateutil>=2.8` to requirements.txt
+- Explicit `gameDateSort` from API callers still wins over the derived value
+
+## v0.14.15
+- News API accepts ISO-8601 strings for `gameDateSort` (including trailing `Z`) and coerces them to real datetimes before assignment, so MCP/PUT callers can finally set the chronological sort key
+- Bad/unparseable sort values now fall back to `None` instead of bricking the row with a stringified `DateTimeField`
+
 ## v0.14.14
 - Battle map and map editor canvases support zoom in/out (40% – 250%)
 - Floating zoom toolbar in the top-left of the canvas with −/+/⟲ reset buttons and a percentage label

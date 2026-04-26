@@ -30,6 +30,7 @@ urlpatterns = [
     path("", include("characters.urls")),
     path("", include("agencies.urls")),
     path("", include("npcs.urls")),
+    path("", include("gm_workspace.urls")),
 ]
 
 urlpatterns += static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)

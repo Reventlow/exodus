@@ -123,6 +123,76 @@ urlpatterns = [
         views.api_agency_base_detail,
         name="api_agency_base_detail",
     ),
+    # Per-base section PATCH (Phase 1/2 — multi-player concurrency).
+    # section_key ∈ {name, location, merits, facilities, workspaces,
+    # equipment, departments, notes, geo, hidden, classified}.
+    path(
+        "api/agencies/<int:pk>/bases/<int:base_id>/section/<str:section_key>/",
+        views.api_agency_base_section,
+        name="api_agency_base_section",
+    ),
+    # Agency-level section PATCH (Phase 1/2 — multi-player concurrency).
+    # See views.py for permission per section.
+    path(
+        "api/agencies/<int:pk>/section/header/",
+        views.api_agency_section_header,
+        name="api_agency_section_header",
+    ),
+    path(
+        "api/agencies/<int:pk>/section/alliance/",
+        views.api_agency_section_alliance,
+        name="api_agency_section_alliance",
+    ),
+    path(
+        "api/agencies/<int:pk>/section/notes/",
+        views.api_agency_section_notes,
+        name="api_agency_section_notes",
+    ),
+    path(
+        "api/agencies/<int:pk>/section/integrity/",
+        views.api_agency_section_integrity,
+        name="api_agency_section_integrity",
+    ),
+    path(
+        "api/agencies/<int:pk>/section/attributes/",
+        views.api_agency_section_attributes,
+        name="api_agency_section_attributes",
+    ),
+    path(
+        "api/agencies/<int:pk>/section/specializations/",
+        views.api_agency_section_specializations,
+        name="api_agency_section_specializations",
+    ),
+    path(
+        "api/agencies/<int:pk>/section/merits/",
+        views.api_agency_section_merits,
+        name="api_agency_section_merits",
+    ),
+    path(
+        "api/agencies/<int:pk>/section/flaws/",
+        views.api_agency_section_flaws,
+        name="api_agency_section_flaws",
+    ),
+    path(
+        "api/agencies/<int:pk>/section/assets/",
+        views.api_agency_section_assets,
+        name="api_agency_section_assets",
+    ),
+    path(
+        "api/agencies/<int:pk>/section/fleet/",
+        views.api_agency_section_fleet,
+        name="api_agency_section_fleet",
+    ),
+    path(
+        "api/agencies/<int:pk>/section/history/",
+        views.api_agency_section_history,
+        name="api_agency_section_history",
+    ),
+    path(
+        "api/agencies/<int:pk>/section/admin-flags/",
+        views.api_agency_section_admin_flags,
+        name="api_agency_section_admin_flags",
+    ),
     # Dark Grants
     path(
         "api/agencies/<int:pk>/projects/<int:project_index>/dark-grants/",

@@ -31,6 +31,7 @@ INSTALLED_APPS = [
     "starmap",
     "starships",
     "spacebattle",
+    "gm_workspace",
     "exodus",
 ]
 
@@ -65,6 +66,7 @@ TEMPLATES = [
                 "comms.context_processors.unread_count",
                 "exodus.context_processors.impersonation",
                 "exodus.context_processors.map_visibility",
+                "gm_workspace.context_processors.shared_briefs_count",
             ],
         },
     },
@@ -88,6 +90,48 @@ DATABASES = {
     "default": {
         "ENGINE": "django.db.backends.sqlite3",
         "NAME": Path(os.environ.get("DATABASE_DIR", BASE_DIR)) / "db.sqlite3",
+        "OPTIONS": {
+            # Bump SQLite's busy-wait so concurrent writes back off cleanly
+            # instead of raising ``database is locked`` under contention.
+            # Default is 5 seconds; 20 seconds gives ample headroom for
+            # Daphne worker threads doing per-request writes (sessions,
+            # section PATCHes, etc.) without ever timing out in practice.
+            "timeout": 20,
+            "init_command": (
+                # WAL mode lets readers run while a writer holds the write
+                # lock and dramatically reduces SQLITE_BUSY frequency under
+                # concurrent load. Required for the optimistic-concurrency
+                # CAS on agency / base section PATCHes to behave correctly
+                # under real-world contention.
+                "PRAGMA journal_mode=WAL;"
+                # ``synchronous=NORMAL`` is safe in WAL mode and faster
+                # than the SQLite default of FULL.
+                "PRAGMA synchronous=NORMAL;"
+                # Foreign keys (Django relies on these for CASCADE).
+                "PRAGMA foreign_keys=ON;"
+            ),
+            # Use BEGIN IMMEDIATE for transactions so the write lock is
+            # acquired at BEGIN time. Without this, two concurrent
+            # transactions can both BEGIN-DEFERRED + SELECT, and when the
+            # second one tries to UPDATE it fails *immediately* with
+            # ``database is locked`` (SQLite refuses the read-to-write
+            # upgrade to avoid deadlock — the busy_timeout doesn't apply).
+            # IMMEDIATE makes BEGIN itself wait on the busy timeout, which
+            # serialises concurrent writers cleanly.
+            "transaction_mode": "IMMEDIATE",
+        },
+        "TEST": {
+            # Use a file-based test DB instead of the default in-memory
+            # shared-cache backend. The shared-cache backend's
+            # connection-level isolation has known thread-safety issues
+            # with the Python sqlite3 driver under concurrent writes
+            # (LiveServerTestCase spins per-request threads), which
+            # produces spurious 500s in the concurrent-write regression
+            # tests. A file-backed DB matches production semantics
+            # (Daphne writes to /app/data/db.sqlite3) and serialises
+            # concurrent writes cleanly via SQLite's file lock.
+            "NAME": Path(BASE_DIR) / "test_db.sqlite3",
+        },
     }
 }
 

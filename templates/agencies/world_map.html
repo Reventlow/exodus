@@ -381,7 +381,7 @@
         border-top-color: var(--border-color, #333) !important;
     }
     .leaflet-container {
-        background: #0a0a1a !important;
+        background: var(--map-void-leaflet) !important;
     }
     .country-label {
         background: none !important;
@@ -397,7 +397,7 @@
         font-weight: bold;
         text-transform: uppercase;
         letter-spacing: 1px;
-        text-shadow: 0 0 4px rgba(0,0,0,0.9), 0 0 8px rgba(0,0,0,0.7), 1px 1px 2px rgba(0,0,0,0.9);
+        text-shadow: 0 0 4px var(--label-shadow), 0 0 8px var(--label-shadow), 1px 1px 2px var(--label-shadow);
     }
 </style>
 {% endverbatim %}

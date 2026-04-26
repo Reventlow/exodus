@@ -41,6 +41,13 @@ def site_settings(request):
         settings_obj.show_council = "show_council" in request.POST
         settings_obj.council_mode = request.POST.get("council_mode", "agency")
         settings_obj.enforce_ship_slot_budget = "enforce_ship_slot_budget" in request.POST
+        # Per-class base-building unlocks. The form always POSTs the full set
+        # so an unchecked checkbox correctly lands as False.
+        if "class_unlock_submitted" in request.POST:
+            settings_obj.class_unlock_flags = {
+                cls: f"class_unlock_{cls}" in request.POST
+                for cls in ("soldier", "science", "engineer", "fixer", "ai")
+            }
         for lbl in ["dispatch", "players", "agencies", "council", "npcs", "comms"]:
             val = request.POST.get(f"label_{lbl}", "").strip()
             if val:

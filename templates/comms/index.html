@@ -1042,6 +1042,10 @@ function ThreadView({ thread, onSend, onBack, onOpenMembers, onDeleteThread, onR
   const messagesEndRef = useRef(null);
   const [lightboxImage, setLightboxImage] = useState(null);
   const [showTerminal, setShowTerminal] = useState(false);
+  const [editingTitle, setEditingTitle] = useState(false);
+  const [titleDraft, setTitleDraft] = useState("");
+  const [editingMsgId, setEditingMsgId] = useState(null);
+  const [msgDraft, setMsgDraft] = useState("");
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -1057,13 +1061,60 @@ function ThreadView({ thread, onSend, onBack, onOpenMembers, onDeleteThread, onR
     thread.members.filter(m => m.id !== CURRENT_USER_ID).map(m => m.displayName).join(", ") ||
     "CHANNEL";
 
+  const saveTitle = async () => {
+    await api(`/api/comms/threads/${thread.id}/`, {
+      method: "PUT",
+      body: JSON.stringify({ title: titleDraft }),
+    });
+    setEditingTitle(false);
+    if (onRefreshThread) onRefreshThread();
+  };
+
+  const saveMsg = async (msgId) => {
+    await api(`/api/comms/threads/${thread.id}/messages/${msgId}/`, {
+      method: "PUT",
+      body: JSON.stringify({ content: msgDraft }),
+    });
+    setEditingMsgId(null);
+    if (onRefreshThread) onRefreshThread();
+  };
+
+  const deleteMsg = async (msgId) => {
+    if (!confirm("Delete this message?")) return;
+    await api(`/api/comms/threads/${thread.id}/messages/${msgId}/`, { method: "DELETE" });
+    if (onRefreshThread) onRefreshThread();
+  };
+
   return (
     <div style={S.threadViewContainer}>
       {/* Header */}
       <div style={S.threadHeader}>
         <button onClick={onBack} className="mobile-only" style={S.backBtn}>&#8592;</button>
         <div style={S.threadTitleWrap}>
-          <h2 className="mono-text text-accent" style={S.threadTitle}>{threadTitle}</h2>
+          {editingTitle ? (
+            <div style={{ display: "flex", gap: "0.4rem", alignItems: "center", flex: 1 }}>
+              <input type="text" value={titleDraft}
+                onChange={e => setTitleDraft(e.target.value)}
+                onKeyDown={e => { if (e.key === "Enter") saveTitle(); if (e.key === "Escape") setEditingTitle(false); }}
+                autoFocus
+                style={{
+                  flex: 1, background: "transparent", border: "1px solid var(--accent-color)",
+                  color: "var(--text-primary)", padding: "0.3rem 0.5rem",
+                  fontFamily: "var(--font-mono)", fontSize: "0.85rem",
+                }} />
+              <button onClick={saveTitle} className="mono-text" style={{ ...S.rosterBtn, fontSize: "0.65rem", padding: "0.2rem 0.5rem" }}>SAVE</button>
+              <button onClick={() => setEditingTitle(false)} className="mono-text" style={{ ...S.rosterBtn, fontSize: "0.65rem", padding: "0.2rem 0.5rem", color: "#888", borderColor: "#888" }}>ESC</button>
+            </div>
+          ) : (
+            <h2 className="mono-text text-accent" style={S.threadTitle}>
+              {threadTitle}
+              {IS_STAFF && (
+                <span onClick={() => { setTitleDraft(thread.title || ""); setEditingTitle(true); }}
+                  style={{ cursor: "pointer", marginLeft: "0.5rem", fontSize: "0.65rem", opacity: 0.5 }}
+                  title="Edit thread title">&#9998;</span>
+              )}
+            </h2>
+          )}
           <div style={S.memberPortraits}>
             {thread.members.map(m => (
               <div key={m.id} style={{...S.portraitThumb, cursor: m.portrait ? "pointer" : "default"}} title={m.displayName}
@@ -1116,6 +1167,8 @@ function ThreadView({ thread, onSend, onBack, onOpenMembers, onDeleteThread, onR
             );
           }
 
+          const isEditing = editingMsgId === msg.id;
+
           return (
             <div key={msg.id} style={isOwn ? S.msgRowOwn : S.msgRowOther}>
               <div style={isOwn ? S.msgBubbleOwn : S.msgBubbleOther}>
@@ -1131,19 +1184,51 @@ function ThreadView({ thread, onSend, onBack, onOpenMembers, onDeleteThread, onR
                     )}
                   </div>
                 )}
-                {msg.content && <div style={S.msgContent}>{msg.content}</div>}
-                {msg.image && (
-                  <img src={msg.image} onClick={e => {
-                    e.stopPropagation();
-                    setLightboxImage(msg.image);
-                  }} style={{
-                    maxWidth: "250px", maxHeight: "200px", borderRadius: "4px",
-                    marginTop: msg.content ? "0.4rem" : 0,
-                    cursor: "pointer", border: "1px solid var(--border-color)",
-                  }} />
+                {isEditing ? (
+                  <div style={{ display: "flex", flexDirection: "column", gap: "0.3rem" }}>
+                    <textarea value={msgDraft}
+                      onChange={e => setMsgDraft(e.target.value)}
+                      onKeyDown={e => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); saveMsg(msg.id); } if (e.key === "Escape") setEditingMsgId(null); }}
+                      autoFocus rows={3}
+                      style={{
+                        background: "rgba(0,0,0,0.3)", border: "1px solid var(--accent-color)",
+                        color: "var(--text-primary)", padding: "0.4rem",
+                        fontFamily: "var(--font-mono)", fontSize: "0.85rem",
+                        resize: "vertical", width: "100%",
+                      }} />
+                    <div style={{ display: "flex", gap: "0.3rem", justifyContent: "flex-end" }}>
+                      <button onClick={() => saveMsg(msg.id)} className="mono-text"
+                        style={{ background: "var(--accent-color)", color: "#000", border: "none", padding: "0.2rem 0.6rem", fontSize: "0.65rem", cursor: "pointer" }}>SAVE</button>
+                      <button onClick={() => setEditingMsgId(null)} className="mono-text"
+                        style={{ background: "transparent", color: "#888", border: "1px solid #888", padding: "0.2rem 0.6rem", fontSize: "0.65rem", cursor: "pointer" }}>ESC</button>
+                    </div>
+                  </div>
+                ) : (
+                  <>
+                    {msg.content && <div style={S.msgContent}>{msg.content}</div>}
+                    {msg.image && (
+                      <img src={msg.image} onClick={e => {
+                        e.stopPropagation();
+                        setLightboxImage(msg.image);
+                      }} style={{
+                        maxWidth: "250px", maxHeight: "200px", borderRadius: "4px",
+                        marginTop: msg.content ? "0.4rem" : 0,
+                        cursor: "pointer", border: "1px solid var(--border-color)",
+                      }} />
+                    )}
+                  </>
                 )}
                 <div className="text-muted" style={isOwn ? S.msgTimeRight : S.msgTimeLeft}>
                   {new Date(msg.createdAt).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" })}
+                  {msg.editedAt && <span style={{ marginLeft: "0.3rem", fontStyle: "italic", fontSize: "0.6rem" }}>(edited)</span>}
+                  {IS_STAFF && !isEditing && (
+                    <span style={{ marginLeft: "0.4rem" }}>
+                      <span onClick={() => { setEditingMsgId(msg.id); setMsgDraft(msg.content); }}
+                        style={{ cursor: "pointer", opacity: 0.4, fontSize: "0.65rem" }} title="Edit message">&#9998;</span>
+                      <span onClick={() => deleteMsg(msg.id)}
+                        style={{ cursor: "pointer", opacity: 0.4, fontSize: "0.65rem", marginLeft: "0.3rem" }} title="Delete message">&#10005;</span>
+                    </span>
+                  )}
                 </div>
               </div>
             </div>

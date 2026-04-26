@@ -4,10 +4,15 @@
    ============================================================ */
 
 :root {
-    /* Political High Tech Theme Palette */
+    /* Political High Tech Theme Palette — Dark (default) */
     --bg-dark: #0f172a;
     --bg-panel: #1e293b;
     --bg-input: #020617;
+
+    /* Translucent panel/nav backgrounds (used by glass-panel + sticky nav) */
+    --bg-panel-translucent: rgba(30, 41, 59, 0.7);
+    --nav-bg: rgba(15, 23, 42, 0.9);
+    --nav-bg-mobile: rgba(15, 23, 42, 0.97);
 
     --text-primary: #f8fafc;
     --text-secondary: #94a3b8;
@@ -22,12 +27,71 @@
 
     --border-color: #334155;
 
+    /* Map / canvas palette
+       (used by Leaflet world & city maps, hex battle canvas, Three.js star map) */
+    --map-void: #04060a;                          /* "space" / void background */
+    --map-void-leaflet: #0a0a0f;                  /* slightly lighter void for Leaflet bg */
+    --map-grid-fill: rgba(20, 30, 50, 0.3);       /* hex tile fill */
+    --map-grid-stroke: rgba(80, 100, 140, 0.35);  /* hex tile outline */
+    --map-axis: rgba(26, 26, 46, 1);              /* axis lines (Three.js) */
+    --map-route-faint: rgba(26, 58, 42, 0.35);    /* faint connection lines (Three.js) */
+    --label-shadow: rgba(0, 0, 0, 0.9);           /* halo around map text labels */
+
     --font-main: 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
     --font-mono: 'Consolas', 'Monaco', 'Courier New', monospace;
 
     --grid-spacing: 1rem;
     --radius-sm: 4px;
     --radius-md: 8px;
+
+    color-scheme: dark;
+}
+
+/* ============================================================
+   Light Theme Override
+   Activated via <html data-theme="light"> (toggle in base.html).
+   Strategy:
+     - Flip backgrounds light, text dark.
+     - Darken accent-primary so the existing pattern of
+       `color: var(--bg-dark)` on `background: var(--accent-primary)`
+       still produces readable contrast (light text on darker accent).
+     - Darken accent-warning for the same reason (used by the
+       impersonation banner).
+   ============================================================ */
+:root[data-theme="light"] {
+    --bg-dark: #f1f5f9;       /* page background — slate-100 */
+    --bg-panel: #ffffff;       /* card/panel surface */
+    --bg-input: #f8fafc;       /* input fields — slate-50 */
+
+    --bg-panel-translucent: rgba(255, 255, 255, 0.78);
+    --nav-bg: rgba(248, 250, 252, 0.9);
+    --nav-bg-mobile: rgba(248, 250, 252, 0.97);
+
+    --text-primary: #0f172a;   /* slate-900 */
+    --text-secondary: #475569; /* slate-600 */
+    --text-muted: #64748b;     /* slate-500 — kept readable on light bg */
+
+    --accent-primary: #0284c7; /* sky-600 — darker so white-ish text on it works */
+    --accent-glow: rgba(2, 132, 199, 0.25);
+    --accent-danger: #dc2626;  /* red-600 */
+    --accent-success: #16a34a; /* green-600 */
+    --accent-warning: #b45309; /* amber-700 — readable for light text */
+
+    --border-color: #cbd5e1;   /* slate-300 */
+
+    /* Map / canvas palette — light variant.
+       The "void" becomes a soft pale slate so terrain visuals
+       (which keep their semantic colors) still pop, while the
+       chrome (panels, grid lines, halos) blend with the page. */
+    --map-void: #e2e8f0;                          /* slate-200 — pale "space" */
+    --map-void-leaflet: #f1f5f9;                  /* slate-100 — Leaflet ocean/sky tone */
+    --map-grid-fill: rgba(148, 163, 184, 0.18);   /* slate-400 tint */
+    --map-grid-stroke: rgba(71, 85, 105, 0.45);   /* slate-600 outline */
+    --map-axis: rgba(148, 163, 184, 0.6);         /* lighter axis lines */
+    --map-route-faint: rgba(34, 197, 94, 0.35);   /* greenish faint lines */
+    --label-shadow: rgba(255, 255, 255, 0.95);    /* white halo for dark text */
+
+    color-scheme: light;
 }
 
 * {
@@ -47,7 +111,7 @@ body {
 
 /* Utility Classes for Theme */
 .glass-panel {
-    background: rgba(30, 41, 59, 0.7);
+    background: var(--bg-panel-translucent);
     backdrop-filter: blur(10px);
     border: 1px solid var(--border-color);
     border-radius: var(--radius-md);
@@ -209,7 +273,7 @@ body {
     align-items: center;
     padding: 1rem 2rem;
     border-bottom: 1px solid var(--border-color);
-    background: rgba(15, 23, 42, 0.9);
+    background: var(--nav-bg);
     backdrop-filter: blur(10px);
     position: sticky;
     top: 0;
@@ -275,7 +339,7 @@ body {
         left: 0;
         right: 0;
         flex-direction: column;
-        background: rgba(15, 23, 42, 0.97);
+        background: var(--nav-bg-mobile);
         backdrop-filter: blur(10px);
         border-bottom: 1px solid var(--border-color);
         padding: 1rem 2rem;
@@ -302,6 +366,30 @@ body {
         display: block !important;
     }
 }
+
+/* ============================================================
+   Theme Toggle
+   ============================================================ */
+.theme-toggle {
+    background: none;
+    border: 1px solid var(--border-color);
+    color: var(--text-secondary);
+    cursor: pointer;
+    font-family: var(--font-mono);
+    font-size: 0.85rem;
+    padding: 2px 8px;
+    border-radius: var(--radius-sm);
+    line-height: 1.4;
+    transition: color 0.2s, border-color 0.2s;
+}
+.theme-toggle:hover {
+    color: var(--accent-primary);
+    border-color: var(--accent-primary);
+}
+.theme-toggle .theme-icon-light { display: none; }
+.theme-toggle .theme-icon-dark  { display: inline; }
+:root[data-theme="light"] .theme-toggle .theme-icon-light { display: inline; }
+:root[data-theme="light"] .theme-toggle .theme-icon-dark  { display: none; }
 
 /* ============================================================
    Authentication Forms

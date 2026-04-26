@@ -28,7 +28,7 @@
         font-family: var(--font-mono, 'Courier New', monospace);
         font-size: 0.85rem;
         color: var(--text-primary, #e0e0e0);
-        background: rgba(10, 10, 15, 0.85);
+        background: var(--bg-panel-translucent);
         border: 1px solid var(--border-color, #333);
         border-radius: var(--radius-sm, 4px);
         padding: 0.75rem 1rem;
@@ -76,7 +76,7 @@
         font-family: var(--font-mono, 'Courier New', monospace);
         font-size: 0.75rem;
         color: var(--accent-primary, #00ff88);
-        background: rgba(10, 10, 15, 0.8);
+        background: var(--bg-panel-translucent);
         padding: 2px 8px;
         border-radius: 3px;
         pointer-events: none;
@@ -108,7 +108,7 @@
         position: absolute; top: 1rem; right: 1rem; z-index: 10;
         font-family: var(--font-mono, 'Courier New', monospace);
         font-size: 0.8rem; color: var(--text-primary, #e0e0e0);
-        background: rgba(10, 10, 15, 0.85); border: 1px solid var(--border-color, #333);
+        background: var(--bg-panel-translucent); border: 1px solid var(--border-color, #333);
         border-radius: var(--radius-sm, 4px); padding: 0.75rem 1rem;
         min-width: 220px; backdrop-filter: blur(6px);
     ">
@@ -332,7 +332,30 @@
     // ── Scene setup ────────────────────────────────────────────────
     const container = document.getElementById("starmap-container");
     const scene = new THREE.Scene();
-    scene.background = new THREE.Color(0x06060c);
+
+    // Palette swaps with the global light/dark toggle. Star colors stay
+    // physical (spectral class), but the void/grid/axis/route lines flip
+    // so the map is legible in both themes. See applyStarmapTheme() below.
+    function starmapPalette() {
+        var light = document.documentElement.getAttribute('data-theme') === 'light';
+        return light ? {
+            bg:         0xe2e8f0,  // slate-200 — pale "space"
+            gridMain:   0xcbd5e1,  // slate-300
+            gridSub:    0xd1dae5,  // between 200 and 300
+            axis:       0x94a3b8,  // slate-400
+            connection: 0x64748b,  // slate-500
+            connectionOpacity: 0.35,
+        } : {
+            bg:         0x06060c,
+            gridMain:   0x1a1a2e,
+            gridSub:    0x0d0d1a,
+            axis:       0x1a1a2e,
+            connection: 0x1a3a2a,
+            connectionOpacity: 0.15,
+        };
+    }
+    var PAL = starmapPalette();
+    scene.background = new THREE.Color(PAL.bg);
 
     const camera = new THREE.PerspectiveCamera(
         60, container.clientWidth / container.clientHeight, 0.1, 500
@@ -357,8 +380,10 @@
     };
 
     // ── Ambient grid / reference ───────────────────────────────────
-    // Faint grid on the xz-plane for spatial reference
-    const gridHelper = new THREE.GridHelper(80, 40, 0x1a1a2e, 0x0d0d1a);
+    // Faint grid on the xz-plane for spatial reference. Held in a `var`
+    // so applyStarmapTheme() can swap it (GridHelper bakes colors into
+    // vertex attributes, so re-tinting requires recreating the helper).
+    var gridHelper = new THREE.GridHelper(80, 40, PAL.gridMain, PAL.gridSub);
     scene.add(gridHelper);
 
     // Axis lines (subtle)
@@ -370,7 +395,7 @@
          0, 0, -axisLen,  0, 0, axisLen    // z
     ]);
     axisGeo.setAttribute("position", new THREE.BufferAttribute(axisPositions, 3));
-    const axisMat = new THREE.LineBasicMaterial({ color: 0x1a1a2e, transparent: true, opacity: 0.4 });
+    const axisMat = new THREE.LineBasicMaterial({ color: PAL.axis, transparent: true, opacity: 0.4 });
     const axisLines = new THREE.LineSegments(axisGeo, axisMat);
     scene.add(axisLines);
 
@@ -463,12 +488,31 @@
             var lineGeo = new THREE.BufferGeometry();
             var positions = new Float32Array([0, 0, 0, star.x, star.y, star.z]);
             lineGeo.setAttribute("position", new THREE.BufferAttribute(positions, 3));
-            var lineMat = new THREE.LineBasicMaterial({ color: 0x1a3a2a, transparent: true, opacity: 0.15 });
+            var lineMat = new THREE.LineBasicMaterial({ color: PAL.connection, transparent: true, opacity: PAL.connectionOpacity });
             var line = new THREE.Line(lineGeo, lineMat);
             scene.add(line);
             connectionLines.push(line);
         });
     }
+
+    // Repaint scene chrome (background, grid, axes, route lines) when
+    // the global theme toggle fires. Stars/route segments keep their
+    // semantic colors.
+    function applyStarmapTheme() {
+        PAL = starmapPalette();
+        scene.background = new THREE.Color(PAL.bg);
+        scene.remove(gridHelper);
+        gridHelper.geometry.dispose();
+        gridHelper.material.dispose();
+        gridHelper = new THREE.GridHelper(80, 40, PAL.gridMain, PAL.gridSub);
+        scene.add(gridHelper);
+        axisMat.color.setHex(PAL.axis);
+        connectionLines.forEach(function(line) {
+            line.material.color.setHex(PAL.connection);
+            line.material.opacity = PAL.connectionOpacity;
+        });
+    }
+    window.addEventListener('themechange', applyStarmapTheme);
 
     function rebuildStars() {
         // Remove old stars

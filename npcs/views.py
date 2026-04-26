@@ -81,12 +81,14 @@ def api_npc_list(request):
                 status=403,
             )
 
-        # Optionally assign to an agency
+        # Optionally assign to an agency. Admin access is already gated above,
+        # so any agency (player or NPC) is fair game — this keeps the create
+        # path consistent with the superuser update path further down.
         agency = None
         agency_id = body.get("agencyId")
         if agency_id:
             try:
-                agency = Agency.objects.get(pk=agency_id, is_player_agency=False)
+                agency = Agency.objects.get(pk=agency_id)
             except Agency.DoesNotExist:
                 pass
 

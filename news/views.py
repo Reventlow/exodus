@@ -1,19 +1,63 @@
 """Views for the news application."""
 
+import datetime as _dt
 import json
 import os
 
+from dateutil import parser as _dateutil_parser
 from django.contrib.auth import get_user_model
 from django.contrib.auth.decorators import login_required
 from django.http import JsonResponse
 from django.shortcuts import get_object_or_404, render
 from django.utils import timezone
+from django.utils.dateparse import parse_datetime
 from django.views.decorators.http import require_http_methods
 
 from .models import NewsArticle, NewsAttachment
 from .serializers import serialize_article, serialize_article_summary
 
 User = get_user_model()
+
+
+def _coerce_game_date_sort(value):
+    """Parse a client-supplied gameDateSort into a datetime (or None).
+
+    Accepts ISO-8601 strings (including a trailing 'Z'), existing datetime
+    instances, or None. Returns None for anything unparseable so a bad value
+    never gets written straight into a DateTimeField as a string.
+    """
+    if value is None or value == "":
+        return None
+    if hasattr(value, "isoformat"):
+        return value
+    if isinstance(value, str):
+        # Django's parse_datetime doesn't accept the 'Z' suffix.
+        normalised = value.replace("Z", "+00:00")
+        return parse_datetime(normalised)
+    return None
+
+
+def _derive_sort_from_game_date(game_date):
+    """Best-effort parse of the free-text game_date into a sortable datetime.
+
+    The UI's IN-GAME DATE field is free-form text ("May 5, 2036",
+    "9 February 2036, Evening", "2036-05-05"). We use dateutil.parser with
+    fuzzy=True so trailing words like "Evening" don't break parsing, and
+    anchor missing time components to midday UTC so chronological ordering
+    is stable across articles that only specify a day.
+
+    Returns a timezone-aware datetime, or None if nothing parseable is found.
+    """
+    if not game_date or not isinstance(game_date, str):
+        return None
+    default = _dt.datetime(2036, 1, 1, 12, 0, 0, tzinfo=_dt.timezone.utc)
+    try:
+        parsed = _dateutil_parser.parse(game_date, fuzzy=True, default=default)
+    except (ValueError, OverflowError, _dateutil_parser.ParserError):
+        return None
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=_dt.timezone.utc)
+    return parsed
 
 
 # ---------------------------------------------------------------------------
@@ -72,7 +116,12 @@ def api_news_list(request):
     content = body.get("content", "")
     visibility = body.get("visibility", "hidden")
     game_date = body.get("gameDate", "")
-    game_date_sort = body.get("gameDateSort")
+    # Prefer an explicit client-supplied sort; otherwise derive one from the
+    # free-text game_date so UI-created articles slot into the timeline.
+    if "gameDateSort" in body:
+        game_date_sort = _coerce_game_date_sort(body.get("gameDateSort"))
+    else:
+        game_date_sort = _derive_sort_from_game_date(game_date)
     eyes_only_player_id = body.get("eyesOnlyPlayerId")
 
     if visibility not in ("hidden", "eyes_only", "public"):
@@ -140,8 +189,12 @@ def api_news_detail(request, pk):
         article.content = body["content"]
     if "gameDate" in body:
         article.game_date = body["gameDate"]
+        # If the caller updates the display date but doesn't also send an
+        # explicit sort key, re-derive it from the new text.
+        if "gameDateSort" not in body:
+            article.game_date_sort = _derive_sort_from_game_date(body["gameDate"])
     if "gameDateSort" in body:
-        article.game_date_sort = body["gameDateSort"]
+        article.game_date_sort = _coerce_game_date_sort(body["gameDateSort"])
     if "featuredImageFull" in body:
         article.featured_image_full = body["featuredImageFull"]
     if "visibility" in body:

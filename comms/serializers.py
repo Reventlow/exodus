@@ -80,6 +80,7 @@ def serialize_message(message: Message) -> dict:
         "content": message.content,
         "image": message.image.url if message.image else None,
         "createdAt": localtime(message.created_at).isoformat(),
+        "editedAt": localtime(message.edited_at).isoformat() if message.edited_at else None,
     }
     if message.posted_as_type and message.posted_as_name:
         data["postedAs"] = {

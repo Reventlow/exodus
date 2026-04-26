@@ -307,6 +307,48 @@ def send_message(request, thread_id):
     return JsonResponse(msg_data, status=201)
 
 
+@login_required
+@require_http_methods(["PUT", "DELETE"])
+def edit_message(request, thread_id, message_id):
+    """Edit or delete a message. Superuser only."""
+    if not request.user.is_superuser:
+        return JsonResponse({"error": "Forbidden"}, status=403)
+    thread = get_object_or_404(Thread, pk=thread_id)
+    message = get_object_or_404(Message, pk=message_id, thread=thread)
+
+    if request.method == "DELETE":
+        message.delete()
+        # Broadcast deletion to WebSocket clients
+        channel_layer = get_channel_layer()
+        async_to_sync(channel_layer.group_send)(
+            f"thread_{thread.pk}",
+            {"type": "message.deleted", "message_id": message_id},
+        )
+        return JsonResponse({"status": "deleted"})
+
+    # PUT — edit content
+    try:
+        body = json.loads(request.body)
+    except json.JSONDecodeError:
+        return JsonResponse({"error": "Invalid JSON"}, status=400)
+
+    if "content" in body:
+        message.content = body["content"]
+        message.edited_at = timezone.now()
+        message.save(update_fields=["content", "edited_at"])
+
+    msg_data = serialize_message(message)
+
+    # Broadcast edit to WebSocket clients
+    channel_layer = get_channel_layer()
+    async_to_sync(channel_layer.group_send)(
+        f"thread_{thread.pk}",
+        {"type": "message.edited", "message": msg_data},
+    )
+
+    return JsonResponse(msg_data)
+
+
 # ---------------------------------------------------------------------------
 # Members
 # ---------------------------------------------------------------------------

@@ -16,6 +16,7 @@ urlpatterns = [
     path("api/comms/threads/<int:thread_id>/delete/", views.delete_thread, name="delete-thread"),
     path("api/comms/threads/<int:thread_id>/alias/", views.update_alias, name="update-alias"),
     path("api/comms/threads/<int:thread_id>/messages/", views.send_message, name="send-message"),
+    path("api/comms/threads/<int:thread_id>/messages/<int:message_id>/", views.edit_message, name="edit-message"),
     path("api/comms/threads/<int:thread_id>/members/", views.add_member, name="add-member"),
     path(
         "api/comms/threads/<int:thread_id>/members/<int:user_id>/",

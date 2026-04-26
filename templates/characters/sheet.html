@@ -1284,8 +1284,8 @@
 
         const doTransfer = async () => {
             if (!transferAgency || transferAmount < 1) return;
-            if (transferAmount > (char.experience || 0)) {
-                setTransferStatus('Insufficient XP.');
+            if (transferAmount > remaining) {
+                setTransferStatus(`Insufficient surplus XP. You have ${Math.max(0, remaining)} available to donate.`);
                 return;
             }
             setTransferStatus('Transferring...');

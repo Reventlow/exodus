@@ -144,6 +144,19 @@ class SiteSettings(models.Model):
         ),
     )
 
+    # Base-building class restrictions: { "soldier": True, ... } means that
+    # class's locked items (required_class="soldier") are unlocked for all
+    # characters. Missing key or False = restriction still enforced.
+    class_unlock_flags = models.JSONField(
+        default=dict, blank=True,
+        help_text=(
+            "Per-class base-building unlock flags. If a class key is True, "
+            "items flagged required_class=<that class> become available to "
+            "all characters. Use when the campaign has no character of that "
+            "class so the mechanics are not inaccessible."
+        ),
+    )
+
     # Nav bar label customisation
     label_dispatch = models.CharField(max_length=50, default="DISPATCH", blank=True)
     label_players = models.CharField(max_length=50, default="PLAYERS", blank=True)

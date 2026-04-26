@@ -1,0 +1,474 @@
+{% extends "base.html" %}
+{% load static %}
+{% block title %}GM WORKSPACE // EXODUS{% endblock %}
+
+{% block content %}
+<style>
+    .gm-shell { display: flex; min-height: calc(100vh - 120px); }
+    .gm-main { flex: 1; display: flex; min-width: 0; }
+    .gm-list {
+        width: 320px; flex-shrink: 0;
+        border-right: 1px solid var(--border-color);
+        display: flex; flex-direction: column;
+        min-height: calc(100vh - 120px);
+    }
+    .gm-list-header {
+        padding: 0.75rem; border-bottom: 1px solid var(--border-color);
+        display: flex; gap: 0.5rem; flex-direction: column;
+    }
+    .gm-list-scroll { overflow-y: auto; flex: 1; }
+    .gm-note-item {
+        padding: 0.75rem; cursor: pointer;
+        border-bottom: 1px solid rgba(51,65,85,0.4);
+        transition: background 0.1s;
+    }
+    .gm-note-item:hover { background: rgba(56,189,248,0.04); }
+    .gm-note-item.active {
+        background: rgba(56,189,248,0.08);
+        border-left: 2px solid var(--accent-primary);
+    }
+    .gm-editor { flex: 1; padding: 1.25rem; overflow-y: auto; }
+    .gm-input {
+        background: transparent; border: 1px solid var(--border-color);
+        color: var(--text-primary); padding: 0.5rem;
+        font-family: var(--font-mono); width: 100%;
+        border-radius: 3px; font-size: 0.9rem;
+    }
+    .gm-input:focus { border-color: var(--accent-primary); outline: none; }
+    .gm-textarea {
+        background: transparent; border: 1px solid var(--border-color);
+        color: var(--text-primary); padding: 0.75rem;
+        font-family: var(--font-mono); width: 100%;
+        min-height: 400px; resize: vertical;
+        border-radius: 3px; font-size: 0.85rem;
+        line-height: 1.5;
+    }
+    .gm-textarea:focus { border-color: var(--accent-primary); outline: none; }
+    .gm-btn {
+        background: transparent; border: 1px solid var(--border-color);
+        color: var(--text-secondary); padding: 0.35rem 0.75rem;
+        cursor: pointer; font-family: var(--font-mono);
+        font-size: 0.75rem; letter-spacing: 1px; border-radius: 3px;
+    }
+    .gm-btn.primary { border-color: var(--accent-primary); color: var(--accent-primary); }
+    .gm-btn.danger { border-color: var(--accent-danger); color: var(--accent-danger); }
+    .gm-btn:hover:not(:disabled) { background: rgba(255,255,255,0.04); }
+    .gm-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+    .gm-chip {
+        display: inline-block; padding: 0.1rem 0.4rem;
+        background: rgba(56,189,248,0.08); color: var(--accent-primary);
+        border: 1px solid var(--accent-primary); border-radius: 3px;
+        font-family: var(--font-mono); font-size: 0.65rem;
+        margin-right: 0.25rem; letter-spacing: 1px;
+    }
+    .gm-preview {
+        background: rgba(0,0,0,0.25); border: 1px solid var(--border-color);
+        border-radius: 3px; padding: 1rem;
+        color: var(--text-primary); line-height: 1.6;
+        min-height: 400px;
+    }
+    .gm-preview h1, .gm-preview h2, .gm-preview h3 {
+        color: var(--accent-primary); font-family: var(--font-mono);
+        margin-top: 1rem; margin-bottom: 0.5rem;
+    }
+    .gm-preview code {
+        background: rgba(255,255,255,0.08); padding: 0.1rem 0.3rem;
+        border-radius: 2px; font-size: 0.85em;
+    }
+    .gm-preview pre {
+        background: rgba(0,0,0,0.4); padding: 0.75rem;
+        border-radius: 3px; overflow-x: auto;
+    }
+    .gm-preview blockquote {
+        border-left: 3px solid var(--accent-primary);
+        padding-left: 1rem; color: var(--text-secondary);
+        margin: 0.5rem 0;
+    }
+    .gm-preview a { color: var(--accent-primary); }
+    .gm-preview ul, .gm-preview ol { padding-left: 1.5rem; }
+</style>
+
+<div class="gm-shell">
+    {% include "gm_workspace/_sidebar.html" %}
+    <div id="gm-root" style="flex: 1; display: flex; min-width: 0;"></div>
+</div>
+
+<script>
+  window.__CSRF__ = "{{ csrf_token }}";
+</script>
+
+<script type="text/babel">
+{% verbatim %}
+const { useState, useEffect, useMemo, useRef } = React;
+
+const CSRF = window.__CSRF__;
+
+function api(url, opts = {}) {
+    return fetch(url, {
+        headers: {
+            "Content-Type": "application/json",
+            "X-CSRFToken": CSRF,
+        },
+        ...opts,
+    }).then(r => {
+        if (!r.ok) return r.text().then(t => Promise.reject({ status: r.status, body: t }));
+        return r.json();
+    });
+}
+
+// Debounce hook
+function useDebouncedEffect(fn, deps, ms) {
+    const tRef = useRef();
+    useEffect(() => {
+        clearTimeout(tRef.current);
+        tRef.current = setTimeout(fn, ms);
+        return () => clearTimeout(tRef.current);
+    }, deps);  // eslint-disable-line
+}
+
+function NoteListItem({ note, active, onClick }) {
+    const tags = (note.tags || "").split(",").map(t => t.trim()).filter(Boolean);
+    return (
+        <div className={`gm-note-item ${active ? "active" : ""}`} onClick={onClick}>
+            <div style={{ display: "flex", alignItems: "center", gap: "0.3rem", marginBottom: "0.2rem" }}>
+                {note.pinned && <span style={{ color: "var(--accent-warning)" }}>★</span>}
+                <span className="mono-text" style={{
+                    color: "var(--text-primary)", fontSize: "0.85rem",
+                    overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap"
+                }}>
+                    {note.title || "Untitled"}
+                </span>
+                {note.isShared && (
+                    <span style={{
+                        color: "var(--accent-success)", fontSize: "0.6rem",
+                        fontFamily: "var(--font-mono)", letterSpacing: "1px",
+                    }} title="Shared with players">◉</span>
+                )}
+            </div>
+            <div className="text-muted" style={{ fontSize: "0.7rem", marginBottom: "0.25rem" }}>
+                {new Date(note.updatedAt).toLocaleDateString("en-GB", {
+                    day: "numeric", month: "short", year: "numeric"
+                })}
+            </div>
+            {note.excerpt && (
+                <div className="text-muted" style={{ fontSize: "0.7rem", lineHeight: 1.3 }}>
+                    {note.excerpt}
+                </div>
+            )}
+            {tags.length > 0 && (
+                <div style={{ marginTop: "0.3rem" }}>
+                    {tags.map(t => <span key={t} className="gm-chip">{t}</span>)}
+                </div>
+            )}
+        </div>
+    );
+}
+
+function Editor({ note, players, onSave, onDelete, saveStatus }) {
+    const [title, setTitle] = useState(note.title || "");
+    const [content, setContent] = useState(note.content || "");
+    const [tags, setTags] = useState(note.tags || "");
+    const [pinned, setPinned] = useState(!!note.pinned);
+    const [sharedIds, setSharedIds] = useState(
+        (note.sharedWith || []).map(u => u.id)
+    );
+    // "edit" | "split" | "preview" — remembered in localStorage so it persists across notes
+    const [viewMode, setViewMode] = useState(() => {
+        try { return localStorage.getItem("gm_view_mode") || "edit"; }
+        catch (e) { return "edit"; }
+    });
+    const setView = (m) => {
+        setViewMode(m);
+        try { localStorage.setItem("gm_view_mode", m); } catch (e) {}
+    };
+    const [showShare, setShowShare] = useState(false);
+
+    // When the selected note changes, reset the editor state (but keep viewMode).
+    const lastId = useRef(note.id);
+    useEffect(() => {
+        if (note.id !== lastId.current) {
+            setTitle(note.title || "");
+            setContent(note.content || "");
+            setTags(note.tags || "");
+            setPinned(!!note.pinned);
+            setSharedIds((note.sharedWith || []).map(u => u.id));
+            lastId.current = note.id;
+        }
+    }, [note.id]);
+
+    // Auto-save 1.5s after the last change
+    useDebouncedEffect(() => {
+        if (note.id == null) return;
+        onSave({
+            title, content, tags, pinned,
+            sharedWithIds: sharedIds,
+        });
+    }, [title, content, tags, pinned, sharedIds], 1500);
+
+    const togglePlayer = (id) => {
+        setSharedIds(prev => prev.includes(id) ? prev.filter(p => p !== id) : [...prev, id]);
+    };
+
+    const rendered = useMemo(() => {
+        try {
+            return window.marked ? window.marked.parse(content || "") : content;
+        } catch (e) { return content; }
+    }, [content]);
+
+    return (
+        <div className="gm-editor">
+            <div style={{ display: "flex", gap: "0.5rem", alignItems: "center", marginBottom: "0.5rem" }}>
+                <input className="gm-input" value={title} onChange={e => setTitle(e.target.value)}
+                    placeholder="Title"
+                    style={{ flex: 1, fontSize: "1.1rem", fontWeight: "bold" }} />
+                <button className="gm-btn" onClick={() => setPinned(!pinned)}
+                    title={pinned ? "Unpin" : "Pin"}
+                    style={pinned ? { borderColor: "var(--accent-warning)", color: "var(--accent-warning)" } : {}}>
+                    {pinned ? "★ PINNED" : "☆ PIN"}
+                </button>
+                <div style={{ display: "inline-flex", border: "1px solid var(--border-color)", borderRadius: "3px", overflow: "hidden" }}>
+                    {["edit", "split", "preview"].map(m => (
+                        <button key={m}
+                            onClick={() => setView(m)}
+                            className="mono-text"
+                            style={{
+                                background: viewMode === m ? "rgba(56,189,248,0.12)" : "transparent",
+                                color: viewMode === m ? "var(--accent-primary)" : "var(--text-secondary)",
+                                border: "none",
+                                padding: "0.35rem 0.75rem",
+                                cursor: "pointer",
+                                fontSize: "0.75rem",
+                                letterSpacing: "1px",
+                                borderRight: m !== "preview" ? "1px solid var(--border-color)" : "none",
+                            }}>
+                            {m.toUpperCase()}
+                        </button>
+                    ))}
+                </div>
+                <button className="gm-btn" onClick={() => setShowShare(!showShare)}
+                    style={sharedIds.length > 0 ? { borderColor: "var(--accent-success)", color: "var(--accent-success)" } : {}}>
+                    SHARE ({sharedIds.length})
+                </button>
+                <button className="gm-btn danger" onClick={onDelete}>DELETE</button>
+            </div>
+
+            <div style={{ marginBottom: "0.5rem", display: "flex", gap: "0.5rem", alignItems: "center" }}>
+                <span className="mono-text text-muted" style={{ fontSize: "0.7rem", letterSpacing: "1px" }}>TAGS</span>
+                <input className="gm-input" value={tags} onChange={e => setTags(e.target.value)}
+                    placeholder="comma, separated, tags"
+                    style={{ flex: 1, fontSize: "0.8rem" }} />
+                <span className="mono-text text-muted" style={{ fontSize: "0.7rem" }}>
+                    {saveStatus}
+                </span>
+            </div>
+
+            {showShare && (
+                <div style={{
+                    background: "rgba(0,0,0,0.25)", border: "1px solid var(--border-color)",
+                    padding: "0.75rem", borderRadius: "3px", marginBottom: "0.75rem",
+                }}>
+                    <div className="mono-text text-muted" style={{ fontSize: "0.7rem", letterSpacing: "1px", marginBottom: "0.5rem" }}>
+                        SHARE WITH PLAYERS
+                    </div>
+                    <div style={{ display: "flex", flexWrap: "wrap", gap: "0.4rem" }}>
+                        {players.length === 0 && (
+                            <span className="text-muted" style={{ fontSize: "0.75rem", fontStyle: "italic" }}>
+                                No players registered yet.
+                            </span>
+                        )}
+                        {players.map(p => {
+                            const on = sharedIds.includes(p.id);
+                            return (
+                                <button key={p.id}
+                                    onClick={() => togglePlayer(p.id)}
+                                    className="gm-btn"
+                                    style={on ? {
+                                        borderColor: "var(--accent-success)",
+                                        color: "var(--accent-success)",
+                                        background: "rgba(34,197,94,0.08)",
+                                    } : {}}>
+                                    {on ? "✓ " : ""}{p.displayName}
+                                </button>
+                            );
+                        })}
+                    </div>
+                    {players.length > 0 && (
+                        <div style={{ marginTop: "0.5rem", display: "flex", gap: "0.4rem" }}>
+                            <button className="gm-btn" onClick={() => setSharedIds(players.map(p => p.id))}>
+                                ALL PLAYERS
+                            </button>
+                            <button className="gm-btn" onClick={() => setSharedIds([])}>
+                                NONE
+                            </button>
+                        </div>
+                    )}
+                </div>
+            )}
+
+            {viewMode === "edit" && (
+                <textarea className="gm-textarea" value={content}
+                    onChange={e => setContent(e.target.value)}
+                    placeholder="Write your story idea in markdown..." />
+            )}
+            {viewMode === "preview" && (
+                <div className="gm-preview" dangerouslySetInnerHTML={{ __html: rendered }} />
+            )}
+            {viewMode === "split" && (
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0.75rem", alignItems: "stretch" }}>
+                    <textarea className="gm-textarea" value={content}
+                        onChange={e => setContent(e.target.value)}
+                        placeholder="Write your story idea in markdown..."
+                        style={{ minHeight: "500px" }} />
+                    <div className="gm-preview" style={{ minHeight: "500px", overflowY: "auto" }}
+                        dangerouslySetInnerHTML={{ __html: rendered }} />
+                </div>
+            )}
+        </div>
+    );
+}
+
+function EmptyState({ onCreate }) {
+    return (
+        <div style={{
+            flex: 1, display: "flex", alignItems: "center", justifyContent: "center",
+            flexDirection: "column", gap: "1rem", color: "var(--text-muted)",
+        }}>
+            <div className="mono-text" style={{ fontSize: "0.9rem", letterSpacing: "2px" }}>
+                NO NOTE SELECTED
+            </div>
+            <button className="gm-btn primary" onClick={onCreate}>+ NEW IDEA</button>
+        </div>
+    );
+}
+
+function App() {
+    const [notes, setNotes] = useState([]);
+    const [players, setPlayers] = useState([]);
+    const [activeId, setActiveId] = useState(null);
+    const [activeNote, setActiveNote] = useState(null);
+    const [filter, setFilter] = useState("");
+    const [loading, setLoading] = useState(true);
+    const [saveStatus, setSaveStatus] = useState("");
+
+    const loadList = () => {
+        return api("/api/gm/story-ideas/").then(d => {
+            setNotes(d.ideas || []);
+            setPlayers(d.players || []);
+            return d;
+        });
+    };
+
+    const loadDetail = (id) => {
+        if (id == null) { setActiveNote(null); return; }
+        api(`/api/gm/story-ideas/${id}/`).then(d => setActiveNote(d));
+    };
+
+    useEffect(() => {
+        loadList().then(d => {
+            setLoading(false);
+            // Deep link: /gm/story-ideas/<id>/ via URL fragment
+            const match = location.pathname.match(/\/gm\/story-ideas\/(\d+)/);
+            if (match) {
+                setActiveId(parseInt(match[1]));
+            } else if (d.ideas && d.ideas.length > 0) {
+                setActiveId(d.ideas[0].id);
+            }
+        });
+    }, []);
+
+    useEffect(() => { loadDetail(activeId); }, [activeId]);
+
+    const create = () => {
+        setSaveStatus("creating...");
+        api("/api/gm/story-ideas/", {
+            method: "POST",
+            body: JSON.stringify({ title: "New idea", content: "", tags: "", pinned: false, sharedWithIds: [] }),
+        }).then(d => {
+            setSaveStatus("");
+            loadList();
+            setActiveId(d.id);
+        });
+    };
+
+    const save = (payload) => {
+        if (activeId == null) return;
+        setSaveStatus("saving...");
+        api(`/api/gm/story-ideas/${activeId}/`, {
+            method: "PUT",
+            body: JSON.stringify(payload),
+        }).then(d => {
+            setSaveStatus("saved");
+            setActiveNote(d);
+            loadList();
+            setTimeout(() => setSaveStatus(""), 1500);
+        }).catch(() => setSaveStatus("save failed"));
+    };
+
+    const del = () => {
+        if (activeId == null) return;
+        if (!confirm("Delete this note permanently?")) return;
+        api(`/api/gm/story-ideas/${activeId}/`, { method: "DELETE" }).then(() => {
+            setActiveId(null);
+            setActiveNote(null);
+            loadList();
+        });
+    };
+
+    const filteredNotes = useMemo(() => {
+        if (!filter.trim()) return notes;
+        const f = filter.toLowerCase();
+        return notes.filter(n =>
+            (n.title || "").toLowerCase().includes(f) ||
+            (n.tags || "").toLowerCase().includes(f) ||
+            (n.excerpt || "").toLowerCase().includes(f)
+        );
+    }, [notes, filter]);
+
+    return (
+        <div className="gm-main">
+                <div className="gm-list">
+                    <div className="gm-list-header">
+                        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                            <span className="mono-text text-accent" style={{ fontSize: "0.9rem", letterSpacing: "2px" }}>
+                                STORY IDEAS
+                            </span>
+                            <button className="gm-btn primary" onClick={create}>+ NEW</button>
+                        </div>
+                        <input className="gm-input" value={filter} onChange={e => setFilter(e.target.value)}
+                            placeholder="Filter by title, tag, or content..."
+                            style={{ fontSize: "0.8rem" }} />
+                    </div>
+                    <div className="gm-list-scroll">
+                        {loading && (
+                            <div className="text-muted" style={{ padding: "1rem", fontSize: "0.8rem", fontStyle: "italic" }}>
+                                Loading...
+                            </div>
+                        )}
+                        {!loading && filteredNotes.length === 0 && (
+                            <div className="text-muted" style={{ padding: "1rem", fontSize: "0.8rem", fontStyle: "italic" }}>
+                                {notes.length === 0 ? "No notes yet. Create your first idea." : "No notes match the filter."}
+                            </div>
+                        )}
+                        {filteredNotes.map(n => (
+                            <NoteListItem key={n.id} note={n}
+                                active={n.id === activeId}
+                                onClick={() => setActiveId(n.id)} />
+                        ))}
+                    </div>
+                </div>
+                {activeNote ? (
+                    <Editor key={activeNote.id} note={activeNote}
+                        players={players}
+                        onSave={save} onDelete={del}
+                        saveStatus={saveStatus} />
+                ) : (
+                    <EmptyState onCreate={create} />
+                )}
+        </div>
+    );
+}
+
+ReactDOM.createRoot(document.getElementById("gm-root")).render(<App />);
+{% endverbatim %}
+</script>
+{% endblock %}

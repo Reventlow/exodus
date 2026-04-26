@@ -85,6 +85,10 @@
             <button class="sidebar-item" onclick="showSection('nav-labels', this)">Nav Labels</button>
         </div>
         <div class="sidebar-group">
+            <div class="sidebar-group-label">BASES</div>
+            <button class="sidebar-item" onclick="showSection('base-access', this)">Class Access</button>
+        </div>
+        <div class="sidebar-group">
             <div class="sidebar-group-label">MAPS</div>
             <button class="sidebar-item" onclick="showSection('city-maps', this)">City Maps</button>
             <button class="sidebar-item" onclick="showSection('starmap-config', this)">Star Map</button>
@@ -227,6 +231,48 @@
                     <label class="text-muted mono-text" style="font-size: 0.65rem;">COMMS</label>
                     <input type="text" name="label_comms" value="{{ settings_obj.label_comms }}" style="width: 100%; background: var(--bg-input); border: 1px solid var(--border-color); color: var(--text-primary); padding: 0.4rem; font-family: var(--font-mono); font-size: 0.8rem;">
                 </div>
+            </div>
+            <button type="submit" class="mono-text" style="width: 100%; background: var(--accent-primary); color: var(--bg-dark); border: none; padding: 0.6rem; cursor: pointer; font-weight: bold; font-size: 0.9rem; letter-spacing: 1px;">SAVE</button>
+        </div>
+
+        <!-- Base Access (class unlocks) -->
+        <div id="sec-base-access" class="settings-section">
+            <h3>BASE ACCESS</h3>
+            <span class="text-muted mono-text" style="font-size: 0.7rem; display: block; margin-bottom: 1rem;">
+                Base-building items (locations, merits, facilities, equipment) can be locked to a specific character class. If your campaign has no character of that class, tick a box below to unlock those items for every character.
+            </span>
+            <input type="hidden" name="class_unlock_submitted" value="1">
+            <div style="margin-bottom: 1.5rem; padding: 1rem; border: 1px solid var(--border-color); border-radius: var(--radius-sm); display: grid; gap: 0.65rem;">
+                {% with flags=settings_obj.class_unlock_flags %}
+                <label style="display: flex; align-items: center; gap: 0.75rem; cursor: pointer;">
+                    <input type="checkbox" name="class_unlock_soldier" {% if flags.soldier %}checked{% endif %}
+                        style="width: 20px; height: 20px; accent-color: var(--accent-primary);">
+                    <span class="mono-text" style="font-size: 0.9rem; color: var(--text-primary);">UNLOCK SOLDIER ITEMS FOR ALL</span>
+                </label>
+                <label style="display: flex; align-items: center; gap: 0.75rem; cursor: pointer;">
+                    <input type="checkbox" name="class_unlock_science" {% if flags.science %}checked{% endif %}
+                        style="width: 20px; height: 20px; accent-color: var(--accent-primary);">
+                    <span class="mono-text" style="font-size: 0.9rem; color: var(--text-primary);">UNLOCK SCIENCE ITEMS FOR ALL</span>
+                </label>
+                <label style="display: flex; align-items: center; gap: 0.75rem; cursor: pointer;">
+                    <input type="checkbox" name="class_unlock_engineer" {% if flags.engineer %}checked{% endif %}
+                        style="width: 20px; height: 20px; accent-color: var(--accent-primary);">
+                    <span class="mono-text" style="font-size: 0.9rem; color: var(--text-primary);">UNLOCK ENGINEER ITEMS FOR ALL</span>
+                </label>
+                <label style="display: flex; align-items: center; gap: 0.75rem; cursor: pointer;">
+                    <input type="checkbox" name="class_unlock_fixer" {% if flags.fixer %}checked{% endif %}
+                        style="width: 20px; height: 20px; accent-color: var(--accent-primary);">
+                    <span class="mono-text" style="font-size: 0.9rem; color: var(--text-primary);">UNLOCK FIXER ITEMS FOR ALL</span>
+                </label>
+                <label style="display: flex; align-items: center; gap: 0.75rem; cursor: pointer;">
+                    <input type="checkbox" name="class_unlock_ai" {% if flags.ai %}checked{% endif %}
+                        style="width: 20px; height: 20px; accent-color: var(--accent-primary);">
+                    <span class="mono-text" style="font-size: 0.9rem; color: var(--text-primary);">UNLOCK AI ITEMS FOR ALL</span>
+                </label>
+                {% endwith %}
+                <span class="text-muted mono-text" style="font-size: 0.7rem; display: block; margin-top: 0.25rem;">
+                    Superusers always see every item regardless of these toggles. "General" items are available to everyone and are unaffected.
+                </span>
             </div>
             <button type="submit" class="mono-text" style="width: 100%; background: var(--accent-primary); color: var(--bg-dark); border: none; padding: 0.6rem; cursor: pointer; font-weight: bold; font-size: 0.9rem; letter-spacing: 1px;">SAVE</button>
         </div>

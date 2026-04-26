@@ -700,6 +700,9 @@ def serialize_agency(agency, user):
         "conditions": vis("conditions", agency.conditions),
         "projects": _serialize_projects(agency, show_all, user, is_field_visible),
         "history": vis("history", agency.history),
+        # Optimistic concurrency: per-section version map. Frontend echoes
+        # the value via If-Match on subsequent PATCH calls.
+        "sectionVersions": agency.section_versions or {},
     }
 
     # Global flaws — visible to everyone, not editable per-agency
@@ -885,6 +888,92 @@ def serialize_agency(agency, user):
         data["fieldVisibility"] = agency.field_visibility
 
     return data
+
+
+# ---------------------------------------------------------------------------
+# Section-scoped serializers (Phase 1/2 multi-player concurrency)
+# ---------------------------------------------------------------------------
+
+# Maps an agency-level section_key (the URL slug + payload key) to the value
+# we expose on the model. Keep this in sync with the section view dispatcher
+# in views.py — both must agree on the canonical names.
+AGENCY_SECTION_VALUE_GETTERS = {
+    "header": lambda a: {
+        "name": a.name,
+        "motto": a.motto,
+        "headquarters": a.headquarters,
+    },
+    "alliance": lambda a: a.alliance,
+    "notes": lambda a: a.notes,
+    "integrity": lambda a: a.integrity,
+    "attributes": lambda a: a.attributes,
+    "specializations": lambda a: a.specializations,
+    "merits": lambda a: a.merits,
+    "flaws": lambda a: a.flaws,
+    "assets": lambda a: a.assets,
+    "fleet": lambda a: a.fleet,
+    "history": lambda a: a.history,
+    "admin-flags": lambda a: {
+        "mapColor": a.map_color,
+        "isNuclearPower": a.is_nuclear_power,
+        "isHidden": a.is_hidden,
+        "sweepPool": a.sweep_pool,
+        "zeroDayPool": a.zero_day_pool,
+    },
+}
+
+
+def serialize_agency_section(agency, section_key, user=None):
+    """Lightweight serializer for the per-section PATCH endpoints.
+
+    Returns ``{<section_key>: <value>, "version": <n>}`` — no heavy
+    computed fields (project dice pools, sweep info, base config lookups,
+    etc.) so a save-and-respond round-trip stays cheap.
+
+    `user` is accepted for symmetry with the heavy serializer but is not
+    used for redaction here: the section endpoints are gated by view-level
+    permission checks, so by the time we serialize the caller is allowed
+    to see the value.
+    """
+    getter = AGENCY_SECTION_VALUE_GETTERS.get(section_key)
+    if getter is None:
+        raise ValueError(f"Unknown agency section_key: {section_key!r}")
+    versions = agency.section_versions or {}
+    return {
+        section_key: getter(agency),
+        "version": int(versions.get(section_key, 0)),
+    }
+
+
+def serialize_base_section(base, section_key):
+    """Section-scoped serializer for per-base PATCH endpoints.
+
+    Returns ``{<section_key>: <value>, "version": <n>}``.
+    """
+    getter = BASE_SECTION_VALUE_GETTERS.get(section_key)
+    if getter is None:
+        raise ValueError(f"Unknown base section_key: {section_key!r}")
+    return {
+        section_key: getter(base),
+        "version": int(base.version or 0),
+    }
+
+
+# Per-base section value lookups. ``geo`` returns the lat/lon pair; the
+# frontend sends them together so they share one version slot.
+BASE_SECTION_VALUE_GETTERS = {
+    "name": lambda b: b.name,
+    "location": lambda b: b.location_type,
+    "merits": lambda b: b.merits,
+    "facilities": lambda b: b.facilities,
+    "workspaces": lambda b: b.workspaces,
+    "equipment": lambda b: b.equipment,
+    "departments": lambda b: b.departments,
+    "notes": lambda b: b.notes,
+    "geo": lambda b: {"latitude": b.latitude, "longitude": b.longitude},
+    "hidden": lambda b: b.is_hidden,
+    "classified": lambda b: b.hidden_sections or [],
+}
 
 
 def serialize_agency_summary(agency, user):
@@ -1140,22 +1229,25 @@ def _filter_equipment_by_hidden(equipment, hidden_sections):
 def serialize_base(base, is_admin=True, character_class=None, base_config=None, agency=None):
     """Serialize a Base model instance.
 
-    When is_admin is False, sections listed in hidden_sections are redacted.
+    `hidden_sections` is a GM-side redaction tool for NPC bases — it should
+    not apply when the viewer owns the agency (player agency members see
+    their own bases in full). Admins bypass too.
     When character_class is provided, built items are filtered by class visibility.
     base_config is needed to look up required_class for built items.
     """
+    show_all = is_admin or bool(agency and agency.is_player_agency)
     hidden = set(base.hidden_sections or [])
 
     # Filter equipment by category-level hidden sections for non-admins
-    if is_admin:
+    if show_all:
         equipment = base.equipment
     else:
         equipment = _filter_equipment_by_hidden(base.equipment or [], hidden)
 
-    loc_type = base.location_type if (is_admin or "locationType" not in hidden) else ""
-    merits = base.merits if (is_admin or "merits" not in hidden) else []
-    facilities = base.facilities if (is_admin or "facilities" not in hidden) else []
-    workspaces = _resolve_workspace_names(base.workspaces or []) if (is_admin or "workspaces" not in hidden) else []
+    loc_type = base.location_type if (show_all or "locationType" not in hidden) else ""
+    merits = base.merits if (show_all or "merits" not in hidden) else []
+    facilities = base.facilities if (show_all or "facilities" not in hidden) else []
+    workspaces = _resolve_workspace_names(base.workspaces or []) if (show_all or "workspaces" not in hidden) else []
 
     data = {
         "id": base.id,
@@ -1167,21 +1259,23 @@ def serialize_base(base, is_admin=True, character_class=None, base_config=None, 
         "equipment": equipment,
         "departments": [],
         "thriveGlobal": None,
-        "notes": base.notes if (is_admin or "notes" not in hidden) else "",
+        "notes": base.notes if (show_all or "notes" not in hidden) else "",
         "isHidden": base.is_hidden,
         "hiddenSections": (base.hidden_sections or []) if is_admin else [],
-        "latitude": base.latitude if (is_admin or "coordinates" not in hidden) else None,
-        "longitude": base.longitude if (is_admin or "coordinates" not in hidden) else None,
+        "latitude": base.latitude if (show_all or "coordinates" not in hidden) else None,
+        "longitude": base.longitude if (show_all or "coordinates" not in hidden) else None,
+        # Optimistic concurrency token; bumped on every successful section save.
+        "version": base.version,
     }
 
     # Auto-calculate department thrive from facilities
-    if is_admin or "departments" not in hidden:
+    if show_all or "departments" not in hidden:
         thrive_depts, thrive_mod, thrive_reasons = compute_base_thrive(base, agency=agency)
         data["departments"] = thrive_depts
         data["thriveGlobal"] = {"mod": thrive_mod, "reasons": thrive_reasons}
 
     # Add classified markers for redacted sections
-    if not is_admin:
+    if not show_all:
         for section in hidden:
             key = section[0].upper() + section[1:]
             data[f"classified{key}"] = True
@@ -1189,29 +1283,41 @@ def serialize_base(base, is_admin=True, character_class=None, base_config=None, 
     return data
 
 
-def _class_visible(item, character_class):
+def _class_visible(item, character_class, unlocked_classes=None):
     """Check if a config item is visible to the given character class.
 
     Items with required_class 'general' or no required_class are visible to all.
     Admins pass character_class=None to bypass filtering.
+    If unlocked_classes[rc] is True, the class restriction is bypassed for all
+    characters (campaign has no character of that class — unlock the mechanics).
     """
     if character_class is None:
         return True
     rc = item.get("required_class", "general")
-    return rc == "general" or rc == character_class
+    if rc == "general":
+        return True
+    if unlocked_classes and unlocked_classes.get(rc):
+        return True
+    return rc == character_class
 
 
 def serialize_base_config(config, character_class=None):
     """Serialize the BaseConfig singleton.
 
     When character_class is provided, filters options to only those
-    visible to that class. Pass None (admin) to show all.
+    visible to that class. Pass None (admin) to show all. Honors the
+    SiteSettings.class_unlock_flags toggle so GMs can open up class-locked
+    mechanics when no player has that class.
     """
+    unlocked = None
+    if character_class is not None:
+        from exodus.models import SiteSettings
+        unlocked = SiteSettings.load().class_unlock_flags or {}
     return {
-        "locationTypes": [lt for lt in config.location_types if _class_visible(lt, character_class)],
-        "locationMerits": [lm for lm in config.location_merits if _class_visible(lm, character_class)],
-        "facilityTypes": [ft for ft in config.facility_types if _class_visible(ft, character_class)],
-        "equipmentTypes": [eq for eq in config.equipment_types if _class_visible(eq, character_class)],
+        "locationTypes": [lt for lt in config.location_types if _class_visible(lt, character_class, unlocked)],
+        "locationMerits": [lm for lm in config.location_merits if _class_visible(lm, character_class, unlocked)],
+        "facilityTypes": [ft for ft in config.facility_types if _class_visible(ft, character_class, unlocked)],
+        "equipmentTypes": [eq for eq in config.equipment_types if _class_visible(eq, character_class, unlocked)],
         "departments": BASE_DEPARTMENTS,
         "thriveLabels": THRIVE_LABELS,
     }

@@ -1,0 +1,175 @@
+{% extends "base.html" %}
+{% block title %}BRIEFS // EXODUS{% endblock %}
+
+{% block content %}
+<style>
+    .br-shell { max-width: 900px; margin: 2rem auto; padding: 0 1.5rem; }
+    .br-header {
+        font-family: var(--font-mono); color: var(--accent-primary);
+        letter-spacing: 2px; font-size: 1.2rem;
+        border-bottom: 1px solid var(--border-color);
+        padding-bottom: 0.75rem; margin-bottom: 1.5rem;
+    }
+    .br-card {
+        border: 1px solid var(--border-color);
+        border-radius: 4px; padding: 1rem 1.25rem;
+        margin-bottom: 1rem; background: rgba(0,0,0,0.15);
+        cursor: pointer; transition: border-color 0.1s;
+    }
+    .br-card:hover { border-color: var(--accent-primary); }
+    .br-title {
+        font-family: var(--font-mono); color: var(--text-primary);
+        font-size: 1rem; margin-bottom: 0.3rem;
+    }
+    .br-meta { color: var(--text-muted); font-size: 0.75rem; font-family: var(--font-mono); }
+    .br-excerpt { color: var(--text-secondary); font-size: 0.85rem; margin-top: 0.5rem; line-height: 1.5; }
+    .br-chip {
+        display: inline-block; padding: 0.1rem 0.4rem;
+        background: rgba(56,189,248,0.08); color: var(--accent-primary);
+        border: 1px solid var(--accent-primary); border-radius: 3px;
+        font-family: var(--font-mono); font-size: 0.65rem;
+        margin-right: 0.25rem; letter-spacing: 1px;
+    }
+    .br-detail {
+        background: rgba(0,0,0,0.25); border: 1px solid var(--border-color);
+        border-radius: 4px; padding: 1.5rem; color: var(--text-primary);
+        line-height: 1.7;
+    }
+    .br-detail h1, .br-detail h2, .br-detail h3 {
+        color: var(--accent-primary); font-family: var(--font-mono);
+        margin-top: 1rem; margin-bottom: 0.5rem;
+    }
+    .br-detail code {
+        background: rgba(255,255,255,0.08); padding: 0.1rem 0.3rem;
+        border-radius: 2px; font-size: 0.85em;
+    }
+    .br-detail pre {
+        background: rgba(0,0,0,0.4); padding: 0.75rem;
+        border-radius: 3px; overflow-x: auto;
+    }
+    .br-detail blockquote {
+        border-left: 3px solid var(--accent-primary);
+        padding-left: 1rem; color: var(--text-secondary);
+        margin: 0.5rem 0;
+    }
+    .br-detail a { color: var(--accent-primary); }
+    .br-back {
+        background: transparent; border: 1px solid var(--border-color);
+        color: var(--text-secondary); padding: 0.3rem 0.75rem;
+        font-family: var(--font-mono); font-size: 0.75rem;
+        letter-spacing: 1px; cursor: pointer; border-radius: 3px;
+        margin-bottom: 1rem;
+    }
+    .br-back:hover { border-color: var(--accent-primary); color: var(--accent-primary); }
+</style>
+
+<div id="briefs-root" class="br-shell"></div>
+
+<script type="text/babel">
+{% verbatim %}
+const { useState, useEffect, useMemo } = React;
+
+function api(url) {
+    return fetch(url).then(r => {
+        if (!r.ok) return Promise.reject(r.status);
+        return r.json();
+    });
+}
+
+function chips(tagsStr) {
+    return (tagsStr || "").split(",").map(t => t.trim()).filter(Boolean);
+}
+
+function BriefCard({ brief, onOpen }) {
+    const tags = chips(brief.tags);
+    return (
+        <div className="br-card" onClick={onOpen}>
+            <div className="br-title">{brief.title || "Untitled"}</div>
+            <div className="br-meta">
+                {new Date(brief.updatedAt).toLocaleDateString("en-GB", {
+                    day: "numeric", month: "short", year: "numeric"
+                })}
+            </div>
+            {brief.excerpt && <div className="br-excerpt">{brief.excerpt}</div>}
+            {tags.length > 0 && (
+                <div style={{ marginTop: "0.5rem" }}>
+                    {tags.map(t => <span key={t} className="br-chip">{t}</span>)}
+                </div>
+            )}
+        </div>
+    );
+}
+
+function BriefDetail({ brief, onBack }) {
+    const rendered = useMemo(() => {
+        try { return window.marked ? window.marked.parse(brief.content || "") : brief.content; }
+        catch (e) { return brief.content; }
+    }, [brief.content]);
+    const tags = chips(brief.tags);
+
+    return (
+        <div>
+            <button className="br-back" onClick={onBack}>← BACK TO BRIEFS</button>
+            <div className="br-header">{brief.title || "Untitled"}</div>
+            <div className="br-meta" style={{ marginBottom: "1rem" }}>
+                Updated {new Date(brief.updatedAt).toLocaleDateString("en-GB", {
+                    day: "numeric", month: "short", year: "numeric"
+                })}
+                {tags.length > 0 && (
+                    <span style={{ marginLeft: "0.75rem" }}>
+                        {tags.map(t => <span key={t} className="br-chip">{t}</span>)}
+                    </span>
+                )}
+            </div>
+            <div className="br-detail" dangerouslySetInnerHTML={{ __html: rendered }} />
+        </div>
+    );
+}
+
+function App() {
+    const [briefs, setBriefs] = useState([]);
+    const [activeId, setActiveId] = useState(null);
+    const [activeBrief, setActiveBrief] = useState(null);
+    const [loading, setLoading] = useState(true);
+    const [error, setError] = useState(null);
+
+    useEffect(() => {
+        api("/api/my-briefs/").then(d => {
+            setBriefs(d.briefs || []);
+            setLoading(false);
+        }).catch(() => { setLoading(false); setError("Failed to load briefs."); });
+    }, []);
+
+    useEffect(() => {
+        if (activeId == null) { setActiveBrief(null); return; }
+        api(`/api/my-briefs/${activeId}/`).then(setActiveBrief)
+            .catch(() => setError("This brief is no longer available."));
+    }, [activeId]);
+
+    if (loading) return <div className="br-shell"><div className="br-meta">Loading...</div></div>;
+
+    if (activeBrief) {
+        return <BriefDetail brief={activeBrief} onBack={() => { setActiveId(null); setActiveBrief(null); }} />;
+    }
+
+    return (
+        <div>
+            <div className="br-header">BRIEFS</div>
+            {error && <div style={{ color: "var(--accent-danger)", fontFamily: "var(--font-mono)", fontSize: "0.85rem", marginBottom: "1rem" }}>{error}</div>}
+            {briefs.length === 0 ? (
+                <div className="br-meta" style={{ fontStyle: "italic" }}>
+                    No briefs shared with you yet.
+                </div>
+            ) : (
+                briefs.map(b => (
+                    <BriefCard key={b.id} brief={b} onOpen={() => setActiveId(b.id)} />
+                ))
+            )}
+        </div>
+    );
+}
+
+ReactDOM.createRoot(document.getElementById("briefs-root")).render(<App />);
+{% endverbatim %}
+</script>
+{% endblock %}

@@ -1,7 +1,39 @@
 {% verbatim %}
 <script type="text/babel">
 const { useState, useEffect, useRef, useCallback, useMemo } = React;
-const { Icon, AutoSaveInput, Classified, VisibilityToggle, XpProtester, getCookie } = window;
+const {
+    Icon, AutoSaveInput, Classified, VisibilityToggle, XpProtester,
+    getCookie, getCsrfToken, useSectionSave,
+} = window;
+
+// ----------------------------------------------------------------------
+// Phase 3 (multi-player concurrency) — wiring summary
+//
+// All `onSave` props passed into the modules below come from AgencySheet's
+// `saveAgencyQuiet` (in _app.html), which in Phase 3 became a transitional
+// dispatcher. It routes payloads of shape {field: value, ...} to the
+// matching per-section PATCH endpoint (with If-Match optimistic concurrency
+// + 409 conflict banner). Field -> section mapping lives in SECTION_FIELD_MAP.
+//
+//   {name, motto, headquarters} -> /section/header/
+//   {alliance}                  -> /section/alliance/
+//   {notes}                     -> /section/notes/
+//   {integrity}                 -> /section/integrity/
+//   {attributes}                -> /section/attributes/
+//   {specializations}           -> /section/specializations/
+//   {merits}                    -> /section/merits/
+//   {flaws}                     -> /section/flaws/
+//   {assets}                    -> /section/assets/
+//   {fleet}                     -> /section/fleet/
+//   {history}                   -> /section/history/
+//   {mapColor, isNuclearPower, isHidden, sweepPool, zeroDayPool}
+//                               -> /section/admin-flags/
+//
+// Anything not in that map (eg. `projects`, `experience`, `isCouncilMember`,
+// `projectRolls`) falls back to the legacy /api/agencies/<id>/ PUT — this
+// is the documented transitional path until Phase 4 ships endpoints for
+// those domains.
+// ----------------------------------------------------------------------
 
     // --- ALLIANCE MODULE (3-column: countries, companies, organizations) ---
     const AllianceModule = ({ alliance, agencyRef, update, onSave, visibility, onToggleVis }) => {
@@ -107,6 +139,12 @@ const { Icon, AutoSaveInput, Classified, VisibilityToggle, XpProtester, getCooki
     };
 
     // --- HEADER MODULE ---
+    // Phase 3 wiring note: the `onSave` prop comes from AgencySheet's
+    // saveAgencyQuiet, which routes by field name to the per-section PATCH
+    // endpoints (header for name/motto/headquarters, admin-flags for the
+    // hidden/mapColor toggles). Optimistic concurrency + 409 conflict
+    // handling is centralised there, so this module just emits semantic
+    // {field: value} blobs and lets the dispatcher pick the right endpoint.
     const HeaderModule = ({ agency, onSave, visibility, onToggleVis }) => (
         <div className="glass-panel" style={{
             padding: '1.5rem', marginBottom: '1rem',

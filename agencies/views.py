@@ -4,6 +4,7 @@ from pathlib import Path
 from asgiref.sync import async_to_sync
 from channels.layers import get_channel_layer
 from django.conf import settings
+from django.db import transaction
 from django.http import HttpResponseForbidden, JsonResponse
 from django.shortcuts import render, get_object_or_404
 from django.contrib.auth.decorators import login_required
@@ -14,6 +15,8 @@ from .models import Agency, ChangeRequest, GlobalFlaw, FTLProject, AgencyFTLProj
 from .serializers import (
     serialize_agency,
     serialize_agency_summary,
+    serialize_agency_section,
+    serialize_base_section,
     serialize_change_request,
     serialize_global_flaw,
     serialize_ftl_project,
@@ -1310,140 +1313,81 @@ def api_agency_base_detail(request, pk, base_id):
         base.delete()
         return JsonResponse({"status": "Base record terminated."})
 
-    # PUT — players can add, only admin can remove
+    # PUT — compatibility shim. Historical contract: a single PUT could
+    # mutate any subset of base fields in one request (used by the legacy
+    # frontend and the MCP ``update_base`` tool). We now route each provided
+    # field through the per-section handler so the new authorization rules
+    # (no silent issubset drop — explicit 403 on illegal removals) apply
+    # uniformly. The per-base version is bumped once per affected section.
     try:
         data = json.loads(request.body)
     except json.JSONDecodeError:
         return JsonResponse({"error": "Invalid data stream."}, status=400)
 
-    if is_admin:
-        # Admin can do anything
-        if "name" in data:
-            base.name = data["name"]
-        if "locationType" in data:
-            base.location_type = data["locationType"]
-        if "merits" in data:
-            base.merits = data["merits"]
-        if "facilities" in data:
-            base.facilities = data["facilities"]
-        if "workspaces" in data:
-            base.workspaces = data["workspaces"]
-        if "equipment" in data:
-            base.equipment = data["equipment"]
-        if "departments" in data:
-            base.departments = data["departments"]
-        if "notes" in data:
-            base.notes = data["notes"]
-        if "isHidden" in data:
-            base.is_hidden = bool(data["isHidden"])
-        if "hiddenSections" in data:
-            base.hidden_sections = data["hiddenSections"]
-        if "latitude" in data:
-            base.latitude = data["latitude"] if data["latitude"] is not None else None
-        if "longitude" in data:
-            base.longitude = data["longitude"] if data["longitude"] is not None else None
-    else:
-        # Player: additive only — new items must be a superset of existing
-        # Also validate XP budget and space capacity
-        config = BaseConfig.load()
-        lt_by_key = {lt["key"]: lt for lt in (config.location_types or [])}
-        merit_by_key = {m["key"]: m for m in (config.location_merits or [])}
-        ft_by_key = {ft["key"]: ft for ft in (config.facility_types or [])}
-        eq_by_key = {eq["key"]: eq for eq in (config.equipment_types or [])}
+    # Mapping from legacy PUT body keys to the new section_key. The PUT body
+    # uses both `locationType` and the new `location` alias; the section
+    # writers accept either.
+    field_to_section = [
+        ("name", "name"),
+        ("locationType", "location"),
+        ("location", "location"),
+        ("merits", "merits"),
+        ("facilities", "facilities"),
+        ("workspaces", "workspaces"),
+        ("equipment", "equipment"),
+        ("departments", "departments"),
+        ("notes", "notes"),
+        ("isHidden", "hidden"),
+        ("hidden", "hidden"),
+        ("hiddenSections", "classified"),
+        ("classified", "classified"),
+    ]
 
-        def calc_base_costs(b_loc, b_merits, b_facilities, b_workspaces, b_equipment):
-            """Calculate total EXP and space for a base state."""
-            total_exp = 0
-            total_space = 0
-            used_space = 0
-            lt = lt_by_key.get(b_loc)
-            if lt:
-                total_exp += lt.get("exp", 0)
-                total_space += lt.get("space", 0)
-            for mk in (b_merits or []):
-                m = merit_by_key.get(mk)
-                if m:
-                    total_exp += m.get("exp", 0)
-                    total_space += m.get("extraSpace", 0)
-            for f in (b_facilities or []):
-                ft = ft_by_key.get(f.get("key"))
-                if ft:
-                    lvl = next((l for l in ft.get("levels", []) if l["level"] == f.get("level")), None)
-                    if lvl:
-                        total_exp += lvl.get("exp", 0)
-                        used_space += lvl.get("size", 0)
-            ws_ft = ft_by_key.get("workspace")
-            for w in (b_workspaces or []):
-                if ws_ft:
-                    lvl = next((l for l in ws_ft.get("levels", []) if l["level"] == w.get("level")), None)
-                    if lvl:
-                        total_exp += lvl.get("exp", 0)
-                        used_space += lvl.get("size", 0)
-            for ek in (b_equipment or []):
-                eq = eq_by_key.get(ek)
-                if eq:
-                    total_exp += eq.get("exp", 0)
-            return total_exp, total_space, used_space
+    # ``geo`` is special: the writer reads both lat and long from the same
+    # payload. We collapse them into a single section apply.
+    has_geo = "latitude" in data or "longitude" in data
 
-        # Build proposed new state
-        new_loc = base.location_type
-        new_merits = list(base.merits or [])
-        new_facilities = list(base.facilities or [])
-        new_workspaces = list(base.workspaces or [])
-        new_equipment = list(base.equipment or [])
-
-        if "locationType" in data:
-            if not base.location_type and data["locationType"]:
-                new_loc = data["locationType"]
-        if "merits" in data:
-            existing = set(base.merits or [])
-            proposed = set(data["merits"])
-            if existing.issubset(proposed):
-                new_merits = data["merits"]
-        if "facilities" in data:
-            existing = {(f["key"], f["level"]) for f in (base.facilities or [])}
-            proposed = {(f["key"], f["level"]) for f in data["facilities"]}
-            if existing.issubset(proposed):
-                new_facilities = data["facilities"]
-        if "workspaces" in data:
-            if len(data["workspaces"]) >= len(base.workspaces or []):
-                new_workspaces = data["workspaces"]
-        if "equipment" in data:
-            existing = set(base.equipment or [])
-            proposed = set(data["equipment"])
-            if existing.issubset(proposed):
-                new_equipment = data["equipment"]
-
-        # Calculate costs for proposed state
-        new_exp, new_total_space, new_used_space = calc_base_costs(
-            new_loc, new_merits, new_facilities, new_workspaces, new_equipment
-        )
-        old_exp, _, _ = calc_base_costs(
-            base.location_type, base.merits, base.facilities, base.workspaces, base.equipment
-        )
-        exp_increase = new_exp - old_exp
-
-        # Check agency XP budget: total base EXP across ALL bases can't exceed agency XP
-        if exp_increase > 0:
-            agency = base.agency
-            other_bases_exp = sum(
-                calc_base_costs(b.location_type, b.merits, b.facilities, b.workspaces, b.equipment)[0]
-                for b in agency.bases.exclude(pk=base.pk)
+    # Run all writes inside one atomic transaction so a partial failure on a
+    # multi-field PUT doesn't leave the base half-updated.
+    sections_touched = set()
+    with transaction.atomic():
+        agency = Agency.objects.select_for_update().get(pk=pk)
+        base = Base.objects.select_for_update().get(pk=base_id, agency_id=pk)
+        if base.is_hidden and not is_admin:
+            return JsonResponse(
+                {"error": "ACCESS DENIED. Base record not found."}, status=404
             )
-            if other_bases_exp + new_exp > (agency.experience or 0):
-                return JsonResponse({"error": "Not enough agency XP. Need " + str(other_bases_exp + new_exp) + " but agency has " + str(agency.experience or 0) + "."}, status=400)
 
-        # Check space: used can't exceed total (but skip if no space-consuming items were added)
-        if new_used_space > new_total_space and new_total_space > 0:
-            return JsonResponse({"error": "Not enough space. Used " + str(new_used_space) + " of " + str(new_total_space) + " available."}, status=400)
+        update_fields = {"version", "updated_at"}
+        for body_key, section_key in field_to_section:
+            if body_key not in data or section_key in sections_touched:
+                continue
+            handler = _BASE_SECTION_HANDLERS[section_key]
+            write_fn, fields = handler
+            err = write_fn(request, agency, base, data)
+            if err is not None:
+                # Roll back by raising — transaction.atomic() will discard.
+                # We capture the response to return outside the with block
+                # so the rollback is honored.
+                return err
+            sections_touched.add(section_key)
+            update_fields.update(fields)
 
-        base.location_type = new_loc
-        base.merits = new_merits
-        base.facilities = new_facilities
-        base.workspaces = new_workspaces
-        base.equipment = new_equipment
+        if has_geo:
+            err = _write_base_geo(request, agency, base, data)
+            if err is not None:
+                return err
+            sections_touched.add("geo")
+            update_fields.update(("latitude", "longitude"))
 
-    base.save()
+        if sections_touched:
+            base.version = (base.version or 0) + 1
+            base.save(update_fields=list(update_fields))
+        else:
+            # Nothing changed — still call save() to update updated_at? No,
+            # match legacy behavior of writing on PUT regardless.
+            base.save()
+
     return JsonResponse(serialize_base(base, is_admin=is_admin))
 
 
@@ -3025,3 +2969,838 @@ def api_downtime_action(request, pk):
         "messages": messages,
         "message": "\n".join(messages),
     })
+
+
+# ---------------------------------------------------------------------------
+# Phase 1/2 — Per-section PATCH endpoints with optimistic concurrency.
+#
+# The legacy PUT /api/agencies/<pk>/bases/<base_id>/ endpoint silently dropped
+# concurrent writes via an ``existing.issubset(proposed)`` check (two players
+# adding different items to the same base would lose one write). The endpoints
+# below replace that with explicit version negotiation:
+#
+#   * Each agency section tracks a monotonic version in agency.section_versions
+#     (a JSON map). Per-base sections track their version on Base.version.
+#   * Clients send the expected current version in the If-Match header.
+#   * On mismatch the server returns 409 with {current_version, current_value}
+#     so the client can rebase and retry.
+#   * Missing If-Match is treated as a force-write (still bumps version),
+#     mainly so MCP / automation tooling doesn't have to track versions.
+# ---------------------------------------------------------------------------
+
+
+def _admin_only(request, agency):
+    """Return a 403 JsonResponse for non-admins, else None."""
+    if not request.user.is_superuser:
+        return JsonResponse(
+            {"error": "ACCESS DENIED. Administrator clearance required."},
+            status=403,
+        )
+    return None
+
+
+def _user_belongs_to_player_agency(user, agency):
+    """True iff ``user`` owns a character assigned to a workspace on a base
+    of ``agency`` (and ``agency`` is the player agency).
+
+    Mirrors the membership rule used on the council page (see council_page).
+    Superusers are always considered members.
+    """
+    if user.is_superuser:
+        return True
+    if not agency.is_player_agency:
+        return False
+    char_ids = set(user.characters.values_list("id", flat=True))
+    if not char_ids:
+        return False
+    for base in agency.bases.all():
+        for ws in base.workspaces or []:
+            if (
+                ws.get("assignedType") == "character"
+                and ws.get("assignedTo") in char_ids
+            ):
+                return True
+    return False
+
+
+def _admin_or_player_member(request, agency):
+    """Permission check for sections any player on the agency can edit
+    (e.g. the shared notes pad). Returns 403 JsonResponse or None.
+    """
+    if request.user.is_superuser:
+        return None
+    if _user_belongs_to_player_agency(request.user, agency):
+        return None
+    return JsonResponse(
+        {"error": "ACCESS DENIED. You are not a member of this agency."},
+        status=403,
+    )
+
+
+def _parse_if_match(request):
+    """Parse the If-Match header. Returns (expected_version, error_response).
+
+    On a missing header, returns (None, None) — the caller treats this as a
+    force-write. On a malformed header, returns (None, JsonResponse(400)).
+    """
+    raw = request.headers.get("If-Match")
+    if raw is None or raw == "":
+        return None, None
+    # Strip optional weak/strong ETag wrapping characters.
+    stripped = raw.strip().strip('"').strip("W/").strip('"')
+    try:
+        return int(stripped), None
+    except ValueError:
+        return None, JsonResponse({"error": "Invalid If-Match header"}, status=400)
+
+
+def _conflict_response(section_key, current_version, current_value):
+    """Build the 409 response shape described in the API contract."""
+    return JsonResponse(
+        {
+            "error": "Stale write — section was updated by another user.",
+            "current_version": int(current_version or 0),
+            "current_value": current_value,
+        },
+        status=409,
+    )
+
+
+def _ok_response(payload, version):
+    """Build the 200 response with ETag set to the new version."""
+    response = JsonResponse(payload)
+    response["ETag"] = str(version)
+    return response
+
+
+def _agency_section_patch(
+    request,
+    pk,
+    section_key,
+    perm_check,
+    write_fn,
+    *,
+    extra_update_fields=(),
+):
+    """Core handler for agency-level section PATCH.
+
+    Uses a compare-and-swap UPDATE so the version check is atomic at the SQL
+    level. This works on every backend (including SQLite, where
+    ``select_for_update()`` is silently dropped and a Python-side check has
+    a TOCTOU race window).
+
+    Strategy:
+        1. Read the agency, run perm + visibility checks against it.
+        2. Call ``write_fn(agency, data)`` to mutate ``agency`` in memory and
+           validate. ``write_fn`` MUST NOT call ``.save()``.
+        3. Build the new ``section_versions`` dict (bump only our key) and
+           emit a single ``UPDATE`` whose ``WHERE`` clause pins the row to
+           the *previous* ``section_versions`` value. The row count from
+           ``.update()`` is the CAS primitive: ``1`` = won, ``0`` = lost.
+
+    Trade-off (JSON-dict-CAS): the WHERE clause pins the *whole* JSON dict,
+    not just our key. So a concurrent write to a *different* section in the
+    same window will also fail our CAS with 409. That's stricter than the
+    contract requires, but it's correct (never silent-drops a write) and the
+    spurious-409 case is rare and recoverable (the client re-fetches and
+    retries). A migration to per-section columns would tighten this; deferred.
+
+    Args:
+        perm_check: ``callable(request, agency) -> Optional[JsonResponse]``.
+            Returning a response short-circuits with that response.
+        write_fn: ``callable(agency, payload_dict) -> Optional[JsonResponse]``.
+            Mutates ``agency`` in memory based on ``payload_dict``. Returning
+            a response (e.g. validation error) short-circuits. MUST NOT save.
+        extra_update_fields: extra concrete fields touched by ``write_fn``
+            (mapped to the columns in the atomic UPDATE).
+    """
+    try:
+        data = json.loads(request.body) if request.body else {}
+    except json.JSONDecodeError:
+        return JsonResponse({"error": "Invalid data stream."}, status=400)
+
+    expected, err = _parse_if_match(request)
+    if err is not None:
+        return err
+
+    try:
+        agency = Agency.objects.get(pk=pk)
+    except Agency.DoesNotExist:
+        return JsonResponse({"error": "Agency record not found."}, status=404)
+
+    if agency.is_hidden and not request.user.is_superuser:
+        return JsonResponse(
+            {"error": "ACCESS DENIED. Agency record not found."}, status=404
+        )
+
+    perm_resp = perm_check(request, agency)
+    if perm_resp is not None:
+        return perm_resp
+
+    # Force-write path retries the CAS on conflict (last-writer-wins
+    # semantics). For If-Match writes a single CAS attempt is correct —
+    # a CAS miss means a real concurrency conflict that the client must see.
+    max_attempts = 1 if expected is not None else 5
+
+    for attempt in range(max_attempts):
+        # Wrap each CAS attempt in an atomic block. This gives us a clean
+        # BEGIN/COMMIT boundary so SQLite serialises concurrent writers via
+        # its file lock (without atomic(), concurrent writers can race on
+        # sqlite3 connection state under the in-memory shared-cache test
+        # backend). The CAS itself remains the source of truth.
+        with transaction.atomic():
+            # Re-read inside the transaction so retries — and our
+            # CAS-snapshot — observe any concurrent commits.
+            agency.refresh_from_db()
+            pre_versions = dict(agency.section_versions or {})
+            current = int(pre_versions.get(section_key, 0))
+
+            if expected is not None and expected != current:
+                current_value = serialize_agency_section(
+                    agency, section_key, request.user
+                )[section_key]
+                return _conflict_response(section_key, current, current_value)
+
+            # Mutate ``agency`` in memory (write_fn must not call .save()).
+            write_resp = write_fn(agency, data)
+            if write_resp is not None:
+                return write_resp
+
+            new_version = current + 1
+            new_versions = dict(pre_versions)
+            new_versions[section_key] = new_version
+
+            # Build the kwargs for the UPDATE — only the columns the writer
+            # touched plus our version bump and updated_at. Reading them off
+            # the in-memory ``agency`` reflects whatever write_fn just set.
+            update_kwargs = {
+                field: getattr(agency, field) for field in extra_update_fields
+            }
+            update_kwargs["section_versions"] = new_versions
+            update_kwargs["updated_at"] = timezone.now()
+
+            # Atomic compare-and-swap. The WHERE pin makes the version
+            # check happen at SQL level — no TOCTOU window even on SQLite.
+            updated = Agency.objects.filter(
+                pk=agency.pk,
+                section_versions=pre_versions,
+            ).update(**update_kwargs)
+
+            if updated:
+                # Refresh once so the response reflects DB-canonical state
+                # (handles e.g. JSON normalisation by the backend).
+                agency.refresh_from_db()
+                payload = serialize_agency_section(
+                    agency, section_key, request.user
+                )
+                return _ok_response(payload, new_version)
+
+        # CAS miss. For force-writes, retry on the next loop iteration.
+        # For If-Match writes the loop ends and we 409 below.
+        agency.refresh_from_db()
+
+    # Lost the race (If-Match path, or force-write exhausted all retries).
+    # Return canonical state in a 409 so the client can rebase and retry.
+    live_versions = agency.section_versions or {}
+    live_current = int(live_versions.get(section_key, 0))
+    current_value = serialize_agency_section(
+        agency, section_key, request.user
+    )[section_key]
+    return _conflict_response(section_key, live_current, current_value)
+
+
+def _base_section_patch(
+    request,
+    pk,
+    base_id,
+    section_key,
+    write_fn,
+    *,
+    extra_update_fields=(),
+):
+    """Core handler for per-base section PATCH.
+
+    Uses a compare-and-swap UPDATE on ``Base.version`` so the concurrency
+    check is atomic at the SQL level. Works on every backend (SQLite drops
+    ``select_for_update()``, so a Python-side check has a TOCTOU race; the
+    CAS-via-WHERE-clause pattern closes that window).
+
+    Strategy:
+        1. Read the base + its agency. Run permission and visibility checks.
+        2. Call ``write_fn(request, agency, base, data)`` to mutate ``base``
+           in memory and run any cross-field validation. ``write_fn`` MUST
+           NOT call ``.save()``.
+        3. Emit a single ``UPDATE`` whose ``WHERE`` clause pins ``version``
+           to the previously-read value. The row count is the CAS primitive.
+
+    Force-writes (no If-Match) retry the CAS on miss for last-writer-wins
+    semantics; If-Match writes attempt once and then 409.
+    """
+    try:
+        data = json.loads(request.body) if request.body else {}
+    except json.JSONDecodeError:
+        return JsonResponse({"error": "Invalid data stream."}, status=400)
+
+    expected, err = _parse_if_match(request)
+    if err is not None:
+        return err
+
+    try:
+        agency = Agency.objects.get(pk=pk)
+    except Agency.DoesNotExist:
+        return JsonResponse({"error": "Agency record not found."}, status=404)
+
+    if agency.is_hidden and not request.user.is_superuser:
+        return JsonResponse(
+            {"error": "ACCESS DENIED. Agency record not found."}, status=404
+        )
+
+    try:
+        base = Base.objects.get(pk=base_id, agency_id=pk)
+    except Base.DoesNotExist:
+        return JsonResponse({"error": "Base record not found."}, status=404)
+
+    if base.is_hidden and not request.user.is_superuser:
+        return JsonResponse(
+            {"error": "ACCESS DENIED. Base record not found."}, status=404
+        )
+
+    # Force-writes retry the CAS on miss. If-Match writes attempt once then
+    # 409 — a CAS miss with a client-supplied expectation IS the conflict.
+    max_attempts = 1 if expected is not None else 5
+
+    for attempt in range(max_attempts):
+        # Wrap each CAS attempt in an atomic block. This gives us a clean
+        # BEGIN/COMMIT boundary so SQLite serialises concurrent writers via
+        # its file lock (without atomic(), each ORM call is its own
+        # autocommit transaction and concurrent writers can hit
+        # ``sqlite3.InterfaceError`` under the in-memory shared-cache test
+        # backend). The CAS itself remains the source of truth — atomic()
+        # just keeps the session/connection state sane around it.
+        with transaction.atomic():
+            # Re-read the base inside the transaction so we observe any
+            # commits from a concurrent writer that finished between our
+            # outer .get() and now.
+            base.refresh_from_db()
+            current = int(base.version or 0)
+            if expected is not None and expected != current:
+                current_value = serialize_base_section(
+                    base, section_key
+                )[section_key]
+                return _conflict_response(section_key, current, current_value)
+
+            # Mutate ``base`` in memory (write_fn must not call .save()).
+            write_resp = write_fn(request, agency, base, data)
+            if write_resp is not None:
+                return write_resp
+
+            new_version = current + 1
+
+            # Pull the writer's mutations off the in-memory ``base`` for the
+            # atomic UPDATE.
+            update_kwargs = {
+                field: getattr(base, field) for field in extra_update_fields
+            }
+            update_kwargs["version"] = new_version
+            update_kwargs["updated_at"] = timezone.now()
+
+            # Atomic compare-and-swap on Base.version. The WHERE pin closes
+            # the TOCTOU window that select_for_update() leaves open on
+            # SQLite.
+            updated = Base.objects.filter(
+                pk=base.pk,
+                version=current,
+            ).update(**update_kwargs)
+
+            if updated:
+                base.refresh_from_db()
+                payload = serialize_base_section(base, section_key)
+                return _ok_response(payload, new_version)
+
+        # CAS miss. Loop iterates: force-writes retry; If-Match writes drop
+        # out below for a 409.
+        base.refresh_from_db()
+
+    # If-Match write lost the race, or force-write exhausted retries.
+    live_current = int(base.version or 0)
+    current_value = serialize_base_section(base, section_key)[section_key]
+    return _conflict_response(section_key, live_current, current_value)
+
+
+# ---------------------------------------------------------------------------
+# Agency-level section write functions.
+# Each takes (agency, data) and mutates ``agency`` in place. Returning a
+# JsonResponse short-circuits the patch (used for validation errors).
+# ---------------------------------------------------------------------------
+
+
+def _write_header(agency, data):
+    if "name" in data:
+        agency.name = data["name"] or ""
+    if "motto" in data:
+        agency.motto = data["motto"] or ""
+    if "headquarters" in data:
+        agency.headquarters = data["headquarters"] or ""
+    return None
+
+
+def _write_alliance(agency, data):
+    if "alliance" in data:
+        agency.alliance = data["alliance"]
+    return None
+
+
+def _write_notes(agency, data):
+    if "notes" in data:
+        agency.notes = data["notes"] or ""
+    return None
+
+
+def _write_integrity(agency, data):
+    if "integrity" in data:
+        try:
+            agency.integrity = int(data["integrity"])
+        except (TypeError, ValueError):
+            return JsonResponse({"error": "integrity must be an integer."}, status=400)
+    return None
+
+
+def _write_attributes(agency, data):
+    if "attributes" in data:
+        agency.attributes = data["attributes"]
+    return None
+
+
+def _write_specializations(agency, data):
+    if "specializations" in data:
+        agency.specializations = data["specializations"] or []
+    return None
+
+
+def _write_merits(agency, data):
+    if "merits" in data:
+        agency.merits = data["merits"] or []
+    return None
+
+
+def _write_flaws(agency, data):
+    if "flaws" in data:
+        agency.flaws = data["flaws"] or []
+    return None
+
+
+def _write_assets(agency, data):
+    if "assets" in data:
+        agency.assets = data["assets"] or []
+    return None
+
+
+def _write_fleet(agency, data):
+    if "fleet" in data:
+        agency.fleet = data["fleet"] or []
+    return None
+
+
+def _write_history(agency, data):
+    if "history" in data:
+        agency.history = data["history"] or []
+    return None
+
+
+def _write_admin_flags(agency, data):
+    """Combined endpoint for the small admin toggles. We accept any subset
+    of the supported keys so the frontend can patch one switch at a time
+    without touching the others.
+    """
+    if "mapColor" in data:
+        agency.map_color = data["mapColor"] or ""
+    if "isNuclearPower" in data:
+        agency.is_nuclear_power = bool(data["isNuclearPower"])
+    if "isHidden" in data:
+        agency.is_hidden = bool(data["isHidden"])
+    if "sweepPool" in data:
+        try:
+            agency.sweep_pool = int(data["sweepPool"])
+        except (TypeError, ValueError):
+            return JsonResponse({"error": "sweepPool must be an integer."}, status=400)
+    if "zeroDayPool" in data:
+        try:
+            agency.zero_day_pool = int(data["zeroDayPool"])
+        except (TypeError, ValueError):
+            return JsonResponse({"error": "zeroDayPool must be an integer."}, status=400)
+    return None
+
+
+# Map a section_key to (write_fn, perm_check, model_fields).
+# ``model_fields`` is the concrete column(s) the writer touches; passed to
+# Django's ``update_fields`` so we don't clobber unrelated state on save.
+_AGENCY_SECTION_HANDLERS = {
+    "header": (
+        _write_header,
+        _admin_only,
+        ("name", "motto", "headquarters"),
+    ),
+    "alliance": (_write_alliance, _admin_only, ("alliance",)),
+    "notes": (_write_notes, _admin_or_player_member, ("notes",)),
+    "integrity": (_write_integrity, _admin_only, ("integrity",)),
+    "attributes": (_write_attributes, _admin_only, ("attributes",)),
+    "specializations": (_write_specializations, _admin_only, ("specializations",)),
+    "merits": (_write_merits, _admin_only, ("merits",)),
+    "flaws": (_write_flaws, _admin_only, ("flaws",)),
+    "assets": (_write_assets, _admin_only, ("assets",)),
+    "fleet": (_write_fleet, _admin_only, ("fleet",)),
+    "history": (_write_history, _admin_only, ("history",)),
+    "admin-flags": (
+        _write_admin_flags,
+        _admin_only,
+        ("map_color", "is_nuclear_power", "is_hidden", "sweep_pool", "zero_day_pool"),
+    ),
+}
+
+
+def _agency_section_view(section_key):
+    """Build a thin view wrapper for an agency section.
+
+    Returns a Django view ``f(request, pk)`` that dispatches to
+    ``_agency_section_patch`` with the right write/perm callables. Used to
+    instantiate the 12 named URL targets without 12 copies of the boilerplate.
+    """
+    write_fn, perm_check, fields = _AGENCY_SECTION_HANDLERS[section_key]
+
+    @login_required
+    @require_http_methods(["PATCH"])
+    def view(request, pk):
+        return _agency_section_patch(
+            request,
+            pk,
+            section_key,
+            perm_check,
+            write_fn,
+            extra_update_fields=fields,
+        )
+
+    view.__name__ = f"api_agency_section_{section_key.replace('-', '_')}"
+    return view
+
+
+api_agency_section_header = _agency_section_view("header")
+api_agency_section_alliance = _agency_section_view("alliance")
+api_agency_section_notes = _agency_section_view("notes")
+api_agency_section_integrity = _agency_section_view("integrity")
+api_agency_section_attributes = _agency_section_view("attributes")
+api_agency_section_specializations = _agency_section_view("specializations")
+api_agency_section_merits = _agency_section_view("merits")
+api_agency_section_flaws = _agency_section_view("flaws")
+api_agency_section_assets = _agency_section_view("assets")
+api_agency_section_fleet = _agency_section_view("fleet")
+api_agency_section_history = _agency_section_view("history")
+api_agency_section_admin_flags = _agency_section_view("admin-flags")
+
+
+# ---------------------------------------------------------------------------
+# Per-base section write functions.
+#
+# Player permission: additive-only. If proposed removes any items from
+# existing, return 403 (replaces the legacy silent issubset drop). Admins
+# can do anything.
+# ---------------------------------------------------------------------------
+
+
+def _player_additive_violation(existing_set, proposed_set, label):
+    """Return a 403 JsonResponse if a player is trying to remove items.
+
+    ``label`` is used in the error message ("merits", "facilities", ...).
+    """
+    removed = existing_set - proposed_set
+    if removed:
+        return JsonResponse(
+            {
+                "error": (
+                    f"ACCESS DENIED. Players can only add {label}; "
+                    f"removing requires administrator clearance."
+                )
+            },
+            status=403,
+        )
+    return None
+
+
+def _validate_player_xp_and_space(agency, base):
+    """Re-check the XP budget and space cap after a player edit.
+
+    Mirrors the legacy validation in api_agency_base_detail so we don't lose
+    that protection when shifting players to the per-section endpoints.
+    """
+    config = BaseConfig.load()
+    lt_by_key = {lt["key"]: lt for lt in (config.location_types or [])}
+    merit_by_key = {m["key"]: m for m in (config.location_merits or [])}
+    ft_by_key = {ft["key"]: ft for ft in (config.facility_types or [])}
+    eq_by_key = {eq["key"]: eq for eq in (config.equipment_types or [])}
+
+    def calc(b_loc, b_merits, b_facilities, b_workspaces, b_equipment):
+        total_exp = 0
+        total_space = 0
+        used_space = 0
+        lt = lt_by_key.get(b_loc)
+        if lt:
+            total_exp += lt.get("exp", 0)
+            total_space += lt.get("space", 0)
+        for mk in (b_merits or []):
+            m = merit_by_key.get(mk)
+            if m:
+                total_exp += m.get("exp", 0)
+                total_space += m.get("extraSpace", 0)
+        for f in (b_facilities or []):
+            ft = ft_by_key.get(f.get("key"))
+            if ft:
+                lvl = next(
+                    (l for l in ft.get("levels", []) if l["level"] == f.get("level")),
+                    None,
+                )
+                if lvl:
+                    total_exp += lvl.get("exp", 0)
+                    used_space += lvl.get("size", 0)
+        ws_ft = ft_by_key.get("workspace")
+        for w in (b_workspaces or []):
+            if ws_ft:
+                lvl = next(
+                    (l for l in ws_ft.get("levels", []) if l["level"] == w.get("level")),
+                    None,
+                )
+                if lvl:
+                    total_exp += lvl.get("exp", 0)
+                    used_space += lvl.get("size", 0)
+        for ek in (b_equipment or []):
+            eq = eq_by_key.get(ek)
+            if eq:
+                total_exp += eq.get("exp", 0)
+        return total_exp, total_space, used_space
+
+    new_exp, new_total_space, new_used_space = calc(
+        base.location_type, base.merits, base.facilities, base.workspaces, base.equipment
+    )
+
+    other_bases_exp = sum(
+        calc(b.location_type, b.merits, b.facilities, b.workspaces, b.equipment)[0]
+        for b in agency.bases.exclude(pk=base.pk)
+    )
+    if other_bases_exp + new_exp > (agency.experience or 0):
+        return JsonResponse(
+            {
+                "error": (
+                    "Not enough agency XP. Need "
+                    + str(other_bases_exp + new_exp)
+                    + " but agency has "
+                    + str(agency.experience or 0)
+                    + "."
+                )
+            },
+            status=400,
+        )
+
+    if new_used_space > new_total_space and new_total_space > 0:
+        return JsonResponse(
+            {
+                "error": (
+                    "Not enough space. Used "
+                    + str(new_used_space)
+                    + " of "
+                    + str(new_total_space)
+                    + " available."
+                )
+            },
+            status=400,
+        )
+    return None
+
+
+def _write_base_name(request, agency, base, data):
+    if "name" not in data:
+        return None
+    if not request.user.is_superuser:
+        return JsonResponse({"error": "ACCESS DENIED."}, status=403)
+    base.name = data["name"] or ""
+    return None
+
+
+def _write_base_location(request, agency, base, data):
+    """Field name aliases: payload may use ``location`` or ``locationType``."""
+    if "location" not in data and "locationType" not in data:
+        return None
+    new_loc = data.get("location", data.get("locationType")) or ""
+    if request.user.is_superuser:
+        base.location_type = new_loc
+        return None
+    # Player rule: location can be set if currently empty, never changed.
+    if base.location_type and base.location_type != new_loc:
+        return JsonResponse(
+            {"error": "ACCESS DENIED. Location may only be set once."}, status=403
+        )
+    if not base.location_type and new_loc:
+        base.location_type = new_loc
+    return _validate_player_xp_and_space(agency, base) if base.location_type else None
+
+
+def _write_base_merits(request, agency, base, data):
+    if "merits" not in data:
+        return None
+    proposed = data["merits"] or []
+    if request.user.is_superuser:
+        base.merits = proposed
+        return None
+    existing_set = set(base.merits or [])
+    proposed_set = set(proposed)
+    violation = _player_additive_violation(existing_set, proposed_set, "merits")
+    if violation is not None:
+        return violation
+    base.merits = proposed
+    return _validate_player_xp_and_space(agency, base)
+
+
+def _write_base_facilities(request, agency, base, data):
+    if "facilities" not in data:
+        return None
+    proposed = data["facilities"] or []
+    if request.user.is_superuser:
+        base.facilities = proposed
+        return None
+    # Compare by (key, level) tuples — a level upgrade is a different item.
+    existing_set = {(f.get("key"), f.get("level")) for f in (base.facilities or [])}
+    proposed_set = {(f.get("key"), f.get("level")) for f in proposed}
+    violation = _player_additive_violation(existing_set, proposed_set, "facilities")
+    if violation is not None:
+        return violation
+    base.facilities = proposed
+    return _validate_player_xp_and_space(agency, base)
+
+
+def _write_base_workspaces(request, agency, base, data):
+    if "workspaces" not in data:
+        return None
+    proposed = data["workspaces"] or []
+    if request.user.is_superuser:
+        base.workspaces = proposed
+        return None
+    # Workspaces don't have a stable key — replicate the legacy "list cannot
+    # shrink" rule from api_agency_base_detail.
+    if len(proposed) < len(base.workspaces or []):
+        return JsonResponse(
+            {
+                "error": (
+                    "ACCESS DENIED. Players can only add workspaces; "
+                    "removing requires administrator clearance."
+                )
+            },
+            status=403,
+        )
+    base.workspaces = proposed
+    return _validate_player_xp_and_space(agency, base)
+
+
+def _write_base_equipment(request, agency, base, data):
+    if "equipment" not in data:
+        return None
+    proposed = data["equipment"] or []
+    if request.user.is_superuser:
+        base.equipment = proposed
+        return None
+    existing_set = set(base.equipment or [])
+    proposed_set = set(proposed)
+    violation = _player_additive_violation(existing_set, proposed_set, "equipment")
+    if violation is not None:
+        return violation
+    base.equipment = proposed
+    return _validate_player_xp_and_space(agency, base)
+
+
+def _write_base_departments(request, agency, base, data):
+    if "departments" not in data:
+        return None
+    base.departments = data["departments"] or []
+    return None
+
+
+def _write_base_notes(request, agency, base, data):
+    if "notes" not in data:
+        return None
+    # Players belonging to the agency can edit notes on a player-agency base.
+    if not request.user.is_superuser and not _user_belongs_to_player_agency(
+        request.user, agency
+    ):
+        return JsonResponse({"error": "ACCESS DENIED."}, status=403)
+    base.notes = data["notes"] or ""
+    return None
+
+
+def _write_base_geo(request, agency, base, data):
+    if not request.user.is_superuser:
+        return JsonResponse({"error": "ACCESS DENIED."}, status=403)
+    if "latitude" in data:
+        base.latitude = data["latitude"] if data["latitude"] is not None else None
+    if "longitude" in data:
+        base.longitude = data["longitude"] if data["longitude"] is not None else None
+    return None
+
+
+def _write_base_hidden(request, agency, base, data):
+    if not request.user.is_superuser:
+        return JsonResponse({"error": "ACCESS DENIED."}, status=403)
+    if "hidden" in data:
+        base.is_hidden = bool(data["hidden"])
+    elif "isHidden" in data:
+        base.is_hidden = bool(data["isHidden"])
+    return None
+
+
+def _write_base_classified(request, agency, base, data):
+    """Manage which sections of the base are redacted from non-admins
+    (the existing ``hidden_sections`` JSON list on Base).
+    """
+    if not request.user.is_superuser:
+        return JsonResponse({"error": "ACCESS DENIED."}, status=403)
+    if "classified" in data:
+        base.hidden_sections = data["classified"] or []
+    elif "hiddenSections" in data:
+        base.hidden_sections = data["hiddenSections"] or []
+    return None
+
+
+_BASE_SECTION_HANDLERS = {
+    "name": (_write_base_name, ("name",)),
+    "location": (_write_base_location, ("location_type",)),
+    "merits": (_write_base_merits, ("merits",)),
+    "facilities": (_write_base_facilities, ("facilities",)),
+    "workspaces": (_write_base_workspaces, ("workspaces",)),
+    "equipment": (_write_base_equipment, ("equipment",)),
+    "departments": (_write_base_departments, ("departments",)),
+    "notes": (_write_base_notes, ("notes",)),
+    "geo": (_write_base_geo, ("latitude", "longitude")),
+    "hidden": (_write_base_hidden, ("is_hidden",)),
+    "classified": (_write_base_classified, ("hidden_sections",)),
+}
+
+
+@login_required
+@require_http_methods(["PATCH"])
+def api_agency_base_section(request, pk, base_id, section_key):
+    """Per-base section PATCH endpoint.
+
+    URL: ``PATCH /api/agencies/<pk>/bases/<base_id>/section/<section_key>/``
+
+    See the file-level header for the optimistic-concurrency contract. The
+    section_key must be one of the keys in ``_BASE_SECTION_HANDLERS``.
+    """
+    handler = _BASE_SECTION_HANDLERS.get(section_key)
+    if handler is None:
+        return JsonResponse(
+            {"error": f"Unknown section key: {section_key!r}"}, status=404
+        )
+    write_fn, fields = handler
+    return _base_section_patch(
+        request,
+        pk,
+        base_id,
+        section_key,
+        write_fn,
+        extra_update_fields=fields,
+    )

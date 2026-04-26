@@ -180,7 +180,7 @@
                                 <option value="" style={{ background: 'var(--bg-dark)' }}>-- Select --</option>
                                 {users.map(u => (
                                     <option key={u.id} value={u.id} style={{ background: 'var(--bg-dark)' }}>
-                                        {u.username}
+                                        {u.displayName || u.username || `User ${u.id}`}
                                     </option>
                                 ))}
                             </select>

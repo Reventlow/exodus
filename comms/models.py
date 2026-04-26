@@ -120,6 +120,7 @@ class Message(models.Model):
         help_text="Denormalized display name for the impersonated dossier.",
     )
     created_at = models.DateTimeField(auto_now_add=True)
+    edited_at = models.DateTimeField(null=True, blank=True)
 
     class Meta:
         ordering = ["created_at"]

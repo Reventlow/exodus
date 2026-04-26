@@ -150,6 +150,165 @@
         </span>
     );
 
+    // ------------------------------------------------------------------
+    // SECTION-SAVE CONTEXT (Phase 3 multi-player concurrency rewire)
+    // ------------------------------------------------------------------
+    //
+    // Provider value shape:
+    //   {
+    //     agencyId:        number,
+    //     versionsRef:     React.MutableRefObject<{[sectionKey]: number}>,
+    //     baseVersionsRef: React.MutableRefObject<{[baseId]:    number}>,
+    //     onConflict:      (sectionKey, currentValue, currentVersion, ctx?) => void,
+    //   }
+    //
+    // The two refs are caches of the latest server-known section versions.
+    // On every successful PATCH the hook bumps the cache entry; on a 409 the
+    // cache is replaced with the server's current_version so the next save
+    // attempt can succeed once the user re-blurs.
+    // ------------------------------------------------------------------
+    const SectionSaveContext = React.createContext(null);
+
+    // Convenience wrapper for the CSRF token. Always reads the cookie first
+    // (Django rotates it across login), falling back to the template-rendered
+    // CSRF_TOKEN constant if cookies are unavailable (eg. iframe contexts).
+    function getCsrfToken() {
+        return getCookie('csrftoken') || (typeof CSRF_TOKEN !== 'undefined' ? CSRF_TOKEN : '');
+    }
+
+    // useSectionSave('notes') -> async (payload) => {ok, value?, version?, conflict?, currentValue?, currentVersion?, error?}
+    //
+    // Payload is the raw section dict the backend write_fn expects, eg.
+    //   useSectionSave('notes')({ notes: 'hello' })
+    //   useSectionSave('header')({ name: 'NEW NAME' })
+    //   useSectionSave('admin-flags')({ isNuclearPower: true })
+    //
+    // The hook does NOT debounce — wrap the call in a debouncer at the call
+    // site (or use AutoSaveInput which already debounces at 1.5s by default).
+    function useSectionSave(sectionKey) {
+        const ctx = React.useContext(SectionSaveContext);
+        if (!ctx) {
+            // Soft-fail: log but don't crash the tree. This makes it easier
+            // to refactor incrementally — modules wired to the new hook will
+            // simply no-op until the provider is mounted.
+            console.error('useSectionSave called outside SectionSaveContext for', sectionKey);
+            return async () => ({ ok: false, conflict: false, error: 'no provider' });
+        }
+        return async function saveSection(payload) {
+            const expected = ctx.versionsRef.current[sectionKey];
+            const headers = {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': getCsrfToken(),
+            };
+            // Only attach If-Match when we have a known version. First-time
+            // writes (server has never seen this section) come through with
+            // version 0; we still send 0 so the server can return 409 if a
+            // concurrent first writer beat us to it.
+            headers['If-Match'] = String(expected != null ? expected : 0);
+            let res;
+            try {
+                res = await fetch(`/api/agencies/${ctx.agencyId}/section/${sectionKey}/`, {
+                    method: 'PATCH',
+                    credentials: 'same-origin',
+                    headers: headers,
+                    body: JSON.stringify(payload || {}),
+                });
+            } catch (err) {
+                console.error('Section save network error', sectionKey, err);
+                return { ok: false, conflict: false, error: String(err) };
+            }
+            if (res.status === 409) {
+                let data = {};
+                try { data = await res.json(); } catch (e) {}
+                ctx.versionsRef.current[sectionKey] = data.current_version || 0;
+                if (typeof ctx.onConflict === 'function') {
+                    ctx.onConflict(sectionKey, data.current_value, data.current_version);
+                }
+                return {
+                    ok: false, conflict: true,
+                    currentValue: data.current_value,
+                    currentVersion: data.current_version,
+                };
+            }
+            if (!res.ok) {
+                let body = '';
+                try { body = await res.text(); } catch (e) {}
+                console.error('Section save failed', sectionKey, res.status, body);
+                return { ok: false, conflict: false, error: body || res.statusText };
+            }
+            let data = {};
+            try { data = await res.json(); } catch (e) {}
+            if (typeof data.version === 'number') {
+                ctx.versionsRef.current[sectionKey] = data.version;
+            }
+            return { ok: true, value: data, version: data.version };
+        };
+    }
+
+    // useBaseSectionSave(baseId, 'merits') -> async (payload) => {...}
+    //
+    // Same shape as useSectionSave but writes to
+    //   /api/agencies/<id>/bases/<baseId>/section/<sectionKey>/
+    // and tracks version via ctx.baseVersionsRef.current[baseId]. Note that
+    // a base has one version counter shared across ALL its sections (unlike
+    // the agency, which has one per section), so we key the cache by baseId
+    // alone — the backend's per-base optimistic concurrency is base-wide.
+    function useBaseSectionSave(baseId, sectionKey) {
+        const ctx = React.useContext(SectionSaveContext);
+        if (!ctx) {
+            console.error('useBaseSectionSave called outside SectionSaveContext', baseId, sectionKey);
+            return async () => ({ ok: false, conflict: false, error: 'no provider' });
+        }
+        return async function saveBaseSection(payload) {
+            const expected = ctx.baseVersionsRef.current[baseId];
+            const headers = {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': getCsrfToken(),
+                'If-Match': String(expected != null ? expected : 0),
+            };
+            let res;
+            try {
+                res = await fetch(
+                    `/api/agencies/${ctx.agencyId}/bases/${baseId}/section/${sectionKey}/`,
+                    {
+                        method: 'PATCH',
+                        credentials: 'same-origin',
+                        headers: headers,
+                        body: JSON.stringify(payload || {}),
+                    }
+                );
+            } catch (err) {
+                console.error('Base section save network error', baseId, sectionKey, err);
+                return { ok: false, conflict: false, error: String(err) };
+            }
+            if (res.status === 409) {
+                let data = {};
+                try { data = await res.json(); } catch (e) {}
+                ctx.baseVersionsRef.current[baseId] = data.current_version || 0;
+                if (typeof ctx.onConflict === 'function') {
+                    ctx.onConflict(`base:${baseId}:${sectionKey}`, data.current_value, data.current_version);
+                }
+                return {
+                    ok: false, conflict: true,
+                    currentValue: data.current_value,
+                    currentVersion: data.current_version,
+                };
+            }
+            if (!res.ok) {
+                let body = '';
+                try { body = await res.text(); } catch (e) {}
+                console.error('Base section save failed', baseId, sectionKey, res.status, body);
+                return { ok: false, conflict: false, error: body || res.statusText };
+            }
+            let data = {};
+            try { data = await res.json(); } catch (e) {}
+            if (typeof data.version === 'number') {
+                ctx.baseVersionsRef.current[baseId] = data.version;
+            }
+            return { ok: true, value: data, version: data.version };
+        };
+    }
+
     // --- VISIBILITY TOGGLE (admin on NPC) ---
     const VisibilityToggle = ({ field, visibility, onToggle }) => {
         if (!IS_ADMIN || IS_PLAYER_AGENCY) return null;
@@ -175,8 +334,9 @@
     };
 
     Object.assign(window, {
-        PROTEST_SIGNS, XpProtester, getCookie, DEFAULT_AGENCY,
+        PROTEST_SIGNS, XpProtester, getCookie, getCsrfToken, DEFAULT_AGENCY,
         Icon, _refreshIcons, AutoSaveInput, SaveStatus, Classified, VisibilityToggle,
+        SectionSaveContext, useSectionSave, useBaseSectionSave,
     });
 </script>
 {% endverbatim %}

@@ -3,7 +3,8 @@
 const { useState, useEffect, useRef, useCallback, useMemo } = React;
 const {
     Icon, AutoSaveInput, SaveStatus, Classified, VisibilityToggle,
-    getCookie, DEFAULT_AGENCY, XpProtester, _refreshIcons,
+    getCookie, getCsrfToken, DEFAULT_AGENCY, XpProtester, _refreshIcons,
+    SectionSaveContext, useSectionSave, useBaseSectionSave,
     AllianceModule, HeaderModule, NotesModule, IntegrityModule,
     DossiersModule, AttributesModule, GlobalFlawsDisplay, CouncilDisplay,
     DarkGrantsModule, ProjectsModule, getWorkspaceConfig, calcTotalBaseExp,
@@ -124,13 +125,74 @@ const {
         );
     };
 
+    // ---------------------------------------------------------------
+    // Phase 3 helpers (multi-player concurrency)
+    //
+    // Section dispatcher: maps an `updates` blob (the legacy saveAgencyQuiet
+    // shape, eg. {motto: "..."} or {merits: [...]}) onto the new per-section
+    // PATCH endpoints. Returns a list of per-section payload pairs.
+    //
+    // Keys not covered here (eg. `projects`) fall through to the legacy
+    // monolithic PUT — see saveAgencyLegacy in AgencySheet. Once Phase 4
+    // ships per-section endpoints for those, drop them from the legacy list.
+    // ---------------------------------------------------------------
+    const SECTION_FIELD_MAP = {
+        // header
+        name: 'header', motto: 'header', headquarters: 'header',
+        // alliance
+        alliance: 'alliance',
+        // notes
+        notes: 'notes',
+        // integrity scalar (server endpoint named "integrity" but covers only the
+        // integrity counter; experience is still flushed via legacy PUT)
+        integrity: 'integrity',
+        // attributes
+        attributes: 'attributes',
+        // tabular sections
+        specializations: 'specializations',
+        merits: 'merits',
+        flaws: 'flaws',
+        assets: 'assets',
+        fleet: 'fleet',
+        history: 'history',
+        // admin-flags (combined endpoint for misc toggles)
+        mapColor: 'admin-flags',
+        isNuclearPower: 'admin-flags',
+        isHidden: 'admin-flags',
+        sweepPool: 'admin-flags',
+        zeroDayPool: 'admin-flags',
+    };
+
     // --- MAIN APP ---
     const AgencySheet = () => {
         const [agency, setAgency] = useState(null);
         const [loading, setLoading] = useState(true);
         const [saveStatus, setSaveStatus] = useState('saved');
+        // Conflict banner: { sectionKey, message } | null
+        const [conflictBanner, setConflictBanner] = useState(null);
         const saveTimerRef = useRef(null);
         const agencyRef = useRef(null);
+
+        // Phase 3 version caches. Keys here are the canonical section keys
+        // shipped in the backend dispatcher (header/notes/merits/...).
+        // baseVersionsRef is keyed by base.id and holds the per-base version
+        // (one counter shared across all base sections — backend semantics).
+        const versionsRef = useRef({});
+        const baseVersionsRef = useRef({});
+
+        // Hydrate the version caches from a freshly fetched agency payload.
+        const hydrateVersions = useCallback((data) => {
+            const sv = data.sectionVersions || {};
+            // Replace, don't merge — the server is canonical.
+            versionsRef.current = { ...sv };
+            const bv = {};
+            (data.bases || []).forEach(b => {
+                if (b && typeof b.id === 'number' && typeof b.version === 'number') {
+                    bv[b.id] = b.version;
+                }
+            });
+            baseVersionsRef.current = bv;
+        }, []);
 
         useEffect(() => {
             fetchAgency();
@@ -158,6 +220,10 @@ const {
                             )
                         };
                     }
+                    // Hydrate the version caches BEFORE updating React state — the
+                    // 30s poll could otherwise race with an in-flight save and
+                    // leave the cache one bump ahead of reality.
+                    hydrateVersions(data);
                     setAgency(merged);
                     agencyRef.current = merged;
                 }
@@ -168,14 +234,57 @@ const {
             }
         };
 
-        const saveAgency = useCallback(async (data) => {
+        // Conflict handler shared by every per-section save. We refresh the
+        // banner with a friendly message and update the in-memory agency
+        // state so the UI re-renders with the server's canonical value.
+        // AutoSaveInput is uncontrolled, so the user's typing is preserved
+        // in the DOM — they can re-blur to save against the new version.
+        const handleConflict = useCallback((sectionKey, currentValue) => {
+            setConflictBanner({
+                sectionKey: sectionKey,
+                message: `Another user updated "${sectionKey}". Refreshed to latest — re-blur to save your changes.`,
+                ts: Date.now(),
+            });
+            // Best-effort: try to slot the server's current_value back into
+            // the agency state for top-level sections (notes, merits, ...).
+            // Header / admin-flags / geo carry partial dicts so we merge.
+            if (currentValue !== undefined && agencyRef.current) {
+                const next = { ...agencyRef.current };
+                if (sectionKey === 'header' && currentValue && typeof currentValue === 'object') {
+                    Object.assign(next, currentValue);
+                } else if (sectionKey === 'admin-flags' && currentValue && typeof currentValue === 'object') {
+                    Object.assign(next, currentValue);
+                } else if (typeof sectionKey === 'string' && !sectionKey.startsWith('base:')) {
+                    next[sectionKey] = currentValue;
+                }
+                agencyRef.current = next;
+                setAgency(next);
+            }
+            // Auto-clear the banner after 6s.
+            setTimeout(() => {
+                setConflictBanner(prev => (prev && prev.sectionKey === sectionKey ? null : prev));
+            }, 6000);
+        }, []);
+
+        const sectionContextValue = useMemo(() => ({
+            agencyId: AGENCY_ID,
+            versionsRef: versionsRef,
+            baseVersionsRef: baseVersionsRef,
+            onConflict: handleConflict,
+        }), [handleConflict]);
+
+        // Legacy monolithic PUT — kept for transitional callers (projects,
+        // unmigrated legacy fields). Same code path that saveAgency had
+        // before Phase 3, just renamed for clarity. New code should NOT
+        // call this; use saveAgencyQuiet (auto-routes) or the section hooks.
+        const saveAgencyLegacy = useCallback(async (data) => {
             setSaveStatus('saving');
             try {
                 const response = await fetch('/api/agencies/' + AGENCY_ID + '/', {
                     method: 'PUT',
                     headers: {
                         'Content-Type': 'application/json',
-                        'X-CSRFToken': getCookie('csrftoken') || CSRF_TOKEN,
+                        'X-CSRFToken': getCsrfToken(),
                     },
                     body: JSON.stringify(data),
                 });
@@ -200,45 +309,160 @@ const {
 
             if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
             saveTimerRef.current = setTimeout(() => {
-                saveAgency(agencyRef.current);
+                // Route through saveAgencyQuiet so the per-section endpoints
+                // are used when possible; updateAgency is the structural-edit
+                // path (add/remove rows, toggle checkboxes) and benefits from
+                // the same routing. saveAgencyQuiet doesn't re-set state on
+                // its own when called directly with a known section field.
+                if (typeof saveAgencyQuietRef.current === 'function') {
+                    saveAgencyQuietRef.current(updates);
+                }
             }, 1000);
         };
 
-        // Silent save: updates ref + state and sends to server.
-        // Safe with uncontrolled inputs (defaultValue) — re-renders
-        // don't overwrite DOM input values, so typing is not interrupted.
-        // Keeping state in sync ensures add/remove operations have current data.
+        // ---------------------------------------------------------------
+        // saveAgencyQuiet — Phase 3 transitional dispatcher.
+        //
+        // Splits an `updates` object into:
+        //  1. recognised section fields (PATCHed per-section with If-Match)
+        //  2. legacy fields like `projects` (still flushed via PUT until
+        //     Phase 4 adds dedicated endpoints for them)
+        //
+        // Optimistic state update is preserved (sync state + ref so adds/
+        // removes have current data) so callers see no behavioural change.
+        // ---------------------------------------------------------------
         const quietSaveTimerRef = useRef(null);
+        // Track per-section PATCH calls debounced together. We keep the
+        // pending payload merged so multiple updates within the debounce
+        // window collapse into one PATCH per section.
+        const pendingSectionPayloads = useRef({});
+
+        // Forward declaration to break the updateAgency -> saveAgencyQuiet
+        // -> updateAgency cycle (saveAgencyQuiet is used inside updateAgency
+        // and vice-versa via debounce).
+        const saveAgencyQuietRef = useRef(null);
+
         const saveAgencyQuiet = useCallback((updates) => {
             if (!IS_ADMIN) return;
             const updated = { ...agencyRef.current, ...updates };
             agencyRef.current = updated;
             setAgency(updated);
 
+            // Partition fields by section.
+            const bySection = {};
+            const legacyFields = {};
+            Object.keys(updates || {}).forEach(field => {
+                const sec = SECTION_FIELD_MAP[field];
+                if (sec) {
+                    if (!bySection[sec]) bySection[sec] = {};
+                    bySection[sec][field] = updates[field];
+                } else {
+                    legacyFields[field] = updates[field];
+                }
+            });
+
+            // Merge into pending buffer so debounced batches accumulate.
+            Object.keys(bySection).forEach(sec => {
+                pendingSectionPayloads.current[sec] = {
+                    ...(pendingSectionPayloads.current[sec] || {}),
+                    ...bySection[sec],
+                };
+            });
+
             if (quietSaveTimerRef.current) clearTimeout(quietSaveTimerRef.current);
             quietSaveTimerRef.current = setTimeout(async () => {
-                try {
-                    const response = await fetch('/api/agencies/' + AGENCY_ID + '/', {
-                        method: 'PUT',
-                        headers: {
-                            'Content-Type': 'application/json',
-                            'X-CSRFToken': getCookie('csrftoken') || CSRF_TOKEN,
-                        },
-                        body: JSON.stringify(agencyRef.current),
-                    });
-                    if (!response.ok) { console.error('Quiet save failed:', response.status); return; }
-                    // Re-fetch to get server-computed fields (dice pool, etc.)
-                    const fresh = await fetch('/api/agencies/' + AGENCY_ID + '/');
-                    if (fresh.ok) {
-                        const data = await fresh.json();
-                        agencyRef.current = data;
-                        setAgency(data);
+                // Snapshot and reset the pending buffer in one shot so any
+                // saves arriving during await don't get dropped.
+                const toFlush = pendingSectionPayloads.current;
+                pendingSectionPayloads.current = {};
+                const headers = {
+                    'Content-Type': 'application/json',
+                    'X-CSRFToken': getCsrfToken(),
+                };
+                let conflictHit = false;
+                // Fire per-section PATCHes sequentially. They share a single
+                // agency row lock on the backend, so parallel sends would
+                // queue up anyway; sequential keeps the conflict banner sane.
+                for (const sectionKey of Object.keys(toFlush)) {
+                    const payload = toFlush[sectionKey];
+                    const expected = versionsRef.current[sectionKey];
+                    const reqHeaders = {
+                        ...headers,
+                        'If-Match': String(expected != null ? expected : 0),
+                    };
+                    try {
+                        const res = await fetch(
+                            `/api/agencies/${AGENCY_ID}/section/${sectionKey}/`,
+                            { method: 'PATCH', credentials: 'same-origin', headers: reqHeaders, body: JSON.stringify(payload) }
+                        );
+                        if (res.status === 409) {
+                            conflictHit = true;
+                            const data = await res.json().catch(() => ({}));
+                            versionsRef.current[sectionKey] = data.current_version || 0;
+                            handleConflict(sectionKey, data.current_value, data.current_version);
+                            continue;
+                        }
+                        if (!res.ok) {
+                            console.error('Section save failed', sectionKey, res.status);
+                            continue;
+                        }
+                        const data = await res.json().catch(() => ({}));
+                        if (typeof data.version === 'number') {
+                            versionsRef.current[sectionKey] = data.version;
+                        }
+                    } catch (err) {
+                        console.error('Section save error', sectionKey, err);
                     }
-                } catch (err) {
-                    console.error('Quiet save error:', err);
+                }
+
+                // Flush remaining legacy fields via the monolithic PUT.
+                // This is the transition path — once `projects` has its own
+                // section endpoint, this branch becomes dead code.
+                //
+                // We send ONLY the legacy fields (not the whole agency) so we
+                // don't stomp on a concurrent edit to a different section.
+                // The backend PUT shim accepts partial bodies.
+                if (Object.keys(legacyFields).length > 0) {
+                    try {
+                        await fetch('/api/agencies/' + AGENCY_ID + '/', {
+                            method: 'PUT', credentials: 'same-origin',
+                            headers: headers,
+                            body: JSON.stringify(legacyFields),
+                        });
+                    } catch (err) {
+                        console.error('Legacy save error:', err);
+                    }
+                }
+
+                // Re-fetch to refresh server-computed fields (dice pool,
+                // sweep info, base XP totals) and to re-hydrate the version
+                // cache. Skip the refetch on conflict so the user can see
+                // the banner before the UI swaps under them.
+                if (!conflictHit) {
+                    try {
+                        const fresh = await fetch('/api/agencies/' + AGENCY_ID + '/');
+                        if (fresh.ok) {
+                            const data = await fresh.json();
+                            hydrateVersions(data);
+                            agencyRef.current = data;
+                            setAgency(data);
+                        }
+                    } catch (err) {
+                        console.error('Refresh after save failed:', err);
+                    }
                 }
             }, 500);
-        }, []);
+        }, [handleConflict, hydrateVersions]);
+
+        // Wire the forward-declared ref so updateAgency can call back here.
+        useEffect(() => {
+            saveAgencyQuietRef.current = saveAgencyQuiet;
+        }, [saveAgencyQuiet]);
+
+        // Back-compat alias: legacy code still references saveAgency. Now
+        // routes through the same dispatcher; intentionally not exposed to
+        // child modules going forward — they should use the section hooks.
+        const saveAgency = saveAgencyLegacy;
 
         const toggleVisibility = async (field, visible) => {
             try {
@@ -288,7 +512,28 @@ const {
         const vis = agency.fieldVisibility || {};
 
         return (
+            <SectionSaveContext.Provider value={sectionContextValue}>
             <div className="fade-in">
+                {/* Conflict banner — shown when another user wrote a section
+                    we just tried to save. Auto-clears after ~6s. */}
+                {conflictBanner && (
+                    <div style={{
+                        marginBottom: '0.75rem', padding: '0.65rem 1rem',
+                        borderRadius: 'var(--radius-sm)',
+                        background: 'rgba(234, 179, 8, 0.12)',
+                        border: '1px solid var(--accent-warning, #eab308)',
+                        color: 'var(--accent-warning, #eab308)',
+                        fontFamily: 'var(--font-mono)', fontSize: '0.8rem',
+                        display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+                    }}>
+                        <span>CONFLICT // {conflictBanner.message}</span>
+                        <button onClick={() => setConflictBanner(null)} style={{
+                            background: 'transparent', border: 'none', color: 'inherit',
+                            cursor: 'pointer', fontFamily: 'inherit', fontSize: '1rem',
+                            padding: '0 0.25rem',
+                        }}>×</button>
+                    </div>
+                )}
                 {/* Sub-header with save status */}
                 <div style={{
                     display: 'flex', justifyContent: 'space-between', alignItems: 'center',
@@ -618,8 +863,8 @@ const {
                     items={agency.history}
                     columns={[
                         { key: 'year', label: 'YEAR', width: '80px' },
-                        { key: 'decision', label: 'DECISION', width: '2fr' },
-                        { key: 'consequence', label: 'CONSEQUENCE', width: '2fr' },
+                        { key: 'decision', label: 'DECISION', width: '2fr', type: 'textarea' },
+                        { key: 'consequence', label: 'CONSEQUENCE', width: '2fr', type: 'textarea' },
                     ]}
                     emptyItem={{ year: '', decision: '', consequence: '' }}
                     update={val => updateAgency({ history: val })}
@@ -643,6 +888,7 @@ const {
                     <ChangeRequestPanel agencyId={AGENCY_ID} />
                 )}
             </div>
+            </SectionSaveContext.Provider>
         );
     };
 

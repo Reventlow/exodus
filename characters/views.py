@@ -312,17 +312,21 @@ def api_transfer_xp(request, pk):
     if amount < 0 and not request.user.is_superuser:
         return JsonResponse({"error": "Only administrators can retract XP."}, status=403)
 
+    # Weak upper bound only — you can't donate more than you've ever earned.
+    # The real "do you have surplus?" check is enforced by the frontend, which
+    # knows auto-XP, manual spend, and prior donations. The source of truth for
+    # a transfer is the XpTransferLog; character.experience represents total
+    # EARNED XP and is not decremented on donation (otherwise the frontend's
+    # remaining-XP calculation would double-count donations).
     if amount > 0 and amount > character.experience:
         return JsonResponse(
-            {"error": f"Insufficient XP. Character has {character.experience}."},
+            {"error": f"Insufficient XP. Character has {character.experience} earned."},
             status=400,
         )
 
     agency = get_object_or_404(Agency, pk=agency_id, is_player_agency=True)
 
     with transaction.atomic():
-        character.experience -= amount
-        character.save()
         agency.experience += amount * 10
         agency.save()
         XpTransferLog.objects.create(

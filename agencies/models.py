@@ -83,6 +83,17 @@ class Agency(models.Model):
         help_text='Roll allocations: {"_global": {"free": N, "spare": N}, "CharName": {"free": N, "spare": N}}',
     )
 
+    # Optimistic concurrency: per-section monotonic version counters.
+    # Shape: {"notes": 7, "merits": 3, ...}. Bumped on every successful
+    # section PATCH; clients send the expected current value via If-Match.
+    section_versions = models.JSONField(
+        default=dict,
+        help_text=(
+            "Per-section monotonic versions for optimistic concurrency on "
+            "agency-level PATCH endpoints."
+        ),
+    )
+
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
@@ -777,6 +788,14 @@ class Base(models.Model):
     )
     latitude = models.FloatField(null=True, blank=True)
     longitude = models.FloatField(null=True, blank=True)
+
+    # Optimistic concurrency: monotonic version counter bumped on every
+    # successful section save. Clients send the expected current value via
+    # If-Match; on mismatch the server returns 409 with the current state.
+    version = models.PositiveIntegerField(
+        default=0,
+        help_text="Monotonic version for optimistic concurrency on per-base PATCH endpoints.",
+    )
 
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
