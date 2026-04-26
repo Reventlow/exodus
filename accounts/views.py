@@ -20,6 +20,7 @@ from django.contrib.auth.models import User
 from django.contrib import messages
 from django.http import JsonResponse
 from django.utils import timezone
+from django.views.decorators.http import require_http_methods
 
 
 # Activity-status thresholds. ACTIVE within 2h, STANDBY within 4h,
@@ -155,6 +156,64 @@ def login_view(request):
         messages.error(request, err)
 
     return render(request, "accounts/login.html", _login_context(request))
+
+
+@require_http_methods(["POST"])
+def api_admin_set_last_activity(request):
+    """Admin-only bulk-set ``UserProfile.last_activity`` for testing the
+    roster status pills. POST JSON body:
+
+        {"users": "all_non_superuser" | ["username1", ...],
+         "timestamp": "2026-04-13T13:00:00+00:00"}
+
+    Returns ``{"updated": N, "usernames": [...]}``. Authenticated as a
+    superuser via session, or via the MCP Bearer token middleware.
+    """
+    from datetime import datetime
+
+    if not request.user.is_superuser:
+        return JsonResponse({"error": "Forbidden"}, status=403)
+    try:
+        body = json.loads(request.body) if request.body else {}
+    except json.JSONDecodeError:
+        return JsonResponse({"error": "Invalid JSON"}, status=400)
+
+    raw_ts = body.get("timestamp")
+    try:
+        ts = datetime.fromisoformat(raw_ts) if raw_ts else None
+    except (TypeError, ValueError):
+        ts = None
+    if ts is None:
+        return JsonResponse(
+            {"error": "Invalid or missing 'timestamp' (ISO 8601 required)."},
+            status=400,
+        )
+    if ts.tzinfo is None:
+        ts = ts.replace(tzinfo=timezone.utc)
+
+    target = body.get("users")
+    if target == "all_non_superuser":
+        users_qs = User.objects.filter(is_superuser=False, is_active=True)
+    elif isinstance(target, list) and all(isinstance(u, str) for u in target):
+        users_qs = User.objects.filter(username__in=target, is_active=True)
+    else:
+        return JsonResponse(
+            {"error": "'users' must be \"all_non_superuser\" or a list of usernames."},
+            status=400,
+        )
+
+    from .models import UserProfile
+
+    updated = []
+    for user in users_qs:
+        profile, _ = UserProfile.objects.get_or_create(user=user)
+        UserProfile.objects.filter(pk=profile.pk).update(last_activity=ts)
+        updated.append(user.username)
+    return JsonResponse({
+        "updated": len(updated),
+        "usernames": updated,
+        "timestamp": ts.isoformat(),
+    })
 
 
 def logout_view(request):

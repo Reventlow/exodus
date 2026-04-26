@@ -1,5 +1,8 @@
 # Changelog
 
+## v0.14.44
+- New admin-only endpoint `POST /accounts/api/admin/set-last-activity/` for bulk-setting `UserProfile.last_activity` timestamps. Body: `{"users": "all_non_superuser" | ["username1", ...], "timestamp": "ISO-8601"}`. Useful for testing the roster status pills (drift users into ACTIVE / STANDBY / DORMANT / INACTIVE bands without waiting for real time to pass)
+
 ## v0.14.43
 - **Wave 3 of the clearance-gate aesthetic rollout — heavy authority surfaces.** 10 React-via-Babel templates restyled across four parallel agents on disjoint files
 - **Agency sheet** (Wave 3A): 6 component files (`_app`, `_core_modules`, `_projects`, `_table_ftl`, `_changes`, `_bases`). 1 bracket-frame on the agency header authority card, 20 `.block-head` section markers, 17 status pills (hidden, XP, read-only, council statuses, change requests, project completes, base hidden), 122 `borderRadius` zeroings. Hooks (`useSectionSave`, `useBaseSectionSave`, `useProjectActionFetch`) and conflict-banner logic untouched

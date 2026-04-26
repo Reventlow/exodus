@@ -1,6 +1,6 @@
 services:
   web:
-    image: elohite/exodus:0.14.43
+    image: elohite/exodus:0.14.44
     ports:
       - "8000:8000"
     volumes:
