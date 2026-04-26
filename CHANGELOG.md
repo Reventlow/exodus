@@ -1,5 +1,13 @@
 # Changelog
 
+## v0.14.49
+- Three new admin-only API endpoints for user profile management:
+  - `GET /accounts/api/admin/users/` — list all users with profile + activity status
+  - `GET /accounts/api/admin/users/<username>/` — single user's profile
+  - `POST /accounts/api/admin/users/<username>/set-active/` — burn / un-burn (set `is_active`)
+- Each user payload includes `username`, `isSuperuser`, `isActive`, `email`, `dateJoined`, `lastLogin`, `lastActivity`, `secondsSinceActivity`, `activityStatus` (ACTIVE / STANDBY / DORMANT / CRAWLING / INACTIVE / BURNED), `burned` flag, `characterName`, `characterClass`, `hasAvatar`
+- Four new MCP tools wrapping the endpoints (`list_user_profiles`, `get_user_profile`, `set_user_active`, `set_user_last_activity`) so Claude can monitor + manage activity without the admin UI
+
 ## v0.14.48
 - New `CRAWLING` status (muted ocher `#8a7656`) added to the login roster ladder. Sort order is now ACTIVE → STANDBY → DORMANT → **CRAWLING** → INACTIVE → BURNED
 - Synthetic `__SYSTEM__` row always present on the roster — `CRAWLING` status, `SYSTEMS SECURITY` node, `ALWAYS` uplink. The in-fiction systems-security daemon that never logs off but never quite gets full bandwidth either. Excluded from the active-count badge (it's not a real human)

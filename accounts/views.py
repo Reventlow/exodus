@@ -129,6 +129,94 @@ def _build_login_roster():
     return rows, active_count
 
 
+def _serialize_user(user, now=None):
+    """Serialize a user with profile + activity status for the admin API."""
+    if now is None:
+        now = timezone.now()
+    profile = getattr(user, "profile", None)
+    last = profile.last_activity if profile else None
+    char = (
+        user.characters.first()
+        if (hasattr(user, "characters") and not user.is_superuser)
+        else None
+    )
+    delta_sec = (now - last).total_seconds() if last else None
+    return {
+        "username": user.username,
+        "isSuperuser": user.is_superuser,
+        "isActive": user.is_active,
+        "email": user.email,
+        "dateJoined": user.date_joined.isoformat() if user.date_joined else None,
+        "lastLogin": user.last_login.isoformat() if user.last_login else None,
+        "lastActivity": last.isoformat() if last else None,
+        "secondsSinceActivity": int(delta_sec) if delta_sec is not None else None,
+        "activityStatus": (
+            "BURNED" if not user.is_active
+            else _compute_activity_status(last, now)
+        ),
+        "burned": not user.is_active,
+        "characterName": char.name if char else None,
+        "characterClass": char.character_class if char else None,
+        "hasAvatar": bool(profile and profile.avatar) if profile else False,
+    }
+
+
+@require_http_methods(["GET"])
+def api_admin_list_user_profiles(request):
+    """List all users with profile data + activity status (admin-only)."""
+    if not request.user.is_superuser:
+        return JsonResponse({"error": "Forbidden"}, status=403)
+    now = timezone.now()
+    users = (
+        User.objects.all()
+        .select_related("profile")
+        .prefetch_related("characters")
+        .order_by("-is_superuser", "username")
+    )
+    payload = [_serialize_user(u, now) for u in users]
+    return JsonResponse({"count": len(payload), "users": payload})
+
+
+@require_http_methods(["GET"])
+def api_admin_get_user_profile(request, username):
+    """Get a single user's profile + activity status (admin-only)."""
+    if not request.user.is_superuser:
+        return JsonResponse({"error": "Forbidden"}, status=403)
+    try:
+        user = (
+            User.objects
+            .select_related("profile")
+            .prefetch_related("characters")
+            .get(username=username)
+        )
+    except User.DoesNotExist:
+        return JsonResponse({"error": "User not found"}, status=404)
+    return JsonResponse(_serialize_user(user))
+
+
+@require_http_methods(["POST"])
+def api_admin_set_user_active(request, username):
+    """Toggle a user's ``is_active`` flag (burn / un-burn). Admin-only.
+
+    POST body: ``{"active": true | false}``.
+    """
+    if not request.user.is_superuser:
+        return JsonResponse({"error": "Forbidden"}, status=403)
+    try:
+        body = json.loads(request.body) if request.body else {}
+    except json.JSONDecodeError:
+        return JsonResponse({"error": "Invalid JSON"}, status=400)
+    if "active" not in body:
+        return JsonResponse({"error": "Missing 'active' boolean"}, status=400)
+    try:
+        user = User.objects.get(username=username)
+    except User.DoesNotExist:
+        return JsonResponse({"error": "User not found"}, status=404)
+    user.is_active = bool(body["active"])
+    user.save(update_fields=["is_active"])
+    return JsonResponse(_serialize_user(user))
+
+
 def _wants_json(request):
     """Detect AJAX/JSON callers from the Clearance Gate JS."""
     accept = request.headers.get("Accept", "")
