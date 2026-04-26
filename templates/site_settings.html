@@ -89,6 +89,10 @@
             <button class="sidebar-item" onclick="showSection('base-access', this)">Class Access</button>
         </div>
         <div class="sidebar-group">
+            <div class="sidebar-group-label">CLEARANCE GATE</div>
+            <button class="sidebar-item" onclick="showSection('tweaks', this)">Tweaks</button>
+        </div>
+        <div class="sidebar-group">
             <div class="sidebar-group-label">MAPS</div>
             <button class="sidebar-item" onclick="showSection('city-maps', this)">City Maps</button>
             <button class="sidebar-item" onclick="showSection('starmap-config', this)">Star Map</button>
@@ -275,6 +279,171 @@
                 </span>
             </div>
             <button type="submit" class="mono-text" style="width: 100%; background: var(--accent-primary); color: var(--bg-dark); border: none; padding: 0.6rem; cursor: pointer; font-weight: bold; font-size: 0.9rem; letter-spacing: 1px;">SAVE</button>
+        </div>
+
+        <!-- Clearance Gate Tweaks -->
+        <div id="sec-tweaks" class="settings-section">
+            <h3>CLEARANCE GATE</h3>
+            <span class="text-muted mono-text" style="font-size: 0.7rem; display: block; margin-bottom: 1rem;">
+                Presentation tweaks for the unauthenticated login screen ("clearance gate"). Defaults: EMERALD palette, OPS_MAP backdrop, all effects on.
+            </span>
+            <input type="hidden" name="tweaks_submitted" value="1">
+
+            {# THEME -- Palette radio #}
+            <div style="margin-bottom: 1.25rem; padding: 1rem; border: 1px solid var(--border-color); border-radius: var(--radius-sm);">
+                <div class="text-secondary mono-text" style="font-size: 0.75rem; letter-spacing: 0.18em; margin-bottom: 0.6rem;">THEME / PALETTE</div>
+                <div style="display: flex; flex-wrap: wrap; gap: 1rem;">
+                    <label style="display: inline-flex; align-items: center; gap: 0.45rem; font-family: var(--font-mono); font-size: 0.85rem; cursor: pointer;">
+                        <input type="radio" name="tweaks_palette" value="emerald" {% if tweaks.palette == 'emerald' %}checked{% endif %}>
+                        EMERALD
+                    </label>
+                    <label style="display: inline-flex; align-items: center; gap: 0.45rem; font-family: var(--font-mono); font-size: 0.85rem; cursor: pointer;">
+                        <input type="radio" name="tweaks_palette" value="amber" {% if tweaks.palette == 'amber' %}checked{% endif %}>
+                        AMBER
+                    </label>
+                    <label style="display: inline-flex; align-items: center; gap: 0.45rem; font-family: var(--font-mono); font-size: 0.85rem; cursor: pointer;">
+                        <input type="radio" name="tweaks_palette" value="ice" {% if tweaks.palette == 'ice' %}checked{% endif %}>
+                        ICE
+                    </label>
+                    <label style="display: inline-flex; align-items: center; gap: 0.45rem; font-family: var(--font-mono); font-size: 0.85rem; cursor: pointer;">
+                        <input type="radio" name="tweaks_palette" value="blood" {% if tweaks.palette == 'blood' %}checked{% endif %}>
+                        BLOOD
+                    </label>
+                    <label style="display: inline-flex; align-items: center; gap: 0.45rem; font-family: var(--font-mono); font-size: 0.85rem; cursor: pointer;">
+                        <input type="radio" name="tweaks_palette" value="bone" {% if tweaks.palette == 'bone' %}checked{% endif %}>
+                        BONE
+                    </label>
+                </div>
+            </div>
+
+            {# BACKGROUND -- Backdrop radio + conditional sliders #}
+            <div style="margin-bottom: 1.25rem; padding: 1rem; border: 1px solid var(--border-color); border-radius: var(--radius-sm);">
+                <div class="text-secondary mono-text" style="font-size: 0.75rem; letter-spacing: 0.18em; margin-bottom: 0.6rem;">BACKGROUND / BACKDROP</div>
+                <div style="display: flex; flex-wrap: wrap; gap: 1rem; margin-bottom: 1rem;">
+                    <label style="display: inline-flex; align-items: center; gap: 0.45rem; font-family: var(--font-mono); font-size: 0.85rem; cursor: pointer;">
+                        <input type="radio" name="tweaks_backdrop" value="ops_map" {% if tweaks.backdrop == 'ops_map' %}checked{% endif %}>
+                        OPS_MAP
+                    </label>
+                    <label style="display: inline-flex; align-items: center; gap: 0.45rem; font-family: var(--font-mono); font-size: 0.85rem; cursor: pointer;">
+                        <input type="radio" name="tweaks_backdrop" value="code_rain" {% if tweaks.backdrop == 'code_rain' %}checked{% endif %}>
+                        CODE_RAIN
+                    </label>
+                    <label style="display: inline-flex; align-items: center; gap: 0.45rem; font-family: var(--font-mono); font-size: 0.85rem; cursor: pointer;">
+                        <input type="radio" name="tweaks_backdrop" value="plain" {% if tweaks.backdrop == 'plain' %}checked{% endif %}>
+                        PLAIN
+                    </label>
+                </div>
+
+                {# OPS_MAP sub-controls #}
+                <div style="display: grid; gap: 0.6rem; padding: 0.65rem; border: 1px dashed var(--border-color);">
+                    <div class="text-muted mono-text" style="font-size: 0.7rem; letter-spacing: 0.16em;">OPS_MAP CONTROLS</div>
+                    <label style="display: flex; align-items: center; gap: 0.75rem; font-family: var(--font-mono); font-size: 0.8rem;">
+                        <span style="min-width: 9rem;">Map intensity</span>
+                        <input type="range" name="tweaks_map_intensity" min="0" max="100" step="1"
+                            data-raw="{{ tweaks.map_intensity }}"
+                            oninput="this.nextElementSibling.textContent = this.value + '%'"
+                            style="flex: 1;">
+                        <span class="text-muted mono-text" style="min-width: 3rem; text-align: right;">--</span>
+                    </label>
+                    <label style="display: flex; align-items: center; gap: 0.75rem; cursor: pointer; font-family: var(--font-mono); font-size: 0.8rem;">
+                        <input type="checkbox" name="tweaks_show_radar" {% if tweaks.show_radar %}checked{% endif %}
+                            style="width: 18px; height: 18px; accent-color: var(--accent-primary);">
+                        Radar sweep
+                    </label>
+                    <label style="display: flex; align-items: center; gap: 0.75rem; cursor: pointer; font-family: var(--font-mono); font-size: 0.8rem;">
+                        <input type="checkbox" name="tweaks_show_nodes" {% if tweaks.show_nodes %}checked{% endif %}
+                            style="width: 18px; height: 18px; accent-color: var(--accent-primary);">
+                        Node markers
+                    </label>
+                </div>
+
+                {# CODE_RAIN sub-controls #}
+                <div style="display: grid; gap: 0.6rem; padding: 0.65rem; border: 1px dashed var(--border-color); margin-top: 0.6rem;">
+                    <div class="text-muted mono-text" style="font-size: 0.7rem; letter-spacing: 0.16em;">CODE_RAIN CONTROLS</div>
+                    <label style="display: flex; align-items: center; gap: 0.75rem; font-family: var(--font-mono); font-size: 0.8rem;">
+                        <span style="min-width: 9rem;">Glyphs</span>
+                        <select name="tweaks_rain_style"
+                            style="flex: 1; background: var(--bg-input); border: 1px solid var(--border-color); color: var(--text-primary); padding: 0.4rem; font-family: var(--font-mono);">
+                            <option value="katakana" {% if tweaks.rain_style == 'katakana' %}selected{% endif %}>KATAKANA</option>
+                            <option value="hex" {% if tweaks.rain_style == 'hex' %}selected{% endif %}>HEX</option>
+                            <option value="binary" {% if tweaks.rain_style == 'binary' %}selected{% endif %}>BINARY</option>
+                            <option value="ascii" {% if tweaks.rain_style == 'ascii' %}selected{% endif %}>ASCII</option>
+                        </select>
+                    </label>
+                    <label style="display: flex; align-items: center; gap: 0.75rem; font-family: var(--font-mono); font-size: 0.8rem;">
+                        <span style="min-width: 9rem;">Density</span>
+                        <input type="range" name="tweaks_rain_density" min="0" max="100" step="1"
+                            data-raw="{{ tweaks.rain_density }}"
+                            oninput="this.nextElementSibling.textContent = this.value + '%'"
+                            style="flex: 1;">
+                        <span class="text-muted mono-text" style="min-width: 3rem; text-align: right;">--</span>
+                    </label>
+                    <label style="display: flex; align-items: center; gap: 0.75rem; font-family: var(--font-mono); font-size: 0.8rem;">
+                        <span style="min-width: 9rem;">Speed</span>
+                        <input type="range" name="tweaks_rain_speed" min="0" max="100" step="1"
+                            data-raw="{{ tweaks.rain_speed }}"
+                            oninput="this.nextElementSibling.textContent = this.value + '%'"
+                            style="flex: 1;">
+                        <span class="text-muted mono-text" style="min-width: 3rem; text-align: right;">--</span>
+                    </label>
+                </div>
+            </div>
+
+            {# EFFECTS toggles #}
+            <div style="margin-bottom: 1.25rem; padding: 1rem; border: 1px solid var(--border-color); border-radius: var(--radius-sm); display: grid; gap: 0.55rem;">
+                <div class="text-secondary mono-text" style="font-size: 0.75rem; letter-spacing: 0.18em; margin-bottom: 0.4rem;">EFFECTS</div>
+                <label style="display: flex; align-items: center; gap: 0.75rem; cursor: pointer; font-family: var(--font-mono); font-size: 0.85rem;">
+                    <input type="checkbox" name="tweaks_scanlines" {% if tweaks.scanlines %}checked{% endif %}
+                        style="width: 18px; height: 18px; accent-color: var(--accent-primary);">
+                    Scanlines
+                </label>
+                <label style="display: flex; align-items: center; gap: 0.75rem; cursor: pointer; font-family: var(--font-mono); font-size: 0.85rem;">
+                    <input type="checkbox" name="tweaks_vignette" {% if tweaks.vignette %}checked{% endif %}
+                        style="width: 18px; height: 18px; accent-color: var(--accent-primary);">
+                    Vignette
+                </label>
+                <label style="display: flex; align-items: center; gap: 0.75rem; cursor: pointer; font-family: var(--font-mono); font-size: 0.85rem;">
+                    <input type="checkbox" name="tweaks_show_rails" {% if tweaks.show_rails %}checked{% endif %}
+                        style="width: 18px; height: 18px; accent-color: var(--accent-primary);">
+                    Side telemetry rails
+                </label>
+            </div>
+
+            {# BRANDING #}
+            <div style="margin-bottom: 1.25rem; padding: 1rem; border: 1px solid var(--border-color); border-radius: var(--radius-sm); display: grid; gap: 0.6rem;">
+                <div class="text-secondary mono-text" style="font-size: 0.75rem; letter-spacing: 0.18em; margin-bottom: 0.2rem;">BRANDING</div>
+                <label style="display: flex; flex-direction: column; gap: 0.25rem;">
+                    <span class="text-secondary mono-text" style="font-size: 0.75rem;">AGENCY NAME</span>
+                    <input type="text" name="tweaks_agency_name" maxlength="50"
+                        value="{{ tweaks.agency_name|default:'BLACKLOG.NET' }}"
+                        style="background: var(--bg-input); border: 1px solid var(--border-color); color: var(--text-primary); padding: 0.5rem; font-family: var(--font-mono); font-size: 0.9rem;">
+                </label>
+                <label style="display: flex; flex-direction: column; gap: 0.25rem;">
+                    <span class="text-secondary mono-text" style="font-size: 0.75rem;">OP CODENAME</span>
+                    <input type="text" name="tweaks_op_codename" maxlength="50"
+                        value="{{ tweaks.op_codename|default:'OMEGA-7' }}"
+                        style="background: var(--bg-input); border: 1px solid var(--border-color); color: var(--text-primary); padding: 0.5rem; font-family: var(--font-mono); font-size: 0.9rem;">
+                </label>
+            </div>
+
+            <button type="submit" class="mono-text" style="width: 100%; background: var(--accent-primary); color: var(--bg-dark); border: none; padding: 0.6rem; cursor: pointer; font-weight: bold; font-size: 0.9rem; letter-spacing: 1px;">SAVE</button>
+
+            {# Initialise slider readouts to current % values on load.
+               Stored values are 0..1; the slider runs 0..100. #}
+            <script>
+            (function () {
+              var section = document.getElementById('sec-tweaks');
+              if (!section) return;
+              var sliders = section.querySelectorAll('input[type="range"]');
+              sliders.forEach(function (s) {
+                var raw = parseFloat(s.dataset.raw);
+                if (isNaN(raw)) raw = 1.0;
+                s.value = Math.round(Math.max(0, Math.min(1, raw)) * 100);
+                var lbl = s.nextElementSibling;
+                if (lbl) lbl.textContent = s.value + '%';
+              });
+            })();
+            </script>
         </div>
 
         </form>

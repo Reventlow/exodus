@@ -48,6 +48,49 @@ def site_settings(request):
                 cls: f"class_unlock_{cls}" in request.POST
                 for cls in ("soldier", "science", "engineer", "fixer", "ai")
             }
+        # Clearance Gate tweaks. Like class_unlock_flags above we only touch
+        # the JSON blob when the TWEAKS tab POSTs its hidden marker, so saves
+        # from other tabs don't clobber the Clearance Gate settings.
+        if "tweaks_submitted" in request.POST:
+            tw = settings_obj.get_tweaks()
+            valid_palettes = {"emerald", "amber", "ice", "blood", "bone"}
+            valid_backdrops = {"ops_map", "code_rain", "plain"}
+            valid_rain = {"katakana", "hex", "binary", "ascii"}
+
+            pal = request.POST.get("tweaks_palette", "").strip().lower()
+            if pal in valid_palettes:
+                tw["palette"] = pal
+            bd = request.POST.get("tweaks_backdrop", "").strip().lower()
+            if bd in valid_backdrops:
+                tw["backdrop"] = bd
+            rs = request.POST.get("tweaks_rain_style", "").strip().lower()
+            if rs in valid_rain:
+                tw["rain_style"] = rs
+
+            def _slider(field, default):
+                """Map slider value (0..100) -> 0.0..1.0 with safe coercion."""
+                raw = request.POST.get(field, "").strip()
+                try:
+                    v = float(raw)
+                except (TypeError, ValueError):
+                    return default
+                return max(0.0, min(1.0, v / 100.0))
+
+            tw["map_intensity"] = _slider("tweaks_map_intensity", tw["map_intensity"])
+            tw["rain_density"] = _slider("tweaks_rain_density", tw["rain_density"])
+            tw["rain_speed"] = _slider("tweaks_rain_speed", tw["rain_speed"])
+
+            tw["show_radar"] = "tweaks_show_radar" in request.POST
+            tw["show_nodes"] = "tweaks_show_nodes" in request.POST
+            tw["scanlines"] = "tweaks_scanlines" in request.POST
+            tw["vignette"] = "tweaks_vignette" in request.POST
+            tw["show_rails"] = "tweaks_show_rails" in request.POST
+
+            tw["agency_name"] = (request.POST.get("tweaks_agency_name", "").strip()
+                                 or "BLACKLOG.NET")[:50]
+            tw["op_codename"] = (request.POST.get("tweaks_op_codename", "").strip()
+                                 or "OMEGA-7")[:50]
+            settings_obj.tweaks = tw
         for lbl in ["dispatch", "players", "agencies", "council", "npcs", "comms"]:
             val = request.POST.get(f"label_{lbl}", "").strip()
             if val:
@@ -68,6 +111,7 @@ def site_settings(request):
         "impersonating": impersonating,
         "player_agencies": player_agencies,
         "npc_agencies": npc_agencies,
+        "tweaks": settings_obj.get_tweaks(),
     })
 
 

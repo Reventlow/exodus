@@ -1,58 +1,184 @@
-{% extends "base.html" %}
+{% load static %}<!DOCTYPE html>
+{# Petition form (request new clearance). Same chrome as login.html
+   but single-column. Standard Django POST — no AJAX. #}
+<html lang="en" class="no-js">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="csrf-token" content="{{ csrf_token }}">
+  <title>NEW CLEARANCE // BLACKLOG.NET</title>
+  <link rel="icon" href="{% static 'favicon.svg' %}">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700;800&family=VT323&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="{% static 'css/clearance_gate.css' %}">
+</head>
+<body class="clearance-gate">
 
-{% block title %}REGISTER // BLACKLOG.NET{% endblock %}
+<div class="root" data-palette="{{ tweaks.palette|default:'emerald' }}">
+  <canvas id="bg-canvas" class="bg-canvas"></canvas>
 
-{% block content %}
-<div style="max-width: 400px; margin: 4rem auto;">
-    <div class="glass-panel" style="padding: 2rem;">
-        <h2 class="mono-text text-accent" style="text-align: center; margin-bottom: 0.5rem; letter-spacing: 2px;">
-            NEW OPERATIVE
-        </h2>
-        <p class="text-muted mono-text" style="text-align: center; font-size: 0.8rem; margin-bottom: 2rem;">
-            INITIALIZE PERSONNEL RECORD
-        </p>
+  {% if tweaks.vignette|default:True %}<div class="vignette"></div>{% endif %}
+  {% if tweaks.scanlines|default:True %}<div class="scanlines"></div>{% endif %}
+  <div class="crt-curve"></div>
+
+  <div class="strip">
+    <div class="strip-l">
+      <span class="dot"></span>
+      <span>{{ tweaks.agency_name|default:"BLACKLOG.NET" }}</span>
+      <span class="muted">//</span>
+      <span>EXODUS</span>
+      <span class="muted">//</span>
+      <span class="muted">PETITION FORM</span>
+    </div>
+    <div class="strip-r">
+      <span class="muted">SES</span><span class="strip-ses">--------</span>
+      <span class="muted">·</span>
+      <span class="muted">OPS ONLINE</span><span class="strip-ops">127</span>
+      <span class="muted">·</span>
+      <span class="muted">UTC</span><span class="strip-utc">----</span>
+    </div>
+  </div>
+
+  {% if tweaks.show_rails|default:True %}
+  <div class="rail rail-left"  aria-hidden="true"></div>
+  <div class="rail rail-right" aria-hidden="true"></div>
+  {% endif %}
+
+  <main class="stage">
+
+    <div id="stage-register" class="login">
+      <div class="brackets single">
+        <span class="bk tl"></span><span class="bk tr"></span>
+        <span class="bk bl"></span><span class="bk br"></span>
+
+        <header class="login-head">
+          <div class="kicker">FORM 7-B  //  CLEARANCE PETITION</div>
+          <h1 class="title">
+            <span>NEW</span><span class="title-sep">/</span><span>CLEARANCE</span>
+          </h1>
+          <div class="sub">SUBMITTED PETITIONS ARE REVIEWED BY HANDLER WITHIN 48H</div>
+        </header>
 
         {% if messages %}
-        <div style="margin-bottom: 1rem;">
-            {% for message in messages %}
-            <div class="mono-text" style="color: var(--accent-danger); font-size: 0.85rem; padding: 0.5rem; border-left: 2px solid var(--accent-danger); margin-bottom: 0.5rem;">
-                {{ message }}
-            </div>
-            {% endfor %}
-        </div>
+          {% for message in messages %}
+          <div class="err{% if message.tags == 'success' %} success{% endif %}">
+            <span class="err-tag">!! {% if message.tags == 'success' %}OK{% else %}ERROR{% endif %}</span>
+            {{ message }}
+          </div>
+          {% endfor %}
         {% endif %}
 
-        <form method="post">
-            {% csrf_token %}
-            <div style="margin-bottom: 1.5rem;">
-                <label class="text-secondary mono-text" style="font-size: 0.8rem; display: block; margin-bottom: 0.25rem;">CODENAME</label>
-                <input type="text" name="username" required autofocus
-                    style="width: 100%; background: var(--bg-input); border: 1px solid var(--border-color); color: var(--text-primary); padding: 0.75rem; font-family: var(--font-mono); font-size: 1rem;"
-                    placeholder="Choose codename...">
+        <form class="form" id="register-form" method="post" autocomplete="off"
+              action="{% url 'accounts:register' %}">
+          {% csrf_token %}
+
+          <div class="field">
+            <label class="field-label" for="reg-codename">
+              <span class="field-arrow">▸</span> REQUESTED CODENAME
+              <span class="field-spec">A-Z 0-9 · 2–24</span>
+            </label>
+            <div class="field-wrap">
+              <span class="field-prompt">&gt;</span>
+              <input class="field-input" id="reg-codename" name="username" type="text"
+                     placeholder="e.g. SHRIKE"
+                     autocomplete="username" spellcheck="false" required>
+              <span class="field-caret"></span>
             </div>
-            <div style="margin-bottom: 1.5rem;">
-                <label class="text-secondary mono-text" style="font-size: 0.8rem; display: block; margin-bottom: 0.25rem;">PASSPHRASE</label>
-                <input type="password" name="password" required
-                    style="width: 100%; background: var(--bg-input); border: 1px solid var(--border-color); color: var(--text-primary); padding: 0.75rem; font-family: var(--font-mono); font-size: 1rem;"
-                    placeholder="Create passphrase...">
+          </div>
+
+          <div class="field">
+            <label class="field-label" for="reg-pass">
+              <span class="field-arrow">▸</span> ACCESS PASSPHRASE
+              <span class="field-spec">MIN 8 · ZEROIZED ON SUBMIT</span>
+            </label>
+            <div class="field-wrap">
+              <span class="field-prompt">&gt;</span>
+              <input class="field-input" id="reg-pass" name="password" type="password"
+                     placeholder="• • • • • • • •"
+                     autocomplete="new-password" spellcheck="false" required>
+              <span class="field-caret"></span>
             </div>
-            <div style="margin-bottom: 2rem;">
-                <label class="text-secondary mono-text" style="font-size: 0.8rem; display: block; margin-bottom: 0.25rem;">CONFIRM PASSPHRASE</label>
-                <input type="password" name="password_confirm" required
-                    style="width: 100%; background: var(--bg-input); border: 1px solid var(--border-color); color: var(--text-primary); padding: 0.75rem; font-family: var(--font-mono); font-size: 1rem;"
-                    placeholder="Re-enter passphrase...">
+          </div>
+
+          <div class="field">
+            <label class="field-label" for="reg-pass2">
+              <span class="field-arrow">▸</span> CONFIRM PASSPHRASE
+              <span class="field-spec">MUST MATCH</span>
+            </label>
+            <div class="field-wrap">
+              <span class="field-prompt">&gt;</span>
+              <input class="field-input" id="reg-pass2" name="password_confirm" type="password"
+                     placeholder="• • • • • • • •"
+                     autocomplete="new-password" spellcheck="false" required>
+              <span class="field-caret"></span>
             </div>
-            <button type="submit"
-                style="width: 100%; background: var(--accent-primary); color: var(--bg-dark); border: none; padding: 0.75rem; font-family: var(--font-mono); font-size: 1rem; font-weight: bold; cursor: pointer; letter-spacing: 1px;">
-                INITIALIZE OPERATIVE
+          </div>
+
+          <div class="meta-row">
+            <button type="button" class="chk on" data-chk-on="1">
+              <span class="chk-box">[×]</span>
+              <span>ACCEPT TIER-3 PROTOCOLS</span>
             </button>
+            <button type="button" class="chk" data-chk-on="0">
+              <span class="chk-box">[ ]</span>
+              <span>ACKNOWLEDGE BURN RISK</span>
+            </button>
+          </div>
+
+          <div class="err" id="login-error" hidden></div>
+
+          <button class="btn-primary" type="submit">
+            <span class="btn-bracket">[</span>
+            <span>SUBMIT PETITION</span>
+            <span class="btn-bracket">]</span>
+          </button>
+
+          <div class="alt-row">
+            <a class="link" href="{% url 'accounts:login' %}">◄ BACK TO GATE</a>
+          </div>
         </form>
 
-        <div style="text-align: center; margin-top: 1.5rem;">
-            <a href="{% url 'accounts:login' %}" class="text-accent mono-text" style="font-size: 0.85rem; text-decoration: none;">
-                EXISTING OPERATIVE? AUTHENTICATE
-            </a>
+        <div class="legal">
+          PETITIONS ARE SUBJECT TO HANDLER REVIEW UNDER PROTOCOL 7-B.<br>
+          ACCOUNTS BEGIN INACTIVE — UPLINK ENABLES ON APPROVAL.
         </div>
+      </div>
     </div>
+
+  </main>
+
+  <footer class="foot">
+    <span><span class="dot tiny"></span> <span class="foot-stage">PETITION FORM</span></span>
+    <span class="muted">·</span>
+    <span>NODE-07</span>
+    <span class="muted">·</span>
+    <span>UPLINK 84ms</span>
+    <span class="muted">·</span>
+    <span>TLS-1.3</span>
+    <span class="muted">·</span>
+    <span>BUILD {{ APP_VERSION|default:"8.14.32" }}</span>
+    <span class="grow"></span>
+    <span class="muted">F1 HELP</span>
+    <span class="muted">·</span>
+    <span class="muted">ESC ABORT</span>
+    <span class="muted">·</span>
+    <span class="muted">⏎ SUBMIT</span>
+  </footer>
+
 </div>
-{% endblock %}
+
+<script>
+  window.LOGIN_TWEAKS = {{ tweaks_json|safe }};
+  window.LOGIN_CONFIG = {
+    csrfToken: "{{ csrf_token }}",
+    loginUrl: "{% url 'accounts:login' %}",
+    registerUrl: "{% url 'accounts:register' %}",
+    nextUrl: "/accounts/login/",
+    mode: "register"
+  };
+</script>
+<script src="{% static 'js/clearance_gate.js' %}" defer></script>
+
+</body>
+</html>

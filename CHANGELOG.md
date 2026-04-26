@@ -1,5 +1,13 @@
 # Changelog
 
+## v0.14.35
+- New **clearance-gate login surface** at `/login/` and `/register/` — terminal-aesthetic multi-stage flow (boot screen → login → authing cinematic → granted/denied splash). Animated agency-map background with continent point-in-poly dot grid, radar sweep, connection arcs, focal-node crosshair, and 14 fixed operative nodes; alternative code-rain backdrop with selectable glyph set (Katakana / Hex / Binary / ASCII)
+- Login submit is AJAX: the 3.3-second handshake cinematic plays AFTER the server confirms credentials, not before — the `<form method="POST">` fallback still works without JS for graceful degradation. The legacy 302-redirect path is unchanged
+- 3 failed attempts trigger a client-side 30-second lockout with a live countdown banner; petition form (request new clearance) maps to the existing `/register/` flow
+- Implemented in **vanilla ES2017+ vanilla JS + canvas**, not Babel-standalone, so the unauthenticated login surface stays light. Loads JetBrains Mono + VT323 from Google Fonts. Five palettes (EMERALD / AMBER / ICE / BLOOD / BONE), three backdrops (OPS_MAP / CODE_RAIN / PLAIN), optional scanlines / vignette / side telemetry rails
+- New **CLEARANCE GATE → TWEAKS** tab in `/settings/` (admin-only) configures the login surface persistently: palette, backdrop, map intensity, radar / nodes toggles, code-rain glyphs / density / speed, scanlines, vignette, side rails, agency name, op codename. Stored as a single `tweaks` JSONField on `SiteSettings` with a `default_tweaks()` helper that re-merges defaults on save so the on-disk JSON always has the full schema
+- Migration `exodus/0016_sitesettings_tweaks` adds the `tweaks` field
+
 ## v0.14.34
 - Fix: the **edit-conflict banner is now actually visible**. Previously the banner was rendered as a normal block element at the top of the agency sheet, which meant if you were scrolled down (e.g., looking at the projects section) and your save was rejected by another player's concurrent edit, the banner appeared above your viewport and you never saw it — you only saw the option silently disappear from the UI as the state refreshed. Now positioned `fixed` at the top-right of the viewport with a solid yellow background, drop shadow, slide-in animation, and a `⚠ EDIT CONFLICT` heading
 - Section-specific messages: a conflict on `projects` says *"Another player just changed the projects list. The view has been refreshed — your last action was NOT applied. Click again if you still want it."*; conflicts on bases say *"Another player just edited &lt;section&gt; on this base..."*; text-input sections still ask for a re-blur

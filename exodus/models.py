@@ -165,6 +165,20 @@ class SiteSettings(models.Model):
     label_npcs = models.CharField(max_length=50, default="NPC'S", blank=True)
     label_comms = models.CharField(max_length=50, default="COMMS", blank=True)
 
+    # Clearance Gate (login surface) presentation tweaks. JSON blob with the
+    # full schema produced by ``default_tweaks()``. The login template embeds
+    # this directly into the page; the in-browser code reads it as initial
+    # state. Persisted here so superusers can rebrand the gate without code.
+    tweaks = models.JSONField(
+        default=dict, blank=True,
+        help_text=(
+            "Login screen presentation. Keys: palette, backdrop, "
+            "map_intensity, show_radar, show_nodes, rain_style, rain_density, "
+            "rain_speed, scanlines, vignette, show_rails, agency_name, "
+            "op_codename. See SiteSettings.default_tweaks() for defaults."
+        ),
+    )
+
     class Meta:
         verbose_name = "Site Settings"
         verbose_name_plural = "Site Settings"
@@ -172,9 +186,43 @@ class SiteSettings(models.Model):
     def __str__(self):
         return "Site Settings"
 
+    @staticmethod
+    def default_tweaks():
+        """Canonical defaults — EMERALD palette, OPS_MAP backdrop, all FX on."""
+        return {
+            "palette": "emerald",          # emerald | amber | ice | blood | bone
+            "backdrop": "ops_map",         # ops_map | code_rain | plain
+            "map_intensity": 1.0,          # 0.0 .. 1.0  (slider 0..100)
+            "show_radar": True,
+            "show_nodes": True,
+            "rain_style": "katakana",      # katakana | hex | binary | ascii
+            "rain_density": 1.0,           # 0.0 .. 1.0  (slider 0..100)
+            "rain_speed": 1.0,             # 0.0 .. 1.0  (slider 0..100)
+            "scanlines": True,
+            "vignette": True,
+            "show_rails": True,
+            "agency_name": "BLACKLOG.NET",
+            "op_codename": "OMEGA-7",
+        }
+
+    def get_tweaks(self):
+        """Return saved tweaks merged over defaults so partial saves never
+        leak missing keys to the front-end."""
+        merged = self.default_tweaks()
+        if isinstance(self.tweaks, dict):
+            merged.update({k: v for k, v in self.tweaks.items() if k in merged})
+        return merged
+
     def save(self, *args, **kwargs):
-        """Enforce singleton: always use pk=1."""
+        """Enforce singleton: always use pk=1. Also normalise tweaks so the
+        on-disk JSON always has the full schema."""
         self.pk = 1
+        # Validate / normalise tweaks blob on every save.
+        if not isinstance(self.tweaks, dict):
+            self.tweaks = {}
+        merged = self.default_tweaks()
+        merged.update({k: v for k, v in (self.tweaks or {}).items() if k in merged})
+        self.tweaks = merged
         super().save(*args, **kwargs)
 
     def delete(self, *args, **kwargs):
