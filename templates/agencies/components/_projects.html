@@ -1,9 +1,15 @@
 {% verbatim %}
 <script type="text/babel">
 const { useState, useEffect, useRef, useCallback, useMemo } = React;
-const { Icon, AutoSaveInput, Classified, VisibilityToggle, getCookie } = window;
+const { Icon, AutoSaveInput, Classified, VisibilityToggle, getCookie, useProjectActionFetch } = window;
 
     const DarkGrantsModule = ({ agency, fetchAgency }) => {
+        // Per-project endpoints share the ``projects`` section version
+        // slot — useProjectActionFetch attaches If-Match and routes 409
+        // through the standard conflict handler. Called unconditionally
+        // at the top so the hook order matches across renders even when
+        // the early-return guards below trigger.
+        var projectFetch = useProjectActionFetch();
         if (!IS_SCIENCE) return null;
         var projects = agency.projects;
         if (!Array.isArray(projects)) return null;
@@ -133,11 +139,15 @@ const { Icon, AutoSaveInput, Classified, VisibilityToggle, getCookie } = window;
                                                 if (opt.key === 'off_books') warn += '\nRequires Off the Books merit.';
                                                 warn += '\n\nThis cannot be undone.';
                                                 if (!confirm(warn)) return;
-                                                fetch('/api/agencies/' + AGENCY_ID + '/projects/' + realIdx + '/live-testing/', {
+                                                projectFetch('/api/agencies/' + AGENCY_ID + '/projects/' + realIdx + '/live-testing/', {
                                                     method: 'POST',
-                                                    headers: { 'Content-Type': 'application/json', 'X-CSRFToken': CSRF_TOKEN },
                                                     body: JSON.stringify({ level: opt.key }),
-                                                }).then(function(r) { return r.json(); }).then(function(data) {
+                                                }).then(function(r) {
+                                                    if (r.conflict) return null;
+                                                    if (!r.response) return null;
+                                                    return r.response.json();
+                                                }).then(function(data) {
+                                                    if (!data) return;
                                                     if (data.error) { alert(data.error); return; }
                                                     alert(data.message);
                                                     fetchAgency();
@@ -183,10 +193,14 @@ const { Icon, AutoSaveInput, Classified, VisibilityToggle, getCookie } = window;
                                         {IS_ADMIN ? (
                                             <button onClick={function() {
                                                 if (!confirm('Unlock this project? Stimulant cocktail will be cleared.')) return;
-                                                fetch('/api/agencies/' + AGENCY_ID + '/projects/' + realI + '/stimulants/unlock/', {
+                                                projectFetch('/api/agencies/' + AGENCY_ID + '/projects/' + realI + '/stimulants/unlock/', {
                                                     method: 'POST',
-                                                    headers: { 'Content-Type': 'application/json', 'X-CSRFToken': CSRF_TOKEN },
-                                                }).then(function(r) { return r.json(); }).then(function(data) {
+                                                }).then(function(r) {
+                                                    if (r.conflict) return null;
+                                                    if (!r.response) return null;
+                                                    return r.response.json();
+                                                }).then(function(data) {
+                                                    if (!data) return;
                                                     if (data.error) { alert(data.error); return; }
                                                     fetchAgency();
                                                 });
@@ -255,11 +269,15 @@ const { Icon, AutoSaveInput, Classified, VisibilityToggle, getCookie } = window;
                                                     <button onClick={function() {
                                                         var totalDice = stims.filter(function(s) { return sel.indexOf(s.key) >= 0; }).reduce(function(a, s) { return a + s.dice; }, 0);
                                                         if (!confirm('Synthesize stimulant: ' + sel.length + ' substances, +' + totalDice + ' dice.\nThe project owner will only see "Stimulant Cocktail Active".\nSide effects are hidden from them.\n\nProceed?')) return;
-                                                        fetch('/api/agencies/' + AGENCY_ID + '/projects/' + realI + '/stimulants/', {
+                                                        projectFetch('/api/agencies/' + AGENCY_ID + '/projects/' + realI + '/stimulants/', {
                                                             method: 'POST',
-                                                            headers: { 'Content-Type': 'application/json', 'X-CSRFToken': CSRF_TOKEN },
                                                             body: JSON.stringify({ stimulants: sel }),
-                                                        }).then(function(r) { return r.json(); }).then(function(data) {
+                                                        }).then(function(r) {
+                                                            if (r.conflict) return null;
+                                                            if (!r.response) return null;
+                                                            return r.response.json();
+                                                        }).then(function(data) {
+                                                            if (!data) return;
                                                             if (data.error) { alert(data.error); return; }
                                                             alert(data.message);
                                                             selectedRef.current = [];
@@ -304,10 +322,13 @@ const { Icon, AutoSaveInput, Classified, VisibilityToggle, getCookie } = window;
                             <div style={{ marginTop: '0.75rem' }}>
                                 <button onClick={function() {
                                     if (!confirm('Activate Black Market Tech on "' + p.name + '"?\n\n+2 permanent dice.\nRisk: 15% chance tech comes with a tracker (agency linkage).\n\nThis cannot be undone.')) return;
-                                    fetch('/api/agencies/' + AGENCY_ID + '/projects/' + ri + '/fringe-effect/', {
-                                        method: 'POST', headers: { 'Content-Type': 'application/json', 'X-CSRFToken': CSRF_TOKEN },
+                                    projectFetch('/api/agencies/' + AGENCY_ID + '/projects/' + ri + '/fringe-effect/', {
+                                        method: 'POST',
                                         body: JSON.stringify({ effect: 'black_market_tech' }),
-                                    }).then(function(r) { return r.json(); }).then(function(d) { if (d.error) { alert(d.error); return; } alert(d.message); fetchAgency(); });
+                                    }).then(function(r) {
+                                        if (r.conflict || !r.response) return null;
+                                        return r.response.json();
+                                    }).then(function(d) { if (!d) return; if (d.error) { alert(d.error); return; } alert(d.message); fetchAgency(); });
                                 }} style={{ width: '100%', padding: '0.5rem', cursor: 'pointer', background: 'rgba(13,148,136,0.06)', border: '1px solid #0d9488', borderRadius: '4px', fontFamily: 'var(--font-mono)', color: '#2dd4bf', textAlign: 'center' }}>
                                     <div style={{ fontSize: '0.85rem', fontWeight: 'bold' }}>+2 BLACK MARKET TECH</div>
                                     <div style={{ fontSize: '0.55rem', color: 'var(--text-muted)', marginTop: '0.1rem' }}>15% tracker risk (agency linkage)</div>
@@ -337,10 +358,13 @@ const { Icon, AutoSaveInput, Classified, VisibilityToggle, getCookie } = window;
                             <div style={{ marginTop: '0.75rem' }}>
                                 <button onClick={function() {
                                     if (!confirm('Activate Gene Manipulation on "' + p.name + '"?\n\n+3 permanent dice.\nRisk: 18% containment breach (GM determines consequences).\n\nThis cannot be undone.')) return;
-                                    fetch('/api/agencies/' + AGENCY_ID + '/projects/' + ri + '/fringe-effect/', {
-                                        method: 'POST', headers: { 'Content-Type': 'application/json', 'X-CSRFToken': CSRF_TOKEN },
+                                    projectFetch('/api/agencies/' + AGENCY_ID + '/projects/' + ri + '/fringe-effect/', {
+                                        method: 'POST',
                                         body: JSON.stringify({ effect: 'gene_manipulation' }),
-                                    }).then(function(r) { return r.json(); }).then(function(d) { if (d.error) { alert(d.error); return; } alert(d.message); fetchAgency(); });
+                                    }).then(function(r) {
+                                        if (r.conflict || !r.response) return null;
+                                        return r.response.json();
+                                    }).then(function(d) { if (!d) return; if (d.error) { alert(d.error); return; } alert(d.message); fetchAgency(); });
                                 }} style={{ width: '100%', padding: '0.5rem', cursor: 'pointer', background: 'rgba(22,163,74,0.06)', border: '1px solid #16a34a', borderRadius: '4px', fontFamily: 'var(--font-mono)', color: '#4ade80', textAlign: 'center' }}>
                                     <div style={{ fontSize: '0.85rem', fontWeight: 'bold' }}>+3 GENE MANIPULATION</div>
                                     <div style={{ fontSize: '0.55rem', color: 'var(--text-muted)', marginTop: '0.1rem' }}>18% containment breach</div>
@@ -371,10 +395,13 @@ const { Icon, AutoSaveInput, Classified, VisibilityToggle, getCookie } = window;
                             <div style={{ marginTop: '0.75rem' }}>
                                 <button onClick={function() {
                                     if (!confirm('Activate Neural Interface on "' + p.name + '"?\n\n+4 permanent dice.\nRisk: 30% ML +2 to project owner.\nRisk: 5% permanent -1 to a random mental attribute.\n\nThis cannot be undone.')) return;
-                                    fetch('/api/agencies/' + AGENCY_ID + '/projects/' + ri + '/fringe-effect/', {
-                                        method: 'POST', headers: { 'Content-Type': 'application/json', 'X-CSRFToken': CSRF_TOKEN },
+                                    projectFetch('/api/agencies/' + AGENCY_ID + '/projects/' + ri + '/fringe-effect/', {
+                                        method: 'POST',
                                         body: JSON.stringify({ effect: 'neural_interface' }),
-                                    }).then(function(r) { return r.json(); }).then(function(d) { if (d.error) { alert(d.error); return; } alert(d.message); fetchAgency(); });
+                                    }).then(function(r) {
+                                        if (r.conflict || !r.response) return null;
+                                        return r.response.json();
+                                    }).then(function(d) { if (!d) return; if (d.error) { alert(d.error); return; } alert(d.message); fetchAgency(); });
                                 }} style={{ width: '100%', padding: '0.5rem', cursor: 'pointer', background: 'rgba(168,85,247,0.06)', border: '1px solid #a855f7', borderRadius: '4px', fontFamily: 'var(--font-mono)', color: '#c084fc', textAlign: 'center' }}>
                                     <div style={{ fontSize: '0.85rem', fontWeight: 'bold' }}>+4 NEURAL INTERFACE</div>
                                     <div style={{ fontSize: '0.55rem', color: 'var(--text-muted)', marginTop: '0.1rem' }}>30% ML+2 / 5% permanent -1 mental attr</div>
@@ -404,10 +431,13 @@ const { Icon, AutoSaveInput, Classified, VisibilityToggle, getCookie } = window;
                             <div style={{ marginTop: '0.75rem' }}>
                                 <button onClick={function() {
                                     if (!confirm('Activate Sleep Deprivation Marathon on "' + p.name + '"?\n\n+2 permanent dice.\nRisk: 30% ML +1 to ALL team members on this project.\n\nThis cannot be undone.')) return;
-                                    fetch('/api/agencies/' + AGENCY_ID + '/projects/' + ri + '/fringe-effect/', {
-                                        method: 'POST', headers: { 'Content-Type': 'application/json', 'X-CSRFToken': CSRF_TOKEN },
+                                    projectFetch('/api/agencies/' + AGENCY_ID + '/projects/' + ri + '/fringe-effect/', {
+                                        method: 'POST',
                                         body: JSON.stringify({ effect: 'sleep_deprivation' }),
-                                    }).then(function(r) { return r.json(); }).then(function(d) { if (d.error) { alert(d.error); return; } alert(d.message); fetchAgency(); });
+                                    }).then(function(r) {
+                                        if (r.conflict || !r.response) return null;
+                                        return r.response.json();
+                                    }).then(function(d) { if (!d) return; if (d.error) { alert(d.error); return; } alert(d.message); fetchAgency(); });
                                 }} style={{ width: '100%', padding: '0.5rem', cursor: 'pointer', background: 'rgba(234,179,8,0.06)', border: '1px solid #eab308', borderRadius: '4px', fontFamily: 'var(--font-mono)', color: '#fbbf24', textAlign: 'center' }}>
                                     <div style={{ fontSize: '0.85rem', fontWeight: 'bold' }}>+2 SLEEP DEPRIVATION MARATHON</div>
                                     <div style={{ fontSize: '0.55rem', color: 'var(--text-muted)', marginTop: '0.1rem' }}>30% ML +1 to all team members</div>
@@ -467,10 +497,13 @@ const { Icon, AutoSaveInput, Classified, VisibilityToggle, getCookie } = window;
                                     </select>
                                     <button disabled={!baseVal} onClick={function() {
                                         if (!confirm('Activate Overclocked Equipment on "' + p.name + '"?\n\n+3 permanent dice.\nRisk: 25% a random facility at the base loses a level.\n\nThis cannot be undone.')) return;
-                                        fetch('/api/agencies/' + AGENCY_ID + '/projects/' + ri + '/fringe-effect/', {
-                                            method: 'POST', headers: { 'Content-Type': 'application/json', 'X-CSRFToken': CSRF_TOKEN },
+                                        projectFetch('/api/agencies/' + AGENCY_ID + '/projects/' + ri + '/fringe-effect/', {
+                                            method: 'POST',
                                             body: JSON.stringify({ effect: 'overclocked_equipment', baseId: parseInt(baseVal) }),
-                                        }).then(function(r) { return r.json(); }).then(function(d) { if (d.error) { alert(d.error); return; } alert(d.message); fetchAgency(); });
+                                        }).then(function(r) {
+                                            if (r.conflict || !r.response) return null;
+                                            return r.response.json();
+                                        }).then(function(d) { if (!d) return; if (d.error) { alert(d.error); return; } alert(d.message); fetchAgency(); });
                                     }} style={{
                                         padding: '0.4rem 0.75rem', cursor: baseVal ? 'pointer' : 'not-allowed', opacity: baseVal ? 1 : 0.4,
                                         background: 'rgba(239,68,68,0.1)', border: '1px solid #ef4444', borderRadius: '4px',
@@ -506,10 +539,13 @@ const { Icon, AutoSaveInput, Classified, VisibilityToggle, getCookie } = window;
                             <div style={{ marginTop: '0.75rem' }}>
                                 <button disabled={!canAfford} onClick={function() {
                                     if (!confirm('Recruit Child Prodigy for "' + p.name + '"?\n\n+1 permanent dice.\nCost: 2 XP (agency has ' + agencyXp + ').\nRisk: 15% integrity loss.\nCreates a permanent NPC in the dossier.\n\nThis cannot be undone.')) return;
-                                    fetch('/api/agencies/' + AGENCY_ID + '/projects/' + ri + '/fringe-effect/', {
-                                        method: 'POST', headers: { 'Content-Type': 'application/json', 'X-CSRFToken': CSRF_TOKEN },
+                                    projectFetch('/api/agencies/' + AGENCY_ID + '/projects/' + ri + '/fringe-effect/', {
+                                        method: 'POST',
                                         body: JSON.stringify({ effect: 'child_prodigy' }),
-                                    }).then(function(r) { return r.json(); }).then(function(d) { if (d.error) { alert(d.error); return; } alert(d.message); fetchAgency(); });
+                                    }).then(function(r) {
+                                        if (r.conflict || !r.response) return null;
+                                        return r.response.json();
+                                    }).then(function(d) { if (!d) return; if (d.error) { alert(d.error); return; } alert(d.message); fetchAgency(); });
                                 }} style={{
                                     width: '100%', padding: '0.5rem', cursor: canAfford ? 'pointer' : 'not-allowed', opacity: canAfford ? 1 : 0.4,
                                     background: 'rgba(37,99,235,0.06)', border: '1px solid #2563eb', borderRadius: '4px',
@@ -541,10 +577,13 @@ const { Icon, AutoSaveInput, Classified, VisibilityToggle, getCookie } = window;
                                         {IS_SCIENCE ? (
                                             <button onClick={function() {
                                                 if (!confirm('Unassign ' + p.assignedProdigyName + ' from this project?')) return;
-                                                fetch('/api/agencies/' + AGENCY_ID + '/projects/' + ri + '/fringe-effect/', {
-                                                    method: 'POST', headers: { 'Content-Type': 'application/json', 'X-CSRFToken': CSRF_TOKEN },
+                                                projectFetch('/api/agencies/' + AGENCY_ID + '/projects/' + ri + '/fringe-effect/', {
+                                                    method: 'POST',
                                                     body: JSON.stringify({ effect: 'unassign_prodigy' }),
-                                                }).then(function(r) { return r.json(); }).then(function(d) { if (d.error) { alert(d.error); return; } fetchAgency(); });
+                                                }).then(function(r) {
+                                                    if (r.conflict || !r.response) return null;
+                                                    return r.response.json();
+                                                }).then(function(d) { if (!d) return; if (d.error) { alert(d.error); return; } fetchAgency(); });
                                             }} style={{ background: 'transparent', border: '1px solid var(--border-color)', color: 'var(--text-muted)', cursor: 'pointer', fontFamily: 'var(--font-mono)', fontSize: '0.6rem', padding: '0.2rem 0.4rem', borderRadius: '3px' }}>
                                                 UNASSIGN
                                             </button>
@@ -575,10 +614,13 @@ const { Icon, AutoSaveInput, Classified, VisibilityToggle, getCookie } = window;
                                         {available.map(function(cp) { return <option key={cp.id} value={cp.id}>{cp.name}</option>; })}
                                     </select>
                                     <button disabled={!selVal} onClick={function() {
-                                        fetch('/api/agencies/' + AGENCY_ID + '/projects/' + ri + '/fringe-effect/', {
-                                            method: 'POST', headers: { 'Content-Type': 'application/json', 'X-CSRFToken': CSRF_TOKEN },
+                                        projectFetch('/api/agencies/' + AGENCY_ID + '/projects/' + ri + '/fringe-effect/', {
+                                            method: 'POST',
                                             body: JSON.stringify({ effect: 'assign_prodigy', npcId: parseInt(selVal) }),
-                                        }).then(function(r) { return r.json(); }).then(function(d) { if (d.error) { alert(d.error); return; } fetchAgency(); });
+                                        }).then(function(r) {
+                                            if (r.conflict || !r.response) return null;
+                                            return r.response.json();
+                                        }).then(function(d) { if (!d) return; if (d.error) { alert(d.error); return; } fetchAgency(); });
                                     }} style={{
                                         padding: '0.4rem 0.75rem', cursor: selVal ? 'pointer' : 'not-allowed', opacity: selVal ? 1 : 0.4,
                                         background: 'rgba(37,99,235,0.1)', border: '1px solid #2563eb', borderRadius: '4px',
@@ -666,11 +708,15 @@ const { Icon, AutoSaveInput, Classified, VisibilityToggle, getCookie } = window;
                                     return (
                                         <button key={lvl} onClick={function() {
                                             if (!confirm('Activate Dark Grants Level ' + lvl + ' on "' + p.name + '"?\n\n+' + lvl + ' permanent dice to completion rolls.\nRisk: ' + lvl + 'd10 rolled — each 1-2 links an agency (' + riskPct + ' chance of at least one).\n\nThis cannot be undone.')) return;
-                                            fetch('/api/agencies/' + AGENCY_ID + '/projects/' + realIdx + '/dark-grants/', {
+                                            projectFetch('/api/agencies/' + AGENCY_ID + '/projects/' + realIdx + '/dark-grants/', {
                                                 method: 'POST',
-                                                headers: { 'Content-Type': 'application/json', 'X-CSRFToken': CSRF_TOKEN },
                                                 body: JSON.stringify({ level: lvl }),
-                                            }).then(function(r) { return r.json(); }).then(function(data) {
+                                            }).then(function(r) {
+                                                if (r.conflict) return null;
+                                                if (!r.response) return null;
+                                                return r.response.json();
+                                            }).then(function(data) {
+                                                if (!data) return;
                                                 if (data.error) { alert(data.error); return; }
                                                 alert(data.message);
                                                 fetchAgency();
@@ -711,6 +757,8 @@ const { Icon, AutoSaveInput, Classified, VisibilityToggle, getCookie } = window;
         var onSave = props.onSave;
         var visibility = props.visibility;
         var onToggleVis = props.onToggleVis;
+        // Per-project endpoint helper (If-Match + 409-handling).
+        var projectFetch = useProjectActionFetch();
         // Track armed auto-success merit per project: {projectIndex: meritName}
         var armedMeritState = React.useState({});
         var armedMerits = armedMeritState[0];
@@ -1382,10 +1430,14 @@ const { Icon, AutoSaveInput, Classified, VisibilityToggle, getCookie } = window;
                                     if (!changes.length && !intChg) msg += '\nNo stat changes configured.';
                                     msg += '\n\nThis cannot be undone.';
                                     if (!confirm(msg)) return;
-                                    fetch('/api/agencies/' + AGENCY_ID + '/projects/' + idx + '/complete/', {
+                                    projectFetch('/api/agencies/' + AGENCY_ID + '/projects/' + idx + '/complete/', {
                                         method: 'POST',
-                                        headers: { 'Content-Type': 'application/json', 'X-CSRFToken': CSRF_TOKEN },
-                                    }).then(function(r) { return r.json(); }).then(function(d) {
+                                    }).then(function(r) {
+                                        if (r.conflict) return null;
+                                        if (!r.response) return null;
+                                        return r.response.json();
+                                    }).then(function(d) {
+                                        if (!d) return;
                                         if (d.error) { alert(d.error); return; }
                                         alert(d.message);
                                         if (fetchAgency) fetchAgency();
@@ -1455,11 +1507,15 @@ const { Icon, AutoSaveInput, Classified, VisibilityToggle, getCookie } = window;
                                         if (armedMerit) msg += '\n\n+ ' + armedMerit.rating + ' auto-successes from ' + armedMerit.name;
                                         if (!confirm(msg)) return;
                                         var bodyData = armed ? JSON.stringify({ useAutoMerit: armed }) : '{}';
-                                        fetch('/api/agencies/' + AGENCY_ID + '/projects/' + idx + '/roll/', {
+                                        projectFetch('/api/agencies/' + AGENCY_ID + '/projects/' + idx + '/roll/', {
                                             method: 'POST',
-                                            headers: { 'Content-Type': 'application/json', 'X-CSRFToken': CSRF_TOKEN },
                                             body: bodyData,
-                                        }).then(function(r) { return r.json(); }).then(function(d) {
+                                        }).then(function(r) {
+                                            if (r.conflict) return null;
+                                            if (!r.response) return null;
+                                            return r.response.json();
+                                        }).then(function(d) {
+                                            if (!d) return;
                                             if (d.error) { alert(d.error); return; }
                                             setLastRolls(function(prev) { var n = Object.assign({}, prev); n[idx] = d; return n; });
                                             setArmedMerits(function(prev) { var n = Object.assign({}, prev); delete n[idx]; return n; });

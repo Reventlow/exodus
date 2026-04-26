@@ -913,6 +913,13 @@ AGENCY_SECTION_VALUE_GETTERS = {
     "assets": lambda a: a.assets,
     "fleet": lambda a: a.fleet,
     "history": lambda a: a.history,
+    # ``projects`` round-trips the raw JSON list — callers can either
+    # full-replace via the section endpoint or mutate via the per-project
+    # endpoints (which share the same version slot through
+    # ``_with_projects_cas``). Computed fields (``computedPool``) are NOT
+    # added here; the section endpoint is for raw round-trips. Use
+    # ``GET /api/agencies/<id>/`` to receive the enriched view.
+    "projects": lambda a: a.projects or [],
     "admin-flags": lambda a: {
         "mapColor": a.map_color,
         "isNuclearPower": a.is_nuclear_power,

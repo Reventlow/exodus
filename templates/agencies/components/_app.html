@@ -5,6 +5,7 @@ const {
     Icon, AutoSaveInput, SaveStatus, Classified, VisibilityToggle,
     getCookie, getCsrfToken, DEFAULT_AGENCY, XpProtester, _refreshIcons,
     SectionSaveContext, useSectionSave, useBaseSectionSave,
+    useProjectActionFetch,
     AllianceModule, HeaderModule, NotesModule, IntegrityModule,
     DossiersModule, AttributesModule, GlobalFlawsDisplay, CouncilDisplay,
     DarkGrantsModule, ProjectsModule, getWorkspaceConfig, calcTotalBaseExp,
@@ -132,9 +133,9 @@ const {
     // shape, eg. {motto: "..."} or {merits: [...]}) onto the new per-section
     // PATCH endpoints. Returns a list of per-section payload pairs.
     //
-    // Keys not covered here (eg. `projects`) fall through to the legacy
-    // monolithic PUT — see saveAgencyLegacy in AgencySheet. Once Phase 4
-    // ships per-section endpoints for those, drop them from the legacy list.
+    // Keys not covered here fall through to the legacy monolithic PUT —
+    // see saveAgencyLegacy in AgencySheet. As Phase N migrates more
+    // fields to dedicated endpoints, add them here.
     // ---------------------------------------------------------------
     const SECTION_FIELD_MAP = {
         // header
@@ -155,6 +156,11 @@ const {
         assets: 'assets',
         fleet: 'fleet',
         history: 'history',
+        // projects — Phase 4: full-list edits go through the section
+        // endpoint with If-Match. Per-project mutations (roll, fringe-
+        // effect, ...) share this version slot via _with_projects_cas
+        // server-side.
+        projects: 'projects',
         // admin-flags (combined endpoint for misc toggles)
         mapColor: 'admin-flags',
         isNuclearPower: 'admin-flags',
@@ -416,8 +422,10 @@ const {
                 }
 
                 // Flush remaining legacy fields via the monolithic PUT.
-                // This is the transition path — once `projects` has its own
-                // section endpoint, this branch becomes dead code.
+                // Now that `projects` has its own section endpoint
+                // (Phase 4), only ad-hoc unmigrated fields like
+                // `experience`, `projectRolls`, `conditions` reach this
+                // branch. Once those migrate, this becomes dead code.
                 //
                 // We send ONLY the legacy fields (not the whole agency) so we
                 // don't stomp on a concurrent edit to a different section.

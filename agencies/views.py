@@ -5,6 +5,7 @@ from asgiref.sync import async_to_sync
 from channels.layers import get_channel_layer
 from django.conf import settings
 from django.db import transaction
+from django.db.models import F
 from django.http import HttpResponseForbidden, JsonResponse
 from django.shortcuts import render, get_object_or_404
 from django.contrib.auth.decorators import login_required
@@ -1504,7 +1505,14 @@ def api_condition_detail(request, pk, condition_id):
 @login_required
 @require_http_methods(["POST"])
 def api_dark_grants(request, pk, project_index):
-    """Activate Dark Grants on a fringe project. Science class only."""
+    """Activate Dark Grants on a fringe project. Science class only.
+
+    Concurrency: writes to ``agency.projects`` go through
+    ``_with_projects_cas`` which shares the ``projects`` section version
+    slot with every other per-project endpoint. Force-write semantics —
+    no If-Match required (legacy fetch sites). The internal retry covers
+    the typical "two writers to different projects" case.
+    """
     import random
 
     agency = get_object_or_404(Agency, pk=pk)
@@ -1550,10 +1558,13 @@ def api_dark_grants(request, pk, project_index):
     if level < 1 or level > 3:
         return JsonResponse({"error": "Level must be 1-3."}, status=400)
 
-    # Roll for agency involvement: 1d10 per level, each 1-3 = an agency linked
+    # Roll for agency involvement: 1d10 per level, each 1-3 = an agency
+    # linked. Roll OUTSIDE the CAS loop so a CAS retry doesn't re-roll
+    # (which would change outcomes between attempts and confuse the
+    # client). The mutator below just stamps these pre-computed values
+    # onto the project dict.
     linked_agencies = []
     rolls = []
-    # Get all NPC agencies (excluding player agency)
     npc_agencies = list(Agency.objects.filter(is_player_agency=False, is_hidden=False).values_list("id", "name"))
     random.shuffle(npc_agencies)
 
@@ -1562,18 +1573,35 @@ def api_dark_grants(request, pk, project_index):
         die = random.randint(1, 100)
         rolls.append(die)
         if die <= thresholds.get(level, 9) and npc_agencies:
-            # Pick an agency that isn't already linked
             for ag_id, ag_name in npc_agencies:
                 if ag_id not in [la["id"] for la in linked_agencies]:
                     linked_agencies.append({"id": ag_id, "name": ag_name})
                     break
 
-    # Update project
-    project["darkGrantsLevel"] = level
-    project["darkGrantsAgencies"] = linked_agencies
-    projects[project_index] = project
-    agency.projects = projects
-    agency.save(update_fields=["projects"])
+    def _mutate(projects_list, _agency):
+        if project_index < 0 or project_index >= len(projects_list):
+            return JsonResponse({"error": "Invalid project index."}, status=400)
+        proj = projects_list[project_index]
+        if not isinstance(proj, dict):
+            return JsonResponse({"error": "Invalid project data."}, status=400)
+        # Re-check guards — the project state could have changed under
+        # us between the outer read and the CAS commit.
+        if not proj.get("fringe"):
+            return JsonResponse({"error": "Dark Grants can only be activated on fringe projects."}, status=400)
+        if proj.get("darkGrantsLevel"):
+            return JsonResponse({"error": "Dark Grants already active on this project."}, status=400)
+        proj = dict(proj)
+        proj["darkGrantsLevel"] = level
+        proj["darkGrantsAgencies"] = linked_agencies
+        new_list = list(projects_list)
+        new_list[project_index] = proj
+        return new_list
+
+    result = _with_projects_cas(agency, _mutate)
+    if result.response is not None:
+        return result.response
+    if result.conflict:
+        return _conflict_response("projects", result.current_version, result.current_value)
 
     return JsonResponse({
         "level": level,
@@ -1588,7 +1616,12 @@ def api_dark_grants(request, pk, project_index):
 @login_required
 @require_http_methods(["POST"])
 def api_live_testing(request, pk, project_index):
-    """Activate live testing on a fringe project. Science class only."""
+    """Activate live testing on a fringe project. Science class only.
+
+    Concurrency: dice rolls and side effects (Character mental_load,
+    Agency integrity) happen ONCE, outside the CAS loop. The CAS only
+    stamps the pre-computed result onto the project dict — retry-safe.
+    """
     import random
 
     agency = get_object_or_404(Agency, pk=pk)
@@ -1642,18 +1675,22 @@ def api_live_testing(request, pk, project_index):
         if not has_merit:
             return JsonResponse({"error": "Off the Books merit required."}, status=403)
 
-    # Roll for consequences
+    # Roll for consequences ONCE outside the CAS loop — keeps retries
+    # idempotent. Side effects (Character mental_load, Agency.integrity)
+    # are also applied ONCE here, before the CAS, so a retry doesn't
+    # double-apply them. Note: agency.integrity is mutated via its own
+    # save() call, separate from the projects CAS — we accept that this
+    # is two writes (integrity and projects) rather than one. The
+    # original behaviour did the same thing.
     mental_roll = random.randint(1, 100)
     integrity_roll = random.randint(1, 100)
     mental_damage = mental_roll <= config["mental_risk"]
     integrity_loss = config["integrity_risk"] > 0 and integrity_roll <= config["integrity_risk"]
 
-    # Find project owner character for mental load
     owner_name = project.get("player", "")
     messages = []
 
     if mental_damage:
-        # Find character by name and add mental load
         owner_char = Character.objects.filter(name=owner_name).first()
         if owner_char:
             owner_char.mental_load = (owner_char.mental_load or 0) + 1
@@ -1665,19 +1702,41 @@ def api_live_testing(request, pk, project_index):
         messages.append("No mental load damage (rolled " + str(mental_roll) + ", needed <=" + str(config["mental_risk"]) + "%).")
 
     if integrity_loss:
-        agency.integrity = max(0, (agency.integrity or 0) - 1)
-        agency.save(update_fields=["integrity"])
+        # Atomic decrement so concurrent integrity-changing endpoints
+        # don't lose updates. Refresh once to keep the in-memory value
+        # accurate for the response shape.
+        Agency.objects.filter(pk=agency.pk).update(integrity=F("integrity") - 1)
+        agency.refresh_from_db(fields=["integrity"])
+        if agency.integrity is not None and agency.integrity < 0:
+            Agency.objects.filter(pk=agency.pk, integrity__lt=0).update(integrity=0)
+            agency.refresh_from_db(fields=["integrity"])
         messages.append("Agency loses 1 integrity point (rolled " + str(integrity_roll) + "/" + str(config["integrity_risk"]) + "%).")
     elif config["integrity_risk"] > 0:
         messages.append("No integrity loss (rolled " + str(integrity_roll) + ", needed <=" + str(config["integrity_risk"]) + "%).")
 
-    # Update project
-    project["liveTestingLevel"] = level
-    project["liveTestingLabel"] = config["label"]
-    project["liveTestingDice"] = config["dice"]
-    projects[project_index] = project
-    agency.projects = projects
-    agency.save(update_fields=["projects"])
+    def _mutate(projects_list, _agency):
+        if project_index < 0 or project_index >= len(projects_list):
+            return JsonResponse({"error": "Invalid project index."}, status=400)
+        proj = projects_list[project_index]
+        if not isinstance(proj, dict):
+            return JsonResponse({"error": "Invalid project data."}, status=400)
+        if not proj.get("fringe"):
+            return JsonResponse({"error": "Live testing only on fringe projects."}, status=400)
+        if proj.get("liveTestingLevel"):
+            return JsonResponse({"error": "Live testing already active on this project."}, status=400)
+        proj = dict(proj)
+        proj["liveTestingLevel"] = level
+        proj["liveTestingLabel"] = config["label"]
+        proj["liveTestingDice"] = config["dice"]
+        new_list = list(projects_list)
+        new_list[project_index] = proj
+        return new_list
+
+    result = _with_projects_cas(agency, _mutate)
+    if result.response is not None:
+        return result.response
+    if result.conflict:
+        return _conflict_response("projects", result.current_version, result.current_value)
 
     return JsonResponse({
         "level": level,
@@ -1693,7 +1752,12 @@ def api_live_testing(request, pk, project_index):
 @login_required
 @require_http_methods(["POST"])
 def api_stimulants(request, pk, project_index):
-    """Administer stimulant cocktail to a fringe project. Science class only."""
+    """Administer stimulant cocktail to a fringe project. Science class only.
+
+    Concurrency: rolls + Character side effects are computed/applied
+    once outside the CAS. The CAS only stamps pre-computed result
+    fields onto the project dict.
+    """
     import random
 
     agency = get_object_or_404(Agency, pk=pk)
@@ -1777,7 +1841,8 @@ def api_stimulants(request, pk, project_index):
 
         results.append(result)
 
-    # Apply effects to project owner
+    # Apply Character side effects ONCE outside the CAS loop. A retry
+    # would otherwise re-apply mental_load / bashing damage.
     owner_name = project.get("player", "")
     owner_char = Character.objects.filter(name=owner_name).first()
     effect_messages = []
@@ -1795,18 +1860,35 @@ def api_stimulants(request, pk, project_index):
         effect_messages.append(owner_name + " takes " + str(total_bashing) + " bashing damage.")
 
     if total_completion_loss > 0:
-        old_score = int(project.get("completionScore", 0))
-        project["completionScore"] = max(0, old_score - total_completion_loss)
         effect_messages.append("Completion reduced by " + str(total_completion_loss) + ".")
 
-    # Lock the project with stimulant state
-    project["stimulants"] = valid
-    project["stimulantDice"] = total_dice
-    project["stimulantLocked"] = True
-    project["stimulantResults"] = results
-    projects[project_index] = project
-    agency.projects = projects
-    agency.save(update_fields=["projects"])
+    def _mutate(projects_list, _agency):
+        if project_index < 0 or project_index >= len(projects_list):
+            return JsonResponse({"error": "Invalid project index."}, status=400)
+        proj = projects_list[project_index]
+        if not isinstance(proj, dict):
+            return JsonResponse({"error": "Invalid project data."}, status=400)
+        if not proj.get("fringe"):
+            return JsonResponse({"error": "Stimulants only on fringe projects."}, status=400)
+        if proj.get("stimulantLocked"):
+            return JsonResponse({"error": "Stimulant cocktail already active. GM must unlock first."}, status=400)
+        proj = dict(proj)
+        if total_completion_loss > 0:
+            old_score = int(proj.get("completionScore", 0))
+            proj["completionScore"] = max(0, old_score - total_completion_loss)
+        proj["stimulants"] = valid
+        proj["stimulantDice"] = total_dice
+        proj["stimulantLocked"] = True
+        proj["stimulantResults"] = results
+        new_list = list(projects_list)
+        new_list[project_index] = proj
+        return new_list
+
+    cas = _with_projects_cas(agency, _mutate)
+    if cas.response is not None:
+        return cas.response
+    if cas.conflict:
+        return _conflict_response("projects", cas.current_version, cas.current_value)
 
     any_failed = any(r["failed"] for r in results)
 
@@ -1826,27 +1908,36 @@ def api_stimulants(request, pk, project_index):
 @login_required
 @require_http_methods(["POST"])
 def api_stimulants_unlock(request, pk, project_index):
-    """GM unlocks a stimulant-locked project after completion roll."""
+    """GM unlocks a stimulant-locked project after completion roll.
+
+    Concurrency: routed through ``_with_projects_cas`` so a concurrent
+    write to a different project doesn't lose this unlock.
+    """
     if not request.user.is_superuser:
         return JsonResponse({"error": "GM only."}, status=403)
 
     agency = get_object_or_404(Agency, pk=pk)
-    projects = agency.projects or []
-    if project_index < 0 or project_index >= len(projects):
-        return JsonResponse({"error": "Invalid project index."}, status=400)
 
-    project = projects[project_index]
-    if not isinstance(project, dict):
-        return JsonResponse({"error": "Invalid project data."}, status=400)
+    def _mutate(projects_list, _agency):
+        if project_index < 0 or project_index >= len(projects_list):
+            return JsonResponse({"error": "Invalid project index."}, status=400)
+        proj = projects_list[project_index]
+        if not isinstance(proj, dict):
+            return JsonResponse({"error": "Invalid project data."}, status=400)
+        proj = dict(proj)
+        proj.pop("stimulants", None)
+        proj.pop("stimulantDice", None)
+        proj.pop("stimulantLocked", None)
+        proj.pop("stimulantResults", None)
+        new_list = list(projects_list)
+        new_list[project_index] = proj
+        return new_list
 
-    project.pop("stimulants", None)
-    project.pop("stimulantDice", None)
-    project.pop("stimulantLocked", None)
-    project.pop("stimulantResults", None)
-    projects[project_index] = project
-    agency.projects = projects
-    agency.save(update_fields=["projects"])
-
+    cas = _with_projects_cas(agency, _mutate)
+    if cas.response is not None:
+        return cas.response
+    if cas.conflict:
+        return _conflict_response("projects", cas.current_version, cas.current_value)
     return JsonResponse({"status": "unlocked"})
 
 
@@ -1896,12 +1987,29 @@ def api_fringe_effect(request, pk, project_index):
             if npc_agencies:
                 linked_agencies.append({"id": npc_agencies[0][0], "name": npc_agencies[0][1]})
 
-        project["blackMarketTech"] = True
-        project["blackMarketTechDice"] = 2
-        project["blackMarketTechAgencies"] = linked_agencies
-        projects[project_index] = project
-        agency.projects = projects
-        agency.save(update_fields=["projects"])
+        def _mutate(projects_list, _agency):
+            if project_index < 0 or project_index >= len(projects_list):
+                return JsonResponse({"error": "Invalid project index."}, status=400)
+            proj = projects_list[project_index]
+            if not isinstance(proj, dict):
+                return JsonResponse({"error": "Invalid project data."}, status=400)
+            if not proj.get("fringe"):
+                return JsonResponse({"error": "Fringe effects only on fringe projects."}, status=400)
+            if proj.get("blackMarketTech"):
+                return JsonResponse({"error": "Black Market Tech already active."}, status=400)
+            proj = dict(proj)
+            proj["blackMarketTech"] = True
+            proj["blackMarketTechDice"] = 2
+            proj["blackMarketTechAgencies"] = linked_agencies
+            new_list = list(projects_list)
+            new_list[project_index] = proj
+            return new_list
+
+        cas = _with_projects_cas(agency, _mutate)
+        if cas.response is not None:
+            return cas.response
+        if cas.conflict:
+            return _conflict_response("projects", cas.current_version, cas.current_value)
 
         msg = "Black Market Tech activated. +2 permanent dice."
         if linked_agencies:
@@ -1921,12 +2029,29 @@ def api_fringe_effect(request, pk, project_index):
         roll = random.randint(1, 100)
         breach = roll <= 18
 
-        project["geneManipulation"] = True
-        project["geneManipulationDice"] = 3
-        project["geneManipulationBreach"] = breach
-        projects[project_index] = project
-        agency.projects = projects
-        agency.save(update_fields=["projects"])
+        def _mutate(projects_list, _agency):
+            if project_index < 0 or project_index >= len(projects_list):
+                return JsonResponse({"error": "Invalid project index."}, status=400)
+            proj = projects_list[project_index]
+            if not isinstance(proj, dict):
+                return JsonResponse({"error": "Invalid project data."}, status=400)
+            if not proj.get("fringe"):
+                return JsonResponse({"error": "Fringe effects only on fringe projects."}, status=400)
+            if proj.get("geneManipulation"):
+                return JsonResponse({"error": "Gene Manipulation already active."}, status=400)
+            proj = dict(proj)
+            proj["geneManipulation"] = True
+            proj["geneManipulationDice"] = 3
+            proj["geneManipulationBreach"] = breach
+            new_list = list(projects_list)
+            new_list[project_index] = proj
+            return new_list
+
+        cas = _with_projects_cas(agency, _mutate)
+        if cas.response is not None:
+            return cas.response
+        if cas.conflict:
+            return _conflict_response("projects", cas.current_version, cas.current_value)
 
         msg = "Gene Manipulation activated. +3 permanent dice."
         if breach:
@@ -1989,13 +2114,30 @@ def api_fringe_effect(request, pk, project_index):
         else:
             messages.append("No permanent attribute damage (rolled " + str(attr_roll) + ", needed <=5%).")
 
-        project["neuralInterface"] = True
-        project["neuralInterfaceDice"] = 4
-        project["neuralInterfaceMlDamage"] = 2 if ml_damage else 0
-        project["neuralInterfaceAttrDamage"] = attr_damaged
-        projects[project_index] = project
-        agency.projects = projects
-        agency.save(update_fields=["projects"])
+        def _mutate(projects_list, _agency):
+            if project_index < 0 or project_index >= len(projects_list):
+                return JsonResponse({"error": "Invalid project index."}, status=400)
+            proj = projects_list[project_index]
+            if not isinstance(proj, dict):
+                return JsonResponse({"error": "Invalid project data."}, status=400)
+            if not proj.get("fringe"):
+                return JsonResponse({"error": "Fringe effects only on fringe projects."}, status=400)
+            if proj.get("neuralInterface"):
+                return JsonResponse({"error": "Neural Interface already active for this roll."}, status=400)
+            proj = dict(proj)
+            proj["neuralInterface"] = True
+            proj["neuralInterfaceDice"] = 4
+            proj["neuralInterfaceMlDamage"] = 2 if ml_damage else 0
+            proj["neuralInterfaceAttrDamage"] = attr_damaged
+            new_list = list(projects_list)
+            new_list[project_index] = proj
+            return new_list
+
+        cas = _with_projects_cas(agency, _mutate)
+        if cas.response is not None:
+            return cas.response
+        if cas.conflict:
+            return _conflict_response("projects", cas.current_version, cas.current_value)
 
         return JsonResponse({
             "dice": 4, "mlRoll": ml_roll, "attrRoll": attr_roll,
@@ -2026,12 +2168,29 @@ def api_fringe_effect(request, pk, project_index):
         else:
             messages.append("No mental load damage (rolled " + str(roll) + ", needed <=30%).")
 
-        project["sleepDeprivation"] = True
-        project["sleepDeprivationDice"] = 2
-        project["sleepDeprivationMlDamage"] = ml_damage
-        projects[project_index] = project
-        agency.projects = projects
-        agency.save(update_fields=["projects"])
+        def _mutate(projects_list, _agency):
+            if project_index < 0 or project_index >= len(projects_list):
+                return JsonResponse({"error": "Invalid project index."}, status=400)
+            proj = projects_list[project_index]
+            if not isinstance(proj, dict):
+                return JsonResponse({"error": "Invalid project data."}, status=400)
+            if not proj.get("fringe"):
+                return JsonResponse({"error": "Fringe effects only on fringe projects."}, status=400)
+            if proj.get("sleepDeprivation"):
+                return JsonResponse({"error": "Sleep Deprivation Marathon already active for this roll."}, status=400)
+            proj = dict(proj)
+            proj["sleepDeprivation"] = True
+            proj["sleepDeprivationDice"] = 2
+            proj["sleepDeprivationMlDamage"] = ml_damage
+            new_list = list(projects_list)
+            new_list[project_index] = proj
+            return new_list
+
+        cas = _with_projects_cas(agency, _mutate)
+        if cas.response is not None:
+            return cas.response
+        if cas.conflict:
+            return _conflict_response("projects", cas.current_version, cas.current_value)
 
         return JsonResponse({
             "dice": 2, "roll": roll, "mlDamage": ml_damage,
@@ -2068,6 +2227,9 @@ def api_fringe_effect(request, pk, project_index):
         destroyed = roll <= 25
         destroyed_info = None
 
+        # Side effects (Base.facilities, BaseXpLog, Agency.experience F-decrement)
+        # are applied ONCE outside the CAS so a retry doesn't double-apply.
+        # The CAS only stamps the project dict.
         xp_lost = 0
         if destroyed:
             facilities = base.facilities or []
@@ -2085,11 +2247,12 @@ def api_fringe_effect(request, pk, project_index):
                 base.facilities = facilities
                 base.save(update_fields=["facilities"])
 
-                # XP penalty: 3-7 XP subtracted from agency
+                # XP penalty: 3-7 XP subtracted from agency. Use F() so a
+                # concurrent XP-touching endpoint doesn't lose the update.
                 xp_lost = random.randint(3, 7)
-                agency.experience = (agency.experience or 0) - xp_lost
+                Agency.objects.filter(pk=agency.pk).update(experience=F("experience") - xp_lost)
+                agency.refresh_from_db(fields=["experience"])
 
-                # Log the XP loss
                 from .models import BaseXpLog
                 BaseXpLog.objects.create(
                     agency=agency,
@@ -2098,17 +2261,31 @@ def api_fringe_effect(request, pk, project_index):
                     reason="Overclocked Equipment destroyed " + fac_key + " at " + base.name + " (fringe project: " + project.get("name", "") + ")",
                 )
 
-        project["overclockedEquipment"] = True
-        project["overclockedEquipmentDice"] = 3
-        project["overclockedEquipmentDestroyed"] = destroyed_info
-        project["overclockedEquipmentBase"] = base.name
-        project["overclockedEquipmentXpLost"] = xp_lost
-        projects[project_index] = project
-        agency.projects = projects
-        save_fields = ["projects"]
-        if xp_lost:
-            save_fields.append("experience")
-        agency.save(update_fields=save_fields)
+        def _mutate(projects_list, _agency):
+            if project_index < 0 or project_index >= len(projects_list):
+                return JsonResponse({"error": "Invalid project index."}, status=400)
+            proj = projects_list[project_index]
+            if not isinstance(proj, dict):
+                return JsonResponse({"error": "Invalid project data."}, status=400)
+            if not proj.get("fringe"):
+                return JsonResponse({"error": "Fringe effects only on fringe projects."}, status=400)
+            if proj.get("overclockedEquipment"):
+                return JsonResponse({"error": "Overclocked Equipment already active."}, status=400)
+            proj = dict(proj)
+            proj["overclockedEquipment"] = True
+            proj["overclockedEquipmentDice"] = 3
+            proj["overclockedEquipmentDestroyed"] = destroyed_info
+            proj["overclockedEquipmentBase"] = base.name
+            proj["overclockedEquipmentXpLost"] = xp_lost
+            new_list = list(projects_list)
+            new_list[project_index] = proj
+            return new_list
+
+        cas = _with_projects_cas(agency, _mutate)
+        if cas.response is not None:
+            return cas.response
+        if cas.conflict:
+            return _conflict_response("projects", cas.current_version, cas.current_value)
 
         msg = "Overclocked Equipment activated. +3 permanent dice."
         if destroyed_info:
@@ -2136,13 +2313,15 @@ def api_fringe_effect(request, pk, project_index):
         roll = random.randint(1, 100)
         integrity_loss = roll <= 15
 
-        # Deduct XP
-        agency.experience -= 2
-
+        # Side effects (XP/integrity decrement, NPC creation) happen ONCE
+        # outside the CAS. F() keeps XP/integrity decrements consistent
+        # under concurrent writes from sibling endpoints.
+        Agency.objects.filter(pk=agency.pk).update(experience=F("experience") - 2)
         if integrity_loss:
-            agency.integrity = max(0, (agency.integrity or 0) - 1)
+            Agency.objects.filter(pk=agency.pk).update(integrity=F("integrity") - 1)
+            Agency.objects.filter(pk=agency.pk, integrity__lt=0).update(integrity=0)
+        agency.refresh_from_db(fields=["experience", "integrity"])
 
-        # Create NPC dossier tagged as child prodigy
         from npcs.models import NPC
         npc = NPC.objects.create(
             agency=agency,
@@ -2153,16 +2332,30 @@ def api_fringe_effect(request, pk, project_index):
             created_by=request.user,
         )
 
-        project["childProdigy"] = True
-        project["childProdigyDice"] = 1
-        project["childProdigyNpcId"] = npc.id
-        project["childProdigyIntegrityLoss"] = integrity_loss
-        projects[project_index] = project
-        agency.projects = projects
-        save_fields = ["projects", "experience"]
-        if integrity_loss:
-            save_fields.append("integrity")
-        agency.save(update_fields=save_fields)
+        def _mutate(projects_list, _agency):
+            if project_index < 0 or project_index >= len(projects_list):
+                return JsonResponse({"error": "Invalid project index."}, status=400)
+            proj = projects_list[project_index]
+            if not isinstance(proj, dict):
+                return JsonResponse({"error": "Invalid project data."}, status=400)
+            if not proj.get("fringe"):
+                return JsonResponse({"error": "Fringe effects only on fringe projects."}, status=400)
+            if proj.get("childProdigy"):
+                return JsonResponse({"error": "Child Prodigy already recruited."}, status=400)
+            proj = dict(proj)
+            proj["childProdigy"] = True
+            proj["childProdigyDice"] = 1
+            proj["childProdigyNpcId"] = npc.id
+            proj["childProdigyIntegrityLoss"] = integrity_loss
+            new_list = list(projects_list)
+            new_list[project_index] = proj
+            return new_list
+
+        cas = _with_projects_cas(agency, _mutate)
+        if cas.response is not None:
+            return cas.response
+        if cas.conflict:
+            return _conflict_response("projects", cas.current_version, cas.current_value)
 
         msg = "Child Prodigy recruited. +1 permanent dice. 2 XP spent."
         if integrity_loss:
@@ -2190,17 +2383,32 @@ def api_fringe_effect(request, pk, project_index):
         if not npc:
             return JsonResponse({"error": "Child prodigy not found."}, status=400)
 
-        # Check prodigy isn't already assigned to another project
-        for i, proj in enumerate(projects):
-            if isinstance(proj, dict) and proj.get("assignedProdigyId") == npc_id and i != project_index:
-                return JsonResponse({"error": npc.name + " is already assigned to " + proj.get("name", "another project") + "."}, status=400)
+        def _mutate(projects_list, _agency):
+            if project_index < 0 or project_index >= len(projects_list):
+                return JsonResponse({"error": "Invalid project index."}, status=400)
+            proj = projects_list[project_index]
+            if not isinstance(proj, dict):
+                return JsonResponse({"error": "Invalid project data."}, status=400)
+            if proj.get("assignedProdigyId"):
+                return JsonResponse({"error": "A prodigy is already assigned to this project."}, status=400)
+            # Re-check prodigy uniqueness inside the CAS — a sibling
+            # request may have just assigned the same prodigy elsewhere.
+            for i, p2 in enumerate(projects_list):
+                if isinstance(p2, dict) and p2.get("assignedProdigyId") == npc_id and i != project_index:
+                    return JsonResponse({"error": npc.name + " is already assigned to " + p2.get("name", "another project") + "."}, status=400)
+            proj = dict(proj)
+            proj["assignedProdigyId"] = npc.id
+            proj["assignedProdigyName"] = npc.name
+            proj["assignedProdigyDice"] = 2
+            new_list = list(projects_list)
+            new_list[project_index] = proj
+            return new_list
 
-        project["assignedProdigyId"] = npc.id
-        project["assignedProdigyName"] = npc.name
-        project["assignedProdigyDice"] = 2
-        projects[project_index] = project
-        agency.projects = projects
-        agency.save(update_fields=["projects"])
+        cas = _with_projects_cas(agency, _mutate)
+        if cas.response is not None:
+            return cas.response
+        if cas.conflict:
+            return _conflict_response("projects", cas.current_version, cas.current_value)
 
         return JsonResponse({
             "dice": 2, "npcId": npc.id, "npcName": npc.name,
@@ -2213,12 +2421,28 @@ def api_fringe_effect(request, pk, project_index):
             return JsonResponse({"error": "No prodigy assigned to this project."}, status=400)
 
         name = project.get("assignedProdigyName", "Prodigy")
-        project.pop("assignedProdigyId", None)
-        project.pop("assignedProdigyName", None)
-        project.pop("assignedProdigyDice", None)
-        projects[project_index] = project
-        agency.projects = projects
-        agency.save(update_fields=["projects"])
+
+        def _mutate(projects_list, _agency):
+            if project_index < 0 or project_index >= len(projects_list):
+                return JsonResponse({"error": "Invalid project index."}, status=400)
+            proj = projects_list[project_index]
+            if not isinstance(proj, dict):
+                return JsonResponse({"error": "Invalid project data."}, status=400)
+            if not proj.get("assignedProdigyId"):
+                return JsonResponse({"error": "No prodigy assigned to this project."}, status=400)
+            proj = dict(proj)
+            proj.pop("assignedProdigyId", None)
+            proj.pop("assignedProdigyName", None)
+            proj.pop("assignedProdigyDice", None)
+            new_list = list(projects_list)
+            new_list[project_index] = proj
+            return new_list
+
+        cas = _with_projects_cas(agency, _mutate)
+        if cas.response is not None:
+            return cas.response
+        if cas.conflict:
+            return _conflict_response("projects", cas.current_version, cas.current_value)
 
         return JsonResponse({"message": name + " unassigned from project."})
 
@@ -2228,7 +2452,15 @@ def api_fringe_effect(request, pk, project_index):
 @login_required
 @require_http_methods(["POST"])
 def api_complete_project(request, pk, project_index):
-    """Complete a project: apply attribute effects and integrity modifier, log changes."""
+    """Complete a project: apply attribute effects and integrity modifier, log changes.
+
+    Concurrency: AgencyStatLog rows are created ONCE outside the CAS so a
+    retry doesn't write duplicate audit entries. The CAS UPDATE includes
+    ``attributes`` and ``integrity`` in extra_update_fields so all three
+    fields land in a single atomic UPDATE — no torn writes between
+    ``projects.completed=True`` and the stat changes that completion
+    triggered.
+    """
     if not request.user.is_superuser:
         return JsonResponse({"error": "GM only."}, status=403)
 
@@ -2246,18 +2478,19 @@ def api_complete_project(request, pk, project_index):
     effects = project.get("completionEffects") or {}
     messages = []
 
-    # Apply attribute changes
-    attrs = agency.attributes or {}
+    # Build the attribute / integrity deltas + log entries OUTSIDE the
+    # CAS. The CAS-internal mutator just stamps the new values.
+    attribute_deltas = []  # [(cat, name, amount)]
     for change in (effects.get("attributeChanges") or []):
         cat = change.get("category", "")
         name = change.get("name", "")
-        amount = int(change.get("value", 0))
+        try:
+            amount = int(change.get("value", 0))
+        except (TypeError, ValueError):
+            amount = 0
         if not cat or not name or amount == 0:
             continue
-        if cat not in attrs:
-            attrs[cat] = {}
-        old_val = attrs[cat].get(name, 0)
-        attrs[cat][name] = old_val + amount
+        attribute_deltas.append((cat, name, amount))
         AgencyStatLog.objects.create(
             agency=agency,
             stat_type="attribute",
@@ -2265,15 +2498,12 @@ def api_complete_project(request, pk, project_index):
             amount=amount,
             reason="Project '" + project.get("name", "") + "' completed",
         )
-        messages.append(name + " " + ("{:+d}".format(amount)) + " (was " + str(old_val) + ", now " + str(old_val + amount) + ")")
 
-    agency.attributes = attrs
-
-    # Apply integrity change
-    integrity_change = int(effects.get("integrityChange", 0))
+    try:
+        integrity_change = int(effects.get("integrityChange", 0))
+    except (TypeError, ValueError):
+        integrity_change = 0
     if integrity_change != 0:
-        old_int = agency.integrity or 0
-        agency.integrity = old_int + integrity_change
         AgencyStatLog.objects.create(
             agency=agency,
             stat_type="integrity",
@@ -2281,14 +2511,52 @@ def api_complete_project(request, pk, project_index):
             amount=integrity_change,
             reason="Project '" + project.get("name", "") + "' completed",
         )
-        messages.append("Integrity " + ("{:+d}".format(integrity_change)) + " (was " + str(old_int) + ", now " + str(old_int + integrity_change) + ")")
 
-    # Mark project completed and unassign NPCs
-    project["completed"] = True
-    project.pop("assignedNpcs", None)
-    projects[project_index] = project
-    agency.projects = projects
-    agency.save(update_fields=["projects", "attributes", "integrity"])
+    def _mutate(projects_list, agency_inner):
+        if project_index < 0 or project_index >= len(projects_list):
+            return JsonResponse({"error": "Invalid project index."}, status=400)
+        proj = projects_list[project_index]
+        if not isinstance(proj, dict):
+            return JsonResponse({"error": "Invalid project data."}, status=400)
+        if proj.get("completed"):
+            return JsonResponse({"error": "Project already completed."}, status=400)
+
+        # Apply attribute deltas to the agency's *current* attributes
+        # (the helper just refresh_from_db'd it). Apply via in-place
+        # mutate of agency_inner because attributes is in
+        # extra_update_fields and the helper reads getattr(agency, ...)
+        # for the UPDATE kwargs.
+        attrs = agency_inner.attributes or {}
+        local_messages = []
+        for cat, name, amount in attribute_deltas:
+            if cat not in attrs:
+                attrs[cat] = {}
+            old_val = attrs[cat].get(name, 0)
+            attrs[cat][name] = old_val + amount
+            local_messages.append(name + " " + ("{:+d}".format(amount)) + " (was " + str(old_val) + ", now " + str(old_val + amount) + ")")
+        agency_inner.attributes = attrs
+
+        if integrity_change != 0:
+            old_int = agency_inner.integrity or 0
+            agency_inner.integrity = old_int + integrity_change
+            local_messages.append("Integrity " + ("{:+d}".format(integrity_change)) + " (was " + str(old_int) + ", now " + str(old_int + integrity_change) + ")")
+
+        proj = dict(proj)
+        proj["completed"] = True
+        proj.pop("assignedNpcs", None)
+        new_list = list(projects_list)
+        new_list[project_index] = proj
+        return (new_list, local_messages)
+
+    cas = _with_projects_cas(
+        agency, _mutate, extra_update_fields=("attributes", "integrity"),
+    )
+    if cas.response is not None:
+        return cas.response
+    if cas.conflict:
+        return _conflict_response("projects", cas.current_version, cas.current_value)
+    if cas.side_effect:
+        messages.extend(cas.side_effect)
 
     return JsonResponse({
         "messages": messages,
@@ -2436,20 +2704,49 @@ def api_project_roll(request, pk, project_index):
     is_chance = pool_size <= 0
     is_dramatic_failure = is_chance and len(rolls) > 0 and rolls[0] == 1
 
-    # Add successes to project completion
+    # Persist the projects list + project_rolls atomically through the
+    # CAS so concurrent rolls (or other per-project endpoints) don't
+    # lose updates. extra_update_fields includes ``project_rolls`` so
+    # the helper picks up the deducted allocation.
     old_score = int(project.get("completionScore", 0))
+
+    PER_ROLL_KEYS = [
+        "stimulants", "stimulantDice", "stimulantLocked", "stimulantResults",
+        "neuralInterface", "neuralInterfaceDice", "neuralInterfaceMlDamage",
+        "neuralInterfaceAttrDamage",
+        "sleepDeprivation", "sleepDeprivationDice", "sleepDeprivationMlDamage",
+    ]
+
+    def _mutate(projects_list, agency_inner):
+        if project_index < 0 or project_index >= len(projects_list):
+            return JsonResponse({"error": "Invalid project index."}, status=400)
+        proj = projects_list[project_index]
+        if not isinstance(proj, dict):
+            return JsonResponse({"error": "Invalid project data."}, status=400)
+        proj = dict(proj)
+        score_before = int(proj.get("completionScore", 0))
+        proj["completionScore"] = score_before + successes
+        for key in PER_ROLL_KEYS:
+            proj.pop(key, None)
+        new_list = list(projects_list)
+        new_list[project_index] = proj
+        agency_inner.project_rolls = rolls_data
+        return (new_list, score_before)
+
+    cas = _with_projects_cas(
+        agency, _mutate, extra_update_fields=("project_rolls",),
+    )
+    if cas.response is not None:
+        return cas.response
+    if cas.conflict:
+        return _conflict_response("projects", cas.current_version, cas.current_value)
+    # Use the score the CAS observed (handles the case where another
+    # writer bumped completionScore between our outer read and the CAS
+    # commit — old_score for the response should match the value the
+    # CAS used).
+    if cas.side_effect is not None:
+        old_score = cas.side_effect
     project["completionScore"] = old_score + successes
-
-    # Clear per-roll fringe effects (consumed on roll)
-    for per_roll_key in ["stimulants", "stimulantDice", "stimulantLocked", "stimulantResults",
-                         "neuralInterface", "neuralInterfaceDice", "neuralInterfaceMlDamage", "neuralInterfaceAttrDamage",
-                         "sleepDeprivation", "sleepDeprivationDice", "sleepDeprivationMlDamage"]:
-        project.pop(per_roll_key, None)
-
-    projects[project_index] = project
-    agency.project_rolls = rolls_data
-    agency.projects = projects
-    agency.save(update_fields=["projects", "project_rolls"])
 
     dice_successes = successes - auto_successes - prodigy_successes
     msg = roll_type.replace("_", " ").title() + " roll: " + str(pool_size) + " dice → " + str(dice_successes) + " successes."
@@ -3328,6 +3625,192 @@ def _base_section_patch(
 
 
 # ---------------------------------------------------------------------------
+# Projects-array CAS helper (Phase 4 — per-project writes share the
+# ``projects`` section version slot).
+#
+# Every per-project endpoint (fringe-effect, stimulants, dark-grants, roll,
+# complete, ...) does a read-modify-write on ``Agency.projects`` (a JSONField
+# list). Without serialisation that's a classic lost-update race: two writers
+# read the same list, mutate disjoint indices, and the slower writer's commit
+# clobbers the faster one's. The fix is the same compare-and-swap pattern used
+# by ``_agency_section_patch``: we pin ``section_versions`` in the WHERE clause
+# of an UPDATE and bump the ``projects`` version slot on success.
+#
+# Trade-off: every per-project endpoint shares ONE version slot. Two concurrent
+# writers to *different* projects (or different fields of the same project)
+# will produce one spurious 409. For force-writes (no If-Match — the legacy
+# call sites), the helper retries up to ``max_retries`` times so the client
+# sees a successful 200 after 1-3 internal retries; the user never notices.
+# For If-Match writes (new call sites) we attempt once and 409 immediately so
+# the client can re-fetch and rebase. Document the trade-off in the helper
+# docstring so future maintainers don't reach for per-project version slots
+# (``section_versions["projects.<idx>"]`` blows up the JSON map and breaks
+# section-versioning's invariant of a single, bounded JSON-dict footprint).
+# ---------------------------------------------------------------------------
+
+
+def _with_projects_cas(
+    agency,
+    mutate_fn,
+    *,
+    expected_version=None,
+    max_retries=5,
+    extra_update_fields=(),
+):
+    """Run ``mutate_fn(projects_list, agency)`` and persist atomically.
+
+    The mutator may either:
+      * Return a new ``projects`` list (the canonical path).
+      * Return a tuple ``(new_projects, side_effect)`` — ``side_effect`` is
+        passed through to the caller as ``result.side_effect`` and is
+        useful for handlers that need to surface roll outcomes, messages,
+        or DB ids created during the mutation.
+      * Return a JsonResponse to short-circuit (validation error, 400/403
+        responses produced *inside* the mutator).
+
+    The mutator MUST NOT call ``agency.save()`` — persistence happens via
+    the CAS UPDATE in this helper. It MAY mutate other fields on
+    ``agency`` (e.g. ``agency.experience``) provided those fields are
+    listed in ``extra_update_fields`` so the UPDATE picks them up.
+
+    Args:
+        agency: The Agency instance. Will be ``refresh_from_db()``-ed
+            inside each CAS attempt so stale state doesn't leak between
+            retries.
+        mutate_fn: ``(projects: list, agency: Agency) -> list | tuple |
+            JsonResponse``. See above.
+        expected_version: If an int, single-attempt If-Match CAS — a CAS
+            miss returns ``CASResult(conflict=True, ...)``. If ``None``,
+            force-write semantics — retry up to ``max_retries`` times.
+        max_retries: Number of CAS attempts on the force-write path.
+            Ignored when ``expected_version`` is set.
+        extra_update_fields: Concrete Agency columns the mutator touches
+            beyond ``projects``. Used to build the UPDATE kwargs so we
+            don't clobber unrelated state.
+
+    Returns:
+        ``CASResult`` namedtuple-style dict:
+            * ``ok``           — True iff the CAS landed.
+            * ``conflict``     — True iff a CAS miss returned 409 (only
+                                 set on the If-Match path or after
+                                 retries are exhausted).
+            * ``response``     — JsonResponse passthrough from the
+                                 mutator (validation errors).
+            * ``new_version``  — The post-bump projects version (200 path).
+            * ``side_effect``  — Whatever the mutator returned alongside
+                                 the new projects list, or ``None``.
+            * ``current_version``  — On 409, the canonical projects
+                                     version the loser should rebase to.
+            * ``current_value``    — On 409, the canonical projects
+                                     list (post-conflict view).
+
+    Trade-off (single-slot CAS): two concurrent writers to *different*
+    project indices share one version slot. Force-write callers retry
+    silently up to ``max_retries`` (the user sees a 200 after a brief
+    internal back-off). If-Match callers see 409 and must rebase. We
+    deliberately don't shard the version slot per-project — the JSON map
+    bloat outweighs the conflict-rate benefit in practice.
+    """
+    from collections import namedtuple
+
+    CASResult = namedtuple(
+        "CASResult",
+        [
+            "ok", "conflict", "response", "new_version",
+            "side_effect", "current_version", "current_value",
+        ],
+    )
+
+    def _make_result(**kwargs):
+        defaults = {
+            "ok": False, "conflict": False, "response": None,
+            "new_version": None, "side_effect": None,
+            "current_version": None, "current_value": None,
+        }
+        defaults.update(kwargs)
+        return CASResult(**defaults)
+
+    max_attempts = 1 if expected_version is not None else max_retries
+
+    last_pre_versions = None
+    last_current = 0
+    for _attempt in range(max_attempts):
+        with transaction.atomic():
+            agency.refresh_from_db()
+            pre_versions = dict(agency.section_versions or {})
+            current = int(pre_versions.get("projects", 0))
+            last_pre_versions = pre_versions
+            last_current = current
+
+            if expected_version is not None and expected_version != current:
+                return _make_result(
+                    conflict=True,
+                    current_version=current,
+                    current_value=list(agency.projects or []),
+                )
+
+            projects_snapshot = list(agency.projects or [])
+            mutator_out = mutate_fn(projects_snapshot, agency)
+
+            # Mutator returned a JsonResponse — surface it to the caller
+            # so it can be returned as-is to the client (validation 400s,
+            # auth 403s emitted from inside the mutator).
+            if isinstance(mutator_out, JsonResponse):
+                return _make_result(response=mutator_out)
+
+            side_effect = None
+            if isinstance(mutator_out, tuple) and len(mutator_out) == 2:
+                new_projects, side_effect = mutator_out
+            else:
+                new_projects = mutator_out
+
+            if new_projects is None:
+                # Defensive: treat None as "no change" — but we still
+                # need to bump the version because the mutator may have
+                # touched extra_update_fields.
+                new_projects = projects_snapshot
+
+            new_version = current + 1
+            new_versions = dict(pre_versions)
+            new_versions["projects"] = new_version
+
+            update_kwargs = {
+                field: getattr(agency, field) for field in extra_update_fields
+            }
+            update_kwargs["projects"] = new_projects
+            update_kwargs["section_versions"] = new_versions
+            update_kwargs["updated_at"] = timezone.now()
+
+            updated = Agency.objects.filter(
+                pk=agency.pk,
+                section_versions=pre_versions,
+            ).update(**update_kwargs)
+
+            if updated:
+                agency.refresh_from_db()
+                return _make_result(
+                    ok=True,
+                    new_version=new_version,
+                    side_effect=side_effect,
+                )
+
+        # CAS miss — refresh and retry on the next loop iteration. For
+        # force-writes the retry covers the typical "two writers to
+        # different projects" case; for If-Match writes the loop ends
+        # immediately (max_attempts=1) and we 409 below.
+        agency.refresh_from_db()
+
+    # Force-write exhausted retries OR If-Match write lost the race.
+    live_versions = agency.section_versions or {}
+    live_current = int(live_versions.get("projects", last_current))
+    return _make_result(
+        conflict=True,
+        current_version=live_current,
+        current_value=list(agency.projects or []),
+    )
+
+
+# ---------------------------------------------------------------------------
 # Agency-level section write functions.
 # Each takes (agency, data) and mutates ``agency`` in place. Returning a
 # JsonResponse short-circuits the patch (used for validation errors).
@@ -3407,6 +3890,73 @@ def _write_history(agency, data):
     return None
 
 
+def _write_projects(agency, data):
+    """Replace the entire ``agency.projects`` JSON list.
+
+    Mirrors the legacy PUT /api/agencies/<id>/ behaviour for the
+    ``projects`` field:
+      * Writes a ProjectRollLog entry whenever the GM bumps a project's
+        ``completionScore`` directly (manual completion adjustment).
+      * Strips the server-computed ``computedPool`` field before persist
+        so it doesn't leak back into storage and accumulate stale data
+        across saves.
+
+    Admin-only (matches the legacy passthrough); players don't have UI
+    for full-list project edit, only for the per-project endpoints
+    (roll, fringe-effect, ...). Validation: ``projects`` must be a list.
+    """
+    if "projects" not in data:
+        return None
+    new_projects = data["projects"]
+    if not isinstance(new_projects, list):
+        return JsonResponse({"error": "projects must be a list."}, status=400)
+
+    # Log GM completion-score adjustments — preserves the legacy audit
+    # trail so the roll log keeps the same timeline for manual edits.
+    old_projects = agency.projects or []
+    for idx, new_p in enumerate(new_projects):
+        if not isinstance(new_p, dict):
+            continue
+        old_p = (
+            old_projects[idx]
+            if idx < len(old_projects) and isinstance(old_projects[idx], dict)
+            else {}
+        )
+        try:
+            old_score = int(old_p.get("completionScore", 0))
+            new_score = int(new_p.get("completionScore", 0))
+        except (TypeError, ValueError):
+            continue
+        if old_score != new_score:
+            try:
+                ProjectRollLog.objects.create(
+                    agency=agency,
+                    project_index=idx,
+                    project_name=new_p.get("name", ""),
+                    character_name="GM",
+                    roll_type="manual",
+                    pool=0,
+                    rolls=[],
+                    successes=new_score - old_score,
+                    auto_successes=0,
+                    mental_damage=False,
+                    old_score=old_score,
+                    new_score=new_score,
+                    message=f"GM adjusted completion: {old_score} → {new_score}.",
+                )
+            except Exception:
+                pass
+
+    # Strip ``computedPool`` (server-computed at serialise time, must not
+    # round-trip into storage).
+    agency.projects = [
+        {k: v for k, v in p.items() if k != "computedPool"}
+        if isinstance(p, dict) else p
+        for p in new_projects
+    ]
+    return None
+
+
 def _write_admin_flags(agency, data):
     """Combined endpoint for the small admin toggles. We accept any subset
     of the supported keys so the frontend can patch one switch at a time
@@ -3450,6 +4000,10 @@ _AGENCY_SECTION_HANDLERS = {
     "assets": (_write_assets, _admin_only, ("assets",)),
     "fleet": (_write_fleet, _admin_only, ("fleet",)),
     "history": (_write_history, _admin_only, ("history",)),
+    # ``projects`` is also written by the per-project endpoints (roll,
+    # fringe-effect, stimulants, ...) — they share this version slot via
+    # ``_with_projects_cas`` so concurrent writes resolve cleanly.
+    "projects": (_write_projects, _admin_only, ("projects",)),
     "admin-flags": (
         _write_admin_flags,
         _admin_only,
@@ -3494,6 +4048,7 @@ api_agency_section_flaws = _agency_section_view("flaws")
 api_agency_section_assets = _agency_section_view("assets")
 api_agency_section_fleet = _agency_section_view("fleet")
 api_agency_section_history = _agency_section_view("history")
+api_agency_section_projects = _agency_section_view("projects")
 api_agency_section_admin_flags = _agency_section_view("admin-flags")
 
 

@@ -189,6 +189,11 @@ urlpatterns = [
         name="api_agency_section_history",
     ),
     path(
+        "api/agencies/<int:pk>/section/projects/",
+        views.api_agency_section_projects,
+        name="api_agency_section_projects",
+    ),
+    path(
         "api/agencies/<int:pk>/section/admin-flags/",
         views.api_agency_section_admin_flags,
         name="api_agency_section_admin_flags",

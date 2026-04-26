@@ -309,6 +309,95 @@
         };
     }
 
+    // useProjectActionFetch() -> async (path, options) => {ok, conflict?, response?}
+    //
+    // Helper for the per-project action endpoints under
+    //   /api/agencies/<id>/projects/<i>/<action>/
+    // (dark-grants, fringe-effect, stimulants, roll, complete, ...).
+    //
+    // These endpoints share the ``projects`` section version slot on the
+    // server (via ``_with_projects_cas``). The hook attaches the cached
+    // ``projects`` version as If-Match and routes 409 responses through
+    // the same conflict handler the section hooks use, so the user sees
+    // the standard "another user updated projects" banner.
+    //
+    // Returns an object with:
+    //   * ok: bool — true iff the request succeeded (status 2xx)
+    //   * conflict: bool — true iff the server returned 409
+    //   * response: the raw Response (only on success / non-conflict)
+    //   * data: parsed JSON for 409 responses (so the caller can pull
+    //           out current_value / current_version if needed)
+    //
+    // Usage:
+    //   const projectFetch = useProjectActionFetch();
+    //   const r = await projectFetch(
+    //       `/api/agencies/${id}/projects/${i}/fringe-effect/`,
+    //       { method: 'POST', body: JSON.stringify({effect: ...}) }
+    //   );
+    //   if (r.conflict) return;
+    //   if (!r.ok) { alert('error'); return; }
+    //   const data = await r.response.json();
+    //   ...
+    function useProjectActionFetch() {
+        const ctx = React.useContext(SectionSaveContext);
+        return async function projectFetch(path, options) {
+            options = options || {};
+            // CSRF + If-Match injection. The caller can still set
+            // additional headers via options.headers — we merge.
+            const expected = ctx ? ctx.versionsRef.current.projects : null;
+            const headers = Object.assign({
+                'Content-Type': 'application/json',
+                'X-CSRFToken': getCsrfToken(),
+            }, options.headers || {});
+            // Always send If-Match=0 if we have no cached version yet.
+            // The backend force-write semantics retry internally on
+            // CAS miss, so even a stale value is safe — the worst case
+            // is one extra round-trip on a 409 + rebase.
+            headers['If-Match'] = String(expected != null ? expected : 0);
+            const finalOptions = Object.assign({}, options, {
+                credentials: 'same-origin',
+                headers: headers,
+            });
+            let res;
+            try {
+                res = await fetch(path, finalOptions);
+            } catch (err) {
+                console.error('Project action network error', path, err);
+                return { ok: false, conflict: false, error: String(err) };
+            }
+            if (res.status === 409) {
+                let data = {};
+                try { data = await res.json(); } catch (e) {}
+                if (ctx) {
+                    ctx.versionsRef.current.projects = data.current_version || 0;
+                    if (typeof ctx.onConflict === 'function') {
+                        ctx.onConflict('projects', data.current_value, data.current_version);
+                    }
+                }
+                return {
+                    ok: false, conflict: true, data: data,
+                    currentValue: data.current_value,
+                    currentVersion: data.current_version,
+                };
+            }
+            // On 200, peek at ETag to refresh the version cache. The
+            // per-project endpoints don't currently set ETag (they use
+            // legacy JSON response shapes), so the cache may lag — the
+            // background poll in saveAgencyQuiet's caller eventually
+            // re-hydrates from the GET response.
+            if (ctx && res.ok) {
+                const etag = res.headers && res.headers.get('ETag');
+                if (etag) {
+                    const v = parseInt(etag, 10);
+                    if (!Number.isNaN(v)) {
+                        ctx.versionsRef.current.projects = v;
+                    }
+                }
+            }
+            return { ok: res.ok, conflict: false, response: res };
+        };
+    }
+
     // --- VISIBILITY TOGGLE (admin on NPC) ---
     const VisibilityToggle = ({ field, visibility, onToggle }) => {
         if (!IS_ADMIN || IS_PLAYER_AGENCY) return null;
@@ -337,6 +426,7 @@
         PROTEST_SIGNS, XpProtester, getCookie, getCsrfToken, DEFAULT_AGENCY,
         Icon, _refreshIcons, AutoSaveInput, SaveStatus, Classified, VisibilityToggle,
         SectionSaveContext, useSectionSave, useBaseSectionSave,
+        useProjectActionFetch,
     });
 </script>
 {% endverbatim %}
