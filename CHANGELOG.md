@@ -1,5 +1,11 @@
 # Changelog
 
+## v0.14.39
+- The **ACTIVE ROSTER** panel on `/login/` now shows real users instead of the fake operatives. CODENAME = the user's first character name (or `GM` for superusers); NODE = character class (FIXER / SOLDIER / SCIENCE / ENGINEER / AI), or `DIRECTOR` for the GM; UPLINK = compact "time since last activity" (`MM:SS` within the hour, `HH:MM` within the day, `Nd Hh` beyond, `—` for never). Status badge derived from the v0.14.38 `last_activity` timestamp per the spec
+- Status thresholds: `ACTIVE` within 2 hours, `STANDBY` within 4 hours, `DORMANT` within 2 days, `INACTIVE` thereafter (or never seen). Roster is sorted ACTIVE → STANDBY → DORMANT → INACTIVE then alphabetically by codename. The `N / M` badge in the header now reflects "active count / total"
+- New `s-inactive` row style — desaturated grey, 55% opacity row + 75% opacity pill — so inactive operatives read as cold but not alarming (the original BURNED red is reserved for actual compromise scenarios)
+- **Auto-logout for inactive users**: a player whose `last_activity` is older than 2 days has their session invalidated on their next request. They reappear on the roster as `INACTIVE` and have to re-authenticate at the gate. Implemented in `LastActivityMiddleware._maybe_logout_inactive` in the request phase
+
 ## v0.14.38
 - New **`UserProfile.last_activity`** timestamp field, updated on every authenticated HTTP request via a new `LastActivityMiddleware`. Used for site-activity monitoring (e.g., "who has been on the site recently"). Each new action overwrites the previous timestamp
 - Implementation runs in the response phase (no added request latency), uses `QuerySet.update()` to touch only the timestamp column, and is **debounced to once per 30 seconds per user** so a player rapidly clicking, typing, or polling doesn't hammer the DB

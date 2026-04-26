@@ -460,6 +460,8 @@ body.clearance-gate input { font-family: inherit; }
 .s-standby  .status-pill { color: #ffb454; }
 .s-dormant  .status-pill { color: #6c8aa0; }
 .s-burned   .status-pill { color: #ff4d5e; }
+.s-inactive .status-pill { color: #4a5568; opacity: 0.75; }
+.s-inactive { opacity: 0.55; }
 
 /* threats */
 .threat { display: flex; flex-direction: column; gap: 4px; margin-bottom: 8px; }

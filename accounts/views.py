@@ -19,6 +19,83 @@ from django.contrib.auth.forms import PasswordChangeForm
 from django.contrib.auth.models import User
 from django.contrib import messages
 from django.http import JsonResponse
+from django.utils import timezone
+
+
+# Activity-status thresholds. ACTIVE within 2h, STANDBY within 4h,
+# DORMANT within 2 days, INACTIVE thereafter (or never seen).
+ACTIVE_WINDOW_SEC = 2 * 60 * 60
+STANDBY_WINDOW_SEC = 4 * 60 * 60
+DORMANT_WINDOW_SEC = 2 * 24 * 60 * 60
+
+
+def _compute_activity_status(last_activity, now):
+    """Map a UserProfile.last_activity datetime to a status label."""
+    if last_activity is None:
+        return "INACTIVE"
+    delta = (now - last_activity).total_seconds()
+    if delta <= ACTIVE_WINDOW_SEC:
+        return "ACTIVE"
+    if delta <= STANDBY_WINDOW_SEC:
+        return "STANDBY"
+    if delta <= DORMANT_WINDOW_SEC:
+        return "DORMANT"
+    return "INACTIVE"
+
+
+def _format_since(delta_seconds):
+    """Compact 'time since' string for the uplink column."""
+    if delta_seconds is None:
+        return "—"
+    s = int(delta_seconds)
+    if s < 3600:
+        return f"{s // 60:02d}:{s % 60:02d}"
+    if s < 86400:
+        return f"{s // 3600:02d}:{(s % 3600) // 60:02d}"
+    days = s // 86400
+    return f"{days}d {(s % 86400) // 3600}h"
+
+
+def _build_login_roster():
+    """Snapshot the active roster shown on the Clearance Gate login.
+
+    One row per active player using their first character's name.
+    Superusers appear as ``GM``. Sorted by activity status priority
+    then codename. Returns ``(rows, active_count)``.
+    """
+    now = timezone.now()
+    sort_order = {"ACTIVE": 0, "STANDBY": 1, "DORMANT": 2, "INACTIVE": 3}
+    rows = []
+    users = (
+        User.objects.filter(is_active=True)
+        .select_related("profile")
+        .prefetch_related("characters")
+    )
+    for u in users:
+        profile = getattr(u, "profile", None)
+        last = profile.last_activity if profile else None
+        if u.is_superuser:
+            codename = "GM"
+            node = "DIRECTOR"
+        else:
+            char = u.characters.first()
+            if char and char.name and char.name != "UNKNOWN AGENT":
+                codename = char.name.upper()
+                node = (char.character_class or "").upper() or "—"
+            else:
+                codename = u.username.upper()
+                node = "—"
+        status = _compute_activity_status(last, now)
+        delta_sec = (now - last).total_seconds() if last else None
+        rows.append({
+            "codename": codename,
+            "status": status,
+            "node": node,
+            "uplink": _format_since(delta_sec),
+        })
+    rows.sort(key=lambda r: (sort_order[r["status"]], r["codename"]))
+    active_count = sum(1 for r in rows if r["status"] == "ACTIVE")
+    return rows, active_count
 
 
 def _wants_json(request):
@@ -33,10 +110,14 @@ def _login_context(request):
     from exodus.models import SiteSettings
     settings_obj = SiteSettings.load()
     tweaks = settings_obj.get_tweaks()
+    roster, active_count = _build_login_roster()
     return {
         "tweaks": tweaks,
         "tweaks_json": json.dumps(tweaks),
         "next_url_json": json.dumps(request.GET.get("next") or "/"),
+        "roster": roster,
+        "roster_active_count": active_count,
+        "roster_total": len(roster),
     }
 
 

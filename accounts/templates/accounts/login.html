@@ -220,37 +220,26 @@
               <span class="block-bullet">■</span>
               <h3>ACTIVE ROSTER</h3>
               <span class="block-line"></span>
-              <span class="block-badge">3 / 6</span>
+              <span class="block-badge">{{ roster_active_count }} / {{ roster_total }}</span>
             </header>
             <div class="block-body">
               <div class="roster">
                 <div class="roster-head">
                   <span>CODENAME</span><span>STATUS</span><span>NODE</span><span>UPLINK</span>
                 </div>
-                <div class="roster-row s-active">
-                  <span>NIGHTJAR</span><span class="status-pill">ACTIVE</span>
-                  <span>PRAGUE</span><span class="muted">00:14</span>
+                {% for row in roster %}
+                <div class="roster-row s-{{ row.status|lower }}">
+                  <span>{{ row.codename }}</span>
+                  <span class="status-pill">{{ row.status }}</span>
+                  <span>{{ row.node }}</span>
+                  <span class="muted">{{ row.uplink }}</span>
                 </div>
-                <div class="roster-row s-active">
-                  <span>VESPER-09</span><span class="status-pill">ACTIVE</span>
-                  <span>MARRAKECH</span><span class="muted">00:42</span>
-                </div>
-                <div class="roster-row s-standby">
-                  <span>GRAYHOUND</span><span class="status-pill">STANDBY</span>
-                  <span>REYKJAVÍK</span><span class="muted">01:07</span>
-                </div>
-                <div class="roster-row s-dormant">
-                  <span>AMBER-PYX</span><span class="status-pill">DORMANT</span>
+                {% empty %}
+                <div class="roster-row s-inactive">
+                  <span>—</span><span class="status-pill">EMPTY</span>
                   <span>—</span><span class="muted">—</span>
                 </div>
-                <div class="roster-row s-burned">
-                  <span>ROOK-IV</span><span class="status-pill">BURNED</span>
-                  <span>REDACTED</span><span class="muted">—</span>
-                </div>
-                <div class="roster-row s-active">
-                  <span>CIPHER-7</span><span class="status-pill">ACTIVE</span>
-                  <span>BOGOTÁ</span><span class="muted">00:03</span>
-                </div>
+                {% endfor %}
               </div>
             </div>
           </section>
