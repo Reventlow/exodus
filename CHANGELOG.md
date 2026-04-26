@@ -1,5 +1,9 @@
 # Changelog
 
+## v0.14.37
+- Fix: clearance-gate kicker on `/login/` now reads the **DIRECTORATE** value from `/settings/ → CLEARANCE GATE → TWEAKS` instead of the hardcoded `"DIRECTORATE OMEGA"`. Both the JS-on render and the no-JS fallback now show `DIRECTORATE {{ agency_name }}  //  PROJECT {{ op_codename }}`
+- Fix: granted-dossier copy in the post-login cinematic. Previously rendered `PROJECT:   PROJECT OMEGA-7` (duplicate "PROJECT" word). Now: `CLEARANCE: TIER-3 // DIRECTORATE <agency_name>` and `PROJECT:   <op_codename>`
+
 ## v0.14.36
 - Branding labels in `/settings/` → `CLEARANCE GATE → TWEAKS` renamed: `AGENCY NAME` → `DIRECTORATE`, `OP CODENAME` → `PROJECT`. Matches the on-screen kicker copy "DIRECTORATE OMEGA // PROJECT EXODUS" so the field labels read as the operator's directorate and project assignment, not the brand. The underlying `tweaks` JSON keys (`agency_name`, `op_codename`) are unchanged — no migration required, existing values preserved
 
