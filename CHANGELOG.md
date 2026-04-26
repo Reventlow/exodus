@@ -1,5 +1,13 @@
 # Changelog
 
+## v0.14.43
+- **Wave 3 of the clearance-gate aesthetic rollout — heavy authority surfaces.** 10 React-via-Babel templates restyled across four parallel agents on disjoint files
+- **Agency sheet** (Wave 3A): 6 component files (`_app`, `_core_modules`, `_projects`, `_table_ftl`, `_changes`, `_bases`). 1 bracket-frame on the agency header authority card, 20 `.block-head` section markers, 17 status pills (hidden, XP, read-only, council statuses, change requests, project completes, base hidden), 122 `borderRadius` zeroings. Hooks (`useSectionSave`, `useBaseSectionSave`, `useProjectActionFetch`) and conflict-banner logic untouched
+- **Character sheet** (Wave 3B): editable `templates/characters/sheet.html` (2365L). 1 bracket frame on HeaderModule with kicker/title/sub above the editable form, 13 `.block-head` section markers (Attributes, Skills, Specialisations, Derived, Pulling Strings, Merits, Experience with `[N XP REMAINING]` badge, Biosign Monitor, Inventory, Dossier, Classified Notes, Dice Roller, Flaws), 2 status pills, 20 `borderRadius` zeroings. StatDots / health track / mental load / EKG / cybernetics tracker preserved
+- **NPCs** (Wave 3C): list + detail. List page in bracket frame with state pills (active/leave/missing/deceased → `s-active`/`s-standby`/`s-burned`/`s-inactive`). Detail page in bracket frame with 17 `.block-head` section markers and 10 status pills (state, hidden-section redactions, BIOSIGN MONITOR, ADMIN PANEL, COMPROMISED indicators), 14 `borderRadius` zeroings
+- **Comms** (Wave 3D): `templates/comms/index.html` (1833L). Page in bracket frame, 5 `.block-head` panels (CHANNELS with unread badge, ThreadView with msg count, MemberManager, NewThreadModal, INTERCEPTED), 4 status pills (OWNER, ATTACHED file chip, system-message bubble, intercepted thread wrapper), `.field-wrap` compose row with `>` prompt + accent caret + textarea, pulsing `.dot` for unread. WebSocket logic, typing indicator, message edit/delete, file-attachment thumbnail untouched. CyberTerminal overlay kept its retro green-CRT aesthetic
+- Total Wave 3: ~10 templates, +89 LOC net (counts vary because some chrome wraps replace existing structure 1:1), ~150 `borderRadius` zeroings, 30 status pills, 35 block-heads, 4 bracket frames
+
 ## v0.14.42
 - New `UserProfile` admin registration at `/admin/accounts/userprofile/` — see every user's `last_activity` timestamp, computed status pill (ACTIVE / STANDBY / DORMANT / INACTIVE matching the login roster), and "since" delta. Also surfaces the same status column on the standard `/admin/auth/user/` list, with the profile (incl. avatar + last_activity) inlined on each user's edit page
 

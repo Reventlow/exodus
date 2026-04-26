@@ -195,7 +195,7 @@
             }}>
                 <img src={src} alt={alt || 'Image'} onClick={e => e.stopPropagation()} style={{
                     maxWidth: '90vw', maxHeight: '90vh', objectFit: 'contain',
-                    border: '2px solid var(--border-color)', borderRadius: '4px', cursor: 'default',
+                    border: '2px solid var(--border-color)', borderRadius: 0, cursor: 'default',
                 }} />
             </div>,
             document.body
@@ -301,12 +301,11 @@
 
         return (
             <div className="glass-panel" style={{ padding: '1.5rem', marginBottom: '1rem' }}>
-                <div style={{
-                    display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-                    borderBottom: '1px solid var(--border-color)',
-                    paddingBottom: '0.5rem', marginBottom: '1rem'
-                }}>
-                    <h3 className="mono-text text-accent">OPERATIVE DOSSIER</h3>
+                {/* Wave 3B: block-head pattern with edit toggle on right. */}
+                <header className="block-head" style={{ marginBottom: '1rem' }}>
+                    <span className="block-bullet">■</span>
+                    <h3>OPERATIVE DOSSIER</h3>
+                    <span className="block-line"></span>
                     {IS_OWNER && (
                         <button onClick={() => editing ? handleSave() : setEditing(true)}
                             style={{
@@ -315,11 +314,12 @@
                                 color: 'var(--accent-primary)',
                                 padding: '0.25rem 0.75rem', cursor: 'pointer',
                                 fontFamily: 'var(--font-mono)', fontSize: '0.8rem',
+                                marginLeft: '0.5rem'
                             }}>
                             {editing ? 'SAVE' : 'EDIT'}
                         </button>
                     )}
-                </div>
+                </header>
                 {editing ? (
                     <textarea ref={textareaRef} defaultValue={dossier}
                         placeholder="Write operative dossier in markdown..."
@@ -327,7 +327,7 @@
                             width: '100%', minHeight: '200px', background: 'var(--bg-input)',
                             border: '1px solid var(--border-color)', color: 'var(--text-primary)',
                             padding: '1rem', fontFamily: 'var(--font-mono)', fontSize: '0.9rem',
-                            resize: 'vertical', borderRadius: 'var(--radius-sm)',
+                            resize: 'vertical', borderRadius: 0,
                         }} />
                 ) : (
                     <div className="dossier-content"
@@ -359,12 +359,11 @@
                 padding: '1.5rem', marginBottom: '1rem',
                 border: '1px solid var(--accent-danger)',
             }}>
-                <div style={{
-                    display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-                    borderBottom: '1px solid var(--accent-danger)',
-                    paddingBottom: '0.5rem', marginBottom: '0.5rem'
-                }}>
-                    <h3 className="mono-text" style={{ color: 'var(--accent-danger)' }}>CLASSIFIED NOTES</h3>
+                {/* Wave 3B: block-head pattern recoloured with danger semantics. */}
+                <header className="block-head" style={{ marginBottom: '0.5rem', color: 'var(--accent-danger)' }}>
+                    <span className="block-bullet">●</span>
+                    <h3 style={{ color: 'var(--accent-danger)' }}>CLASSIFIED NOTES</h3>
+                    <span className="block-line" style={{ background: 'linear-gradient(90deg, var(--accent-danger), transparent)' }}></span>
                     {IS_OWNER && (
                         <button onClick={() => editing ? handleSave() : setEditing(true)}
                             style={{
@@ -373,11 +372,12 @@
                                 color: 'var(--accent-danger)',
                                 padding: '0.25rem 0.75rem', cursor: 'pointer',
                                 fontFamily: 'var(--font-mono)', fontSize: '0.8rem',
+                                marginLeft: '0.5rem'
                             }}>
                             {editing ? 'SAVE' : 'EDIT'}
                         </button>
                     )}
-                </div>
+                </header>
                 <div className="text-muted" style={{
                     fontSize: '0.7rem', marginBottom: '0.75rem', fontStyle: 'italic'
                 }}>
@@ -390,7 +390,7 @@
                             width: '100%', minHeight: '150px', background: 'var(--bg-input)',
                             border: '1px solid var(--accent-danger)', color: 'var(--text-primary)',
                             padding: '1rem', fontFamily: 'var(--font-mono)', fontSize: '0.9rem',
-                            resize: 'vertical', borderRadius: 'var(--radius-sm)',
+                            resize: 'vertical', borderRadius: 0,
                         }} />
                 ) : (
                     <div className="dossier-content"
@@ -401,11 +401,30 @@
     };
 
     // --- HEADER MODULE ---
+    // Wave 3B: bracket-frame chrome around the character header card,
+    // mirroring view.html. Display title shows the codename + class kicker;
+    // the editable form fields live inside the same frame as the body grid.
     const HeaderModule = ({ char, onSave }) => (
-        <div className="glass-panel" style={{
-            padding: '1.5rem', marginBottom: '1rem',
-            display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '1rem'
+        <div className="brackets" style={{
+            position: 'relative', padding: '28px 32px', marginBottom: '1rem'
         }}>
+            <span className="bk tl"></span><span className="bk tr"></span>
+            <span className="bk bl"></span><span className="bk br"></span>
+            <div style={{ marginBottom: '1.25rem' }}>
+                <div className="kicker">// PERSONNEL RECORD</div>
+                <h2 className="title" style={{ fontSize: '40px', marginBottom: '6px' }}>
+                    <span>{char.name || 'UNKNOWN AGENT'}</span>
+                </h2>
+                {(char.characterClass || char.concept) && (
+                    <div className="sub" style={{ marginBottom: 0 }}>
+                        {char.characterClass ? char.characterClass.toUpperCase() : 'UNCLASSIFIED'}
+                        {char.concept ? ` · ${char.concept}` : ''}
+                    </div>
+                )}
+            </div>
+            <div style={{
+                display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '1rem'
+            }}>
             <div>
                 <label className="text-secondary mono-text" style={{ fontSize: '0.8rem' }}>CODENAME</label>
                 <AutoSaveInput type="text" defaultValue={char.name}
@@ -476,6 +495,7 @@
                         }} />
                 </div>
             </div>
+            </div>
         </div>
     );
 
@@ -487,10 +507,12 @@
 
         return (
             <div className="glass-panel" style={{ padding: '1.5rem', marginBottom: '1rem' }}>
-                <h3 className="mono-text text-accent" style={{
-                    borderBottom: '1px solid var(--border-color)',
-                    paddingBottom: '0.5rem', marginBottom: '1rem'
-                }}>ATTRIBUTES</h3>
+                {/* Wave 3B: block-head section pattern. */}
+                <header className="block-head" style={{ marginBottom: '1rem' }}>
+                    <span className="block-bullet">■</span>
+                    <h3>ATTRIBUTES</h3>
+                    <span className="block-line"></span>
+                </header>
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '2rem' }}>
                     <div>
                         <div className="text-center text-muted mono-text" style={{ marginBottom: '0.5rem' }}>MENTAL</div>
@@ -585,12 +607,20 @@
             </div>
         );
 
+        // Count trained skills (rating > 0) across all categories.
+        const trainedCount = ['mental', 'physical', 'social'].reduce((sum, cat) => {
+            return sum + Object.values(skills[cat] || {}).filter(v => v > 0).length;
+        }, 0);
+
         return (
             <div className="glass-panel" style={{ padding: '1.5rem', marginBottom: '1rem' }}>
-                <h3 className="mono-text text-accent" style={{
-                    borderBottom: '1px solid var(--border-color)',
-                    paddingBottom: '0.5rem', marginBottom: '1rem'
-                }}>SKILLS</h3>
+                {/* Wave 3B: block-head + trained-skill count badge. */}
+                <header className="block-head" style={{ marginBottom: '1rem' }}>
+                    <span className="block-bullet">■</span>
+                    <h3>SKILLS</h3>
+                    <span className="block-line"></span>
+                    <span className="block-badge">{trainedCount} TRAINED</span>
+                </header>
                 <div style={{
                     display: 'grid',
                     gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))',
@@ -613,19 +643,12 @@
 
     const SpecialisationsModule = ({ specialisations, update, quietUpdate, getFresh }) => (
         <div className="glass-panel" style={{ padding: '1.5rem', marginBottom: '1rem' }}>
-            <h3 className="mono-text text-accent" style={{
-                borderBottom: '1px solid var(--border-color)',
-                paddingBottom: '0.5rem', marginBottom: '1rem',
-                display: 'flex', justifyContent: 'space-between', alignItems: 'center'
-            }}>
-                SPECIALISATIONS
-                {IS_OWNER && (
-                    <span className="text-muted" style={{
-                        fontSize: '0.65rem', fontWeight: 'normal', flex: 1, marginLeft: '0.75rem',
-                    }} title="When rolling a skill with a matching specialisation, gain +1 die">
-                        +1 die when a skill roll matches a specialisation
-                    </span>
-                )}
+            {/* Wave 3B: block-head pattern with count badge + add control on right. */}
+            <header className="block-head" style={{ marginBottom: '1rem' }}>
+                <span className="block-bullet">■</span>
+                <h3>SPECIALISATIONS</h3>
+                <span className="block-line"></span>
+                <span className="block-badge">{specialisations.length}</span>
                 {IS_OWNER && (
                     <button onClick={() => {
                         document.activeElement?.blur();
@@ -635,13 +658,20 @@
                         title="Add Specialisation" style={{
                             background: 'transparent', border: '1px solid var(--accent-primary)',
                             color: 'var(--accent-primary)', width: '24px', height: '24px',
-                            borderRadius: '4px', cursor: 'pointer',
-                            display: 'flex', alignItems: 'center', justifyContent: 'center'
+                            borderRadius: 0, cursor: 'pointer',
+                            display: 'flex', alignItems: 'center', justifyContent: 'center', marginLeft: '0.5rem'
                         }}>
                         <Icon name="plus" size={14} />
                     </button>
                 )}
-            </h3>
+            </header>
+            {IS_OWNER && (
+                <p className="text-muted mono-text" style={{
+                    fontSize: '0.65rem', marginTop: '-0.25rem', marginBottom: '0.75rem'
+                }} title="When rolling a skill with a matching specialisation, gain +1 die">
+                    +1 die when a skill roll matches a specialisation
+                </p>
+            )}
             {specialisations.map((spec, idx) => (
                 <div key={idx} className="tech-border" style={{
                     padding: '0.5rem', marginBottom: '0.5rem', background: 'rgba(0,0,0,0.2)',
@@ -717,10 +747,12 @@
 
         return (
             <div className="glass-panel" style={{ padding: '1.5rem', marginBottom: '1rem' }}>
-                <h3 className="mono-text text-accent" style={{
-                    borderBottom: '1px solid var(--border-color)',
-                    paddingBottom: '0.5rem', marginBottom: '1rem'
-                }}>DERIVED TRAITS</h3>
+                {/* Wave 3B: block-head section pattern. */}
+                <header className="block-head" style={{ marginBottom: '1rem' }}>
+                    <span className="block-bullet">■</span>
+                    <h3>DERIVED TRAITS</h3>
+                    <span className="block-line"></span>
+                </header>
                 <div style={{
                     display: 'grid',
                     gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))',
@@ -797,29 +829,29 @@
 
         return (
             <div className="glass-panel" style={{ padding: '1.5rem', marginBottom: '1rem' }}>
-                <h3 className="mono-text text-accent" style={{
-                    borderBottom: '1px solid var(--border-color)',
-                    paddingBottom: '0.5rem', marginBottom: '1rem',
-                    display: 'flex', justifyContent: 'space-between', alignItems: 'center'
-                }}>
-                    PULLING STRINGS
+                {/* Wave 3B: block-head pattern with count badge + add control. */}
+                <header className="block-head" style={{ marginBottom: '1rem' }}>
+                    <span className="block-bullet">■</span>
+                    <h3>PULLING STRINGS</h3>
+                    <span className="block-line"></span>
+                    <span className="block-badge">{pullingStrings.length}</span>
                     {IS_OWNER && (
                         <button onClick={() => setShowPicker(!showPicker)} title={showPicker ? "Close" : "Add Pulling String"} style={{
                             background: 'transparent', border: '1px solid var(--accent-primary)',
                             color: 'var(--accent-primary)', width: '24px', height: '24px',
-                            borderRadius: '4px', cursor: 'pointer',
-                            display: 'flex', alignItems: 'center', justifyContent: 'center'
+                            borderRadius: 0, cursor: 'pointer',
+                            display: 'flex', alignItems: 'center', justifyContent: 'center', marginLeft: '0.5rem'
                         }}>
                             <Icon name={showPicker ? "x" : "plus"} size={14} />
                         </button>
                     )}
-                </h3>
+                </header>
 
                 {/* Picker */}
                 {showPicker && (
                     <div style={{
                         border: '1px solid var(--accent-primary)',
-                        borderRadius: '4px', padding: '0.75rem', marginBottom: '1rem',
+                        borderRadius: 0, padding: '0.75rem', marginBottom: '1rem',
                         background: 'rgba(0,0,0,0.3)', maxHeight: '300px', overflowY: 'auto'
                     }}>
                         <div className="text-secondary mono-text" style={{ fontSize: '0.75rem', marginBottom: '0.5rem' }}>
@@ -834,7 +866,7 @@
                             <div key={ps.id + (ps.isLinkable ? '-link' : '')} style={{
                                 display: 'flex', justifyContent: 'space-between', alignItems: 'center',
                                 padding: '0.4rem 0.5rem', marginBottom: '0.25rem',
-                                background: 'rgba(0,0,0,0.2)', borderRadius: '3px',
+                                background: 'rgba(0,0,0,0.2)', borderRadius: 0,
                                 cursor: 'pointer'
                             }} onClick={() => { onAdd(ps.id); if (!ps.isLinkable) setShowPicker(false); }}>
                                 <div style={{ flex: 1 }}>
@@ -904,7 +936,7 @@
                                                 style={{
                                                     background: 'transparent',
                                                     border: '1px solid var(--border-color)',
-                                                    borderRadius: '3px',
+                                                    borderRadius: 0,
                                                     color: ps.linkedNpc ? 'var(--text-primary)' : 'var(--text-muted)',
                                                     fontSize: '0.8rem', padding: '0.15rem 0.3rem',
                                                     fontFamily: 'var(--font-mono)', cursor: 'pointer'
@@ -998,40 +1030,39 @@
 
         return (
             <div className="glass-panel" style={{ padding: '1.5rem', marginBottom: '1rem' }}>
-                <h3 className="mono-text text-accent" style={{
-                    borderBottom: '1px solid var(--border-color)',
-                    paddingBottom: '0.5rem', marginBottom: '1rem',
-                    display: 'flex', justifyContent: 'space-between', alignItems: 'center'
-                }}>
-                    MERITS
-                    <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
-                        {IS_SUPERUSER && merits.some(m => m.effects && m.effects.auto_success) && (
-                            <button onClick={() => { if (confirm('Reset all auto-success merit uses for this session?')) onResetUses(); }}
-                                title="Reset session uses"
-                                style={{
-                                    background: 'transparent', border: '1px solid #06b6d4',
-                                    color: '#06b6d4', padding: '0.15rem 0.5rem',
-                                    borderRadius: '4px', cursor: 'pointer',
-                                    fontFamily: 'var(--font-mono)', fontSize: '0.65rem',
-                                }}>RESET USES</button>
-                        )}
-                        {IS_OWNER && (
-                            <button onClick={() => setShowPicker(!showPicker)} title={showPicker ? "Close" : "Add Merit"} style={{
-                                background: 'transparent', border: '1px solid var(--accent-primary)',
-                                color: 'var(--accent-primary)', width: '24px', height: '24px',
-                                borderRadius: '4px', cursor: 'pointer',
-                                display: 'flex', alignItems: 'center', justifyContent: 'center'
-                            }}>
-                                <Icon name={showPicker ? "x" : "plus"} size={14} />
-                            </button>
-                        )}
-                    </div>
-                </h3>
+                {/* Wave 3B: block-head pattern with count badge + RESET USES + add control. */}
+                <header className="block-head" style={{ marginBottom: '1rem' }}>
+                    <span className="block-bullet">■</span>
+                    <h3>MERITS</h3>
+                    <span className="block-line"></span>
+                    <span className="block-badge">{merits.length}</span>
+                    {IS_SUPERUSER && merits.some(m => m.effects && m.effects.auto_success) && (
+                        <button onClick={() => { if (confirm('Reset all auto-success merit uses for this session?')) onResetUses(); }}
+                            title="Reset session uses"
+                            style={{
+                                background: 'transparent', border: '1px solid #06b6d4',
+                                color: '#06b6d4', padding: '0.15rem 0.5rem',
+                                borderRadius: 0, cursor: 'pointer',
+                                fontFamily: 'var(--font-mono)', fontSize: '0.65rem',
+                                marginLeft: '0.5rem'
+                            }}>RESET USES</button>
+                    )}
+                    {IS_OWNER && (
+                        <button onClick={() => setShowPicker(!showPicker)} title={showPicker ? "Close" : "Add Merit"} style={{
+                            background: 'transparent', border: '1px solid var(--accent-primary)',
+                            color: 'var(--accent-primary)', width: '24px', height: '24px',
+                            borderRadius: 0, cursor: 'pointer',
+                            display: 'flex', alignItems: 'center', justifyContent: 'center', marginLeft: '0.5rem'
+                        }}>
+                            <Icon name={showPicker ? "x" : "plus"} size={14} />
+                        </button>
+                    )}
+                </header>
 
                 {showPicker && (
                     <div style={{
                         border: '1px solid var(--accent-primary)',
-                        borderRadius: '4px', padding: '0.75rem', marginBottom: '1rem',
+                        borderRadius: 0, padding: '0.75rem', marginBottom: '1rem',
                         background: 'rgba(0,0,0,0.3)', maxHeight: '300px', overflowY: 'auto'
                     }}>
                         <div className="text-secondary mono-text" style={{ fontSize: '0.75rem', marginBottom: '0.5rem' }}>
@@ -1054,7 +1085,7 @@
                                         <div key={m.id} style={{
                                             display: 'flex', justifyContent: 'space-between', alignItems: 'center',
                                             padding: '0.4rem 0.5rem', marginBottom: '0.25rem',
-                                            background: 'rgba(0,0,0,0.2)', borderRadius: '3px', cursor: 'pointer'
+                                            background: 'rgba(0,0,0,0.2)', borderRadius: 0, cursor: 'pointer'
                                         }} onClick={() => { onAdd(m.id, m.cost); setShowPicker(false); }}>
                                             <div style={{ flex: 1 }}>
                                                 <span className="mono-text" style={{ color: 'var(--text-primary)', fontSize: '0.85rem' }}>
@@ -1152,7 +1183,7 @@
                                                     background: 'rgba(6,182,212,0.15)', border: '1px solid #06b6d4',
                                                     color: '#06b6d4', padding: '0.1rem 0.4rem', cursor: 'pointer',
                                                     fontFamily: 'var(--font-mono)', fontSize: '0.6rem',
-                                                    borderRadius: '3px',
+                                                    borderRadius: 0,
                                                 },
                                             }, 'USE') : null}
                                         </div>
@@ -1315,15 +1346,21 @@
                 {remaining < 0 && (
                     <div className="xp-protester-zone"><XpProtester /></div>
                 )}
-                <h3 className="mono-text text-accent" style={{
-                    borderBottom: '1px solid var(--border-color)',
-                    paddingBottom: '0.5rem', marginBottom: '1rem'
-                }}>EXPERIENCE</h3>
+                {/* Wave 3B: block-head pattern with remaining-XP badge. */}
+                <header className="block-head" style={{ marginBottom: '1rem' }}>
+                    <span className="block-bullet">■</span>
+                    <h3>EXPERIENCE</h3>
+                    <span className="block-line"></span>
+                    <span className="block-badge"
+                        style={remaining < 0 ? { color: 'var(--accent-danger)', borderColor: 'var(--accent-danger)' } : null}>
+                        {remaining} XP REMAINING
+                    </span>
+                </header>
 
                 {creation.messages.length > 0 && (
                     <div style={{
                         background: 'rgba(255,200,0,0.1)', border: '1px solid var(--accent-warning)',
-                        borderRadius: '4px', padding: '0.75rem', marginBottom: '1rem',
+                        borderRadius: 0, padding: '0.75rem', marginBottom: '1rem',
                         fontSize: '0.8rem', color: 'var(--accent-warning)'
                     }}>
                         <strong className="mono-text">CREATION INCOMPLETE</strong>
@@ -1418,7 +1455,7 @@
                                 style={{
                                     background: 'transparent', border: '1px solid var(--border-color)',
                                     color: 'var(--text-primary)', width: '60px', padding: '0.25rem 0.5rem',
-                                    textAlign: 'center', fontFamily: 'var(--font-mono)', borderRadius: '3px'
+                                    textAlign: 'center', fontFamily: 'var(--font-mono)', borderRadius: 0
                                 }} />
                             <span className="text-muted">XP →</span>
                             <select value={transferAgency}
@@ -1426,7 +1463,7 @@
                                 style={{
                                     background: 'transparent', border: '1px solid var(--border-color)',
                                     color: 'var(--text-primary)', padding: '0.25rem 0.5rem',
-                                    fontFamily: 'var(--font-mono)', cursor: 'pointer', borderRadius: '3px'
+                                    fontFamily: 'var(--font-mono)', cursor: 'pointer', borderRadius: 0
                                 }}>
                                 <option value="" style={{ background: 'var(--bg-dark)' }}>Select agency...</option>
                                 {agencies.map(a => (
@@ -1444,7 +1481,7 @@
                                     background: transferAgency ? 'var(--accent-primary)' : 'transparent',
                                     border: '1px solid var(--accent-primary)',
                                     color: transferAgency ? 'var(--bg-dark)' : 'var(--text-muted)',
-                                    padding: '0.25rem 0.75rem', borderRadius: '3px',
+                                    padding: '0.25rem 0.75rem', borderRadius: 0,
                                     cursor: transferAgency ? 'pointer' : 'default',
                                     fontFamily: 'var(--font-mono)', fontSize: '0.8rem'
                                 }}>
@@ -1529,17 +1566,21 @@
                 padding: '1.5rem', marginBottom: '1rem',
                 border: '1px solid var(--accent-danger)'
             }}>
+                {/* Wave 3B: block-head pattern + status-pill for monitoring state.
+                    Header recoloured to danger to preserve the BIOSIGN MONITOR visual semantics. */}
                 <div style={{
-                    display: 'flex', justifyContent: 'space-between',
-                    alignItems: 'center', marginBottom: '1rem',
-                    flexWrap: 'wrap', gap: '0.5rem'
+                    display: 'flex', alignItems: 'center', gap: '0.75rem',
+                    marginBottom: '1rem', flexWrap: 'wrap'
                 }}>
-                    <h3 className="mono-text text-danger">BIOSIGN MONITOR</h3>
-                    <div className="text-danger mono-text" style={{
-                        animation: isFlatline ? 'none' : 'pulse 2s infinite'
-                    }}>
-                        {isFlatline ? 'NO VITAL SIGNS DETECTED' : 'Tracking vital signs...'}
-                    </div>
+                    <header className="block-head" style={{ flex: 1, color: 'var(--accent-danger)' }}>
+                        <span className="block-bullet">●</span>
+                        <h3>BIOSIGN MONITOR</h3>
+                        <span className="block-line" style={{ background: 'linear-gradient(90deg, var(--accent-danger), transparent)' }}></span>
+                    </header>
+                    <span className={'status-pill ' + (isFlatline ? 's-burned' : 's-active')}
+                        style={isFlatline ? null : { animation: 'pulse 2s infinite' }}>
+                        {isFlatline ? 'NO VITAL SIGNS' : 'TRACKING VITAL SIGNS'}
+                    </span>
                 </div>
 
                 {/* EKG Visual */}
@@ -1722,23 +1763,23 @@
     // --- EXPANDABLE LIST MODULE (Merits, Pulling Strings) ---
     const ExpandableListModule = ({ title, items, onAdd, onRemove, onUpdate, onQuietSave, itemLabel = "Item" }) => (
         <div className="glass-panel" style={{ padding: '1.5rem', marginBottom: '1rem' }}>
-            <h3 className="mono-text text-accent" style={{
-                borderBottom: '1px solid var(--border-color)',
-                paddingBottom: '0.5rem', marginBottom: '1rem',
-                display: 'flex', justifyContent: 'space-between', alignItems: 'center'
-            }}>
-                {title}
+            {/* Wave 3B: block-head pattern with item-count badge + add control. */}
+            <header className="block-head" style={{ marginBottom: '1rem' }}>
+                <span className="block-bullet">■</span>
+                <h3>{title}</h3>
+                <span className="block-line"></span>
+                <span className="block-badge">{items.length}</span>
                 {IS_OWNER && (
                     <button onClick={onAdd} title="Add New" style={{
                         background: 'transparent', border: '1px solid var(--accent-primary)',
                         color: 'var(--accent-primary)', width: '24px', height: '24px',
-                        borderRadius: '4px', cursor: 'pointer',
-                        display: 'flex', alignItems: 'center', justifyContent: 'center'
+                        borderRadius: 0, cursor: 'pointer',
+                        display: 'flex', alignItems: 'center', justifyContent: 'center', marginLeft: '0.5rem'
                     }}>
                         <Icon name="plus" size={14} />
                     </button>
                 )}
-            </h3>
+            </header>
             {items.map((item, idx) => (
                 <div key={idx} className="tech-border" style={{
                     padding: '0.5rem', marginBottom: '0.5rem', background: 'rgba(0,0,0,0.2)'
@@ -1794,12 +1835,12 @@
     // --- INVENTORY MODULE ---
     const InventoryModule = ({ inventory, update, quietUpdate, getFreshItems }) => (
         <div className="glass-panel" style={{ padding: '1.5rem', marginBottom: '1rem' }}>
-            <h3 className="mono-text text-accent" style={{
-                borderBottom: '1px solid var(--border-color)',
-                paddingBottom: '0.5rem', marginBottom: '1rem',
-                display: 'flex', justifyContent: 'space-between', alignItems: 'center'
-            }}>
-                INVENTORY / ASSETS
+            {/* Wave 3B: block-head pattern with item-count badge + add control. */}
+            <header className="block-head" style={{ marginBottom: '1rem' }}>
+                <span className="block-bullet">■</span>
+                <h3>INVENTORY / ASSETS</h3>
+                <span className="block-line"></span>
+                <span className="block-badge">{(inventory || []).length}</span>
                 {IS_OWNER && (
                     <button onClick={() => {
                         document.activeElement?.blur();
@@ -1809,13 +1850,13 @@
                         title="Add Item" style={{
                             background: 'transparent', border: '1px solid var(--accent-primary)',
                             color: 'var(--accent-primary)', width: '24px', height: '24px',
-                            borderRadius: '4px', cursor: 'pointer',
-                            display: 'flex', alignItems: 'center', justifyContent: 'center'
+                            borderRadius: 0, cursor: 'pointer',
+                            display: 'flex', alignItems: 'center', justifyContent: 'center', marginLeft: '0.5rem'
                         }}>
                         <Icon name="plus" size={14} />
                     </button>
                 )}
-            </h3>
+            </header>
             <div style={{
                 display: 'grid',
                 gridTemplateColumns: 'repeat(auto-fill, minmax(250px, 1fr))',
@@ -1927,9 +1968,12 @@
                 padding: '1.5rem', marginBottom: '1rem',
                 borderTop: '2px solid var(--accent-primary)'
             }}>
-                <h3 className="mono-text text-accent" style={{ marginBottom: '1rem' }}>
-                    TACTICAL DICE ROLLER
-                </h3>
+                {/* Wave 3B: block-head section pattern. */}
+                <header className="block-head" style={{ marginBottom: '1rem' }}>
+                    <span className="block-bullet">■</span>
+                    <h3>TACTICAL DICE ROLLER</h3>
+                    <span className="block-line"></span>
+                </header>
 
                 <div style={{
                     display: 'flex', gap: '1rem', alignItems: 'flex-end',
@@ -1986,7 +2030,7 @@
                             {results.rolls.map((r, i) => (
                                 <div key={i} style={{
                                     width: '24px', height: '24px',
-                                    borderRadius: '2px',
+                                    borderRadius: 0,
                                     background: r.success ? 'var(--accent-primary)' : 'var(--bg-panel)',
                                     color: r.success ? 'var(--bg-dark)' : 'var(--text-secondary)',
                                     display: 'flex', alignItems: 'center', justifyContent: 'center',
@@ -2184,16 +2228,20 @@
 
         return (
             <div className="fade-in">
-                {/* Sub-header with save status */}
+                {/* Wave 3B: thin status rail; the framed personnel header below
+                    carries the title and class kicker, so we only need
+                    save state + close action here. */}
                 <div style={{
                     display: 'flex', justifyContent: 'space-between', alignItems: 'center',
                     marginBottom: '1rem', paddingBottom: '0.5rem',
                     borderBottom: '1px solid var(--border-color)',
                     flexWrap: 'wrap', gap: '0.5rem'
                 }}>
-                    <h2 className="mono-text text-accent" style={{ fontSize: '1.2rem' }}>
-                        PERSONNEL RECORD
-                    </h2>
+                    <div className="mono-text text-muted" style={{
+                        fontSize: '0.7rem', letterSpacing: '0.22em', textTransform: 'uppercase'
+                    }}>
+                        EDIT MODE
+                    </div>
                     <div style={{ display: 'flex', gap: '1rem', alignItems: 'center' }}>
                         {IS_OWNER && <SaveStatus status={saveStatus} />}
                         <a href="/"

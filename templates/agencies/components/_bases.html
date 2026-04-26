@@ -67,7 +67,7 @@ const BASE_FIELD_TO_SECTION = {
                             background: 'rgba(0,0,0,0.2)', border: '1px solid var(--border-color)',
                             color: 'var(--text-primary)', width: '100%', minHeight: '150px',
                             fontSize: '0.85rem', fontFamily: 'var(--font-mono)', padding: '0.5rem',
-                            resize: 'vertical', borderRadius: 'var(--radius-sm)',
+                            resize: 'vertical', borderRadius: 0,
                         }} />
                 ) : (
                     <div className="dossier-content" style={{ fontSize: '0.85rem' }}
@@ -563,12 +563,8 @@ const BASE_FIELD_TO_SECTION = {
                                 )}
                                 <VisibilityToggle field={basePath} visibility={visibility} onToggle={onToggleVis} />
                                 {base.isHidden && (
-                                    <span className="mono-text" style={{
-                                        fontSize: '0.6rem', color: 'var(--accent-danger)',
-                                        border: '1px solid var(--accent-danger)',
-                                        padding: '0.1rem 0.35rem', borderRadius: 'var(--radius-sm)',
-                                        whiteSpace: 'nowrap',
-                                    }}>HIDDEN</span>
+                                    /* Wave 3A: HIDDEN base flag uses status-pill burned. */
+                                    <span className="status-pill s-burned" style={{ whiteSpace: 'nowrap' }}>HIDDEN</span>
                                 )}
                             </div>
                             <div style={{ display: 'flex', gap: '0.75rem', alignItems: 'center', flexShrink: 0 }}>
@@ -620,7 +616,7 @@ const BASE_FIELD_TO_SECTION = {
                                         background: 'rgba(0,0,0,0.25)',
                                         border: '1px solid ' + color + '40',
                                         padding: '0.1rem 0.4rem',
-                                        borderRadius: '9999px',
+                                        borderRadius: 0,
                                         whiteSpace: 'nowrap',
                                         lineHeight: '1.4',
                                         cursor: 'help',
@@ -706,7 +702,7 @@ const BASE_FIELD_TO_SECTION = {
                                                                 color: selected ? BASE_ACCENT : 'var(--text-muted)',
                                                                 padding: '0.4rem 0.75rem', cursor: canClick ? 'pointer' : 'default',
                                                                 fontFamily: 'var(--font-mono)', fontSize: '0.8rem',
-                                                                borderRadius: 'var(--radius-sm)',
+                                                                borderRadius: 0,
                                                             }}>
                                                             {lt.name}
                                                             {lt.exp > 0 ? React.createElement('span', { style: { fontSize: '0.65rem', marginLeft: '0.5rem', opacity: 0.7 } }, 'E:' + lt.exp + ' S:' + lt.space) : null}
@@ -763,7 +759,7 @@ const BASE_FIELD_TO_SECTION = {
                                                             color: selected ? '#3b82f6' : 'var(--text-muted)',
                                                             padding: '0.4rem 0.75rem', cursor: canClick ? 'pointer' : 'default',
                                                             fontFamily: 'var(--font-mono)', fontSize: '0.8rem',
-                                                            borderRadius: 'var(--radius-sm)',
+                                                            borderRadius: 0,
                                                         }}>
                                                         {m.name}
                                                         {m.exp > 0 ? React.createElement('span', { style: { fontSize: '0.65rem', marginLeft: '0.5rem', opacity: 0.7 } }, 'E:+' + m.exp + (m.extraSpace > 0 ? ' S:+' + m.extraSpace : '')) : null}
@@ -784,7 +780,7 @@ const BASE_FIELD_TO_SECTION = {
                                         <SectionHideToggle baseId={base.id} sectionKey="space" hiddenSections={base.hiddenSections} />
                                     </label>
                                     {isSectionHidden('space') ? <Classified /> : (
-                                        <div style={{ background: 'rgba(0,0,0,0.3)', height: '8px', borderRadius: '4px', overflow: 'hidden' }}>
+                                        <div style={{ background: 'rgba(0,0,0,0.3)', height: '8px', borderRadius: 0, overflow: 'hidden' }}>
                                             <div style={{
                                                 width: `${spacePercent}%`, height: '100%',
                                                 background: costs.freeSpace < 0 ? 'var(--accent-danger)' : BASE_ACCENT,
@@ -830,7 +826,7 @@ const BASE_FIELD_TO_SECTION = {
                                                 </span>
                                             )}
                                         </label>
-                                        <div style={{ background: 'rgba(0,0,0,0.3)', height: '8px', borderRadius: '4px', overflow: 'hidden' }}>
+                                        <div style={{ background: 'rgba(0,0,0,0.3)', height: '8px', borderRadius: 0, overflow: 'hidden' }}>
                                             <div style={{
                                                 width: pw.produced > 0 ? `${internalPct}%` : (pw.internalConsumed > 0 ? '100%' : '0%'),
                                                 height: '100%',
@@ -933,7 +929,7 @@ const BASE_FIELD_TO_SECTION = {
                                                                     color: active ? BASE_ACCENT : locked ? 'var(--bg-panel)' : 'var(--text-muted)',
                                                                     padding: '0.25rem 0.5rem', cursor: canClick ? 'pointer' : 'default',
                                                                     fontFamily: 'var(--font-mono)', fontSize: '0.7rem',
-                                                                    borderRadius: 'var(--radius-sm)',
+                                                                    borderRadius: 0,
                                                                     opacity: locked ? 0.4 : 1,
                                                                 },
                                                             }, locked ? '🔒 ' : '', lvl.name,
@@ -949,7 +945,7 @@ const BASE_FIELD_TO_SECTION = {
                                                                     border: '1px solid ' + (isPowered ? '#eab308' : 'var(--border-color)'),
                                                                     color: isPowered ? '#eab308' : 'var(--text-muted)',
                                                                     padding: '0.15rem 0.25rem', cursor: 'pointer',
-                                                                    fontSize: '0.65rem', borderRadius: '3px',
+                                                                    fontSize: '0.65rem', borderRadius: 0,
                                                                     opacity: isPowered ? 1 : 0.4,
                                                                 },
                                                             }, '\u26A1') : null
@@ -995,7 +991,7 @@ const BASE_FIELD_TO_SECTION = {
                                                         background: 'rgba(0,0,0,0.3)', color: BASE_ACCENT,
                                                         border: `1px solid ${BASE_ACCENT}`, padding: '0.2rem 0.4rem',
                                                         fontFamily: 'var(--font-mono)', fontSize: '0.7rem',
-                                                        borderRadius: 'var(--radius-sm)', cursor: 'pointer',
+                                                        borderRadius: 0, cursor: 'pointer',
                                                     }}>
                                                     <option value="">+ Add Workspace</option>
                                                     {wsConfig.levels.map(lvl => (
@@ -1030,7 +1026,7 @@ const BASE_FIELD_TO_SECTION = {
                                                                 border: '1px solid ' + (ws.internalPower ? '#eab308' : 'var(--border-color)'),
                                                                 color: ws.internalPower ? '#eab308' : 'var(--text-muted)',
                                                                 padding: '0.1rem 0.25rem', cursor: 'pointer',
-                                                                fontSize: '0.6rem', borderRadius: '3px',
+                                                                fontSize: '0.6rem', borderRadius: 0,
                                                                 opacity: ws.internalPower ? 1 : 0.4,
                                                             }}>⚡</button>
                                                     ) : null}
@@ -1050,7 +1046,7 @@ const BASE_FIELD_TO_SECTION = {
                                                                 background: 'rgba(0,0,0,0.3)', color: 'var(--text-primary)',
                                                                 border: '1px solid var(--border-color)', padding: '0.2rem 0.4rem',
                                                                 fontFamily: 'var(--font-mono)', fontSize: '0.75rem',
-                                                                borderRadius: 'var(--radius-sm)', flex: 1, minWidth: '150px',
+                                                                borderRadius: 0, flex: 1, minWidth: '150px',
                                                             }}>
                                                             <option value="">Unassigned</option>
                                                             {assignableCharacters.length > 0 && (
@@ -1179,7 +1175,7 @@ const BASE_FIELD_TO_SECTION = {
                                                                 color: selected ? '#f59e0b' : locked ? 'var(--bg-panel)' : 'var(--text-muted)',
                                                                 padding: '0.3rem 0.6rem', cursor: canClick ? 'pointer' : 'default',
                                                                 fontFamily: 'var(--font-mono)', fontSize: '0.75rem',
-                                                                borderRadius: 'var(--radius-sm)',
+                                                                borderRadius: 0,
                                                                 opacity: locked ? 0.4 : 1,
                                                             }}>
                                                             {locked && '🔒 '}{eq.name}
@@ -1226,7 +1222,7 @@ const BASE_FIELD_TO_SECTION = {
                                         <div>
                                             {/* Global modifiers */}
                                             {reasons.length > 0 && (
-                                                <div style={{ marginBottom: '0.5rem', padding: '0.3rem 0.5rem', background: 'rgba(0,0,0,0.2)', borderRadius: 'var(--radius-sm)', borderLeft: '3px solid ' + (globalMod >= 0 ? '#22c55e' : '#ef4444') }}>
+                                                <div style={{ marginBottom: '0.5rem', padding: '0.3rem 0.5rem', background: 'rgba(0,0,0,0.2)', borderRadius: 0, borderLeft: '3px solid ' + (globalMod >= 0 ? '#22c55e' : '#ef4444') }}>
                                                     <span className="mono-text" style={{ fontSize: '0.6rem', color: globalMod >= 0 ? '#22c55e' : '#ef4444' }}>
                                                         GLOBAL {globalMod >= 0 ? '+' + globalMod : globalMod}: {reasons.join(' | ')}
                                                     </span>
@@ -1247,7 +1243,7 @@ const BASE_FIELD_TO_SECTION = {
                                                             <div key={dept.key} title={dept.tooltip || ''} style={{
                                                                 display: 'flex', alignItems: 'center', gap: '0.5rem',
                                                                 background: 'rgba(0,0,0,0.15)', padding: '0.4rem 0.6rem',
-                                                                borderRadius: 'var(--radius-sm)', borderLeft: '3px solid ' + color,
+                                                                borderRadius: 0, borderLeft: '3px solid ' + color,
                                                                 cursor: 'help',
                                                             }}>
                                                                 <span className="mono-text" style={{ fontSize: '0.75rem', color: 'var(--text-primary)', minWidth: '120px' }}>
@@ -1255,12 +1251,12 @@ const BASE_FIELD_TO_SECTION = {
                                                                 </span>
                                                                 <div style={{
                                                                     flex: 1, maxWidth: '120px', height: '6px',
-                                                                    background: 'rgba(0,0,0,0.3)', borderRadius: '3px',
+                                                                    background: 'rgba(0,0,0,0.3)', borderRadius: 0,
                                                                     overflow: 'hidden',
                                                                 }}>
                                                                     <div style={{
                                                                         width: (t * 10) + '%', height: '100%',
-                                                                        background: color, borderRadius: '3px',
+                                                                        background: color, borderRadius: 0,
                                                                     }} />
                                                                 </div>
                                                                 <span className="mono-text" style={{
@@ -1273,7 +1269,7 @@ const BASE_FIELD_TO_SECTION = {
                                                                 }}>{dept.label}</span>
                                                                 <span className="mono-text" style={{
                                                                     fontSize: '0.65rem', padding: '0.1rem 0.3rem',
-                                                                    background: 'rgba(0,0,0,0.3)', borderRadius: '3px',
+                                                                    background: 'rgba(0,0,0,0.3)', borderRadius: 0,
                                                                     color: mod.charAt(0) === '-' ? '#ef4444' : mod === '0' ? 'var(--text-muted)' : '#22c55e',
                                                                 }}>
                                                                     {mod} dice
@@ -1309,7 +1305,7 @@ const BASE_FIELD_TO_SECTION = {
                                                     background: 'rgba(0,0,0,0.2)', border: '1px solid var(--border-color)',
                                                     color: 'var(--text-primary)', width: '100%',
                                                     fontSize: '0.85rem', fontFamily: 'var(--font-mono)', padding: '0.3rem 0.5rem',
-                                                    borderRadius: 'var(--radius-sm)',
+                                                    borderRadius: 0,
                                                 }} />
                                         </div>
                                         <div style={{ flex: 1 }}>
@@ -1322,7 +1318,7 @@ const BASE_FIELD_TO_SECTION = {
                                                     background: 'rgba(0,0,0,0.2)', border: '1px solid var(--border-color)',
                                                     color: 'var(--text-primary)', width: '100%',
                                                     fontSize: '0.85rem', fontFamily: 'var(--font-mono)', padding: '0.3rem 0.5rem',
-                                                    borderRadius: 'var(--radius-sm)',
+                                                    borderRadius: 0,
                                                 }} />
                                         </div>
                                     </div>
@@ -1358,7 +1354,7 @@ const BASE_FIELD_TO_SECTION = {
                                             background: 'transparent', border: '1px solid #f59e0b',
                                             color: '#f59e0b', padding: '0.3rem 1rem',
                                             cursor: 'pointer', fontSize: '0.75rem', fontFamily: 'var(--font-mono)',
-                                            borderRadius: 'var(--radius-sm)',
+                                            borderRadius: 0,
                                         }}>
                                         CLEAR BASE
                                     </button>
@@ -1371,7 +1367,7 @@ const BASE_FIELD_TO_SECTION = {
                                             background: 'transparent', border: '1px solid var(--accent-danger)',
                                             color: 'var(--accent-danger)', padding: '0.3rem 1rem',
                                             cursor: 'pointer', fontSize: '0.75rem', fontFamily: 'var(--font-mono)',
-                                            borderRadius: 'var(--radius-sm)',
+                                            borderRadius: 0,
                                         }}>
                                         DELETE BASE
                                     </button>
@@ -1390,7 +1386,12 @@ const BASE_FIELD_TO_SECTION = {
         if (classifiedBases && !IS_ADMIN) {
             return (
                 <div className="glass-panel" style={{ padding: '1.5rem', marginBottom: '1rem' }}>
-                    <h3 className="mono-text" style={{ color: BASE_ACCENT, marginBottom: '1rem' }}>BASES</h3>
+                    {/* Wave 3A: classified BASES placeholder uses block-head pattern. */}
+                    <header className="block-head" style={{ marginBottom: '1rem' }}>
+                        <span className="block-bullet">■</span>
+                        <h3>BASES</h3>
+                        <span className="block-line"></span>
+                    </header>
                     <Classified />
                 </div>
             );
@@ -1398,44 +1399,38 @@ const BASE_FIELD_TO_SECTION = {
 
         return (
             <div className="glass-panel" style={{ padding: '1.5rem', marginBottom: '1rem' }}>
-                <h3 className="mono-text" style={{
-                    color: BASE_ACCENT,
-                    borderBottom: `1px solid ${BASE_ACCENT}`,
-                    paddingBottom: '0.5rem', marginBottom: '1rem',
-                    display: 'flex', justifyContent: 'space-between', alignItems: 'center'
-                }}>
-                    <span>
-                        BASES
-                        <VisibilityToggle field="bases" visibility={visibility} onToggle={onToggleVis} />
-                        <span className="text-muted" style={{ fontSize: '0.75rem', marginLeft: '0.75rem' }}>
-                            ({bases.length}) // TOTAL EXP: {totalBaseExp}
-                        </span>
-                    </span>
-                    <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
-                        <button onClick={() => setShowRules(prev => !prev)}
+                {/* Wave 3A: BASES block-head with count badge + EXP standby pill + rules + add. */}
+                <header className="block-head" style={{ marginBottom: '1rem' }}>
+                    <span className="block-bullet">■</span>
+                    <h3>BASES</h3>
+                    <span className="block-line"></span>
+                    <span className="block-badge">{bases.length}</span>
+                    <span className="status-pill s-standby">EXP {totalBaseExp}</span>
+                    <VisibilityToggle field="bases" visibility={visibility} onToggle={onToggleVis} />
+                    <button onClick={() => setShowRules(prev => !prev)}
+                        style={{
+                            background: showRules ? `${BASE_ACCENT}22` : 'transparent',
+                            border: `1px solid ${BASE_ACCENT}`,
+                            color: BASE_ACCENT, padding: '0.15rem 0.5rem',
+                            borderRadius: 0, cursor: 'pointer',
+                            fontFamily: 'var(--font-mono)', fontSize: '0.65rem',
+                            marginLeft: '0.25rem',
+                        }}>RULES</button>
+                    {IS_ADMIN && (
+                        <button onClick={createBase} disabled={creating}
                             style={{
-                                background: showRules ? `${BASE_ACCENT}22` : 'transparent',
-                                border: `1px solid ${BASE_ACCENT}`,
-                                color: BASE_ACCENT, padding: '0.15rem 0.5rem',
-                                borderRadius: '4px', cursor: 'pointer',
-                                fontFamily: 'var(--font-mono)', fontSize: '0.65rem',
-                            }}>RULES</button>
-                        {IS_ADMIN && (
-                            <button onClick={createBase} disabled={creating}
-                                style={{
-                                    background: 'transparent', border: `1px solid ${BASE_ACCENT}`,
-                                    color: BASE_ACCENT, width: '24px', height: '24px',
-                                    borderRadius: '4px', cursor: creating ? 'wait' : 'pointer',
-                                    display: 'flex', alignItems: 'center', justifyContent: 'center',
-                                }}>
-                                <Icon name="plus" size={14} />
-                            </button>
-                        )}
-                    </div>
-                </h3>
+                                background: 'transparent', border: `1px solid ${BASE_ACCENT}`,
+                                color: BASE_ACCENT, width: '24px', height: '24px',
+                                borderRadius: 0, cursor: creating ? 'wait' : 'pointer',
+                                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                            }}>
+                            <Icon name="plus" size={14} />
+                        </button>
+                    )}
+                </header>
 
                 {showRules && (
-                    <div style={{ marginBottom: '1rem', padding: '1rem', background: 'rgba(0,0,0,0.3)', borderRadius: 'var(--radius-sm)', border: `1px solid ${BASE_ACCENT}`, fontSize: '0.75rem', fontFamily: 'var(--font-mono)', color: 'var(--text-secondary)' }}>
+                    <div style={{ marginBottom: '1rem', padding: '1rem', background: 'rgba(0,0,0,0.3)', borderRadius: 0, border: `1px solid ${BASE_ACCENT}`, fontSize: '0.75rem', fontFamily: 'var(--font-mono)', color: 'var(--text-secondary)' }}>
                         <div style={{ color: BASE_ACCENT, fontWeight: 'bold', marginBottom: '0.5rem' }}>BASE BUILDING RULES</div>
 
                         <div style={{ marginBottom: '0.75rem' }}>

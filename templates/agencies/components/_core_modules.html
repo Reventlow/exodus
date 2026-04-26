@@ -41,7 +41,12 @@ const {
 
         if (isClassified && !IS_ADMIN) return (
             <div className="glass-panel" style={{ padding: '1.5rem', marginBottom: '1rem' }}>
-                <h3 className="mono-text text-accent" style={{ marginBottom: '1rem' }}>ALLIANCE / BLOC</h3>
+                {/* Wave 3A: classified placeholder uses block-head pattern. */}
+                <header className="block-head" style={{ marginBottom: '1rem' }}>
+                    <span className="block-bullet">■</span>
+                    <h3>ALLIANCE / BLOC</h3>
+                    <span className="block-line"></span>
+                </header>
                 <Classified />
             </div>
         );
@@ -116,15 +121,19 @@ const {
             </div>
         );
 
+        const totalAllies = (data.countries || []).length + (data.companies || []).length + (data.organizations || []).length;
         return (
             <div className="glass-panel" style={{ padding: '1.5rem', marginBottom: '1rem' }}>
-                <h3 className="mono-text text-accent" style={{
-                    borderBottom: '1px solid var(--border-color)',
-                    paddingBottom: '0.5rem', marginBottom: '1rem'
-                }}>
-                    ALLIANCE / BLOC
+                {/* Wave 3A: block-head with member count badge. */}
+                <header className="block-head" style={{ marginBottom: '1rem' }}>
+                    <span className="block-bullet">■</span>
+                    <h3>ALLIANCE / BLOC</h3>
+                    <span className="block-line"></span>
+                    {totalAllies > 0 && (
+                        <span className="block-badge">{totalAllies} MEMBER{totalAllies === 1 ? '' : 'S'}</span>
+                    )}
                     <VisibilityToggle field="alliance" visibility={visibility} onToggle={onToggleVis} />
-                </h3>
+                </header>
                 <div style={{
                     display: 'grid',
                     gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))',
@@ -146,20 +155,21 @@ const {
     // handling is centralised there, so this module just emits semantic
     // {field: value} blobs and lets the dispatcher pick the right endpoint.
     const HeaderModule = ({ agency, onSave, visibility, onToggleVis }) => (
-        <div className="glass-panel" style={{
-            padding: '1.5rem', marginBottom: '1rem',
+        /* Wave 3A: AGENCY HEADER is the authority surface — wrapped in .brackets
+           bracket-frame chrome (corner pieces) instead of plain glass-panel. */
+        <div className="brackets" style={{
+            position: 'relative',
+            padding: '1.75rem 2rem', marginBottom: '1rem',
             display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '1rem'
         }}>
+            <span className="bk tl"></span><span className="bk tr"></span>
+            <span className="bk bl"></span><span className="bk br"></span>
             <div>
                 <label className="text-secondary mono-text" style={{ fontSize: '0.8rem' }}>
                     AGENCY NAME
                     {IS_ADMIN && agency.isHidden && (
-                        <span className="mono-text" style={{
-                            fontSize: '0.65rem', color: 'var(--accent-danger)',
-                            border: '1px solid var(--accent-danger)',
-                            padding: '0.1rem 0.4rem', borderRadius: 'var(--radius-sm)',
-                            marginLeft: '0.5rem',
-                        }}>HIDDEN</span>
+                        /* Wave 3A: HIDDEN flag now uses status-pill burned variant. */
+                        <span className="status-pill s-burned" style={{ marginLeft: '0.5rem' }}>HIDDEN</span>
                     )}
                 </label>
                 <AutoSaveInput type="text" defaultValue={agency.name}
@@ -255,17 +265,18 @@ const {
             try { return window.marked.parse(text); } catch { return text; }
         };
 
+        const noteLen = typeof notes === 'string' ? notes.length : 0;
         return (
             <div className="glass-panel" style={{ padding: '1.5rem', marginBottom: '1rem' }}>
-                <div style={{
-                    display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-                    borderBottom: '1px solid var(--border-color)',
-                    paddingBottom: '0.5rem', marginBottom: '1rem'
-                }}>
-                    <h3 className="mono-text text-accent" style={{ margin: 0 }}>
-                        NOTES
-                        <VisibilityToggle field="notes" visibility={visibility} onToggle={onToggleVis} />
-                    </h3>
+                {/* Wave 3A: block-head with character-count badge + inline edit button. */}
+                <header className="block-head" style={{ marginBottom: '1rem' }}>
+                    <span className="block-bullet">■</span>
+                    <h3>NOTES</h3>
+                    <span className="block-line"></span>
+                    {noteLen > 0 && notes !== 'CLASSIFIED' && (
+                        <span className="block-badge">{noteLen} CHARS</span>
+                    )}
+                    <VisibilityToggle field="notes" visibility={visibility} onToggle={onToggleVis} />
                     {IS_ADMIN && notes !== 'CLASSIFIED' && (
                         <button onClick={() => editing ? handleSave() : setEditing(true)}
                             style={{
@@ -274,11 +285,12 @@ const {
                                 color: 'var(--accent-primary)',
                                 padding: '0.25rem 0.75rem', cursor: 'pointer',
                                 fontFamily: 'var(--font-mono)', fontSize: '0.8rem',
+                                marginLeft: '0.5rem',
                             }}>
                             {editing ? 'SAVE' : 'EDIT'}
                         </button>
                     )}
-                </div>
+                </header>
                 {notes === 'CLASSIFIED' ? <Classified /> : editing ? (
                     <textarea ref={textareaRef} defaultValue={notes}
                         placeholder="Write notes in markdown..."
@@ -286,7 +298,7 @@ const {
                             width: '100%', minHeight: '200px', background: 'var(--bg-input)',
                             border: '1px solid var(--border-color)', color: 'var(--text-primary)',
                             padding: '1rem', fontFamily: 'var(--font-mono)', fontSize: '0.9rem',
-                            resize: 'vertical', borderRadius: 'var(--radius-sm)',
+                            resize: 'vertical', borderRadius: 0,
                         }} />
                 ) : (
                     <div className="dossier-content"
@@ -353,14 +365,14 @@ const {
                     if (!open) loadLogs();
                     setOpen(!open);
                 }} style={{
-                    background: 'transparent', border: '1px solid var(--border-color)', borderRadius: '3px',
+                    background: 'transparent', border: '1px solid var(--border-color)', borderRadius: 0,
                     color: 'var(--text-muted)', cursor: 'pointer', fontFamily: 'var(--font-mono)',
                     fontSize: '0.55rem', padding: '0.1rem 0.35rem', verticalAlign: 'middle',
                 }}>{label}</button>
                 {open ? (
                     <div style={{
                         marginTop: '0.5rem', padding: '0.5rem', background: 'rgba(0,0,0,0.2)',
-                        border: '1px solid var(--border-color)', borderRadius: '4px', maxHeight: '200px', overflowY: 'auto',
+                        border: '1px solid var(--border-color)', borderRadius: 0, maxHeight: '200px', overflowY: 'auto',
                     }}>
                         {logs === null ? (
                             <div className="text-muted mono-text" style={{ fontSize: '0.7rem' }}>Loading...</div>
@@ -400,10 +412,15 @@ const {
                 {available < 0 && (
                     <div className="xp-protester-zone"><XpProtester /></div>
                 )}
-                <h3 className="mono-text text-accent" style={{
-                    borderBottom: '1px solid var(--border-color)',
-                    paddingBottom: '0.5rem', marginBottom: '1rem'
-                }}>CORE STATS</h3>
+                {/* Wave 3A: CORE STATS block-head with available-EXP badge. */}
+                <header className="block-head" style={{ marginBottom: '1rem' }}>
+                    <span className="block-bullet">■</span>
+                    <h3>CORE STATS</h3>
+                    <span className="block-line"></span>
+                    <span className={`status-pill ${available < 0 ? 's-burned' : 's-active'}`}>
+                        XP {available}
+                    </span>
+                </header>
                 <div style={{ display: 'flex', gap: '1rem', justifyContent: 'center', flexWrap: 'wrap' }}>
                     <div className="tech-border text-center" style={{ padding: '1rem', minWidth: '120px', flex: '1 1 0' }}>
                         <div className="text-secondary mono-text" style={{ fontSize: '0.8rem' }}>
@@ -537,9 +554,9 @@ const {
                             };
                             return (
                                 <div>
-                                    <div style={{ display: 'flex', gap: '1rem', alignItems: 'center', marginBottom: '0.5rem', padding: '0.3rem', background: 'rgba(0,0,0,0.15)', borderRadius: '3px' }}>
+                                    <div style={{ display: 'flex', gap: '1rem', alignItems: 'center', marginBottom: '0.5rem', padding: '0.3rem', background: 'rgba(0,0,0,0.15)', borderRadius: 0 }}>
                                         <span className="mono-text" style={{ flex: 1, fontSize: '0.75rem', fontWeight: 'bold' }}>SET ALL</span>
-                                        <button onClick={function() { if (confirm('Reset ALL rolls to 0?')) resetAll(); }} className="mono-text" style={{ background: 'transparent', border: '1px solid var(--accent-danger)', color: 'var(--accent-danger)', padding: '0.1rem 0.4rem', cursor: 'pointer', fontSize: '0.6rem', borderRadius: '3px' }}>RESET</button>
+                                        <button onClick={function() { if (confirm('Reset ALL rolls to 0?')) resetAll(); }} className="mono-text" style={{ background: 'transparent', border: '1px solid var(--accent-danger)', color: 'var(--accent-danger)', padding: '0.1rem 0.4rem', cursor: 'pointer', fontSize: '0.6rem', borderRadius: 0 }}>RESET</button>
                                         <span className="mono-text text-muted" style={{ fontSize: '0.65rem' }}>Free:</span>
                                         <input type="number" defaultValue="" placeholder="—" onChange={function(e) { setAll('free', e.target.value); }} style={inputStyle} />
                                         <span className="mono-text text-muted" style={{ fontSize: '0.65rem' }}>Spare:</span>
@@ -575,7 +592,7 @@ const {
                                 return {
                                     flex: 1, padding: '0.4rem', cursor: enabled ? 'pointer' : 'not-allowed',
                                     background: 'rgba(0,0,0,0.2)', border: '1px solid ' + (enabled ? 'var(--border-color)' : 'transparent'),
-                                    borderRadius: '4px', fontFamily: 'var(--font-mono)', fontSize: '0.7rem',
+                                    borderRadius: 0, fontFamily: 'var(--font-mono)', fontSize: '0.7rem',
                                     color: enabled ? 'var(--text-primary)' : 'var(--text-muted)', textAlign: 'center',
                                     opacity: enabled ? 1 : 0.4,
                                 };
@@ -622,7 +639,7 @@ const {
                                         <div style={{ display: 'flex', gap: '0.4rem', alignItems: 'center' }}>
                                             <select value={selNpc} onChange={function(e) { setSelNpc(e.target.value); }} style={{
                                                 flex: 1, padding: '0.3rem', background: 'var(--bg-input, #1a1a2e)', border: '1px solid var(--border-color)',
-                                                color: 'var(--text-primary)', fontFamily: 'var(--font-mono)', fontSize: '0.7rem', borderRadius: '4px',
+                                                color: 'var(--text-primary)', fontFamily: 'var(--font-mono)', fontSize: '0.7rem', borderRadius: 0,
                                             }}>
                                                 <option value="">— assign NPC study —</option>
                                                 {personalNpcs.map(function(n) { return <option key={n.id} value={n.id}>{n.name}</option>; })}
@@ -734,16 +751,16 @@ const {
 
         return (
             <div className="glass-panel" style={{ padding: '1.5rem', marginBottom: '1rem' }}>
-                <h3 className="mono-text text-accent" style={{
-                    borderBottom: '1px solid var(--border-color)',
-                    paddingBottom: '0.5rem', marginBottom: '1rem',
-                    display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-                }}>
-                    <span>DOSSIERS</span>
+                {/* Wave 3A: block-head with dossier-count badge + filter dropdown. */}
+                <header className="block-head" style={{ marginBottom: '1rem' }}>
+                    <span className="block-bullet">■</span>
+                    <h3>DOSSIERS</h3>
+                    <span className="block-line"></span>
+                    <span className="block-badge">{dossiers.length}</span>
                     <select value={filter} onChange={function(e) { setFilter(e.target.value); }} style={{
                         background: 'var(--bg-input, #1a1a2e)', border: '1px solid var(--border-color)',
                         color: 'var(--text-primary)', fontFamily: 'var(--font-mono)', fontSize: '0.7rem',
-                        padding: '0.2rem 0.4rem', borderRadius: '3px',
+                        padding: '0.2rem 0.4rem', borderRadius: 0, marginLeft: '0.5rem',
                     }}>
                         <option value="all">All ({dossiers.length})</option>
                         <option value="pc">Players</option>
@@ -752,7 +769,7 @@ const {
                             return <option key={name} value={name}>{name} ({count})</option>;
                         })}
                     </select>
-                </h3>
+                </header>
                 <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem' }}>
                     {filtered.map(function(d) {
                         return (
@@ -767,7 +784,7 @@ const {
                                 <span style={{
                                     fontSize: '0.6rem', opacity: 0.7,
                                     border: '1px solid currentColor',
-                                    padding: '0.1rem 0.3rem', borderRadius: '2px',
+                                    padding: '0.1rem 0.3rem', borderRadius: 0,
                                 }}>{d.type === 'character' ? 'PC' : d.agencyName || 'NPC'}</span>
                                 {d.name}
                             </a>
@@ -786,7 +803,12 @@ const {
         const isClassified = attributes === 'CLASSIFIED';
         if (isClassified && !IS_ADMIN) return (
             <div className="glass-panel" style={{ padding: '1.5rem', marginBottom: '1rem' }}>
-                <h3 className="mono-text text-accent" style={{ marginBottom: '1rem' }}>ATTRIBUTES</h3>
+                {/* Wave 3A: classified placeholder uses block-head pattern. */}
+                <header className="block-head" style={{ marginBottom: '1rem' }}>
+                    <span className="block-bullet">■</span>
+                    <h3>ATTRIBUTES</h3>
+                    <span className="block-line"></span>
+                </header>
                 <Classified />
             </div>
         );
@@ -852,10 +874,13 @@ const {
 
         return (
             <div className="glass-panel" style={{ padding: '1.5rem', marginBottom: '1rem' }}>
-                <h3 className="mono-text text-accent" style={{
-                    borderBottom: '1px solid var(--border-color)',
-                    paddingBottom: '0.5rem', marginBottom: '1rem'
-                }}>ATTRIBUTES <StatLogButton filterPath="attributes" label="LOG" /></h3>
+                {/* Wave 3A: ATTRIBUTES block-head with stat-log button in trailing slot. */}
+                <header className="block-head" style={{ marginBottom: '1rem' }}>
+                    <span className="block-bullet">■</span>
+                    <h3>ATTRIBUTES</h3>
+                    <span className="block-line"></span>
+                    <StatLogButton filterPath="attributes" label="LOG" />
+                </header>
                 <div style={{
                     display: 'grid',
                     gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))',
@@ -878,16 +903,13 @@ const {
                 padding: '1.5rem', marginTop: '0.5rem',
                 borderLeft: '3px solid var(--accent-warning)'
             }}>
-                <h3 className="mono-text" style={{
-                    borderBottom: '1px solid var(--border-color)',
-                    paddingBottom: '0.5rem', marginBottom: '1rem',
-                    color: 'var(--accent-warning)', fontSize: '0.95rem'
-                }}>
-                    GLOBAL FLAWS
-                    <span className="text-muted" style={{ fontSize: '0.7rem', marginLeft: '0.5rem' }}>
-                        (SYSTEM-WIDE // READ ONLY)
-                    </span>
-                </h3>
+                {/* Wave 3A: GLOBAL FLAWS block-head with read-only standby badge. */}
+                <header className="block-head" style={{ marginBottom: '1rem' }}>
+                    <span className="block-bullet">■</span>
+                    <h3>GLOBAL FLAWS</h3>
+                    <span className="block-line"></span>
+                    <span className="status-pill s-standby">SYSTEM-WIDE // READ ONLY</span>
+                </header>
                 <div style={{
                     display: 'grid',
                     gridTemplateColumns: 'minmax(120px, 1.5fr) 60px minmax(120px, 2fr)',
@@ -930,6 +952,14 @@ const {
             suspended: 'var(--accent-warning)',
             repealed: 'var(--accent-danger)',
         };
+        // Wave 3A: map council statuses to clearance-gate status pill variants.
+        const statusPillClass = {
+            proposed: 's-standby',
+            voting: 's-standby',
+            active: 's-active',
+            suspended: 's-dormant',
+            repealed: 's-burned',
+        };
 
         const typeLabels = {
             agreement: 'AGREEMENT',
@@ -947,28 +977,22 @@ const {
                 padding: '1.5rem', marginTop: '1rem',
                 borderLeft: `3px solid ${COUNCIL_ACCENT}`
             }}>
-                <h3 className="mono-text" style={{
-                    borderBottom: '1px solid var(--border-color)',
-                    paddingBottom: '0.5rem', marginBottom: '1rem',
-                    color: COUNCIL_ACCENT, fontSize: '0.95rem',
-                    display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-                }}>
-                    <span>
-                        UNITED INTERSTELLAR COUNCIL
-                        <span className="text-muted" style={{ fontSize: '0.7rem', marginLeft: '0.5rem' }}>
-                            (COUNCIL RECORD // READ ONLY)
-                        </span>
-                    </span>
+                {/* Wave 3A: UIC block-head — chairman badge + read-only standby pill. */}
+                <header className="block-head" style={{ marginBottom: '1rem' }}>
+                    <span className="block-bullet">■</span>
+                    <h3>UNITED INTERSTELLAR COUNCIL</h3>
+                    <span className="block-line"></span>
+                    <span className="status-pill s-standby">READ ONLY</span>
                     {isCouncilChairman && (
                         <span className="mono-text" style={{
                             fontSize: '0.7rem', padding: '2px 8px',
                             background: COUNCIL_ACCENT, color: 'var(--bg-dark)',
-                            borderRadius: 'var(--radius-sm)', fontWeight: 'bold',
+                            borderRadius: 0, fontWeight: 'bold', marginLeft: '0.25rem',
                         }}>
                             CHAIRMAN
                         </span>
                     )}
-                </h3>
+                </header>
 
                 {/* Council Membership Toggle */}
                 {IS_ADMIN && (
@@ -976,7 +1000,7 @@ const {
                         display: 'flex', alignItems: 'center', gap: '0.5rem',
                         marginBottom: '1rem', padding: '0.5rem 0.75rem',
                         background: 'rgba(168, 85, 247, 0.08)',
-                        borderRadius: 'var(--radius-sm)',
+                        borderRadius: 0,
                         border: '1px solid rgba(168, 85, 247, 0.2)',
                     }}>
                         <input
@@ -1002,7 +1026,7 @@ const {
                 {votingItems.length > 0 && (
                     <div style={{
                         border: '1px solid #f97316',
-                        borderRadius: 'var(--radius-sm)',
+                        borderRadius: 0,
                         padding: '0.75rem',
                         marginBottom: '0.75rem',
                         background: 'rgba(249, 115, 22, 0.08)',
@@ -1070,11 +1094,8 @@ const {
                                 }}>
                                     {typeLabels[item.itemType] || item.itemType.toUpperCase()}
                                 </span>
-                                <span className="mono-text" style={{
-                                    fontSize: '0.65rem', padding: '2px 6px',
-                                    border: `1px solid ${statusColors[item.status] || 'var(--text-muted)'}`,
-                                    color: statusColors[item.status] || 'var(--text-muted)',
-                                }}>
+                                {/* Wave 3A: council item status now uses status-pill recipe. */}
+                                <span className={`status-pill ${statusPillClass[item.status] || 's-inactive'}`}>
                                     {item.status.toUpperCase()}
                                 </span>
                             </div>

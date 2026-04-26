@@ -8,9 +8,12 @@ const { Icon, AutoSaveInput, Classified, VisibilityToggle, getCookie } = window;
 
         if (isClassified && !IS_ADMIN) return (
             <div className="glass-panel" style={{ padding: '1.5rem', marginBottom: '1rem' }}>
-                <h3 className="mono-text text-accent" style={{ marginBottom: '1rem' }}>
-                    {title}
-                </h3>
+                {/* Wave 3A: classified table placeholder uses block-head pattern. */}
+                <header className="block-head" style={{ marginBottom: '1rem' }}>
+                    <span className="block-bullet">■</span>
+                    <h3>{title}</h3>
+                    <span className="block-line"></span>
+                </header>
                 <Classified />
             </div>
         );
@@ -31,26 +34,27 @@ const { Icon, AutoSaveInput, Classified, VisibilityToggle, getCookie } = window;
 
         return (
             <div className="glass-panel" style={{ padding: '1.5rem', marginBottom: '1rem' }}>
-                <h3 className="mono-text text-accent" style={{
-                    borderBottom: '1px solid var(--border-color)',
-                    paddingBottom: '0.5rem', marginBottom: '1rem',
-                    display: 'flex', justifyContent: 'space-between', alignItems: 'center'
-                }}>
-                    <span>
-                        {title}
-                        <VisibilityToggle field={field} visibility={visibility} onToggle={onToggleVis} />
-                    </span>
+                {/* Wave 3A: TableModule heading uses block-head; row-count badge if any. */}
+                <header className="block-head" style={{ marginBottom: '1rem' }}>
+                    <span className="block-bullet">■</span>
+                    <h3>{title}</h3>
+                    <span className="block-line"></span>
+                    {actualItems.length > 0 && (
+                        <span className="block-badge">{actualItems.length}</span>
+                    )}
+                    <VisibilityToggle field={field} visibility={visibility} onToggle={onToggleVis} />
                     {IS_ADMIN && (
                         <button onClick={addItem} title="Add Row" style={{
                             background: 'transparent', border: '1px solid var(--accent-primary)',
                             color: 'var(--accent-primary)', width: '24px', height: '24px',
-                            borderRadius: '4px', cursor: 'pointer',
-                            display: 'flex', alignItems: 'center', justifyContent: 'center'
+                            borderRadius: 0, cursor: 'pointer',
+                            display: 'flex', alignItems: 'center', justifyContent: 'center',
+                            marginLeft: '0.25rem',
                         }}>
                             <Icon name="plus" size={14} />
                         </button>
                     )}
-                </h3>
+                </header>
 
                 {/* Column headers */}
                 {actualItems.length > 0 && (
@@ -290,34 +294,31 @@ const { Icon, AutoSaveInput, Classified, VisibilityToggle, getCookie } = window;
         const assignedIds = projects.map(p => p.id);
         const unassigned = allFTL.filter(fp => !assignedIds.includes(fp.id));
 
+        const activeFtlCount = projects.length;
         return (<React.Fragment>
             <div className="glass-panel" style={{
                 padding: '1.5rem', marginBottom: '1rem',
                 borderLeft: `3px solid ${FTL_ACCENT}`,
             }}>
-                <h3 className="mono-text" style={{
-                    borderBottom: '1px solid var(--border-color)',
-                    paddingBottom: '0.5rem', marginBottom: '1rem',
-                    color: FTL_ACCENT, fontSize: '0.95rem',
-                    display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-                }}>
-                    <span>
-                        FTL PROJECTS
-                        <span className="text-muted" style={{ fontSize: '0.7rem', marginLeft: '0.5rem' }}>
-                            (FASTER THAN LIGHT RESEARCH)
-                        </span>
-                    </span>
+                {/* Wave 3A: FTL PROJECTS block-head with assigned-count badge + assign button. */}
+                <header className="block-head" style={{ marginBottom: '1rem' }}>
+                    <span className="block-bullet">■</span>
+                    <h3>FTL PROJECTS</h3>
+                    <span className="block-line"></span>
+                    {activeFtlCount > 0 && (
+                        <span className="block-badge">{activeFtlCount} ASSIGNED</span>
+                    )}
                     {IS_ADMIN && (
                         <button onClick={openAssign} style={{
                             background: 'transparent', border: `1px solid ${FTL_ACCENT}`,
                             color: FTL_ACCENT, padding: '4px 12px',
                             cursor: 'pointer', fontFamily: 'var(--font-mono)', fontSize: '0.75rem',
-                            borderRadius: 'var(--radius-sm)',
+                            borderRadius: 0, marginLeft: '0.25rem',
                         }}>
                             ASSIGN FTL PROJECT
                         </button>
                     )}
-                </h3>
+                </header>
 
                 {/* Assign dropdown */}
                 {showAssign && IS_ADMIN && (
@@ -369,7 +370,7 @@ const { Icon, AutoSaveInput, Classified, VisibilityToggle, getCookie } = window;
                                         color: 'var(--bg-dark)', padding: '4px 12px',
                                         cursor: 'pointer', fontFamily: 'var(--font-mono)',
                                         fontSize: '0.8rem', fontWeight: 'bold',
-                                        borderRadius: 'var(--radius-sm)',
+                                        borderRadius: 0,
                                     }}
                                 >ASSIGN</button>
                                 <button onClick={() => setShowAssign(false)} style={{
@@ -414,11 +415,8 @@ const { Icon, AutoSaveInput, Classified, VisibilityToggle, getCookie } = window;
                                         {proj.name}
                                     </span>
                                     {isComplete && (
-                                        <span className="mono-text" style={{
-                                            fontSize: '0.7rem', padding: '2px 6px',
-                                            border: `1px solid ${FTL_ACCENT}`,
-                                            color: FTL_ACCENT, marginLeft: '0.5rem',
-                                        }}>COMPLETE</span>
+                                        /* Wave 3A: COMPLETE -> status-pill active. */
+                                        <span className="status-pill s-active" style={{ marginLeft: '0.5rem' }}>COMPLETE</span>
                                     )}
                                 </div>
                                 {IS_ADMIN && (
@@ -502,7 +500,7 @@ const { Icon, AutoSaveInput, Classified, VisibilityToggle, getCookie } = window;
                                 <div style={{
                                     width: '100%', height: '8px',
                                     background: 'rgba(255,255,255,0.05)',
-                                    borderRadius: '4px', overflow: 'hidden',
+                                    borderRadius: 0, overflow: 'hidden',
                                     border: '1px solid var(--border-color)',
                                 }}>
                                     <div style={{
@@ -535,7 +533,7 @@ const { Icon, AutoSaveInput, Classified, VisibilityToggle, getCookie } = window;
                                                 padding: '4px 10px',
                                                 cursor: proj.currentSuccesses <= 0 ? 'not-allowed' : 'pointer',
                                                 fontFamily: 'var(--font-mono)', fontSize: '0.8rem',
-                                                borderRadius: 'var(--radius-sm)',
+                                                borderRadius: 0,
                                                 opacity: proj.currentSuccesses <= 0 ? 0.3 : 1,
                                             }}
                                         >−</button>
@@ -551,7 +549,7 @@ const { Icon, AutoSaveInput, Classified, VisibilityToggle, getCookie } = window;
                                                 color: 'var(--text-primary)',
                                                 padding: '4px',
                                                 fontFamily: 'var(--font-mono)', fontSize: '0.8rem',
-                                                borderRadius: 'var(--radius-sm)',
+                                                borderRadius: 0,
                                             }}
                                         />
                                         <button
@@ -568,7 +566,7 @@ const { Icon, AutoSaveInput, Classified, VisibilityToggle, getCookie } = window;
                                                 padding: '4px 10px',
                                                 cursor: 'pointer',
                                                 fontFamily: 'var(--font-mono)', fontSize: '0.8rem',
-                                                borderRadius: 'var(--radius-sm)',
+                                                borderRadius: 0,
                                             }}
                                         >+</button>
                                     </div>
@@ -615,7 +613,7 @@ const { Icon, AutoSaveInput, Classified, VisibilityToggle, getCookie } = window;
                                             alignSelf: 'flex-end', background: 'transparent',
                                             border: proj.fringe ? '2px solid #8a2be2' : '1px solid var(--border-color)',
                                             cursor: 'pointer', fontSize: '1.2rem', padding: '0.2rem 0.5rem',
-                                            opacity: proj.fringe ? 1 : 0.3, borderRadius: '4px',
+                                            opacity: proj.fringe ? 1 : 0.3, borderRadius: 0,
                                         }} title={proj.fringe ? 'Fringe Science' : 'Mark as Fringe'}>🖐</button>
                                     ) : null}
                                     <div style={{ display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
@@ -655,7 +653,7 @@ const { Icon, AutoSaveInput, Classified, VisibilityToggle, getCookie } = window;
                                                         method: 'POST', headers: { 'Content-Type': 'application/json', 'X-CSRFToken': getCookie('csrftoken') || CSRF_TOKEN },
                                                         body: JSON.stringify({ effect: 'dark_grants', level: lvl }),
                                                     }).then(function(r) { return r.json(); }).then(function(d) { if (d.error) alert(d.error); else { alert(d.message); if (fetchAgency) fetchAgency(); } });
-                                                }} style={{ padding: '0.3rem 0.5rem', background: 'rgba(138,43,226,0.08)', border: '1px solid #8a2be2', borderRadius: '3px', fontFamily: 'var(--font-mono)', color: '#c084fc', cursor: 'pointer', fontSize: '0.7rem' }}>DG +{lvl}</button>;
+                                                }} style={{ padding: '0.3rem 0.5rem', background: 'rgba(138,43,226,0.08)', border: '1px solid #8a2be2', borderRadius: 0, fontFamily: 'var(--font-mono)', color: '#c084fc', cursor: 'pointer', fontSize: '0.7rem' }}>DG +{lvl}</button>;
                                             })}
                                         </div>
                                     )}
@@ -669,7 +667,7 @@ const { Icon, AutoSaveInput, Classified, VisibilityToggle, getCookie } = window;
                                                 method: 'POST', headers: { 'Content-Type': 'application/json', 'X-CSRFToken': getCookie('csrftoken') || CSRF_TOKEN },
                                                 body: JSON.stringify({ effect: eff }),
                                             }).then(function(r) { return r.json(); }).then(function(d) { if (d.error) alert(d.error); else { alert(d.message); if (fetchAgency) fetchAgency(); } });
-                                        }} style={{ padding: '0.2rem 0.4rem', background: 'transparent', border: '1px solid var(--border-color)', borderRadius: '3px', fontFamily: 'var(--font-mono)', color: 'var(--text-muted)', cursor: 'pointer', fontSize: '0.6rem', marginRight: '0.3rem', marginBottom: '0.2rem' }}>{labels[eff]}</button>;
+                                        }} style={{ padding: '0.2rem 0.4rem', background: 'transparent', border: '1px solid var(--border-color)', borderRadius: 0, fontFamily: 'var(--font-mono)', color: 'var(--text-muted)', cursor: 'pointer', fontSize: '0.6rem', marginRight: '0.3rem', marginBottom: '0.2rem' }}>{labels[eff]}</button>;
                                     })}
                                 </div>
                             ) : null}
@@ -688,7 +686,7 @@ const { Icon, AutoSaveInput, Classified, VisibilityToggle, getCookie } = window;
                                             <span className="mono-text text-muted" style={{ fontSize: '0.7rem' }}>DICE POOL</span>
                                         </div>
                                         {isHover ? (
-                                            <div style={{ position: 'absolute', top: '100%', left: 0, zIndex: 100, marginTop: '0.25rem', padding: '0.5rem 0.75rem', background: 'rgba(15,15,30,0.97)', border: '1px solid var(--border-color)', borderRadius: '4px', fontSize: '0.7rem', minWidth: '220px', boxShadow: '0 4px 12px rgba(0,0,0,0.5)' }}>
+                                            <div style={{ position: 'absolute', top: '100%', left: 0, zIndex: 100, marginTop: '0.25rem', padding: '0.5rem 0.75rem', background: 'rgba(15,15,30,0.97)', border: '1px solid var(--border-color)', borderRadius: 0, fontSize: '0.7rem', minWidth: '220px', boxShadow: '0 4px 12px rgba(0,0,0,0.5)' }}>
                                                 {cp.parts.map(function(pt, i) {
                                                     var color = 'var(--text-secondary)';
                                                     if (pt.type === 'fringe') color = '#c084fc';
@@ -754,7 +752,7 @@ const { Icon, AutoSaveInput, Classified, VisibilityToggle, getCookie } = window;
                                             {expanded ? '▼' : '▶'} DICE POOL CONFIG
                                         </button>
                                         {expanded ? (
-                                            <div style={{ marginTop: '0.4rem', padding: '0.5rem', background: 'rgba(0,0,0,0.15)', borderRadius: '3px' }}>
+                                            <div style={{ marginTop: '0.4rem', padding: '0.5rem', background: 'rgba(0,0,0,0.15)', borderRadius: 0 }}>
                                                 <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap', marginBottom: '0.5rem' }}>
                                                     <div style={{ minWidth: '120px', flex: 1 }}>
                                                         <div className="text-muted mono-text" style={{ fontSize: '0.6rem', marginBottom: '0.15rem' }}>ATTRIBUTE 1</div>
@@ -877,7 +875,7 @@ const { Icon, AutoSaveInput, Classified, VisibilityToggle, getCookie } = window;
                                                         color: isArmed ? '#06b6d4' : 'var(--text-muted)',
                                                         padding: '0.2rem 0.5rem', cursor: 'pointer',
                                                         fontFamily: 'var(--font-mono)', fontSize: '0.65rem',
-                                                        borderRadius: '4px', display: 'flex', alignItems: 'center', gap: '0.3rem',
+                                                        borderRadius: 0, display: 'flex', alignItems: 'center', gap: '0.3rem',
                                                     },
                                                 }, isArmed ? '✓ ' : '', m.name + ' ', dots, ' +' + m.rating);
                                             })}
@@ -904,7 +902,7 @@ const { Icon, AutoSaveInput, Classified, VisibilityToggle, getCookie } = window;
                                         cursor: hasRolls || IS_ADMIN ? 'pointer' : 'not-allowed',
                                         background: armedMerit ? 'rgba(6,182,212,0.1)' : 'rgba(0,0,0,0.2)',
                                         border: '1px solid ' + (armedMerit ? '#06b6d4' : rollColor),
-                                        borderRadius: '4px', fontFamily: 'var(--font-mono)',
+                                        borderRadius: 0, fontFamily: 'var(--font-mono)',
                                         color: armedMerit ? '#06b6d4' : rollColor,
                                         fontSize: '0.75rem', fontWeight: 'bold',
                                         opacity: hasRolls || IS_ADMIN ? 1 : 0.4,
@@ -917,13 +915,13 @@ const { Icon, AutoSaveInput, Classified, VisibilityToggle, getCookie } = window;
                                         var totalSuccesses = lr.successes || 0;
                                         var diceSuccesses = totalSuccesses - (lr.autoSuccesses || 0);
                                         return (
-                                            <div style={{ marginTop: '0.4rem', padding: '0.5rem', background: 'rgba(0,0,0,0.3)', borderRadius: '4px', border: '1px solid var(--border-color)' }}>
+                                            <div style={{ marginTop: '0.4rem', padding: '0.5rem', background: 'rgba(0,0,0,0.3)', borderRadius: 0, border: '1px solid var(--border-color)' }}>
                                                 <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px', marginBottom: '0.35rem' }}>
                                                     {(lr.rolls || []).map(function(die, i) {
                                                         var isSuccess = die >= 8;
                                                         return React.createElement('span', { key: i, className: 'mono-text', style: {
                                                             display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
-                                                            width: '26px', height: '26px', borderRadius: '4px',
+                                                            width: '26px', height: '26px', borderRadius: 0,
                                                             background: isSuccess ? 'rgba(34,197,94,0.2)' : 'rgba(0,0,0,0.3)',
                                                             border: '1px solid ' + (isSuccess ? '#22c55e' : 'var(--border-color)'),
                                                             color: isSuccess ? '#22c55e' : 'var(--text-muted)',
@@ -988,7 +986,7 @@ const { Icon, AutoSaveInput, Classified, VisibilityToggle, getCookie } = window;
                             return (
                                 <div key={log.id} style={{
                                     padding: '0.75rem', marginBottom: '0.5rem',
-                                    background: 'rgba(0,0,0,0.3)', borderRadius: '4px',
+                                    background: 'rgba(0,0,0,0.3)', borderRadius: 0,
                                     border: '1px solid var(--border-color)',
                                 }}>
                                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.4rem' }}>
@@ -1004,7 +1002,7 @@ const { Icon, AutoSaveInput, Classified, VisibilityToggle, getCookie } = window;
                                             var isSuccess = die >= 8;
                                             return React.createElement('span', { key: i, className: 'mono-text', style: {
                                                 display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
-                                                width: '22px', height: '22px', borderRadius: '3px',
+                                                width: '22px', height: '22px', borderRadius: 0,
                                                 background: isSuccess ? 'rgba(34,197,94,0.2)' : 'rgba(0,0,0,0.3)',
                                                 border: '1px solid ' + (isSuccess ? '#22c55e' : 'var(--border-color)'),
                                                 color: isSuccess ? '#22c55e' : 'var(--text-muted)',

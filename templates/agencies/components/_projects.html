@@ -22,33 +22,28 @@ const { Icon, AutoSaveInput, Classified, VisibilityToggle, getCookie, useProject
         var setShowRules = rulesState[1];
         return (
             <div className="glass-panel" style={{ padding: '1.5rem', marginBottom: '1rem' }}>
-                <h3 className="mono-text text-accent" style={{
-                    borderBottom: '1px solid #8a2be2',
-                    paddingBottom: '0.5rem', marginBottom: '1rem',
-                    display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-                    color: '#8a2be2',
-                }}>
-                    <span>🖐 FRINGE SCIENCE</span>
-                    <div style={{ display: 'flex', gap: '0.75rem', alignItems: 'center' }}>
-                        <button onClick={function() { setShowRules(!showRules); }} style={{
-                            background: 'transparent', border: '1px solid #8a2be2', borderRadius: '3px',
-                            color: showRules ? '#c084fc' : '#6b21a8', cursor: 'pointer',
-                            fontFamily: 'var(--font-mono)', fontSize: '0.65rem', padding: '0.15rem 0.5rem',
-                        }}>RULES</button>
-                        {fringeInfo ? (
-                            <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
-                                Slots: {fringeInfo.usedSlots}/{fringeInfo.maxSlots}
-                            </span>
-                        ) : null}
-                    </div>
-                </h3>
+                {/* Wave 3A: FRINGE SCIENCE block-head with slot badge + rules toggle. */}
+                <header className="block-head" style={{ marginBottom: '1rem' }}>
+                    <span className="block-bullet">■</span>
+                    <h3>🖐 FRINGE SCIENCE</h3>
+                    <span className="block-line"></span>
+                    {fringeInfo ? (
+                        <span className="block-badge">{fringeInfo.usedSlots}/{fringeInfo.maxSlots} SLOTS</span>
+                    ) : null}
+                    <button onClick={function() { setShowRules(!showRules); }} style={{
+                        background: 'transparent', border: '1px solid #8a2be2', borderRadius: 0,
+                        color: showRules ? '#c084fc' : '#6b21a8', cursor: 'pointer',
+                        fontFamily: 'var(--font-mono)', fontSize: '0.65rem', padding: '0.15rem 0.5rem',
+                        marginLeft: '0.25rem',
+                    }}>RULES</button>
+                </header>
                 {showRules ? (
-                    <div style={{ marginBottom: '1rem', padding: '0.75rem', border: '1px solid rgba(138,43,226,0.3)', background: 'rgba(138,43,226,0.04)', borderRadius: '4px' }}>
+                    <div style={{ marginBottom: '1rem', padding: '0.75rem', border: '1px solid rgba(138,43,226,0.3)', background: 'rgba(138,43,226,0.04)', borderRadius: 0 }}>
                         <div className="mono-text" style={{ fontSize: '0.75rem', color: '#c084fc', marginBottom: '0.5rem', fontWeight: 'bold' }}>FRINGE SCIENCE MANUAL</div>
                         <div style={{ fontSize: '0.65rem', marginBottom: '0.5rem', display: 'flex', gap: '1rem' }}>
-                            <span className="mono-text" style={{ color: '#c084fc', border: '1px solid #c084fc', padding: '0.15rem 0.4rem', borderRadius: '3px' }}>PERMANENT</span>
+                            <span className="mono-text" style={{ color: '#c084fc', border: '1px solid #c084fc', padding: '0.15rem 0.4rem', borderRadius: 0 }}>PERMANENT</span>
                             <span style={{ color: 'var(--text-muted)' }}>= added to all rolls forever</span>
-                            <span className="mono-text" style={{ color: '#e879f9', border: '1px solid #e879f9', padding: '0.15rem 0.4rem', borderRadius: '3px' }}>PER ROLL</span>
+                            <span className="mono-text" style={{ color: '#e879f9', border: '1px solid #e879f9', padding: '0.15rem 0.4rem', borderRadius: 0 }}>PER ROLL</span>
                             <span style={{ color: 'var(--text-muted)' }}>= next roll only, then consumed (re-activatable)</span>
                         </div>
                         <div style={{ fontSize: '0.7rem', lineHeight: '1.6', color: 'var(--text-secondary)' }}>
@@ -58,45 +53,45 @@ const { Icon, AutoSaveInput, Classified, VisibilityToggle, getCookie, useProject
                                 Discarded or completed projects free up slots. Only science class and GM can see fringe status.
                             </div>
                             <div style={{ marginBottom: '0.6rem', borderBottom: '1px solid rgba(138,43,226,0.15)', paddingBottom: '0.4rem' }}>
-                                <span style={{ color: '#c084fc', fontWeight: 'bold' }}>DARK GRANTS</span> <span className="mono-text" style={{ fontSize: '0.55rem', color: '#c084fc', border: '1px solid #c084fc', padding: '0.1rem 0.3rem', borderRadius: '2px' }}>PERMANENT</span> — Requires "Dark Grants" pulling string (cost 4)<br/>
+                                <span style={{ color: '#c084fc', fontWeight: 'bold' }}>DARK GRANTS</span> <span className="mono-text" style={{ fontSize: '0.55rem', color: '#c084fc', border: '1px solid #c084fc', padding: '0.1rem 0.3rem', borderRadius: 0 }}>PERMANENT</span> — Requires "Dark Grants" pulling string (cost 4)<br/>
                                 Choose level 1-3. Permanently adds +level dice to all completion rolls.
                                 Risk: d100 per level — chance of linking an NPC agency to the project.
                             </div>
                             <div style={{ marginBottom: '0.6rem', borderBottom: '1px solid rgba(138,43,226,0.15)', paddingBottom: '0.4rem' }}>
-                                <span style={{ color: '#d97706', fontWeight: 'bold' }}>LIVE TESTING</span> <span className="mono-text" style={{ fontSize: '0.55rem', color: '#c084fc', border: '1px solid #c084fc', padding: '0.1rem 0.3rem', borderRadius: '2px' }}>PERMANENT</span> — Choose subject type<br/>
+                                <span style={{ color: '#d97706', fontWeight: 'bold' }}>LIVE TESTING</span> <span className="mono-text" style={{ fontSize: '0.55rem', color: '#c084fc', border: '1px solid #c084fc', padding: '0.1rem 0.3rem', borderRadius: 0 }}>PERMANENT</span> — Choose subject type<br/>
                                 Small Animals (+1, 5% ML) | Large Animals (+2, 9% ML) | Human (+5, 23% ML, 17% integrity) | Off the Books (+5, 23% ML, requires merit).
                             </div>
                             <div style={{ marginBottom: '0.6rem', borderBottom: '1px solid rgba(138,43,226,0.15)', paddingBottom: '0.4rem' }}>
-                                <span style={{ color: '#3b82f6', fontWeight: 'bold' }}>STIMULANT COCKTAILS</span> <span className="mono-text" style={{ fontSize: '0.55rem', color: '#e879f9', border: '1px solid #e879f9', padding: '0.1rem 0.3rem', borderRadius: '2px' }}>PER ROLL</span> — Select one or more substances<br/>
+                                <span style={{ color: '#3b82f6', fontWeight: 'bold' }}>STIMULANT COCKTAILS</span> <span className="mono-text" style={{ fontSize: '0.55rem', color: '#e879f9', border: '1px solid #e879f9', padding: '0.1rem 0.3rem', borderRadius: 0 }}>PER ROLL</span> — Select one or more substances<br/>
                                 Cocaine (+2, 15%) | LSD (+3, 20%) | Shrooms (+2, 10%) | Exotic Venom (+4, 25%).
                                 Stacking: +10% risk per additional substance. Side effects hidden from project owner.
                                 Consumed after rolling. Re-activatable for next roll.
                             </div>
                             <div style={{ marginBottom: '0.6rem', borderBottom: '1px solid rgba(138,43,226,0.15)', paddingBottom: '0.4rem' }}>
-                                <span style={{ color: '#2dd4bf', fontWeight: 'bold' }}>BLACK MARKET TECH</span> <span className="mono-text" style={{ fontSize: '0.55rem', color: '#c084fc', border: '1px solid #c084fc', padding: '0.1rem 0.3rem', borderRadius: '2px' }}>PERMANENT</span> — +2 dice, 15% tracker risk<br/>
+                                <span style={{ color: '#2dd4bf', fontWeight: 'bold' }}>BLACK MARKET TECH</span> <span className="mono-text" style={{ fontSize: '0.55rem', color: '#c084fc', border: '1px solid #c084fc', padding: '0.1rem 0.3rem', borderRadius: 0 }}>PERMANENT</span> — +2 dice, 15% tracker risk<br/>
                                 Acquired tech may come with a tracker. If detected, an NPC agency is linked to the project.
                             </div>
                             <div style={{ marginBottom: '0.6rem', borderBottom: '1px solid rgba(138,43,226,0.15)', paddingBottom: '0.4rem' }}>
-                                <span style={{ color: '#4ade80', fontWeight: 'bold' }}>GENE MANIPULATION</span> <span className="mono-text" style={{ fontSize: '0.55rem', color: '#c084fc', border: '1px solid #c084fc', padding: '0.1rem 0.3rem', borderRadius: '2px' }}>PERMANENT</span> — +3 dice, 18% containment breach<br/>
+                                <span style={{ color: '#4ade80', fontWeight: 'bold' }}>GENE MANIPULATION</span> <span className="mono-text" style={{ fontSize: '0.55rem', color: '#c084fc', border: '1px solid #c084fc', padding: '0.1rem 0.3rem', borderRadius: 0 }}>PERMANENT</span> — +3 dice, 18% containment breach<br/>
                                 Experimental genetic modification. If breach occurs, GM determines narrative consequences.
                             </div>
                             <div style={{ marginBottom: '0.6rem', borderBottom: '1px solid rgba(138,43,226,0.15)', paddingBottom: '0.4rem' }}>
-                                <span style={{ color: '#c084fc', fontWeight: 'bold' }}>NEURAL INTERFACE</span> <span className="mono-text" style={{ fontSize: '0.55rem', color: '#e879f9', border: '1px solid #e879f9', padding: '0.1rem 0.3rem', borderRadius: '2px' }}>PER ROLL</span> — +4 dice, 30% ML+2, 5% permanent -1 mental attr<br/>
+                                <span style={{ color: '#c084fc', fontWeight: 'bold' }}>NEURAL INTERFACE</span> <span className="mono-text" style={{ fontSize: '0.55rem', color: '#e879f9', border: '1px solid #e879f9', padding: '0.1rem 0.3rem', borderRadius: 0 }}>PER ROLL</span> — +4 dice, 30% ML+2, 5% permanent -1 mental attr<br/>
                                 Direct neural link. 30% chance of +2 mental load, 5% chance of permanently reducing a random mental attribute.
                                 Consumed after rolling. Re-activatable for next roll (risks re-apply each time).
                             </div>
                             <div style={{ marginBottom: '0.6rem', borderBottom: '1px solid rgba(138,43,226,0.15)', paddingBottom: '0.4rem' }}>
-                                <span style={{ color: '#fbbf24', fontWeight: 'bold' }}>SLEEP DEPRIVATION MARATHON</span> <span className="mono-text" style={{ fontSize: '0.55rem', color: '#e879f9', border: '1px solid #e879f9', padding: '0.1rem 0.3rem', borderRadius: '2px' }}>PER ROLL</span> — +2 dice, 30% ML+1 all team<br/>
+                                <span style={{ color: '#fbbf24', fontWeight: 'bold' }}>SLEEP DEPRIVATION MARATHON</span> <span className="mono-text" style={{ fontSize: '0.55rem', color: '#e879f9', border: '1px solid #e879f9', padding: '0.1rem 0.3rem', borderRadius: 0 }}>PER ROLL</span> — +2 dice, 30% ML+1 all team<br/>
                                 Extended work session. If risk triggers, ALL team members gain +1 mental load.
                                 Consumed after rolling. Re-activatable for next roll.
                             </div>
                             <div style={{ marginBottom: '0.6rem', borderBottom: '1px solid rgba(138,43,226,0.15)', paddingBottom: '0.4rem' }}>
-                                <span style={{ color: '#f87171', fontWeight: 'bold' }}>OVERCLOCKED EQUIPMENT</span> <span className="mono-text" style={{ fontSize: '0.55rem', color: '#c084fc', border: '1px solid #c084fc', padding: '0.1rem 0.3rem', borderRadius: '2px' }}>PERMANENT</span> — +3 dice, 25% facility loss + 3-7 XP<br/>
+                                <span style={{ color: '#f87171', fontWeight: 'bold' }}>OVERCLOCKED EQUIPMENT</span> <span className="mono-text" style={{ fontSize: '0.55rem', color: '#c084fc', border: '1px solid #c084fc', padding: '0.1rem 0.3rem', borderRadius: 0 }}>PERMANENT</span> — +3 dice, 25% facility loss + 3-7 XP<br/>
                                 Push base equipment beyond safe limits. Select a base with the owner's workspace.
                                 If risk triggers, a facility loses a level and agency loses 3-7 XP.
                             </div>
                             <div style={{ marginBottom: '0.2rem' }}>
-                                <span style={{ color: '#60a5fa', fontWeight: 'bold' }}>CHILD PRODIGY RECRUITMENT</span> <span className="mono-text" style={{ fontSize: '0.55rem', color: '#c084fc', border: '1px solid #c084fc', padding: '0.1rem 0.3rem', borderRadius: '2px' }}>PERMANENT</span> — +1 dice, 2 XP, 15% integrity<br/>
+                                <span style={{ color: '#60a5fa', fontWeight: 'bold' }}>CHILD PRODIGY RECRUITMENT</span> <span className="mono-text" style={{ fontSize: '0.55rem', color: '#c084fc', border: '1px solid #c084fc', padding: '0.1rem 0.3rem', borderRadius: 0 }}>PERMANENT</span> — +1 dice, 2 XP, 15% integrity<br/>
                                 Recruit a child genius. Costs 2 agency XP. Creates a permanent NPC in the agency dossier.
                                 Prodigies can be assigned to other fringe projects for +2 dice (one project at a time).
                             </div>
@@ -110,11 +105,11 @@ const { Icon, AutoSaveInput, Classified, VisibilityToggle, getCookie, useProject
                     var LiveTestingBlock = function() {
                         if (p.liveTestingLevel) {
                             return (
-                                <div style={{ marginTop: '0.75rem', padding: '0.5rem', background: 'rgba(220,120,20,0.08)', borderLeft: '2px solid #d97706', borderRadius: '2px' }}>
+                                <div style={{ marginTop: '0.75rem', padding: '0.5rem', background: 'rgba(220,120,20,0.08)', borderLeft: '2px solid #d97706', borderRadius: 0 }}>
                                     <div className="mono-text" style={{ fontSize: '0.7rem', color: '#d97706', marginBottom: '0.15rem' }}>
                                         LIVE TESTING: {p.liveTestingLabel}
                                     </div>
-                                    <span className="mono-text" style={{ fontSize: '0.75rem', padding: '0.15rem 0.4rem', background: 'rgba(220,120,20,0.15)', borderRadius: '3px', color: '#fbbf24' }}>
+                                    <span className="mono-text" style={{ fontSize: '0.75rem', padding: '0.15rem 0.4rem', background: 'rgba(220,120,20,0.15)', borderRadius: 0, color: '#fbbf24' }}>
                                         +{p.liveTestingDice} dice to completion
                                     </span>
                                 </div>
@@ -155,7 +150,7 @@ const { Icon, AutoSaveInput, Classified, VisibilityToggle, getCookie, useProject
                                             }} style={{
                                                 flex: 1, minWidth: '120px', padding: '0.5rem', cursor: 'pointer',
                                                 background: 'rgba(220,120,20,0.06)', border: '1px solid #d97706',
-                                                borderRadius: '4px', fontFamily: 'var(--font-mono)', color: '#fbbf24', textAlign: 'center',
+                                                borderRadius: 0, fontFamily: 'var(--font-mono)', color: '#fbbf24', textAlign: 'center',
                                             }}>
                                                 <div style={{ fontSize: '0.9rem', fontWeight: 'bold' }}>+{opt.dice}</div>
                                                 <div style={{ fontSize: '0.6rem', color: 'var(--text-muted)', marginTop: '0.15rem' }}>{opt.label}</div>
@@ -173,13 +168,13 @@ const { Icon, AutoSaveInput, Classified, VisibilityToggle, getCookie, useProject
                         var realI = projects.indexOf(p);
                         if (p.stimulantLocked) {
                             return (
-                                <div style={{ marginTop: '0.75rem', padding: '0.5rem', background: 'rgba(59,130,246,0.08)', borderLeft: '2px solid #3b82f6', borderRadius: '2px' }}>
+                                <div style={{ marginTop: '0.75rem', padding: '0.5rem', background: 'rgba(59,130,246,0.08)', borderLeft: '2px solid #3b82f6', borderRadius: 0 }}>
                                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                                         <div>
                                             <div className="mono-text" style={{ fontSize: '0.7rem', color: '#3b82f6', marginBottom: '0.15rem' }}>
                                                 STIMULANT COCKTAIL ACTIVE
                                             </div>
-                                            <span className="mono-text" style={{ fontSize: '0.75rem', padding: '0.15rem 0.4rem', background: 'rgba(59,130,246,0.15)', borderRadius: '3px', color: '#60a5fa' }}>
+                                            <span className="mono-text" style={{ fontSize: '0.75rem', padding: '0.15rem 0.4rem', background: 'rgba(59,130,246,0.15)', borderRadius: 0, color: '#60a5fa' }}>
                                                 +{p.stimulantDice} dice (next roll)
                                             </span>
                                             {IS_SCIENCE ? (
@@ -249,7 +244,7 @@ const { Icon, AutoSaveInput, Classified, VisibilityToggle, getCookie, useProject
                                                                 flex: 1, minWidth: '110px', padding: '0.5rem', cursor: 'pointer',
                                                                 background: isOn ? 'rgba(59,130,246,0.15)' : 'rgba(59,130,246,0.03)',
                                                                 border: isOn ? '2px solid #3b82f6' : '1px solid var(--border-color)',
-                                                                borderRadius: '4px', fontFamily: 'var(--font-mono)', color: isOn ? '#60a5fa' : 'var(--text-muted)', textAlign: 'center',
+                                                                borderRadius: 0, fontFamily: 'var(--font-mono)', color: isOn ? '#60a5fa' : 'var(--text-muted)', textAlign: 'center',
                                                             }}>
                                                             <div style={{ fontSize: '0.85rem', fontWeight: 'bold' }}>+{s.dice}</div>
                                                             <div style={{ fontSize: '0.55rem', marginTop: '0.1rem' }}>{s.label}</div>
@@ -286,7 +281,7 @@ const { Icon, AutoSaveInput, Classified, VisibilityToggle, getCookie, useProject
                                                     }} style={{
                                                         padding: '0.4rem 1rem', background: '#3b82f6', border: 'none',
                                                         color: 'white', fontFamily: 'var(--font-mono)', fontWeight: 'bold',
-                                                        fontSize: '0.75rem', cursor: 'pointer', borderRadius: '4px',
+                                                        fontSize: '0.75rem', cursor: 'pointer', borderRadius: 0,
                                                     }}>
                                                         SYNTHESIZE STIMULANT
                                                     </button>
@@ -302,9 +297,9 @@ const { Icon, AutoSaveInput, Classified, VisibilityToggle, getCookie, useProject
                         var ri = projects.indexOf(p);
                         if (p.blackMarketTech) {
                             return (
-                                <div style={{ marginTop: '0.75rem', padding: '0.5rem', background: 'rgba(13,148,136,0.08)', borderLeft: '2px solid #0d9488', borderRadius: '2px' }}>
+                                <div style={{ marginTop: '0.75rem', padding: '0.5rem', background: 'rgba(13,148,136,0.08)', borderLeft: '2px solid #0d9488', borderRadius: 0 }}>
                                     <div className="mono-text" style={{ fontSize: '0.7rem', color: '#0d9488', marginBottom: '0.15rem' }}>BLACK MARKET TECH</div>
-                                    <span className="mono-text" style={{ fontSize: '0.75rem', padding: '0.15rem 0.4rem', background: 'rgba(13,148,136,0.15)', borderRadius: '3px', color: '#2dd4bf' }}>
+                                    <span className="mono-text" style={{ fontSize: '0.75rem', padding: '0.15rem 0.4rem', background: 'rgba(13,148,136,0.15)', borderRadius: 0, color: '#2dd4bf' }}>
                                         +{p.blackMarketTechDice} dice to completion
                                     </span>
                                     {(p.blackMarketTechAgencies && p.blackMarketTechAgencies.length > 0) ? (
@@ -329,7 +324,7 @@ const { Icon, AutoSaveInput, Classified, VisibilityToggle, getCookie, useProject
                                         if (r.conflict || !r.response) return null;
                                         return r.response.json();
                                     }).then(function(d) { if (!d) return; if (d.error) { alert(d.error); return; } alert(d.message); fetchAgency(); });
-                                }} style={{ width: '100%', padding: '0.5rem', cursor: 'pointer', background: 'rgba(13,148,136,0.06)', border: '1px solid #0d9488', borderRadius: '4px', fontFamily: 'var(--font-mono)', color: '#2dd4bf', textAlign: 'center' }}>
+                                }} style={{ width: '100%', padding: '0.5rem', cursor: 'pointer', background: 'rgba(13,148,136,0.06)', border: '1px solid #0d9488', borderRadius: 0, fontFamily: 'var(--font-mono)', color: '#2dd4bf', textAlign: 'center' }}>
                                     <div style={{ fontSize: '0.85rem', fontWeight: 'bold' }}>+2 BLACK MARKET TECH</div>
                                     <div style={{ fontSize: '0.55rem', color: 'var(--text-muted)', marginTop: '0.1rem' }}>15% tracker risk (agency linkage)</div>
                                 </button>
@@ -340,9 +335,9 @@ const { Icon, AutoSaveInput, Classified, VisibilityToggle, getCookie, useProject
                         var ri = projects.indexOf(p);
                         if (p.geneManipulation) {
                             return (
-                                <div style={{ marginTop: '0.75rem', padding: '0.5rem', background: 'rgba(22,163,74,0.08)', borderLeft: '2px solid #16a34a', borderRadius: '2px' }}>
+                                <div style={{ marginTop: '0.75rem', padding: '0.5rem', background: 'rgba(22,163,74,0.08)', borderLeft: '2px solid #16a34a', borderRadius: 0 }}>
                                     <div className="mono-text" style={{ fontSize: '0.7rem', color: '#16a34a', marginBottom: '0.15rem' }}>GENE MANIPULATION</div>
-                                    <span className="mono-text" style={{ fontSize: '0.75rem', padding: '0.15rem 0.4rem', background: 'rgba(22,163,74,0.15)', borderRadius: '3px', color: '#4ade80' }}>
+                                    <span className="mono-text" style={{ fontSize: '0.75rem', padding: '0.15rem 0.4rem', background: 'rgba(22,163,74,0.15)', borderRadius: 0, color: '#4ade80' }}>
                                         +{p.geneManipulationDice} dice to completion
                                     </span>
                                     {p.geneManipulationBreach ? (
@@ -365,7 +360,7 @@ const { Icon, AutoSaveInput, Classified, VisibilityToggle, getCookie, useProject
                                         if (r.conflict || !r.response) return null;
                                         return r.response.json();
                                     }).then(function(d) { if (!d) return; if (d.error) { alert(d.error); return; } alert(d.message); fetchAgency(); });
-                                }} style={{ width: '100%', padding: '0.5rem', cursor: 'pointer', background: 'rgba(22,163,74,0.06)', border: '1px solid #16a34a', borderRadius: '4px', fontFamily: 'var(--font-mono)', color: '#4ade80', textAlign: 'center' }}>
+                                }} style={{ width: '100%', padding: '0.5rem', cursor: 'pointer', background: 'rgba(22,163,74,0.06)', border: '1px solid #16a34a', borderRadius: 0, fontFamily: 'var(--font-mono)', color: '#4ade80', textAlign: 'center' }}>
                                     <div style={{ fontSize: '0.85rem', fontWeight: 'bold' }}>+3 GENE MANIPULATION</div>
                                     <div style={{ fontSize: '0.55rem', color: 'var(--text-muted)', marginTop: '0.1rem' }}>18% containment breach</div>
                                 </button>
@@ -376,9 +371,9 @@ const { Icon, AutoSaveInput, Classified, VisibilityToggle, getCookie, useProject
                         var ri = projects.indexOf(p);
                         if (p.neuralInterface) {
                             return (
-                                <div style={{ marginTop: '0.75rem', padding: '0.5rem', background: 'rgba(168,85,247,0.08)', borderLeft: '2px solid #a855f7', borderRadius: '2px' }}>
+                                <div style={{ marginTop: '0.75rem', padding: '0.5rem', background: 'rgba(168,85,247,0.08)', borderLeft: '2px solid #a855f7', borderRadius: 0 }}>
                                     <div className="mono-text" style={{ fontSize: '0.7rem', color: '#a855f7', marginBottom: '0.15rem' }}>NEURAL INTERFACE</div>
-                                    <span className="mono-text" style={{ fontSize: '0.75rem', padding: '0.15rem 0.4rem', background: 'rgba(168,85,247,0.15)', borderRadius: '3px', color: '#c084fc' }}>
+                                    <span className="mono-text" style={{ fontSize: '0.75rem', padding: '0.15rem 0.4rem', background: 'rgba(168,85,247,0.15)', borderRadius: 0, color: '#c084fc' }}>
                                         +{p.neuralInterfaceDice} dice to completion
                                     </span>
                                     {p.neuralInterfaceMlDamage > 0 ? (
@@ -402,7 +397,7 @@ const { Icon, AutoSaveInput, Classified, VisibilityToggle, getCookie, useProject
                                         if (r.conflict || !r.response) return null;
                                         return r.response.json();
                                     }).then(function(d) { if (!d) return; if (d.error) { alert(d.error); return; } alert(d.message); fetchAgency(); });
-                                }} style={{ width: '100%', padding: '0.5rem', cursor: 'pointer', background: 'rgba(168,85,247,0.06)', border: '1px solid #a855f7', borderRadius: '4px', fontFamily: 'var(--font-mono)', color: '#c084fc', textAlign: 'center' }}>
+                                }} style={{ width: '100%', padding: '0.5rem', cursor: 'pointer', background: 'rgba(168,85,247,0.06)', border: '1px solid #a855f7', borderRadius: 0, fontFamily: 'var(--font-mono)', color: '#c084fc', textAlign: 'center' }}>
                                     <div style={{ fontSize: '0.85rem', fontWeight: 'bold' }}>+4 NEURAL INTERFACE</div>
                                     <div style={{ fontSize: '0.55rem', color: 'var(--text-muted)', marginTop: '0.1rem' }}>30% ML+2 / 5% permanent -1 mental attr</div>
                                 </button>
@@ -413,9 +408,9 @@ const { Icon, AutoSaveInput, Classified, VisibilityToggle, getCookie, useProject
                         var ri = projects.indexOf(p);
                         if (p.sleepDeprivation) {
                             return (
-                                <div style={{ marginTop: '0.75rem', padding: '0.5rem', background: 'rgba(234,179,8,0.08)', borderLeft: '2px solid #eab308', borderRadius: '2px' }}>
+                                <div style={{ marginTop: '0.75rem', padding: '0.5rem', background: 'rgba(234,179,8,0.08)', borderLeft: '2px solid #eab308', borderRadius: 0 }}>
                                     <div className="mono-text" style={{ fontSize: '0.7rem', color: '#eab308', marginBottom: '0.15rem' }}>SLEEP DEPRIVATION MARATHON</div>
-                                    <span className="mono-text" style={{ fontSize: '0.75rem', padding: '0.15rem 0.4rem', background: 'rgba(234,179,8,0.15)', borderRadius: '3px', color: '#fbbf24' }}>
+                                    <span className="mono-text" style={{ fontSize: '0.75rem', padding: '0.15rem 0.4rem', background: 'rgba(234,179,8,0.15)', borderRadius: 0, color: '#fbbf24' }}>
                                         +{p.sleepDeprivationDice} dice to completion
                                     </span>
                                     {p.sleepDeprivationMlDamage ? (
@@ -438,7 +433,7 @@ const { Icon, AutoSaveInput, Classified, VisibilityToggle, getCookie, useProject
                                         if (r.conflict || !r.response) return null;
                                         return r.response.json();
                                     }).then(function(d) { if (!d) return; if (d.error) { alert(d.error); return; } alert(d.message); fetchAgency(); });
-                                }} style={{ width: '100%', padding: '0.5rem', cursor: 'pointer', background: 'rgba(234,179,8,0.06)', border: '1px solid #eab308', borderRadius: '4px', fontFamily: 'var(--font-mono)', color: '#fbbf24', textAlign: 'center' }}>
+                                }} style={{ width: '100%', padding: '0.5rem', cursor: 'pointer', background: 'rgba(234,179,8,0.06)', border: '1px solid #eab308', borderRadius: 0, fontFamily: 'var(--font-mono)', color: '#fbbf24', textAlign: 'center' }}>
                                     <div style={{ fontSize: '0.85rem', fontWeight: 'bold' }}>+2 SLEEP DEPRIVATION MARATHON</div>
                                     <div style={{ fontSize: '0.55rem', color: 'var(--text-muted)', marginTop: '0.1rem' }}>30% ML +1 to all team members</div>
                                 </button>
@@ -449,9 +444,9 @@ const { Icon, AutoSaveInput, Classified, VisibilityToggle, getCookie, useProject
                         var ri = projects.indexOf(p);
                         if (p.overclockedEquipment) {
                             return (
-                                <div style={{ marginTop: '0.75rem', padding: '0.5rem', background: 'rgba(239,68,68,0.08)', borderLeft: '2px solid #ef4444', borderRadius: '2px' }}>
+                                <div style={{ marginTop: '0.75rem', padding: '0.5rem', background: 'rgba(239,68,68,0.08)', borderLeft: '2px solid #ef4444', borderRadius: 0 }}>
                                     <div className="mono-text" style={{ fontSize: '0.7rem', color: '#ef4444', marginBottom: '0.15rem' }}>OVERCLOCKED EQUIPMENT ({p.overclockedEquipmentBase || 'unknown base'})</div>
-                                    <span className="mono-text" style={{ fontSize: '0.75rem', padding: '0.15rem 0.4rem', background: 'rgba(239,68,68,0.15)', borderRadius: '3px', color: '#f87171' }}>
+                                    <span className="mono-text" style={{ fontSize: '0.75rem', padding: '0.15rem 0.4rem', background: 'rgba(239,68,68,0.15)', borderRadius: 0, color: '#f87171' }}>
                                         +{p.overclockedEquipmentDice} dice to completion
                                     </span>
                                     {p.overclockedEquipmentDestroyed ? (
@@ -490,7 +485,7 @@ const { Icon, AutoSaveInput, Classified, VisibilityToggle, getCookie, useProject
                                 <div style={{ display: 'flex', gap: '0.4rem', alignItems: 'center' }}>
                                     <select value={baseVal} onChange={function(e) { setBaseVal(e.target.value); }} style={{
                                         flex: 1, padding: '0.4rem', background: 'var(--bg-input, #1a1a2e)', border: '1px solid #ef4444',
-                                        color: 'var(--text-primary)', fontFamily: 'var(--font-mono)', fontSize: '0.75rem', borderRadius: '4px',
+                                        color: 'var(--text-primary)', fontFamily: 'var(--font-mono)', fontSize: '0.75rem', borderRadius: 0,
                                     }}>
                                         <option value="">— select base —</option>
                                         {basesToShow.map(function(b) { return <option key={b.id} value={b.id}>{b.name}</option>; })}
@@ -506,7 +501,7 @@ const { Icon, AutoSaveInput, Classified, VisibilityToggle, getCookie, useProject
                                         }).then(function(d) { if (!d) return; if (d.error) { alert(d.error); return; } alert(d.message); fetchAgency(); });
                                     }} style={{
                                         padding: '0.4rem 0.75rem', cursor: baseVal ? 'pointer' : 'not-allowed', opacity: baseVal ? 1 : 0.4,
-                                        background: 'rgba(239,68,68,0.1)', border: '1px solid #ef4444', borderRadius: '4px',
+                                        background: 'rgba(239,68,68,0.1)', border: '1px solid #ef4444', borderRadius: 0,
                                         fontFamily: 'var(--font-mono)', color: '#f87171', fontSize: '0.7rem', fontWeight: 'bold',
                                     }}>
                                         +3 OVERCLOCK
@@ -520,9 +515,9 @@ const { Icon, AutoSaveInput, Classified, VisibilityToggle, getCookie, useProject
                         var ri = projects.indexOf(p);
                         if (p.childProdigy) {
                             return (
-                                <div style={{ marginTop: '0.75rem', padding: '0.5rem', background: 'rgba(37,99,235,0.08)', borderLeft: '2px solid #2563eb', borderRadius: '2px' }}>
+                                <div style={{ marginTop: '0.75rem', padding: '0.5rem', background: 'rgba(37,99,235,0.08)', borderLeft: '2px solid #2563eb', borderRadius: 0 }}>
                                     <div className="mono-text" style={{ fontSize: '0.7rem', color: '#2563eb', marginBottom: '0.15rem' }}>CHILD PRODIGY RECRUITMENT</div>
-                                    <span className="mono-text" style={{ fontSize: '0.75rem', padding: '0.15rem 0.4rem', background: 'rgba(37,99,235,0.15)', borderRadius: '3px', color: '#60a5fa' }}>
+                                    <span className="mono-text" style={{ fontSize: '0.75rem', padding: '0.15rem 0.4rem', background: 'rgba(37,99,235,0.15)', borderRadius: 0, color: '#60a5fa' }}>
                                         +{p.childProdigyDice} permanent dice to completion
                                     </span>
                                     {p.childProdigyIntegrityLoss ? (
@@ -548,7 +543,7 @@ const { Icon, AutoSaveInput, Classified, VisibilityToggle, getCookie, useProject
                                     }).then(function(d) { if (!d) return; if (d.error) { alert(d.error); return; } alert(d.message); fetchAgency(); });
                                 }} style={{
                                     width: '100%', padding: '0.5rem', cursor: canAfford ? 'pointer' : 'not-allowed', opacity: canAfford ? 1 : 0.4,
-                                    background: 'rgba(37,99,235,0.06)', border: '1px solid #2563eb', borderRadius: '4px',
+                                    background: 'rgba(37,99,235,0.06)', border: '1px solid #2563eb', borderRadius: 0,
                                     fontFamily: 'var(--font-mono)', color: '#60a5fa', textAlign: 'center',
                                 }}>
                                     <div style={{ fontSize: '0.85rem', fontWeight: 'bold' }}>+1 CHILD PRODIGY RECRUITMENT</div>
@@ -565,12 +560,12 @@ const { Icon, AutoSaveInput, Classified, VisibilityToggle, getCookie, useProject
                         if (prodigies.length === 0) return null;
                         if (p.assignedProdigyId) {
                             return (
-                                <div style={{ marginTop: '0.75rem', padding: '0.5rem', background: 'rgba(37,99,235,0.08)', borderLeft: '2px solid #2563eb', borderRadius: '2px' }}>
+                                <div style={{ marginTop: '0.75rem', padding: '0.5rem', background: 'rgba(37,99,235,0.08)', borderLeft: '2px solid #2563eb', borderRadius: 0 }}>
                                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                                         <div>
                                             <div className="mono-text" style={{ fontSize: '0.7rem', color: '#2563eb', marginBottom: '0.15rem' }}>CHILD PRODIGY ASSIGNED</div>
                                             <span className="mono-text" style={{ fontSize: '0.75rem', color: '#60a5fa' }}>{p.assignedProdigyName}</span>
-                                            <span className="mono-text" style={{ fontSize: '0.75rem', padding: '0.15rem 0.4rem', marginLeft: '0.5rem', background: 'rgba(37,99,235,0.15)', borderRadius: '3px', color: '#60a5fa' }}>
+                                            <span className="mono-text" style={{ fontSize: '0.75rem', padding: '0.15rem 0.4rem', marginLeft: '0.5rem', background: 'rgba(37,99,235,0.15)', borderRadius: 0, color: '#60a5fa' }}>
                                                 +2 dice to completion
                                             </span>
                                         </div>
@@ -584,7 +579,7 @@ const { Icon, AutoSaveInput, Classified, VisibilityToggle, getCookie, useProject
                                                     if (r.conflict || !r.response) return null;
                                                     return r.response.json();
                                                 }).then(function(d) { if (!d) return; if (d.error) { alert(d.error); return; } fetchAgency(); });
-                                            }} style={{ background: 'transparent', border: '1px solid var(--border-color)', color: 'var(--text-muted)', cursor: 'pointer', fontFamily: 'var(--font-mono)', fontSize: '0.6rem', padding: '0.2rem 0.4rem', borderRadius: '3px' }}>
+                                            }} style={{ background: 'transparent', border: '1px solid var(--border-color)', color: 'var(--text-muted)', cursor: 'pointer', fontFamily: 'var(--font-mono)', fontSize: '0.6rem', padding: '0.2rem 0.4rem', borderRadius: 0 }}>
                                                 UNASSIGN
                                             </button>
                                         ) : null}
@@ -608,7 +603,7 @@ const { Icon, AutoSaveInput, Classified, VisibilityToggle, getCookie, useProject
                                 <div style={{ display: 'flex', gap: '0.4rem', alignItems: 'center' }}>
                                     <select value={selVal} onChange={function(e) { setSelVal(e.target.value); }} style={{
                                         flex: 1, padding: '0.4rem', background: 'var(--bg-input, #1a1a2e)', border: '1px solid #2563eb',
-                                        color: 'var(--text-primary)', fontFamily: 'var(--font-mono)', fontSize: '0.75rem', borderRadius: '4px',
+                                        color: 'var(--text-primary)', fontFamily: 'var(--font-mono)', fontSize: '0.75rem', borderRadius: 0,
                                     }}>
                                         <option value="">— select prodigy —</option>
                                         {available.map(function(cp) { return <option key={cp.id} value={cp.id}>{cp.name}</option>; })}
@@ -623,7 +618,7 @@ const { Icon, AutoSaveInput, Classified, VisibilityToggle, getCookie, useProject
                                         }).then(function(d) { if (!d) return; if (d.error) { alert(d.error); return; } fetchAgency(); });
                                     }} style={{
                                         padding: '0.4rem 0.75rem', cursor: selVal ? 'pointer' : 'not-allowed', opacity: selVal ? 1 : 0.4,
-                                        background: 'rgba(37,99,235,0.1)', border: '1px solid #2563eb', borderRadius: '4px',
+                                        background: 'rgba(37,99,235,0.1)', border: '1px solid #2563eb', borderRadius: 0,
                                         fontFamily: 'var(--font-mono)', color: '#60a5fa', fontSize: '0.7rem', fontWeight: 'bold',
                                     }}>
                                         ASSIGN
@@ -650,13 +645,13 @@ const { Icon, AutoSaveInput, Classified, VisibilityToggle, getCookie, useProject
                                     </span>
                                     <span className="mono-text" style={{
                                         fontSize: '0.75rem', padding: '0.2rem 0.5rem',
-                                        background: 'rgba(138,43,226,0.2)', borderRadius: '3px', color: '#c084fc',
+                                        background: 'rgba(138,43,226,0.2)', borderRadius: 0, color: '#c084fc',
                                     }}>
                                         +{p.darkGrantsLevel} dice to completion
                                     </span>
                                 </div>
                                 {p.darkGrantsAgencies && p.darkGrantsAgencies.length > 0 ? (
-                                    <div style={{ marginTop: '0.75rem', padding: '0.5rem', background: 'rgba(170,51,51,0.1)', borderLeft: '2px solid var(--accent-danger, #c0392b)', borderRadius: '2px' }}>
+                                    <div style={{ marginTop: '0.75rem', padding: '0.5rem', background: 'rgba(170,51,51,0.1)', borderLeft: '2px solid var(--accent-danger, #c0392b)', borderRadius: 0 }}>
                                         <div className="mono-text" style={{ fontSize: '0.7rem', color: 'var(--accent-danger, #c0392b)', marginBottom: '0.25rem' }}>
                                             LINKED AGENCIES
                                         </div>
@@ -724,7 +719,7 @@ const { Icon, AutoSaveInput, Classified, VisibilityToggle, getCookie, useProject
                                         }} style={{
                                             flex: 1, padding: '0.75rem', cursor: 'pointer',
                                             background: 'rgba(138,43,226,0.08)', border: '1px solid #8a2be2',
-                                            borderRadius: '4px', fontFamily: 'var(--font-mono)',
+                                            borderRadius: 0, fontFamily: 'var(--font-mono)',
                                             color: '#c084fc', textAlign: 'center',
                                         }}>
                                             <div style={{ fontSize: '1.1rem', fontWeight: 'bold' }}>+{lvl}</div>
@@ -782,7 +777,12 @@ const { Icon, AutoSaveInput, Classified, VisibilityToggle, getCookie, useProject
         if (isClassified && !IS_ADMIN) {
             return (
                 <div className="glass-panel" style={{ padding: '1.5rem', marginBottom: '1rem' }}>
-                    <h3 className="mono-text text-accent">PROJECTS</h3>
+                    {/* Wave 3A: classified placeholder uses block-head pattern. */}
+                    <header className="block-head" style={{ marginBottom: '1rem' }}>
+                        <span className="block-bullet">■</span>
+                        <h3>PROJECTS</h3>
+                        <span className="block-line"></span>
+                    </header>
                     <Classified />
                 </div>
             );
@@ -882,7 +882,7 @@ const { Icon, AutoSaveInput, Classified, VisibilityToggle, getCookie, useProject
                             position: 'absolute', top: '100%', left: 0, zIndex: 100,
                             marginTop: '0.25rem', padding: '0.5rem 0.75rem',
                             background: 'rgba(15,15,30,0.97)', border: '1px solid var(--border-color)',
-                            borderRadius: '4px', fontSize: '0.7rem', minWidth: '220px',
+                            borderRadius: 0, fontSize: '0.7rem', minWidth: '220px',
                             boxShadow: '0 4px 12px rgba(0,0,0,0.5)',
                         }}>
                             {cp.parts.map(function(pt, i) {
@@ -946,7 +946,7 @@ const { Icon, AutoSaveInput, Classified, VisibilityToggle, getCookie, useProject
                         {expanded ? '▼' : '▶'} DICE POOL CONFIG
                     </button>
                     {expanded ? (
-                        <div style={{ marginTop: '0.4rem', padding: '0.5rem', background: 'rgba(0,0,0,0.15)', borderRadius: '3px' }}>
+                        <div style={{ marginTop: '0.4rem', padding: '0.5rem', background: 'rgba(0,0,0,0.15)', borderRadius: 0 }}>
                             <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap', marginBottom: '0.5rem' }}>
                                 <div style={{ minWidth: '120px', flex: 1 }}>
                                     <div className="text-muted mono-text" style={labelStyle}>ATTRIBUTE 1</div>
@@ -1098,7 +1098,7 @@ const { Icon, AutoSaveInput, Classified, VisibilityToggle, getCookie, useProject
                         {expanded ? '▼' : '▶'} COMPLETION EFFECTS
                     </button>
                     {expanded ? (
-                        <div style={{ marginTop: '0.4rem', padding: '0.5rem', background: 'rgba(0,0,0,0.15)', borderRadius: '3px' }}>
+                        <div style={{ marginTop: '0.4rem', padding: '0.5rem', background: 'rgba(0,0,0,0.15)', borderRadius: 0 }}>
                             <div className="text-muted mono-text" style={{ fontSize: '0.6rem', marginBottom: '0.4rem' }}>ATTRIBUTE CHANGES (applied on completion)</div>
                             {attrChanges.map(function(ac, i) {
                                 return (
@@ -1128,7 +1128,7 @@ const { Icon, AutoSaveInput, Classified, VisibilityToggle, getCookie, useProject
                             })}
                             <button onClick={function() {
                                 updateEffects('attributeChanges', attrChanges.concat([{category: '', name: '', value: 0}]));
-                            }} style={{ background: 'transparent', border: '1px solid var(--border-color)', color: 'var(--text-muted)', cursor: 'pointer', fontFamily: 'var(--font-mono)', fontSize: '0.6rem', padding: '0.15rem 0.5rem', borderRadius: '3px', marginBottom: '0.5rem' }}>
+                            }} style={{ background: 'transparent', border: '1px solid var(--border-color)', color: 'var(--text-muted)', cursor: 'pointer', fontFamily: 'var(--font-mono)', fontSize: '0.6rem', padding: '0.15rem 0.5rem', borderRadius: 0, marginBottom: '0.5rem' }}>
                                 + ADD ATTRIBUTE
                             </button>
                             <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
@@ -1146,28 +1146,30 @@ const { Icon, AutoSaveInput, Classified, VisibilityToggle, getCookie, useProject
 
         var fetchAgency = props.fetchAgency;
 
+        var activeProjectsCount = items.filter(function(p) { return p && !p.discarded; }).length;
         return (<React.Fragment>
             <div className="glass-panel" style={{ padding: '1.5rem', marginBottom: '1rem' }}>
-                <h3 className="mono-text text-accent" style={{
-                    borderBottom: '1px solid var(--border-color)',
-                    paddingBottom: '0.5rem', marginBottom: '1rem',
-                    display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-                }}>
-                    <span>
-                        PROJECTS
-                        <VisibilityToggle field="projects" visibility={visibility} onToggle={onToggleVis} />
-                    </span>
+                {/* Wave 3A: PROJECTS block-head with active-count badge + add-row button. */}
+                <header className="block-head" style={{ marginBottom: '1rem' }}>
+                    <span className="block-bullet">■</span>
+                    <h3>PROJECTS</h3>
+                    <span className="block-line"></span>
+                    {activeProjectsCount > 0 && (
+                        <span className="block-badge">{activeProjectsCount} ACTIVE</span>
+                    )}
+                    <VisibilityToggle field="projects" visibility={visibility} onToggle={onToggleVis} />
                     {IS_ADMIN ? (
                         <button onClick={addProject} title="Add Project" style={{
                             background: 'transparent', border: '1px solid var(--accent-primary)',
                             color: 'var(--accent-primary)', width: '24px', height: '24px',
-                            borderRadius: '4px', cursor: 'pointer',
+                            borderRadius: 0, cursor: 'pointer',
                             display: 'flex', alignItems: 'center', justifyContent: 'center',
+                            marginLeft: '0.25rem',
                         }}>
                             <Icon name="plus" size={14} />
                         </button>
                     ) : null}
-                </h3>
+                </header>
                 {items.length === 0 ? (
                     <div className="text-muted mono-text" style={{ textAlign: 'center', padding: '2rem', fontSize: '0.85rem' }}>No projects</div>
                 ) : null}
@@ -1366,7 +1368,7 @@ const { Icon, AutoSaveInput, Classified, VisibilityToggle, getCookie, useProject
                                             <div>
                                                 {assigned.map(function(n) {
                                                     return (
-                                                        <div key={n.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '0.2rem 0.4rem', marginBottom: '0.2rem', background: 'rgba(249,115,22,0.08)', borderLeft: '2px solid #f97316', borderRadius: '2px' }}>
+                                                        <div key={n.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '0.2rem 0.4rem', marginBottom: '0.2rem', background: 'rgba(249,115,22,0.08)', borderLeft: '2px solid #f97316', borderRadius: 0 }}>
                                                             <span className="mono-text" style={{ fontSize: '0.75rem', color: '#f97316' }}>{n.name} <span style={{ color: 'var(--text-muted)' }}>(+{n.bonus})</span></span>
                                                             <button onClick={function() {
                                                                 updateField(idx, 'assignedNpcs', myIds.filter(function(id) { return id !== n.id; }));
@@ -1376,13 +1378,13 @@ const { Icon, AutoSaveInput, Classified, VisibilityToggle, getCookie, useProject
                                                 })}
                                                 {available.length > 0 ? (
                                                     <div style={{ display: 'flex', gap: '0.3rem', marginTop: '0.3rem' }}>
-                                                        <select id={'npc-add-' + idx} style={{ flex: 1, padding: '0.25rem', background: 'var(--bg-input, #1a1a2e)', border: '1px solid var(--border-color)', color: 'var(--text-primary)', fontFamily: 'var(--font-mono)', fontSize: '0.7rem', borderRadius: '3px' }}>
+                                                        <select id={'npc-add-' + idx} style={{ flex: 1, padding: '0.25rem', background: 'var(--bg-input, #1a1a2e)', border: '1px solid var(--border-color)', color: 'var(--text-primary)', fontFamily: 'var(--font-mono)', fontSize: '0.7rem', borderRadius: 0 }}>
                                                             {available.map(function(n) { return <option key={n.id} value={n.id}>{n.name} (+{n.bonus})</option>; })}
                                                         </select>
                                                         <button onClick={function() {
                                                             var sel = document.getElementById('npc-add-' + idx);
                                                             if (sel && sel.value) updateField(idx, 'assignedNpcs', myIds.concat([parseInt(sel.value)]));
-                                                        }} style={{ padding: '0.25rem 0.5rem', background: 'rgba(249,115,22,0.1)', border: '1px solid #f97316', borderRadius: '3px', fontFamily: 'var(--font-mono)', color: '#f97316', cursor: 'pointer', fontSize: '0.65rem' }}>ADD</button>
+                                                        }} style={{ padding: '0.25rem 0.5rem', background: 'rgba(249,115,22,0.1)', border: '1px solid #f97316', borderRadius: 0, fontFamily: 'var(--font-mono)', color: '#f97316', cursor: 'pointer', fontSize: '0.65rem' }}>ADD</button>
                                                     </div>
                                                 ) : null}
                                             </div>
@@ -1404,8 +1406,8 @@ const { Icon, AutoSaveInput, Classified, VisibilityToggle, getCookie, useProject
                                         <span className="text-muted mono-text" style={{ fontSize: '0.6rem' }}>{completion}/{duration}</span>
                                         <span className="mono-text" style={{ fontSize: '0.6rem', color: pct >= 100 ? 'var(--accent-success, #2ecc71)' : 'var(--text-muted)' }}>{pct}%</span>
                                     </div>
-                                    <div style={{ height: 4, background: 'rgba(255,255,255,0.1)', borderRadius: 2 }}>
-                                        <div style={{ height: '100%', width: pct + '%', background: pct >= 100 ? 'var(--accent-success, #2ecc71)' : 'var(--accent-primary)', borderRadius: 2, transition: 'width 0.3s' }} />
+                                    <div style={{ height: 4, background: 'rgba(255,255,255,0.1)', borderRadius: 0 }}>
+                                        <div style={{ height: '100%', width: pct + '%', background: pct >= 100 ? 'var(--accent-success, #2ecc71)' : 'var(--accent-primary)', borderRadius: 0, transition: 'width 0.3s' }} />
                                     </div>
                                 </div>
                             ) : null}
@@ -1445,7 +1447,7 @@ const { Icon, AutoSaveInput, Classified, VisibilityToggle, getCookie, useProject
                                 }} style={{
                                     width: '100%', padding: '0.4rem', marginBottom: '0.5rem', cursor: 'pointer',
                                     background: 'rgba(46,204,113,0.08)', border: '1px solid #2ecc71',
-                                    borderRadius: '4px', fontFamily: 'var(--font-mono)', color: '#2ecc71',
+                                    borderRadius: 0, fontFamily: 'var(--font-mono)', color: '#2ecc71',
                                     fontSize: '0.75rem', fontWeight: 'bold',
                                 }}>
                                     COMPLETE PROJECT
@@ -1493,7 +1495,7 @@ const { Icon, AutoSaveInput, Classified, VisibilityToggle, getCookie, useProject
                                                         color: isArmed ? '#06b6d4' : 'var(--text-muted)',
                                                         padding: '0.2rem 0.5rem', cursor: 'pointer',
                                                         fontFamily: 'var(--font-mono)', fontSize: '0.65rem',
-                                                        borderRadius: '4px', display: 'flex', alignItems: 'center', gap: '0.3rem',
+                                                        borderRadius: 0, display: 'flex', alignItems: 'center', gap: '0.3rem',
                                                     },
                                                 }, isArmed ? '✓ ' : '', m.name + ' ', dots, ' +' + m.rating);
                                             })}
@@ -1526,7 +1528,7 @@ const { Icon, AutoSaveInput, Classified, VisibilityToggle, getCookie, useProject
                                         cursor: hasRolls || IS_ADMIN ? 'pointer' : 'not-allowed',
                                         background: armedMerit ? 'rgba(6,182,212,0.1)' : 'rgba(0,0,0,0.2)',
                                         border: '1px solid ' + (armedMerit ? '#06b6d4' : rollColor),
-                                        borderRadius: '4px', fontFamily: 'var(--font-mono)',
+                                        borderRadius: 0, fontFamily: 'var(--font-mono)',
                                         color: armedMerit ? '#06b6d4' : rollColor,
                                         fontSize: '0.75rem', fontWeight: 'bold',
                                         opacity: hasRolls || IS_ADMIN ? 1 : 0.4,
@@ -1539,13 +1541,13 @@ const { Icon, AutoSaveInput, Classified, VisibilityToggle, getCookie, useProject
                                         var totalSuccesses = lr.successes || 0;
                                         var diceSuccesses = totalSuccesses - (lr.autoSuccesses || 0);
                                         return (
-                                            <div style={{ marginTop: '0.4rem', padding: '0.5rem', background: 'rgba(0,0,0,0.3)', borderRadius: '4px', border: '1px solid var(--border-color)' }}>
+                                            <div style={{ marginTop: '0.4rem', padding: '0.5rem', background: 'rgba(0,0,0,0.3)', borderRadius: 0, border: '1px solid var(--border-color)' }}>
                                                 <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px', marginBottom: '0.35rem' }}>
                                                     {(lr.rolls || []).map(function(die, i) {
                                                         var isSuccess = die >= 8;
                                                         return React.createElement('span', { key: i, className: 'mono-text', style: {
                                                             display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
-                                                            width: '26px', height: '26px', borderRadius: '4px',
+                                                            width: '26px', height: '26px', borderRadius: 0,
                                                             background: isSuccess ? 'rgba(34,197,94,0.2)' : 'rgba(0,0,0,0.3)',
                                                             border: '1px solid ' + (isSuccess ? '#22c55e' : 'var(--border-color)'),
                                                             color: isSuccess ? '#22c55e' : 'var(--text-muted)',
@@ -1627,7 +1629,7 @@ const { Icon, AutoSaveInput, Classified, VisibilityToggle, getCookie, useProject
                             return (
                                 <div key={log.id} style={{
                                     padding: '0.75rem', marginBottom: '0.5rem',
-                                    background: 'rgba(0,0,0,0.3)', borderRadius: '4px',
+                                    background: 'rgba(0,0,0,0.3)', borderRadius: 0,
                                     border: '1px solid var(--border-color)',
                                 }}>
                                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.4rem' }}>
@@ -1643,7 +1645,7 @@ const { Icon, AutoSaveInput, Classified, VisibilityToggle, getCookie, useProject
                                             var isSuccess = die >= 8;
                                             return React.createElement('span', { key: i, className: 'mono-text', style: {
                                                 display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
-                                                width: '22px', height: '22px', borderRadius: '3px',
+                                                width: '22px', height: '22px', borderRadius: 0,
                                                 background: isSuccess ? 'rgba(34,197,94,0.2)' : 'rgba(0,0,0,0.3)',
                                                 border: '1px solid ' + (isSuccess ? '#22c55e' : 'var(--border-color)'),
                                                 color: isSuccess ? '#22c55e' : 'var(--text-muted)',

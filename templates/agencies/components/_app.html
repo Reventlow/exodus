@@ -50,9 +50,12 @@ const {
                 padding: '1.5rem', marginBottom: '1rem',
                 borderTop: '2px solid var(--accent-primary)'
             }}>
-                <h3 className="mono-text text-accent" style={{ marginBottom: '1rem' }}>
-                    TACTICAL DICE ROLLER
-                </h3>
+                {/* Wave 3A: section header reframed as .block-head bullet/title/line. */}
+                <header className="block-head" style={{ marginBottom: '1rem' }}>
+                    <span className="block-bullet">■</span>
+                    <h3>TACTICAL DICE ROLLER</h3>
+                    <span className="block-line"></span>
+                </header>
 
                 <div style={{
                     display: 'flex', gap: '1rem', alignItems: 'flex-end',
@@ -109,7 +112,7 @@ const {
                             {results.rolls.map((r, i) => (
                                 <div key={i} style={{
                                     width: '24px', height: '24px',
-                                    borderRadius: '2px',
+                                    borderRadius: 0,
                                     background: r.success ? 'var(--accent-primary)' : 'var(--bg-panel)',
                                     color: r.success ? 'var(--bg-dark)' : 'var(--text-secondary)',
                                     display: 'flex', alignItems: 'center', justifyContent: 'center',
@@ -554,7 +557,7 @@ const {
                         maxWidth: 'min(420px, calc(100vw - 2rem))',
                         zIndex: 9999,
                         padding: '0.75rem 1rem',
-                        borderRadius: 'var(--radius-sm, 4px)',
+                        borderRadius: 0,
                         background: 'rgba(234, 179, 8, 0.95)',
                         border: '1px solid #b45309',
                         color: '#1c1917',
@@ -720,7 +723,7 @@ const {
                 */}
                 <div style={{
                     border: '1px solid var(--border-color)',
-                    borderRadius: 'var(--radius-sm)',
+                    borderRadius: 0,
                     padding: '0.75rem 1rem',
                     marginBottom: '1rem'
                 }}>
@@ -772,27 +775,26 @@ const {
                 {/* Cyber Conditions - structured conditions from deploy actions */}
                 {agency.conditions_cyber && agency.conditions_cyber.length > 0 && (
                     <div className="glass-panel" style={{ padding: '1.5rem', marginBottom: '1rem' }}>
-                        <h3 className="mono-text text-accent" style={{
-                            borderBottom: '1px solid var(--border-color)',
-                            paddingBottom: '0.5rem', marginBottom: '0.5rem',
-                            display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-                        }}>
-                            <span>CYBER CONDITIONS</span>
-                            <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
-                                Sweep Pool: <span style={{ color: agency.sweepPool > 0 ? 'var(--accent-success, #2ecc71)' : 'var(--accent-danger, #c0392b)' }}>{agency.sweepPool || 0}</span>
-                                {IS_ADMIN && (
-                                    <button onClick={() => {
-                                        const input = prompt('Set agency Sweep & Clear pool:');
-                                        if (input === null) return;
-                                        const pool = parseInt(input);
-                                        if (isNaN(pool)) return;
-                                        saveAgencyQuiet({ sweepPool: pool });
-                                    }} className="btn-cyber" style={{ fontSize: '0.65rem', padding: '0.15rem 0.5rem', marginLeft: '0.5rem' }}>
-                                        SET
-                                    </button>
-                                )}
+                        {/* Wave 3A: block-head with sweep pool badge in trailing slot. */}
+                        <header className="block-head" style={{ marginBottom: '0.5rem' }}>
+                            <span className="block-bullet">■</span>
+                            <h3>CYBER CONDITIONS</h3>
+                            <span className="block-line"></span>
+                            <span className={`status-pill ${agency.sweepPool > 0 ? 's-active' : 's-burned'}`}>
+                                SWEEP {agency.sweepPool || 0}
                             </span>
-                        </h3>
+                            {IS_ADMIN && (
+                                <button onClick={() => {
+                                    const input = prompt('Set agency Sweep & Clear pool:');
+                                    if (input === null) return;
+                                    const pool = parseInt(input);
+                                    if (isNaN(pool)) return;
+                                    saveAgencyQuiet({ sweepPool: pool });
+                                }} className="btn-cyber" style={{ fontSize: '0.65rem', padding: '0.15rem 0.5rem', marginLeft: '0.25rem' }}>
+                                    SET
+                                </button>
+                            )}
+                        </header>
                         {agency.sweepInfo && (
                             <div className="tech-border" style={{ padding: '0.75rem', marginBottom: '0.75rem', background: 'rgba(0,0,0,0.2)' }}>
                                 <div className="mono-text text-muted" style={{ fontSize: '0.7rem', marginBottom: '0.25rem' }}>
@@ -834,7 +836,7 @@ const {
                                     <div style={{ display: 'flex', gap: '2px' }}>
                                         {Array.from({ length: c.difficulty }, (_, i) => (
                                             <div key={i} style={{
-                                                flex: 1, height: 8, borderRadius: 2,
+                                                flex: 1, height: 8, borderRadius: 0,
                                                 background: i < c.sweepProgress ? 'var(--accent-success, #2ecc71)' : 'rgba(255,255,255,0.1)',
                                                 border: '1px solid var(--border-color)',
                                             }} />

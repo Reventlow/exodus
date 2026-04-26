@@ -106,6 +106,22 @@
         }
     };
 
+    // --- STATE -> CLEARANCE-GATE STATUS-PILL CLASS (Wave 3) ---
+    // active   -> s-active   (green)
+    // leave    -> s-standby  (amber)
+    // missing  -> s-burned   (danger)
+    // deceased -> s-inactive (cold)
+    const getStatePillClass = (state) => {
+        switch (state) {
+            case 'active': return 's-active';
+            case 'leave':
+            case 'medical_leave': return 's-standby';
+            case 'missing': return 's-burned';
+            case 'deceased': return 's-inactive';
+            default: return 's-inactive';
+        }
+    };
+
     // --- STATE DISPLAY LABELS ---
     const STATE_CHOICES = [
         { value: 'active', label: 'Active' },
@@ -133,7 +149,7 @@
                     onClick={e => e.stopPropagation()}
                     style={{
                         maxWidth: '90vw', maxHeight: '90vh', objectFit: 'contain',
-                        border: '2px solid var(--border-color)', borderRadius: '4px',
+                        border: '2px solid var(--border-color)', borderRadius: 0,
                         cursor: 'default',
                     }}
                 />
@@ -434,18 +450,19 @@
     // --- STATE MODULE ---
     const StateModule = ({ npc, onSave }) => {
         const stateColor = getStateColor(npc.state);
-        const stateLabel = STATE_CHOICES.find(s => s.value === npc.state)?.label || npc.state;
+        const stateLabel = (STATE_CHOICES.find(s => s.value === npc.state) || { label: npc.state }).label;
+        const pillClass = getStatePillClass(npc.state);
 
         if (!IS_EDITOR) {
             return (
                 <div className="glass-panel" style={{ padding: '1.5rem', marginBottom: '1rem' }}>
-                    <label className="text-secondary mono-text" style={{ fontSize: '0.8rem' }}>STATUS</label>
-                    <span className="mono-text" style={{
-                        display: 'block', marginTop: '0.25rem',
-                        color: stateColor, fontSize: '1rem',
-                        textTransform: 'uppercase'
-                    }}>
-                        {stateLabel}
+                    <header className="block-head" style={{ marginBottom: '0.6rem' }}>
+                        <span className="block-bullet">■</span>
+                        <h3>STATUS</h3>
+                        <span className="block-line"></span>
+                    </header>
+                    <span className={`status-pill ${pillClass}`} style={{ fontSize: '11px' }}>
+                        {(stateLabel || '').toUpperCase()}
                     </span>
                 </div>
             );
@@ -453,7 +470,12 @@
 
         return (
             <div className="glass-panel" style={{ padding: '1.5rem', marginBottom: '1rem' }}>
-                <label className="text-secondary mono-text" style={{ fontSize: '0.8rem' }}>STATUS</label>
+                <header className="block-head" style={{ marginBottom: '0.6rem' }}>
+                    <span className="block-bullet">■</span>
+                    <h3>STATUS</h3>
+                    <span className="block-line"></span>
+                    <span className={`status-pill ${pillClass}`}>{(stateLabel || '').toUpperCase()}</span>
+                </header>
                 <select
                     value={npc.state || 'active'}
                     onChange={e => onSave({ state: e.target.value })}
@@ -551,28 +573,20 @@
 
         return (
             <div className="glass-panel" style={{ padding: '1.5rem', marginBottom: '1rem' }}>
-                <div style={{
-                    display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-                    borderBottom: '1px solid var(--border-color)',
-                    paddingBottom: '0.5rem', marginBottom: '1rem'
-                }}>
-                    <h3 className="mono-text text-accent">DOSSIER</h3>
+                <header className="block-head" style={{ marginBottom: '1rem' }}>
+                    <span className="block-bullet">■</span>
+                    <h3>DOSSIER</h3>
+                    <span className="block-line"></span>
                     {IS_EDITOR && (
                         <button
                             onClick={() => setEditMode(!editMode)}
-                            className="mono-text"
-                            style={{
-                                background: 'transparent',
-                                border: '1px solid var(--accent-primary)',
-                                color: 'var(--accent-primary)',
-                                padding: '0.25rem 0.75rem',
-                                cursor: 'pointer', fontSize: '0.8rem'
-                            }}
+                            className="btn-cyber"
+                            style={{ padding: '0.25rem 0.75rem', fontSize: '0.7rem' }}
                         >
                             {editMode ? 'PREVIEW' : 'EDIT'}
                         </button>
                     )}
-                </div>
+                </header>
 
                 {editMode && IS_EDITOR ? (
                     <AutoSaveInput
@@ -694,12 +708,11 @@
 
         return (
             <div className="glass-panel" style={{ padding: '1.5rem', marginBottom: '1rem' }}>
-                <h3 className="mono-text text-accent" style={{
-                    borderBottom: '1px solid var(--border-color)',
-                    paddingBottom: '0.5rem', marginBottom: '1rem',
-                }}>
-                    <Icon name="sticky-note" size={16} /> FIELD NOTES
-                </h3>
+                <header className="block-head" style={{ marginBottom: '1rem' }}>
+                    <span className="block-bullet">■</span>
+                    <h3>PLAYER NOTES</h3>
+                    <span className="block-line"></span>
+                </header>
 
                 {/* Add note form */}
                 <div style={{ marginBottom: '1.5rem' }}>
@@ -974,7 +987,7 @@
                     </div>
                 )}
                 {result && (
-                    <div style={{ padding: '0.75rem', border: '1px solid var(--border-color)', background: 'rgba(0,0,0,0.2)', borderRadius: '4px' }}>
+                    <div style={{ padding: '0.75rem', border: '1px solid var(--border-color)', background: 'rgba(0,0,0,0.2)', borderRadius: 0 }}>
                         <div style={{ display: 'flex', gap: '4px', flexWrap: 'wrap', marginBottom: '0.5rem' }}>
                             {result.rolls.map((d, i) => (
                                 <span key={i} style={{
@@ -982,7 +995,7 @@
                                     border: '1px solid ' + (d >= 8 ? 'var(--accent-primary)' : 'var(--border-color)'),
                                     background: d >= 8 ? 'rgba(56, 189, 248, 0.15)' : 'transparent',
                                     color: d >= 8 ? 'var(--accent-primary)' : 'var(--text-muted)',
-                                    borderRadius: '3px', fontSize: '0.75rem', fontFamily: 'var(--font-mono)',
+                                    borderRadius: 0, fontSize: '0.75rem', fontFamily: 'var(--font-mono)',
                                 }}>{d}</span>
                             ))}
                         </div>
@@ -1005,10 +1018,11 @@
         };
         return (
             <div className="glass-panel" style={{ padding: '1.5rem', marginBottom: '1rem' }}>
-                <h3 className="mono-text text-accent" style={{
-                    borderBottom: '1px solid var(--border-color)',
-                    paddingBottom: '0.5rem', marginBottom: '1rem'
-                }}>ATTRIBUTES</h3>
+                <header className="block-head" style={{ marginBottom: '1rem' }}>
+                    <span className="block-bullet">■</span>
+                    <h3>ATTRIBUTES</h3>
+                    <span className="block-line"></span>
+                </header>
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '2rem' }}>
                     <div>
                         <div className="text-center text-muted mono-text" style={{ marginBottom: '0.5rem' }}>MENTAL</div>
@@ -1066,10 +1080,11 @@
         );
         return (
             <div className="glass-panel" style={{ padding: '1.5rem', marginBottom: '1rem' }}>
-                <h3 className="mono-text text-accent" style={{
-                    borderBottom: '1px solid var(--border-color)',
-                    paddingBottom: '0.5rem', marginBottom: '1rem'
-                }}>SKILLS</h3>
+                <header className="block-head" style={{ marginBottom: '1rem' }}>
+                    <span className="block-bullet">■</span>
+                    <h3>SKILLS</h3>
+                    <span className="block-line"></span>
+                </header>
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))', gap: '2rem' }}>
                     <SkillCol category="mental" title="Mental (-3 Unskilled)" />
                     <SkillCol category="physical" title="Physical (-1 Unskilled)" locked={lockPhysical} />
@@ -1088,10 +1103,11 @@
         const healthMax = attrs.resistance.physical + (npc.size || 5);
         return (
             <div className="glass-panel" style={{ padding: '1.5rem', marginBottom: '1rem' }}>
-                <h3 className="mono-text text-accent" style={{
-                    borderBottom: '1px solid var(--border-color)',
-                    paddingBottom: '0.5rem', marginBottom: '1rem'
-                }}>DERIVED TRAITS</h3>
+                <header className="block-head" style={{ marginBottom: '1rem' }}>
+                    <span className="block-bullet">■</span>
+                    <h3>DERIVED TRAITS</h3>
+                    <span className="block-line"></span>
+                </header>
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: '1rem' }}>
                     <div className="tech-border text-center" style={{ padding: '0.5rem' }}>
                         <div className="text-secondary mono-text" style={{ fontSize: '0.8rem' }}>HEALTH</div>
@@ -1160,12 +1176,15 @@
         const penalties = getMentalLoadPenalties(mentalLoad, mlMax);
         return (
             <div className="glass-panel" style={{ padding: '1.5rem', marginBottom: '1rem', border: '1px solid var(--accent-danger)' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem', flexWrap: 'wrap', gap: '0.5rem' }}>
-                    <h3 className="mono-text text-danger">BIOSIGN MONITOR</h3>
-                    <div className="text-danger mono-text" style={{ animation: isFlatline ? 'none' : 'pulse 2s infinite' }}>
-                        {isFlatline ? 'NO VITAL SIGNS DETECTED' : 'Tracking vital signs...'}
-                    </div>
-                </div>
+                <header className="block-head" style={{ marginBottom: '1rem' }}>
+                    <span className="block-bullet" style={{ color: 'var(--accent-danger)' }}>■</span>
+                    <h3 style={{ color: 'var(--accent-danger)' }}>BIOSIGN MONITOR</h3>
+                    <span className="block-line"></span>
+                    <span className={`status-pill ${isFlatline ? 's-burned' : 's-active'}`}
+                          style={{ animation: isFlatline ? 'none' : 'pulse 2s infinite' }}>
+                        {isFlatline ? 'NO VITAL SIGNS' : 'TRACKING'}
+                    </span>
+                </header>
                 <div style={{ height: '60px', background: 'rgba(0,0,0,0.3)', marginBottom: '1rem', position: 'relative', overflow: 'hidden', borderLeft: '2px solid ' + ekgColor }}>
                     <svg width="100%" height="100%" viewBox="0 0 300 60" preserveAspectRatio="none">
                         <path d={ekgPath} fill="none" stroke={ekgColor} strokeWidth="2" vectorEffect="non-scaling-stroke"
@@ -1248,16 +1267,16 @@
         const [expanded, setExpanded] = useState({});
         return (
             <div className="glass-panel" style={{ padding: '1.5rem', marginBottom: '1rem' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
-                    <h3 className="mono-text text-accent" style={{ borderBottom: '1px solid var(--border-color)', paddingBottom: '0.5rem', flex: 1 }}>
-                        {title} ({items.length})
-                    </h3>
-                    <button onClick={onAdd} style={{
-                        background: 'transparent', border: '1px solid var(--accent-primary)',
-                        color: 'var(--accent-primary)', padding: '0.3rem 0.75rem', cursor: 'pointer',
-                        fontFamily: 'var(--font-mono)', fontSize: '0.8rem', marginLeft: '1rem',
-                    }}>+ ADD</button>
-                </div>
+                <header className="block-head" style={{ marginBottom: '1rem' }}>
+                    <span className="block-bullet">■</span>
+                    <h3>{title}</h3>
+                    <span className="block-line"></span>
+                    <span className="block-badge">{items.length}</span>
+                    <button onClick={onAdd} className="btn-cyber"
+                        style={{ padding: '0.25rem 0.6rem', fontSize: '0.7rem', marginLeft: '0.5rem' }}>
+                        + ADD
+                    </button>
+                </header>
                 {items.map((item, idx) => (
                     <div key={idx} className="tech-border" style={{ padding: '0.75rem', marginBottom: '0.5rem' }}>
                         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', cursor: 'pointer' }}
@@ -1389,16 +1408,18 @@
 
         return (
             <div style={{ marginTop: '1rem' }}>
-                <h3 className="mono-text text-accent" style={{
-                    borderBottom: '2px solid var(--accent-primary)',
-                    paddingBottom: '0.5rem', marginBottom: '1rem', fontSize: '1.1rem'
-                }}>{readOnly ? 'OPERATIVE STATS' : 'OPERATIVE STATS (ADMIN ONLY)'}</h3>
+                <header className="block-head" style={{ marginBottom: '1rem' }}>
+                    <span className="block-bullet">■</span>
+                    <h3>OPERATIVE STATS</h3>
+                    <span className="block-line"></span>
+                    {!readOnly && <span className="block-badge">ADMIN</span>}
+                </header>
 
                 {isAi && (
                     <div style={{
                         background: lockPhysical ? 'rgba(255,100,100,0.1)' : 'rgba(0,255,136,0.1)',
                         border: `1px solid ${lockPhysical ? 'var(--accent-danger)' : 'var(--accent-primary)'}`,
-                        borderRadius: '4px', padding: '0.75rem', marginBottom: '1rem',
+                        borderRadius: 0, padding: '0.75rem', marginBottom: '1rem',
                         fontSize: '0.8rem', color: lockPhysical ? 'var(--accent-danger)' : 'var(--text-accent)'
                     }}>
                         <strong className="mono-text">AI ENTITY</strong>
@@ -1426,15 +1447,16 @@
                     const remaining = (npc.experience || 0) - totalUsed;
                     return (
                         <div className="glass-panel" style={{ padding: '1.5rem', marginBottom: '1rem' }}>
-                            <h3 className="mono-text text-accent" style={{
-                                borderBottom: '1px solid var(--border-color)',
-                                paddingBottom: '0.5rem', marginBottom: '1rem'
-                            }}>EXPERIENCE</h3>
+                            <header className="block-head" style={{ marginBottom: '1rem' }}>
+                                <span className="block-bullet">■</span>
+                                <h3>EXPERIENCE</h3>
+                                <span className="block-line"></span>
+                            </header>
 
                             {creation.messages.length > 0 && (
                                 <div style={{
                                     background: 'rgba(255,200,0,0.1)', border: '1px solid var(--accent-warning)',
-                                    borderRadius: '4px', padding: '0.75rem', marginBottom: '1rem',
+                                    borderRadius: 0, padding: '0.75rem', marginBottom: '1rem',
                                     fontSize: '0.8rem', color: 'var(--accent-warning)'
                                 }}>
                                     <strong className="mono-text">CREATION INCOMPLETE</strong>
@@ -1521,7 +1543,7 @@
                                     return (
                                         <div key={i} style={{ position: 'relative' }}>
                                             <div style={{
-                                                width: 24, height: 24, borderRadius: '3px',
+                                                width: 24, height: 24, borderRadius: 0,
                                                 border: '1px solid ' + (isLast4 ? 'var(--accent-danger, #c0392b)' : 'var(--border-color)'),
                                                 background: 'transparent',
                                                 display: 'flex', alignItems: 'center', justifyContent: 'center',
@@ -1551,23 +1573,22 @@
                         );
                         return (
                             <div className="glass-panel" style={{ padding: '1rem', marginBottom: '0.5rem' }}>
-                                <h4 className="mono-text text-accent" style={{
-                                    borderBottom: '1px solid var(--border-color)',
-                                    paddingBottom: '0.5rem', marginBottom: '0.5rem',
-                                    display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.85rem'
-                                }}>
-                                    PULLING STRINGS
+                                <header className="block-head" style={{ marginBottom: '0.6rem' }}>
+                                    <span className="block-bullet">■</span>
+                                    <h3>PULLING STRINGS</h3>
+                                    <span className="block-line"></span>
+                                    <span className="block-badge">{(npc.pullingStrings || []).length}</span>
                                     {!readOnly && <button onClick={() => setShowPsPicker(!showPsPicker)} style={{
                                         background: 'transparent', border: '1px solid var(--accent-primary)',
                                         color: 'var(--accent-primary)', width: '20px', height: '20px',
-                                        borderRadius: '3px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                        borderRadius: 0, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', marginLeft: '0.4rem',
                                     }}>{showPsPicker ? '×' : '+'}</button>}
-                                </h4>
+                                </header>
                                 {showPsPicker && (
-                                    <div style={{ border: '1px solid var(--accent-primary)', borderRadius: '3px', padding: '0.5rem', marginBottom: '0.5rem', background: 'rgba(0,0,0,0.3)', maxHeight: '200px', overflowY: 'auto' }}>
+                                    <div style={{ border: '1px solid var(--accent-primary)', borderRadius: 0, padding: '0.5rem', marginBottom: '0.5rem', background: 'rgba(0,0,0,0.3)', maxHeight: '200px', overflowY: 'auto' }}>
                                         {available.map(ps => (
                                             <div key={ps.id} onClick={() => { onSave({ addPullingString: { pullingStringId: ps.id } }); setShowPsPicker(false); setTimeout(onRefresh, 500); }}
-                                                style={{ padding: '0.3rem 0.5rem', marginBottom: '0.2rem', background: 'rgba(0,0,0,0.2)', borderRadius: '3px', cursor: 'pointer', display: 'flex', justifyContent: 'space-between' }}>
+                                                style={{ padding: '0.3rem 0.5rem', marginBottom: '0.2rem', background: 'rgba(0,0,0,0.2)', borderRadius: 0, cursor: 'pointer', display: 'flex', justifyContent: 'space-between' }}>
                                                 <span className="mono-text" style={{ fontSize: '0.8rem' }}>{ps.name}</span>
                                                 <span className="text-accent mono-text" style={{ fontSize: '0.75rem' }}>{ps.cost} XP</span>
                                             </div>
@@ -1604,23 +1625,22 @@
                         );
                         return (
                             <div className="glass-panel" style={{ padding: '1rem', marginBottom: '0.5rem' }}>
-                                <h4 className="mono-text text-accent" style={{
-                                    borderBottom: '1px solid var(--border-color)',
-                                    paddingBottom: '0.5rem', marginBottom: '0.5rem',
-                                    display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.85rem'
-                                }}>
-                                    MERITS
+                                <header className="block-head" style={{ marginBottom: '0.6rem' }}>
+                                    <span className="block-bullet">■</span>
+                                    <h3>MERITS</h3>
+                                    <span className="block-line"></span>
+                                    <span className="block-badge">{(npc.merits || []).length}</span>
                                     {!readOnly && <button onClick={() => setShowMeritPicker(!showMeritPicker)} style={{
                                         background: 'transparent', border: '1px solid var(--accent-primary)',
                                         color: 'var(--accent-primary)', width: '20px', height: '20px',
-                                        borderRadius: '3px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                        borderRadius: 0, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', marginLeft: '0.4rem',
                                     }}>{showMeritPicker ? '×' : '+'}</button>}
-                                </h4>
+                                </header>
                                 {showMeritPicker && (
-                                    <div style={{ border: '1px solid var(--accent-primary)', borderRadius: '3px', padding: '0.5rem', marginBottom: '0.5rem', background: 'rgba(0,0,0,0.3)', maxHeight: '200px', overflowY: 'auto' }}>
+                                    <div style={{ border: '1px solid var(--accent-primary)', borderRadius: 0, padding: '0.5rem', marginBottom: '0.5rem', background: 'rgba(0,0,0,0.3)', maxHeight: '200px', overflowY: 'auto' }}>
                                         {available.map(m => (
                                             <div key={m.id} onClick={() => { onSave({ addMerit: { meritId: m.id, rating: m.cost } }); setShowMeritPicker(false); setTimeout(onRefresh, 500); }}
-                                                style={{ padding: '0.3rem 0.5rem', marginBottom: '0.2rem', background: 'rgba(0,0,0,0.2)', borderRadius: '3px', cursor: 'pointer', display: 'flex', justifyContent: 'space-between' }}>
+                                                style={{ padding: '0.3rem 0.5rem', marginBottom: '0.2rem', background: 'rgba(0,0,0,0.2)', borderRadius: 0, cursor: 'pointer', display: 'flex', justifyContent: 'space-between' }}>
                                                 <span className="mono-text" style={{ fontSize: '0.8rem' }}>{m.name}</span>
                                                 <span className="text-accent mono-text" style={{ fontSize: '0.75rem' }}>
                                                     {m.minCost === m.cost ? m.cost : `${m.minCost}-${m.cost}`} dots
@@ -1775,10 +1795,12 @@
                 padding: '1.5rem', marginBottom: '1rem',
                 border: '1px solid var(--accent-danger)'
             }}>
-                <h3 className="mono-text text-danger" style={{
-                    borderBottom: '1px solid var(--border-color)',
-                    paddingBottom: '0.5rem', marginBottom: '1rem'
-                }}>ADMIN PANEL</h3>
+                <header className="block-head" style={{ marginBottom: '1rem' }}>
+                    <span className="block-bullet" style={{ color: 'var(--accent-danger)' }}>■</span>
+                    <h3 style={{ color: 'var(--accent-danger)' }}>ADMIN PANEL</h3>
+                    <span className="block-line"></span>
+                    <span className="status-pill s-burned">RESTRICTED</span>
+                </header>
 
                 {/* Hidden toggle */}
                 <div style={{ marginBottom: '1.5rem' }}>
@@ -2165,56 +2187,61 @@
             );
         }
 
+        // Wave 3: kicker assembled from class / nationality / agency for the header
+        const classLabel = npc.characterClass === 'classified'
+            ? 'CLASSIFIED'
+            : (npc.characterClass ? npc.characterClass.toUpperCase() : 'UNCLASSED');
+        const natLabel = npc.nationality ? npc.nationality.toUpperCase() : null;
+        const kickerParts = [IS_NPC_DOSSIER ? 'OPERATIVE' : 'CONTACT', classLabel];
+        if (natLabel) kickerParts.push(natLabel);
+        const subLabel = npc.occupation || (IS_NPC_DOSSIER ? 'NPC DOSSIER' : 'PLAYER CONTACT');
+        const pillClass = getStatePillClass(npc.state);
+        const stateLabel = (STATE_CHOICES.find(s => s.value === npc.state) || { label: 'UNKNOWN' }).label.toUpperCase();
+
         return (
             <div className="fade-in">
-                {/* Sub-header with save status */}
-                <div style={{
-                    display: 'flex', flexWrap: 'wrap', justifyContent: 'space-between', alignItems: 'center',
-                    marginBottom: '1rem', paddingBottom: '0.5rem',
-                    gap: '0.5rem',
-                    borderBottom: '1px solid var(--border-color)'
+                {/* Wave 3 authority frame: bracket card with kicker / title / sub */}
+                <div className="brackets" style={{
+                    position: 'relative', padding: '32px 36px', marginBottom: '1rem',
                 }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-                        <h2 className="mono-text text-accent" style={{ fontSize: '1.2rem' }}>
-                            {IS_NPC_DOSSIER ? 'NPC DOSSIER' : 'CONTACT DOSSIER'}
-                        </h2>
-                        {IS_NPC_DOSSIER && npc.agencyName && (
-                            <span className="mono-text" style={{
-                                fontSize: '0.75rem', color: 'var(--accent-warning)',
-                                border: '1px solid var(--accent-warning)',
-                                padding: '0.15rem 0.5rem',
-                            }}>
-                                {npc.agencyName}
-                            </span>
-                        )}
-                        {npc.isHidden && (
-                            <span className="mono-text" style={{
-                                fontSize: '0.75rem', color: 'var(--accent-danger)',
-                                border: '1px solid var(--accent-danger)',
-                                padding: '0.15rem 0.5rem',
-                            }}>
-                                HIDDEN
-                            </span>
-                        )}
-                    </div>
-                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem', alignItems: 'center' }}>
-                        {!IS_EDITOR && (
-                            <span className="mono-text" style={{
-                                fontSize: '0.8rem', padding: '0.25rem 0.75rem',
-                                border: '1px solid var(--text-muted)',
-                                color: 'var(--text-muted)'
-                            }}>READ ONLY</span>
-                        )}
-                        {IS_EDITOR && <SaveStatus status={saveStatus} />}
-                        <a href="/npcs/"
-                            className="mono-text"
-                            style={{
-                                background: 'transparent', border: '1px solid var(--accent-primary)',
-                                color: 'var(--accent-primary)', padding: '0.5rem 1rem',
-                                cursor: 'pointer', textDecoration: 'none', fontSize: '0.9rem'
-                            }}>
-                            &lt; CLOSE RECORD
-                        </a>
+                    <span className="bk tl"></span><span className="bk tr"></span>
+                    <span className="bk bl"></span><span className="bk br"></span>
+
+                    <header style={{ marginBottom: '1rem' }}>
+                        <div className="kicker">{kickerParts.join(' // ')}</div>
+                        <h1 className="title" style={{ fontSize: '52px' }}>
+                            <span>{npc.name || 'UNKNOWN'}</span>
+                        </h1>
+                        <div className="sub">{subLabel}</div>
+                    </header>
+
+                    {/* Status row: state pill + agency + hidden + save / close */}
+                    <div style={{
+                        display: 'flex', flexWrap: 'wrap', justifyContent: 'space-between', alignItems: 'center',
+                        gap: '0.5rem',
+                    }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
+                            <span className={`status-pill ${pillClass}`}>{stateLabel}</span>
+                            {IS_NPC_DOSSIER && npc.agencyName && (
+                                <span className="status-pill s-standby">{npc.agencyName}</span>
+                            )}
+                            {npc.isHidden && (
+                                <span className="status-pill s-burned">HIDDEN</span>
+                            )}
+                            {npc.classClassified && (
+                                <span className="status-pill s-burned">CLASS REDACTED</span>
+                            )}
+                        </div>
+                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem', alignItems: 'center' }}>
+                            {!IS_EDITOR && (
+                                <span className="status-pill s-inactive">READ ONLY</span>
+                            )}
+                            {IS_EDITOR && <SaveStatus status={saveStatus} />}
+                            <a href="/npcs/"
+                                className="btn-cyber">
+                                &lt; CLOSE RECORD
+                            </a>
+                        </div>
                     </div>
                 </div>
 
@@ -2232,10 +2259,13 @@
                 <StateModule npc={npc} onSave={updateNPC} />
 
                 {npc.state === 'compromised' && (
-                    <div className="glass-panel" style={{ padding: '1rem', marginBottom: '1rem', borderLeft: '3px solid var(--accent-danger, #c0392b)' }}>
-                        <h4 className="mono-text" style={{ color: 'var(--accent-danger, #c0392b)', fontSize: '0.85rem', marginBottom: '0.5rem' }}>
-                            ⚠ COMPROMISED — UNDERGROUND
-                        </h4>
+                    <div className="glass-panel" style={{ padding: '1rem', marginBottom: '1rem', borderLeft: '3px solid var(--accent-danger)' }}>
+                        <header className="block-head" style={{ marginBottom: '0.5rem' }}>
+                            <span className="block-bullet" style={{ color: 'var(--accent-danger)' }}>■</span>
+                            <h3 style={{ color: 'var(--accent-danger)' }}>COMPROMISED — UNDERGROUND</h3>
+                            <span className="block-line"></span>
+                            <span className="status-pill s-burned">REDACTED</span>
+                        </header>
                         <div className="text-secondary" style={{ fontSize: '0.8rem' }}>
                             Detected by: <span className="mono-text text-accent">{npc.detectedByAgency || 'Unknown'}</span>
                         </div>
@@ -2258,7 +2288,12 @@
                     <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: '1rem' }}>
                         {(npc.pullingStrings || []).length > 0 && (
                             <div className="glass-panel" style={{ padding: '1rem' }}>
-                                <h4 className="mono-text text-accent" style={{ borderBottom: '1px solid var(--border-color)', paddingBottom: '0.5rem', marginBottom: '0.5rem', fontSize: '0.85rem' }}>PULLING STRINGS</h4>
+                                <header className="block-head" style={{ marginBottom: '0.6rem' }}>
+                                    <span className="block-bullet">■</span>
+                                    <h3>PULLING STRINGS</h3>
+                                    <span className="block-line"></span>
+                                    <span className="block-badge">{npc.pullingStrings.length}</span>
+                                </header>
                                 {npc.pullingStrings.map(ps => (
                                     <div key={ps.id} className="tech-border" style={{ padding: '0.5rem', marginBottom: '0.3rem', background: 'rgba(0,0,0,0.2)' }}>
                                         <div style={{ display: 'flex', justifyContent: 'space-between' }}>
@@ -2272,7 +2307,12 @@
                         )}
                         {(npc.merits || []).length > 0 && (
                             <div className="glass-panel" style={{ padding: '1rem' }}>
-                                <h4 className="mono-text text-accent" style={{ borderBottom: '1px solid var(--border-color)', paddingBottom: '0.5rem', marginBottom: '0.5rem', fontSize: '0.85rem' }}>MERITS</h4>
+                                <header className="block-head" style={{ marginBottom: '0.6rem' }}>
+                                    <span className="block-bullet">■</span>
+                                    <h3>MERITS</h3>
+                                    <span className="block-line"></span>
+                                    <span className="block-badge">{npc.merits.length}</span>
+                                </header>
                                 {npc.merits.map(m => (
                                     <div key={m.id} className="tech-border" style={{ padding: '0.5rem', marginBottom: '0.3rem', background: 'rgba(0,0,0,0.2)' }}>
                                         <div style={{ display: 'flex', justifyContent: 'space-between' }}>

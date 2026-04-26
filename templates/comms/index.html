@@ -3,7 +3,11 @@
 {% block title %}COMMS // EXODUS{% endblock %}
 
 {% block content %}
-<div id="comms-root" style="height: calc(100vh - 80px); padding: var(--grid-spacing);"></div>
+<div class="brackets" style="position: relative; padding: 0; margin: var(--grid-spacing); height: calc(100vh - 80px - 2 * var(--grid-spacing));">
+    <span class="bk tl"></span><span class="bk tr"></span>
+    <span class="bk bl"></span><span class="bk br"></span>
+    <div id="comms-root" style="height: 100%;"></div>
+</div>
 
 <!-- Django variables injected before verbatim block -->
 <script>
@@ -93,33 +97,35 @@ const modalOverlay = {
 };
 
 const modalPanel = {
-  background: "var(--bg-panel)", border: "1px solid var(--border-color)",
-  borderRadius: "var(--radius-md)", width: "90%", maxWidth: 420,
+  // Square edges align with the bracket-frame chrome shipped in Wave 1.
+  background: "var(--bg-panel)", border: "1px solid var(--c-dim)",
+  borderRadius: 0, width: "90%", maxWidth: 420,
   maxHeight: "80vh", overflow: "hidden", display: "flex", flexDirection: "column",
+  boxShadow: "0 0 0 1px rgba(0,0,0,0.6), 0 30px 80px rgba(0,0,0,0.55), inset 0 0 1px var(--c-soft)",
 };
 
 const inputStyle = {
   width: "100%", padding: "0.5rem 0.75rem", background: "var(--bg-input)",
-  border: "1px solid var(--border-color)", borderRadius: "var(--radius-sm)",
+  border: "1px solid var(--c-dim)", borderRadius: 0,
   color: "var(--text-primary)", fontFamily: "var(--font-main)", fontSize: "0.85rem",
   outline: "none",
 };
 
 const btnPrimary = {
-  padding: "0.5rem 1rem", background: "var(--accent-primary)", color: "var(--bg-dark)",
-  border: "none", borderRadius: "var(--radius-sm)", cursor: "pointer",
+  padding: "0.5rem 1rem", background: "var(--c-primary)", color: "var(--bg-dark)",
+  border: "none", borderRadius: 0, cursor: "pointer",
   fontFamily: "var(--font-mono)", fontWeight: "bold", fontSize: "0.8rem",
   letterSpacing: "0.05em",
 };
 
 const btnGhost = {
   padding: "0.5rem 1rem", background: "transparent",
-  border: "1px solid var(--border-color)", borderRadius: "var(--radius-sm)",
+  border: "1px solid var(--c-dim)", borderRadius: 0,
   color: "var(--text-secondary)", cursor: "pointer", fontSize: "0.8rem",
 };
 
 const sectionHeader = {
-  padding: "1rem", borderBottom: "1px solid var(--border-color)",
+  padding: "1rem", borderBottom: "1px solid var(--c-dim)",
 };
 
 const sectionBody = {
@@ -127,7 +133,7 @@ const sectionBody = {
 };
 
 const sectionFooter = {
-  padding: "1rem", borderTop: "1px solid var(--border-color)",
+  padding: "1rem", borderTop: "1px solid var(--c-dim)",
   display: "flex", justifyContent: "flex-end", gap: "0.5rem",
 };
 
@@ -162,9 +168,13 @@ function NewThreadModal({ users, dossiers, onClose, onCreate }) {
     <div style={modalOverlay} onClick={onClose}>
       <div style={modalPanel} onClick={e => e.stopPropagation()}>
         <div style={sectionHeader}>
-          <h3 className="mono-text text-accent" style={S.modalTitle}>
-            NEW THREAD
-          </h3>
+          {/* block-head pattern: bullet + heading + divider line + thread badge */}
+          <div className="block-head">
+            <span className="block-bullet">{"●"}</span>
+            <h3>NEW THREAD</h3>
+            <span className="block-line"></span>
+            <span className="block-badge">DRAFT</span>
+          </div>
         </div>
         <div style={sectionBody}>
           <input
@@ -273,7 +283,13 @@ function MemberManager({ thread, users, onClose, onAddMember, onRemoveMember }) 
     <div style={modalOverlay} onClick={onClose}>
       <div style={modalPanel} onClick={e => e.stopPropagation()}>
         <div style={sectionHeader}>
-          <h3 className="mono-text text-accent" style={S.modalTitle}>MEMBERS</h3>
+          {/* PARTICIPANTS panel header: block-head + count badge */}
+          <div className="block-head">
+            <span className="block-bullet">{"●"}</span>
+            <h3>PARTICIPANTS</h3>
+            <span className="block-line"></span>
+            <span className="block-badge">{String(thread.members.length).padStart(2, "0")}</span>
+          </div>
         </div>
         <div style={Object.assign({}, sectionBody, {gap: "0.5rem"})}>
           {thread.members.map(m => (
@@ -281,7 +297,8 @@ function MemberManager({ thread, users, onClose, onAddMember, onRemoveMember }) 
               <span style={S.userName}>
                 {m.displayName}
                 {m.id === thread.creator && (
-                  <span className="text-accent" style={S.ownerBadge}>OWNER</span>
+                  // OWNER tag — re-skinned as a status-pill in the active palette.
+                  <span className="status-pill s-active" style={S.ownerBadge}>OWNER</span>
                 )}
               </span>
               {canManage && m.id !== thread.creator && (
@@ -962,7 +979,7 @@ function MessageInput({ onSend, dossiers, postingAs, onPostingAsChange, cyberEli
     <div style={S.inputBarWrap}>
       {IS_STAFF && dossiers && dossiers.length > 0 && (
         <div style={S.postingAsBar}>
-          <label className="mono-text text-muted" style={S.postingAsLabel}>POST AS:</label>
+          <label className="kicker" style={S.postingAsLabel}>POST AS:</label>
           <select
             value={postingAs ? `${postingAs.type}:${postingAs.id}` : "self:0"}
             onChange={e => {
@@ -987,16 +1004,18 @@ function MessageInput({ onSend, dossiers, postingAs, onPostingAsChange, cyberEli
       {imagePreview && (
         <div style={{
           padding: "0.5rem", background: "rgba(0,0,0,0.3)",
-          borderBottom: "1px solid var(--border-color)",
+          borderBottom: "1px solid var(--c-dim)",
           display: "flex", alignItems: "center", gap: "0.5rem"
         }}>
+          {/* Attachment chip — square edges; thumbnail content untouched. */}
           <img src={imagePreview} style={{
-            maxHeight: "60px", maxWidth: "100px", borderRadius: "4px",
-            border: "1px solid var(--border-color)"
+            maxHeight: "60px", maxWidth: "100px", borderRadius: 0,
+            border: "1px solid var(--c-dim)"
           }} />
-          <span className="mono-text text-muted" style={{ fontSize: "0.75rem", flex: 1 }}>
-            {pendingImage?.name}
+          <span className="status-pill s-active">
+            ATTACHED {pendingImage && pendingImage.name ? "// " + pendingImage.name : ""}
           </span>
+          <span style={{flex: 1}} />
           <button onClick={clearImage} style={{
             background: "transparent", border: "none",
             color: "var(--accent-danger)", cursor: "pointer",
@@ -1005,29 +1024,26 @@ function MessageInput({ onSend, dossiers, postingAs, onPostingAsChange, cyberEli
         </div>
       )}
       <div style={S.inputBar}>
-        <button onClick={() => fileRef.current?.click()} title="Attach image" style={{
-          background: "transparent", border: "1px solid var(--border-color)",
-          color: "var(--text-muted)", padding: "0.4rem 0.6rem", cursor: "pointer",
-          borderRadius: "4px", fontSize: "1rem", lineHeight: 1,
-        }}>&#128247;</button>
-        {cyberEligible && !(postingAs && postingAs.type === "gm") && (
-          <button onClick={onOpenTerminal} title="Cyber Terminal" style={{
-            background: "transparent", border: "1px solid #0a3",
-            color: "#0f0", padding: "0.4rem 0.6rem", cursor: "pointer",
-            borderRadius: "4px", fontFamily: "var(--font-mono)", fontSize: "0.8rem",
-            lineHeight: 1,
-          }}>&gt;_</button>
-        )}
-        <input ref={fileRef} type="file" accept="image/*"
-          onChange={handleFileSelect} style={{ display: "none" }} />
-        <textarea
-          value={text}
-          onChange={e => setText(e.target.value)}
-          onKeyDown={handleKeyDown}
-          placeholder={postingAs ? `Posting as ${postingAs.name}...` : "Type message..."}
-          rows={1}
-          style={Object.assign({}, inputStyle, {flex: 1, resize: "none"})}
-        />
+        {/* field-wrap recipe — login form parity: prompt glyph + transparent input + accent caret on focus */}
+        <div className="field-wrap" style={S.composeFieldWrap}>
+          <span className="field-prompt">&gt;</span>
+          <button onClick={() => fileRef.current && fileRef.current.click()} title="Attach image" style={S.composeIconBtn}>&#128247;</button>
+          {cyberEligible && !(postingAs && postingAs.type === "gm") && (
+            <button onClick={onOpenTerminal} title="Cyber Terminal" style={S.composeCyberBtn}>&gt;_</button>
+          )}
+          <input ref={fileRef} type="file" accept="image/*"
+            onChange={handleFileSelect} style={{ display: "none" }} />
+          <textarea
+            className="field-input"
+            value={text}
+            onChange={e => setText(e.target.value)}
+            onKeyDown={handleKeyDown}
+            placeholder={postingAs ? `Posting as ${postingAs.name}...` : "Type message..."}
+            rows={1}
+            style={S.composeTextarea}
+          />
+          <span className="field-caret"></span>
+        </div>
         <button onClick={submit} style={btnPrimary}>TRANSMIT</button>
       </div>
     </div>
@@ -1085,6 +1101,7 @@ function ThreadView({ thread, onSend, onBack, onOpenMembers, onDeleteThread, onR
     if (onRefreshThread) onRefreshThread();
   };
 
+  const messageCount = (thread.messages || []).length;
   return (
     <div style={S.threadViewContainer}>
       {/* Header */}
@@ -1098,7 +1115,7 @@ function ThreadView({ thread, onSend, onBack, onOpenMembers, onDeleteThread, onR
                 onKeyDown={e => { if (e.key === "Enter") saveTitle(); if (e.key === "Escape") setEditingTitle(false); }}
                 autoFocus
                 style={{
-                  flex: 1, background: "transparent", border: "1px solid var(--accent-color)",
+                  flex: 1, background: "transparent", border: "1px solid var(--c-primary)",
                   color: "var(--text-primary)", padding: "0.3rem 0.5rem",
                   fontFamily: "var(--font-mono)", fontSize: "0.85rem",
                 }} />
@@ -1106,14 +1123,18 @@ function ThreadView({ thread, onSend, onBack, onOpenMembers, onDeleteThread, onR
               <button onClick={() => setEditingTitle(false)} className="mono-text" style={{ ...S.rosterBtn, fontSize: "0.65rem", padding: "0.2rem 0.5rem", color: "#888", borderColor: "#888" }}>ESC</button>
             </div>
           ) : (
-            <h2 className="mono-text text-accent" style={S.threadTitle}>
-              {threadTitle}
+            // block-head pattern wraps the thread title with a [N MESSAGES] badge.
+            <div className="block-head" style={S.threadTitleBlockHead}>
+              <span className="block-bullet">{"●"}</span>
+              <h3 style={S.threadTitleH3} title={threadTitle}>{threadTitle}</h3>
+              <span className="block-line"></span>
+              <span className="block-badge">{String(messageCount).padStart(2, "0") + " MSG"}</span>
               {IS_STAFF && (
                 <span onClick={() => { setTitleDraft(thread.title || ""); setEditingTitle(true); }}
-                  style={{ cursor: "pointer", marginLeft: "0.5rem", fontSize: "0.65rem", opacity: 0.5 }}
+                  style={{ cursor: "pointer", marginLeft: "0.25rem", fontSize: "0.7rem", opacity: 0.6 }}
                   title="Edit thread title">&#9998;</span>
               )}
-            </h2>
+            </div>
           )}
           <div style={S.memberPortraits}>
             {thread.members.map(m => (
@@ -1158,9 +1179,10 @@ function ThreadView({ thread, onSend, onBack, onOpenMembers, onDeleteThread, onR
             : null;
 
           if (isSystem) {
+            // System message is treated like a burned-status pill: square edges, danger palette.
             return (
               <div key={msg.id} style={S.systemMsgRow}>
-                <div style={S.systemMsgBubble}>
+                <div className="s-burned" style={S.systemMsgBubble}>
                   <span style={S.systemMsgText}>{msg.content}</span>
                 </div>
               </div>
@@ -1211,9 +1233,9 @@ function ThreadView({ thread, onSend, onBack, onOpenMembers, onDeleteThread, onR
                         e.stopPropagation();
                         setLightboxImage(msg.image);
                       }} style={{
-                        maxWidth: "250px", maxHeight: "200px", borderRadius: "4px",
+                        maxWidth: "250px", maxHeight: "200px", borderRadius: 0,
                         marginTop: msg.content ? "0.4rem" : 0,
-                        cursor: "pointer", border: "1px solid var(--border-color)",
+                        cursor: "pointer", border: "1px solid var(--c-dim)",
                       }} />
                     )}
                   </>
@@ -1266,7 +1288,7 @@ function ThreadView({ thread, onSend, onBack, onOpenMembers, onDeleteThread, onR
         }}>
           <img src={lightboxImage} onClick={e => e.stopPropagation()} style={{
             maxWidth: "90vw", maxHeight: "90vh", objectFit: "contain",
-            border: "2px solid var(--border-color)", borderRadius: "4px", cursor: "default",
+            border: "2px solid var(--c-primary)", borderRadius: 0, cursor: "default",
           }} />
         </div>,
         document.body
@@ -1280,10 +1302,21 @@ function ThreadView({ thread, onSend, onBack, onOpenMembers, onDeleteThread, onR
 // ---------------------------------------------------------------------------
 
 function ThreadList({ threads, activeId, onSelect, onNewThread, intercepted }) {
+  // Aggregate unread across visible threads — feeds the [N UNREAD] badge.
+  const totalUnread = threads.reduce((sum, t) => sum + (t.unreadCount || 0), 0);
+  const badgeText = totalUnread > 0
+    ? (String(totalUnread).padStart(2, "0") + " UNREAD")
+    : (String(threads.length).padStart(2, "0") + " THREADS");
   return (
     <div style={S.threadListContainer}>
       <div style={S.threadListHeader}>
-        <span className="mono-text text-accent" style={S.threadListTitle}>CHANNELS</span>
+        {/* block-head pattern: bullet + h3 + line + badge + new-thread btn */}
+        <div className="block-head" style={{flex: 1}}>
+          <span className="block-bullet">{"●"}</span>
+          <h3>CHANNELS</h3>
+          <span className="block-line"></span>
+          <span className="block-badge">{badgeText}</span>
+        </div>
         <button onClick={onNewThread} style={Object.assign({}, btnPrimary, {padding: "0.3rem 0.75rem", fontSize: "0.7rem"})}>
           + NEW
         </button>
@@ -1298,22 +1331,27 @@ function ThreadList({ threads, activeId, onSelect, onNewThread, intercepted }) {
             "Channel";
           const title = (t.isConnectionClosed ? "🔒 " : "") + rawTitle;
           const isActive = t.id === activeId;
+          // Active rail-item treatment matches GM workspace sidebar.
           const itemStyle = Object.assign({}, S.threadItem, {
-            borderLeft: isActive ? "2px solid var(--accent-primary)" : "2px solid transparent",
-            background: isActive ? "rgba(56, 189, 248, 0.05)" : "transparent",
+            borderLeft: isActive ? "2px solid var(--c-primary)" : "2px solid transparent",
+            background: isActive ? "var(--c-soft)" : "transparent",
+            textShadow: isActive ? "0 0 6px var(--c-glow)" : "none",
           });
           return (
             <div key={t.id}
               onClick={() => onSelect(t.id)}
               style={itemStyle}
               onMouseOver={e => { if (!isActive) e.currentTarget.style.background = "rgba(255,255,255,0.02)"; }}
-              onMouseOut={e => { if (!isActive) e.currentTarget.style.background = isActive ? "rgba(56, 189, 248, 0.05)" : "transparent"; }}>
+              onMouseOut={e => { if (!isActive) e.currentTarget.style.background = isActive ? "var(--c-soft)" : "transparent"; }}>
               <div style={S.threadItemRow}>
                 <span style={Object.assign({}, S.threadItemTitle, {fontWeight: t.unreadCount > 0 ? "bold" : "normal"})}>
                   {title}
                 </span>
                 {t.unreadCount > 0 && (
-                  <span style={S.unreadBadge}>{t.unreadCount}</span>
+                  <span style={S.unreadBadgeRow}>
+                    <span className="dot tiny" aria-hidden="true"></span>
+                    <span style={S.unreadBadge}>{t.unreadCount}</span>
+                  </span>
                 )}
               </div>
               {t.lastMessage && (
@@ -1326,10 +1364,16 @@ function ThreadList({ threads, activeId, onSelect, onNewThread, intercepted }) {
         })}
         {intercepted && intercepted.length > 0 && (
           <React.Fragment>
-            <div style={{padding: "0.75rem 1rem 0.25rem", borderTop: "1px solid #300"}}>
-              <span className="mono-text" style={{color: "#f44", fontSize: "0.7rem", letterSpacing: "1px"}}>
-                INTERCEPTED
-              </span>
+            {/* Intercepted block — burned status palette, sub-section block-head */}
+            <div className="s-burned" style={{padding: "0.75rem 1rem 0.25rem", borderTop: "1px solid #300"}}>
+              <div className="block-head" style={{color: "var(--accent-danger)"}}>
+                <span className="block-bullet">{"●"}</span>
+                <h3 style={{color: "var(--accent-danger)"}}>INTERCEPTED</h3>
+                <span className="block-line"></span>
+                <span className="block-badge" style={{color: "var(--accent-danger)", borderColor: "var(--accent-danger)"}}>
+                  {String(intercepted.length).padStart(2, "0")}
+                </span>
+              </div>
             </div>
             {intercepted.map(t => {
               const title = t.title ||
@@ -1340,7 +1384,7 @@ function ThreadList({ threads, activeId, onSelect, onNewThread, intercepted }) {
                 <div key={"int-" + t.id}
                   onClick={() => onSelect(t.id)}
                   style={Object.assign({}, S.threadItem, {
-                    borderLeft: isActive ? "2px solid #f44" : "2px solid transparent",
+                    borderLeft: isActive ? "2px solid var(--accent-danger)" : "2px solid transparent",
                     background: isActive ? "rgba(255,68,68,0.05)" : "transparent",
                   })}
                   onMouseOver={e => { if (!isActive) e.currentTarget.style.background = "rgba(255,68,68,0.03)"; }}
@@ -1570,7 +1614,8 @@ function CommsApp() {
   }
 
   return (
-    <div className="glass-panel" style={S.appContainer}>
+    // .brackets outer chrome is provided by the page-level wrapper; this is the inner three-column shell.
+    <div style={S.appContainer}>
       <div style={S.sidePanel}>
         <ThreadList
           threads={threads}
@@ -1643,15 +1688,15 @@ const S = {
   shortScrollList: { maxHeight: 120, overflowY: "auto" },
   checkLabel: {
     display: "flex", alignItems: "center", gap: "0.5rem",
-    padding: "0.4rem 0.5rem", cursor: "pointer", borderRadius: "var(--radius-sm)",
+    padding: "0.4rem 0.5rem", cursor: "pointer", borderRadius: 0,
   },
-  checkbox: { accentColor: "var(--accent-primary)" },
+  checkbox: { accentColor: "var(--c-primary)" },
   userName: { fontSize: "0.85rem", color: "var(--text-primary)" },
   ownerBadge: { fontSize: "0.7rem", marginLeft: "0.5rem" },
   memberRow: {
     display: "flex", alignItems: "center", justifyContent: "space-between",
     padding: "0.5rem 0.75rem", background: "var(--bg-input)",
-    borderRadius: "var(--radius-sm)", border: "1px solid var(--border-color)",
+    borderRadius: 0, border: "1px solid var(--c-dim)",
   },
   dangerBtn: {
     background: "none", border: "none", color: "var(--accent-danger)",
@@ -1660,33 +1705,55 @@ const S = {
   addUserBtn: {
     display: "block", width: "100%", textAlign: "left",
     padding: "0.4rem 0.75rem", background: "none",
-    border: "none", color: "var(--accent-primary)",
-    cursor: "pointer", fontSize: "0.85rem", borderRadius: "var(--radius-sm)",
+    border: "none", color: "var(--c-primary)",
+    cursor: "pointer", fontSize: "0.85rem", borderRadius: 0,
   },
   inputBarWrap: {
-    borderTop: "1px solid var(--border-color)", background: "var(--bg-panel)",
+    borderTop: "1px solid var(--c-dim)", background: "var(--bg-panel)",
   },
   inputBar: {
     display: "flex", gap: "0.5rem", padding: "0.75rem",
+    alignItems: "stretch",
+  },
+  // Compose row chrome — wraps prompt glyph, icon buttons, textarea, blink caret.
+  composeFieldWrap: { flex: 1, padding: "6px 10px", gap: "8px" },
+  composeIconBtn: {
+    background: "transparent", border: "1px solid var(--c-dim)",
+    color: "var(--text-muted)", padding: "0.3rem 0.5rem", cursor: "pointer",
+    borderRadius: 0, fontSize: "1rem", lineHeight: 1,
+  },
+  composeCyberBtn: {
+    background: "transparent", border: "1px solid var(--c-primary)",
+    color: "var(--c-primary)", padding: "0.3rem 0.5rem", cursor: "pointer",
+    borderRadius: 0, fontFamily: "var(--font-mono)", fontSize: "0.8rem",
+    lineHeight: 1,
+  },
+  composeTextarea: {
+    flex: 1, resize: "none", minHeight: "1.6rem", padding: 0,
+    fontSize: "0.9rem",
   },
   postingAsBar: {
     display: "flex", alignItems: "center", gap: "0.5rem",
     padding: "0.5rem 0.75rem 0", fontSize: "0.75rem",
   },
-  postingAsLabel: { fontSize: "0.7rem", flexShrink: 0 },
+  postingAsLabel: { fontSize: "0.7rem", flexShrink: 0, marginBottom: 0 },
   postingAsSelect: {
-    flex: 1, background: "var(--bg-input)", border: "1px solid var(--border-color)",
-    borderRadius: "var(--radius-sm)", color: "var(--text-primary)",
+    flex: 1, background: "var(--bg-input)", border: "1px solid var(--c-dim)",
+    borderRadius: 0, color: "var(--text-primary)",
     fontFamily: "var(--font-mono)", fontSize: "0.75rem", padding: "0.3rem 0.5rem",
     outline: "none",
   },
   postedAsLink: {
-    color: "var(--accent-primary)", textDecoration: "none",
+    color: "var(--c-primary)", textDecoration: "none",
   },
+  // Impersonation tag — small caps kicker variant for [PC]/[NPC]/[GM] tags inline with sender name.
   postedAsBadge: {
-    fontSize: "0.6rem", marginLeft: "0.4rem", opacity: 0.7,
-    border: "1px solid currentColor", padding: "0.05rem 0.25rem",
-    borderRadius: "2px", verticalAlign: "middle",
+    display: "inline-block",
+    fontFamily: "var(--font-mono)",
+    fontSize: "0.6rem", marginLeft: "0.4rem", opacity: 0.85,
+    border: "1px solid currentColor", padding: "0.05rem 0.3rem",
+    borderRadius: 0, verticalAlign: "middle",
+    letterSpacing: "0.18em", textTransform: "uppercase",
   },
   emptyState: {
     flex: 1, display: "flex", alignItems: "center", justifyContent: "center",
@@ -1695,7 +1762,7 @@ const S = {
   threadViewContainer: { flex: 1, display: "flex", flexDirection: "column", minHeight: 0, position: "relative" },
   threadHeader: {
     display: "flex", alignItems: "center", gap: "0.75rem",
-    padding: "0.75rem 1rem", borderBottom: "1px solid var(--border-color)",
+    padding: "0.75rem 1rem", borderBottom: "1px solid var(--c-dim)",
     background: "var(--bg-panel)",
   },
   backBtn: {
@@ -1703,6 +1770,17 @@ const S = {
     cursor: "pointer", fontSize: "1.2rem", display: "none",
   },
   threadTitleWrap: { flex: 1, minWidth: 0 },
+  // block-head wrapping the thread title — tightens spacing so the bullet/badge sit on one row.
+  threadTitleBlockHead: { gap: "8px", minWidth: 0 },
+  threadTitleH3: {
+    margin: 0,
+    fontFamily: "var(--font-mono)",
+    fontSize: "11px", fontWeight: 500,
+    letterSpacing: "0.22em", textTransform: "uppercase",
+    color: "var(--ink)",
+    overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
+    maxWidth: "60%",
+  },
   threadTitle: {
     fontSize: "0.85rem", letterSpacing: "1px", overflow: "hidden",
     textOverflow: "ellipsis", whiteSpace: "nowrap",
@@ -1711,9 +1789,10 @@ const S = {
   memberPortraits: {
     display: "flex", gap: "4px", flexWrap: "wrap", marginTop: "4px",
   },
+  // Avatar thumbnails keep '50%' radius — they are dossier portraits, not chrome cards.
   portraitThumb: {
     width: 28, height: 28, borderRadius: "50%", overflow: "hidden",
-    border: "1px solid var(--border-color)", background: "var(--bg-input)",
+    border: "1px solid var(--c-dim)", background: "var(--bg-input)",
     display: "flex", alignItems: "center", justifyContent: "center",
     flexShrink: 0,
   },
@@ -1725,14 +1804,14 @@ const S = {
     color: "var(--text-secondary)", fontWeight: "bold",
   },
   rosterBtn: {
-    background: "none", border: "1px solid var(--border-color)",
-    borderRadius: "var(--radius-sm)", color: "var(--text-secondary)",
+    background: "none", border: "1px solid var(--c-dim)",
+    borderRadius: 0, color: "var(--text-secondary)",
     cursor: "pointer", padding: "0.3rem 0.5rem", fontSize: "0.75rem",
-    fontFamily: "var(--font-mono)",
+    fontFamily: "var(--font-mono)", letterSpacing: "0.12em",
   },
   deleteThreadBtn: {
     background: "none", border: "1px solid var(--accent-danger, #c0392b)",
-    borderRadius: "var(--radius-sm)", color: "var(--accent-danger, #c0392b)",
+    borderRadius: 0, color: "var(--accent-danger, #c0392b)",
     cursor: "pointer", padding: "0.3rem 0.5rem", fontSize: "0.85rem",
     lineHeight: 1,
   },
@@ -1742,8 +1821,8 @@ const S = {
   },
   systemMsgRow: { display: "flex", justifyContent: "center", margin: "0.5rem 0" },
   systemMsgBubble: {
-    padding: "0.4rem 1rem", border: "1px solid #a33",
-    background: "rgba(170,51,51,0.1)", borderRadius: "4px",
+    padding: "0.4rem 1rem", border: "1px solid var(--accent-danger)",
+    background: "rgba(170,51,51,0.1)", borderRadius: 0,
   },
   systemMsgText: {
     fontFamily: "var(--font-mono)", fontSize: "0.75rem",
@@ -1751,19 +1830,24 @@ const S = {
   },
   msgRowOwn: { display: "flex", justifyContent: "flex-end" },
   msgRowOther: { display: "flex", justifyContent: "flex-start" },
+  // Square-edged bubbles — palette tokens (own = primary glow, other = soft input).
   msgBubbleOwn: {
     maxWidth: "75%", padding: "0.5rem 0.75rem",
-    borderRadius: "var(--radius-md)",
-    background: "rgba(56, 189, 248, 0.1)",
-    border: "1px solid rgba(56, 189, 248, 0.3)",
+    borderRadius: 0,
+    background: "var(--c-soft)",
+    border: "1px solid var(--c-primary)",
   },
   msgBubbleOther: {
     maxWidth: "75%", padding: "0.5rem 0.75rem",
-    borderRadius: "var(--radius-md)",
+    borderRadius: 0,
     background: "var(--bg-input)",
-    border: "1px solid var(--border-color)",
+    border: "1px solid var(--c-dim)",
   },
-  msgSender: { fontSize: "0.7rem", marginBottom: "0.25rem" },
+  msgSender: {
+    fontSize: "0.7rem", marginBottom: "0.25rem",
+    fontFamily: "var(--font-mono)", letterSpacing: "0.18em",
+    textTransform: "uppercase",
+  },
   msgContent: {
     fontSize: "0.85rem", color: "var(--text-primary)",
     whiteSpace: "pre-wrap", wordBreak: "break-word",
@@ -1772,8 +1856,9 @@ const S = {
   msgTimeLeft: { fontSize: "0.65rem", marginTop: "0.25rem", textAlign: "left" },
   threadListContainer: { display: "flex", flexDirection: "column", height: "100%" },
   threadListHeader: {
-    padding: "0.75rem 1rem", borderBottom: "1px solid var(--border-color)",
+    padding: "0.75rem 1rem", borderBottom: "1px solid var(--c-dim)",
     display: "flex", alignItems: "center", justifyContent: "space-between",
+    gap: "0.5rem",
   },
   threadListTitle: { fontSize: "0.85rem", letterSpacing: "1px" },
   threadListBody: { flex: 1, overflowY: "auto" },
@@ -1790,10 +1875,14 @@ const S = {
     fontSize: "0.85rem", overflow: "hidden", textOverflow: "ellipsis",
     whiteSpace: "nowrap", color: "var(--text-primary)",
   },
+  // Pulsing-dot + numeric pill — keeps the green-glow recipe from clearance_gate.
+  unreadBadgeRow: {
+    display: "inline-flex", alignItems: "center", gap: "0.4rem", flexShrink: 0,
+  },
   unreadBadge: {
-    flexShrink: 0, minWidth: 18, height: 18,
-    background: "var(--accent-primary)", color: "var(--bg-dark)",
-    borderRadius: 9, display: "inline-flex", alignItems: "center",
+    minWidth: 18, height: 18,
+    background: "var(--c-primary)", color: "var(--bg-dark)",
+    borderRadius: "50%", display: "inline-flex", alignItems: "center",
     justifyContent: "center", fontSize: "0.65rem", fontWeight: "bold",
     fontFamily: "var(--font-mono)", padding: "0 4px",
   },
@@ -1803,7 +1892,7 @@ const S = {
   },
   appContainer: { display: "flex", height: "100%", overflow: "hidden" },
   sidePanel: {
-    width: 300, flexShrink: 0, borderRight: "1px solid var(--border-color)",
+    width: 300, flexShrink: 0, borderRight: "1px solid var(--c-dim)",
     display: "flex", flexDirection: "column",
   },
   mainPanel: { flex: 1, display: "flex", flexDirection: "column", minWidth: 0 },

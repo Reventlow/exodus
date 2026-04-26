@@ -77,33 +77,25 @@ const { Icon, getCookie } = window;
                 padding: '1.5rem', marginBottom: '1rem',
                 borderLeft: '3px solid var(--accent-warning)'
             }}>
-                <h3 className="mono-text text-accent" style={{
-                    borderBottom: '1px solid var(--border-color)',
-                    paddingBottom: '0.5rem', marginBottom: '1rem',
-                    display: 'flex', justifyContent: 'space-between', alignItems: 'center'
-                }}>
-                    <span>
-                        CHANGE REQUESTS
-                        {pending.length > 0 && (
-                            <span style={{
-                                background: 'var(--accent-warning)',
-                                color: 'var(--bg-dark)',
-                                borderRadius: '50%', width: '20px', height: '20px',
-                                display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
-                                fontSize: '0.7rem', fontWeight: 'bold', marginLeft: '0.5rem'
-                            }}>{pending.length}</span>
-                        )}
-                    </span>
+                {/* Wave 3A: CHANGE REQUESTS block-head with pending-count standby pill. */}
+                <header className="block-head" style={{ marginBottom: '1rem' }}>
+                    <span className="block-bullet">■</span>
+                    <h3>CHANGE REQUESTS</h3>
+                    <span className="block-line"></span>
+                    {pending.length > 0 && (
+                        <span className="status-pill s-standby">{pending.length} PENDING</span>
+                    )}
                     {!IS_ADMIN && (
                         <button onClick={() => setShowForm(!showForm)} style={{
                             background: 'transparent', border: '1px solid var(--accent-primary)',
                             color: 'var(--accent-primary)', padding: '4px 12px',
-                            cursor: 'pointer', fontFamily: 'var(--font-mono)', fontSize: '0.8rem'
+                            cursor: 'pointer', fontFamily: 'var(--font-mono)', fontSize: '0.8rem',
+                            marginLeft: '0.5rem',
                         }}>
                             REQUEST CHANGE
                         </button>
                     )}
-                </h3>
+                </header>
 
                 {/* Submit form (non-admin) */}
                 {showForm && !IS_ADMIN && (
@@ -169,11 +161,8 @@ const { Icon, getCookie } = window;
                                     by {cr.requester}
                                 </span>
                             </div>
-                            <span className="mono-text" style={{
-                                fontSize: '0.7rem', padding: '2px 6px',
-                                border: '1px solid var(--accent-warning)',
-                                color: 'var(--accent-warning)'
-                            }}>PENDING</span>
+                            {/* Wave 3A: status-pill on pending request. */}
+                            <span className="status-pill s-standby">PENDING</span>
                         </div>
                         <p className="text-secondary" style={{ fontSize: '0.85rem', marginTop: '0.25rem' }}>
                             {cr.description}
@@ -222,10 +211,11 @@ const { Icon, getCookie } = window;
                                 <span className="mono-text" style={{ fontSize: '0.8rem' }}>
                                     {cr.fieldName}
                                 </span>
-                                <span style={{
-                                    fontSize: '0.7rem', marginLeft: '0.5rem',
-                                    color: cr.status === 'approved' ? 'var(--accent-success, #00cc66)' : 'var(--accent-danger)'
-                                }}>
+                                {/* Wave 3A: approved -> active, rejected -> burned. */}
+                                <span
+                                    className={`status-pill ${cr.status === 'approved' ? 's-active' : 's-burned'}`}
+                                    style={{ marginLeft: '0.5rem' }}
+                                >
                                     {cr.status.toUpperCase()}
                                 </span>
                                 {cr.adminNote && (
