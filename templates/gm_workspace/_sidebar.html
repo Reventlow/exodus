@@ -1,36 +1,44 @@
 <style>
+    /* GM workspace sidebar — clearance-gate treatment.
+       Uses block-head pattern for the group label and gives the
+       active item the accent bracket-rail treatment. */
     .gm-sidebar {
         width: 220px; flex-shrink: 0;
-        border-right: 1px solid var(--border-color);
-        padding: 1rem; background: rgba(0,0,0,0.15);
+        border-right: 1px solid var(--c-dim);
+        padding: 1rem; background: rgba(2, 14, 9, 0.55);
     }
-    .gm-sidebar-group-label {
-        font-family: var(--font-mono); color: var(--text-muted);
-        font-size: 0.65rem; letter-spacing: 2px;
-        padding: 0.5rem 0.4rem; margin-top: 0.5rem;
-        border-bottom: 1px solid var(--border-color);
-    }
+    .gm-sidebar .block-head { margin-bottom: 0.5rem; }
     .gm-sidebar-item {
         display: block; width: 100%;
         background: transparent; border: none;
         color: var(--text-secondary);
         font-family: var(--font-mono); font-size: 0.8rem;
         text-align: left; padding: 0.5rem 0.6rem;
-        cursor: pointer; border-radius: 3px;
+        cursor: pointer; border-radius: 0;
         margin-top: 0.25rem; letter-spacing: 1px;
         text-decoration: none;
+        border-left: 2px solid transparent;
+        transition: background 0.1s, color 0.1s, border-color 0.1s;
     }
-    .gm-sidebar-item:hover { background: rgba(56,189,248,0.05); }
+    .gm-sidebar-item:hover {
+        background: var(--c-soft);
+        color: var(--ink);
+    }
     .gm-sidebar-item.active {
-        background: rgba(56,189,248,0.08);
-        color: var(--accent-primary);
-        border-left: 2px solid var(--accent-primary);
+        background: var(--c-soft);
+        color: var(--c-primary);
+        border-left: 2px solid var(--c-primary);
+        text-shadow: 0 0 6px var(--c-glow);
         padding-left: 0.4rem;
     }
 </style>
 
 <div class="gm-sidebar">
-    <div class="gm-sidebar-group-label">CAMPAIGN</div>
+    <header class="block-head">
+        <span class="block-bullet">■</span>
+        <h3>CAMPAIGN</h3>
+        <span class="block-line"></span>
+    </header>
     <a href="/gm/story-ideas/"
        class="gm-sidebar-item {% if active_tool == 'ideas' %}active{% endif %}">Story Ideas</a>
     <a href="/gm/timeline/"

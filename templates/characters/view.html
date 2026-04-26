@@ -101,7 +101,7 @@
             }}>
                 <img src={src} alt={alt || 'Image'} onClick={e => e.stopPropagation()} style={{
                     maxWidth: '90vw', maxHeight: '90vh', objectFit: 'contain',
-                    border: '2px solid var(--border-color)', borderRadius: '4px', cursor: 'default',
+                    border: '2px solid var(--c-dim)', borderRadius: 0, cursor: 'default',
                 }} />
             </div>,
             document.body
@@ -137,6 +137,7 @@
     };
 
     // --- DOSSIER MODULE (read-only) ---
+    // Wave 2A: legacy h3 with hard border swapped for block-head section pattern.
     const DossierReadOnly = ({ dossier }) => {
         const renderMarkdown = (text) => {
             if (!text) return '<p style="color: var(--text-muted); font-style: italic;">No dossier recorded.</p>';
@@ -145,10 +146,11 @@
 
         return (
             <div className="glass-panel" style={{ padding: '1.5rem', marginBottom: '1rem' }}>
-                <h3 className="mono-text text-accent" style={{
-                    borderBottom: '1px solid var(--border-color)',
-                    paddingBottom: '0.5rem', marginBottom: '1rem'
-                }}>OPERATIVE DOSSIER</h3>
+                <header className="block-head" style={{ marginBottom: '1rem' }}>
+                    <span className="block-bullet">■</span>
+                    <h3>OPERATIVE DOSSIER</h3>
+                    <span className="block-line"></span>
+                </header>
                 <div className="dossier-content"
                     dangerouslySetInnerHTML={{ __html: renderMarkdown(dossier) }} />
             </div>
@@ -223,10 +225,11 @@
     const AttributesModule = ({ attributes }) => {
         return (
             <div className="glass-panel" style={{ padding: '1.5rem', marginBottom: '1rem' }}>
-                <h3 className="mono-text text-accent" style={{
-                    borderBottom: '1px solid var(--border-color)',
-                    paddingBottom: '0.5rem', marginBottom: '1rem'
-                }}>ATTRIBUTES</h3>
+                <header className="block-head" style={{ marginBottom: '1rem' }}>
+                    <span className="block-bullet">■</span>
+                    <h3>ATTRIBUTES</h3>
+                    <span className="block-line"></span>
+                </header>
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '2rem' }}>
                     <div>
                         <div className="text-center text-muted mono-text" style={{ marginBottom: '0.5rem' }}>MENTAL</div>
@@ -307,10 +310,11 @@
 
         return (
             <div className="glass-panel" style={{ padding: '1.5rem', marginBottom: '1rem' }}>
-                <h3 className="mono-text text-accent" style={{
-                    borderBottom: '1px solid var(--border-color)',
-                    paddingBottom: '0.5rem', marginBottom: '1rem'
-                }}>SKILLS</h3>
+                <header className="block-head" style={{ marginBottom: '1rem' }}>
+                    <span className="block-bullet">■</span>
+                    <h3>SKILLS</h3>
+                    <span className="block-line"></span>
+                </header>
                 <div style={{
                     display: 'grid',
                     gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))',
@@ -327,10 +331,12 @@
     // --- SPECIALISATIONS MODULE (read-only) ---
     const SpecialisationsModule = ({ specialisations }) => (
         <div className="glass-panel" style={{ padding: '1.5rem', marginBottom: '1rem' }}>
-            <h3 className="mono-text text-accent" style={{
-                borderBottom: '1px solid var(--border-color)',
-                paddingBottom: '0.5rem', marginBottom: '1rem'
-            }}>SPECIALISATIONS</h3>
+            <header className="block-head" style={{ marginBottom: '1rem' }}>
+                <span className="block-bullet">■</span>
+                <h3>SPECIALISATIONS</h3>
+                <span className="block-line"></span>
+                <span className="block-badge">{specialisations.length}</span>
+            </header>
             {specialisations.map((spec, idx) => (
                 <div key={idx} className="tech-border" style={{
                     padding: '0.5rem', marginBottom: '0.5rem', background: 'rgba(0,0,0,0.2)',
@@ -366,10 +372,11 @@
 
         return (
             <div className="glass-panel" style={{ padding: '1.5rem', marginBottom: '1rem' }}>
-                <h3 className="mono-text text-accent" style={{
-                    borderBottom: '1px solid var(--border-color)',
-                    paddingBottom: '0.5rem', marginBottom: '1rem'
-                }}>DERIVED TRAITS</h3>
+                <header className="block-head" style={{ marginBottom: '1rem' }}>
+                    <span className="block-bullet">■</span>
+                    <h3>DERIVED TRAITS</h3>
+                    <span className="block-line"></span>
+                </header>
                 <div style={{
                     display: 'grid',
                     gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))',
@@ -421,10 +428,15 @@
                     alignItems: 'center', marginBottom: '1rem',
                     flexWrap: 'wrap', gap: '0.5rem'
                 }}>
-                    <h3 className="mono-text text-danger">BIOSIGN MONITOR</h3>
-                    <div className="text-danger mono-text" style={{ animation: 'pulse 2s infinite' }}>
-                        Tracking vital signs...
-                    </div>
+                    {/* Wave 2A: block-head pattern, status-pill for monitoring state. */}
+                    <header className="block-head" style={{ flex: 1, color: 'var(--accent-danger)' }}>
+                        <span className="block-bullet">●</span>
+                        <h3 style={{ color: 'var(--ink)' }}>BIOSIGN MONITOR</h3>
+                        <span className="block-line" style={{ background: 'linear-gradient(90deg, var(--accent-danger), transparent)' }}></span>
+                    </header>
+                    <span className="status-pill s-burned" style={{ animation: 'pulse 2s infinite' }}>
+                        TRACKING
+                    </span>
                 </div>
 
                 {/* EKG Visual */}
@@ -511,10 +523,12 @@
 
         return (
             <div className="glass-panel" style={{ padding: '1.5rem', marginBottom: '1rem' }}>
-                <h3 className="mono-text text-accent" style={{
-                    borderBottom: '1px solid var(--border-color)',
-                    paddingBottom: '0.5rem', marginBottom: '1rem'
-                }}>PULLING STRINGS</h3>
+                <header className="block-head" style={{ marginBottom: '1rem' }}>
+                    <span className="block-bullet">■</span>
+                    <h3>PULLING STRINGS</h3>
+                    <span className="block-line"></span>
+                    <span className="block-badge">{pullingStrings.length}</span>
+                </header>
                 {catOrder.filter(c => categories[c]).map(cat => (
                     <div key={cat}>
                         <div className="text-muted mono-text" style={{
@@ -557,12 +571,12 @@
     // --- EXPANDABLE LIST MODULE (read-only) ---
     const ExpandableListModule = ({ title, items, itemLabel = "Item" }) => (
         <div className="glass-panel" style={{ padding: '1.5rem', marginBottom: '1rem' }}>
-            <h3 className="mono-text text-accent" style={{
-                borderBottom: '1px solid var(--border-color)',
-                paddingBottom: '0.5rem', marginBottom: '1rem'
-            }}>
-                {title}
-            </h3>
+            <header className="block-head" style={{ marginBottom: '1rem' }}>
+                <span className="block-bullet">■</span>
+                <h3>{title}</h3>
+                <span className="block-line"></span>
+                <span className="block-badge">{items.length}</span>
+            </header>
             {items.map((item, idx) => (
                 <div key={idx} className="tech-border" style={{
                     padding: '0.5rem', marginBottom: '0.5rem', background: 'rgba(0,0,0,0.2)'
@@ -597,12 +611,12 @@
     // --- INVENTORY MODULE (read-only) ---
     const InventoryModule = ({ inventory }) => (
         <div className="glass-panel" style={{ padding: '1.5rem', marginBottom: '1rem' }}>
-            <h3 className="mono-text text-accent" style={{
-                borderBottom: '1px solid var(--border-color)',
-                paddingBottom: '0.5rem', marginBottom: '1rem'
-            }}>
-                INVENTORY / ASSETS
-            </h3>
+            <header className="block-head" style={{ marginBottom: '1rem' }}>
+                <span className="block-bullet">■</span>
+                <h3>INVENTORY / ASSETS</h3>
+                <span className="block-line"></span>
+                <span className="block-badge">{(inventory || []).length}</span>
+            </header>
             <div style={{
                 display: 'grid',
                 gridTemplateColumns: 'repeat(auto-fill, minmax(250px, 1fr))',
@@ -680,9 +694,11 @@
                 padding: '1.5rem', marginBottom: '1rem',
                 borderTop: '2px solid var(--accent-primary)'
             }}>
-                <h3 className="mono-text text-accent" style={{ marginBottom: '1rem' }}>
-                    TACTICAL DICE ROLLER
-                </h3>
+                <header className="block-head" style={{ marginBottom: '1rem' }}>
+                    <span className="block-bullet">■</span>
+                    <h3>TACTICAL DICE ROLLER</h3>
+                    <span className="block-line"></span>
+                </header>
 
                 <div style={{
                     display: 'flex', gap: '1rem', alignItems: 'flex-end',
@@ -739,7 +755,7 @@
                             {results.rolls.map((r, i) => (
                                 <div key={i} style={{
                                     width: '24px', height: '24px',
-                                    borderRadius: '2px',
+                                    borderRadius: 0,
                                     background: r.success ? 'var(--accent-primary)' : 'var(--bg-panel)',
                                     color: r.success ? 'var(--bg-dark)' : 'var(--text-secondary)',
                                     display: 'flex', alignItems: 'center', justifyContent: 'center',
@@ -824,39 +840,35 @@
 
         return (
             <div className="fade-in">
-                {/* Sub-header */}
-                <div style={{
-                    display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-                    marginBottom: '1rem', paddingBottom: '0.5rem',
-                    borderBottom: '1px solid var(--border-color)',
-                    flexWrap: 'wrap', gap: '0.5rem'
-                }}>
-                    <div>
-                        <h2 className="mono-text text-accent" style={{ fontSize: '1.2rem' }}>
-                            PERSONNEL RECORD
-                        </h2>
-                        {char.owner && (
-                            <span className="text-muted mono-text" style={{ fontSize: '0.8rem' }}>
-                                HANDLER: {char.owner}
-                            </span>
-                        )}
-                    </div>
-                    <div style={{ display: 'flex', gap: '1rem', alignItems: 'center' }}>
-                        <span className="mono-text text-muted" style={{
-                            fontSize: '0.8rem', border: '1px solid var(--border-color)',
-                            padding: '0.25rem 0.75rem', borderRadius: 'var(--radius-sm)'
-                        }}>
-                            READ ONLY
-                        </span>
-                        <a href="/"
-                            className="mono-text"
-                            style={{
-                                background: 'transparent', border: '1px solid var(--accent-primary)',
-                                color: 'var(--accent-primary)', padding: '0.5rem 1rem',
-                                cursor: 'pointer', textDecoration: 'none', fontSize: '0.9rem'
-                            }}>
-                            &lt; CLOSE RECORD
-                        </a>
+                {/* Wave 2A: brackets-card outer chrome — corner cuts + display title.
+                    Inner section panels remain glass-panel; their headers were
+                    swapped to block-head pattern in this same wave. */}
+                <div className="brackets" style={{ position: 'relative', padding: '28px 32px', marginBottom: '1rem' }}>
+                    <span className="bk tl"></span><span className="bk tr"></span>
+                    <span className="bk bl"></span><span className="bk br"></span>
+
+                    <div style={{
+                        display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start',
+                        flexWrap: 'wrap', gap: '0.75rem'
+                    }}>
+                        <div>
+                            <div className="kicker">// PERSONNEL RECORD</div>
+                            <h2 className="title" style={{ fontSize: '44px', marginBottom: '6px' }}>
+                                <span>{char.name || 'UNKNOWN'}</span>
+                            </h2>
+                            {char.owner && (
+                                <div className="sub" style={{ marginBottom: 0 }}>
+                                    HANDLER · {char.owner}
+                                </div>
+                            )}
+                        </div>
+                        <div style={{ display: 'flex', gap: '0.75rem', alignItems: 'center', flexWrap: 'wrap' }}>
+                            {/* Read-only badge -> dormant status pill (idle / non-editable). */}
+                            <span className="status-pill s-dormant">READ ONLY</span>
+                            <a href="/" className="btn-cyber">
+                                &lt; CLOSE RECORD
+                            </a>
+                        </div>
                     </div>
                 </div>
 

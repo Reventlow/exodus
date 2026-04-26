@@ -59,24 +59,18 @@
             }}
             onClick={onClick}
         >
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '0.5rem' }}>
                 <h3 className="text-accent mono-text" style={{ fontSize: '1.1rem' }}>
                     {agency.name}
                 </h3>
-                <div style={{ display: 'flex', gap: '0.3rem' }}>
+                {/* Wave 2A: ad-hoc bordered spans -> .status-pill recipe.
+                    HIDDEN = s-burned (compromised/admin-only); PLAYER = s-active. */}
+                <div style={{ display: 'flex', gap: '0.3rem', flexWrap: 'wrap' }}>
                     {agency.isHidden && (
-                        <span className="mono-text" style={{
-                            fontSize: '0.7rem', padding: '2px 6px',
-                            border: '1px solid var(--accent-danger)',
-                            color: 'var(--accent-danger)'
-                        }}>HIDDEN</span>
+                        <span className="status-pill s-burned">HIDDEN</span>
                     )}
                     {agency.isPlayerAgency && (
-                        <span className="mono-text" style={{
-                            fontSize: '0.7rem', padding: '2px 6px',
-                            border: '1px solid var(--accent-primary)',
-                            color: 'var(--accent-primary)'
-                        }}>PLAYER</span>
+                        <span className="status-pill s-active">PLAYER</span>
                     )}
                 </div>
             </div>
@@ -198,33 +192,29 @@
 
         return (
             <div>
-                <div className="glass-panel" style={{ padding: '2rem', maxWidth: '900px', margin: '2rem auto' }}>
-                    <h2 className="mono-text" style={{
-                        marginBottom: '1.5rem',
-                        borderBottom: '1px solid var(--border-color)',
-                        paddingBottom: '0.5rem',
-                        display: 'flex',
-                        justifyContent: 'space-between',
-                        alignItems: 'center'
-                    }}>
-                        <span className="text-accent">
-                            <Icon name="building-2" size={20} /> AGENCY DATABASE
-                            <NotificationBadge count={notifCount} />
-                        </span>
-                        <span className="text-muted" style={{ fontSize: '0.8rem' }}>
-                            {agencies.length} RECORD{agencies.length !== 1 ? 'S' : ''}
-                        </span>
-                    </h2>
+                {/* Wave 2A: brackets-card chrome with corner cuts replaces glass-panel. */}
+                <div className="brackets" style={{ position: 'relative', padding: '32px 36px', maxWidth: '900px', margin: '2rem auto' }}>
+                    <span className="bk tl"></span><span className="bk tr"></span>
+                    <span className="bk bl"></span><span className="bk br"></span>
 
-                    {/* Player Agency Section */}
+                    <div className="kicker">// AGENCY REGISTRY</div>
+                    <h2 className="title" style={{ fontSize: '52px', marginBottom: '8px' }}>
+                        <span><Icon name="building-2" size={28} /> AGENCIES</span>
+                        <NotificationBadge count={notifCount} />
+                    </h2>
+                    <div className="sub" style={{ marginBottom: '1.5rem' }}>
+                        Faction roster · UIC membership · {agencies.length} RECORD{agencies.length !== 1 ? 'S' : ''}
+                    </div>
+
+                    {/* Player Agency Section — Wave 2A block-head pattern. */}
                     {playerAgencies.length > 0 && (
                         <div style={{ marginBottom: '2rem' }}>
-                            <h3 className="mono-text text-muted" style={{
-                                fontSize: '0.9rem', marginBottom: '1rem',
-                                borderBottom: '1px solid var(--border-color)', paddingBottom: '0.25rem'
-                            }}>
-                                PLAYER AGENCY
-                            </h3>
+                            <header className="block-head" style={{ marginBottom: '1rem' }}>
+                                <span className="block-bullet">■</span>
+                                <h3>PLAYER AGENCY</h3>
+                                <span className="block-line"></span>
+                                <span className="block-badge">{playerAgencies.length}</span>
+                            </header>
                             <div style={{
                                 display: 'grid',
                                 gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))',
@@ -241,15 +231,15 @@
                         </div>
                     )}
 
-                    {/* NPC Agencies Section */}
+                    {/* NPC Agencies Section — Wave 2A block-head pattern. */}
                     {npcAgencies.length > 0 && (
                         <div style={{ marginBottom: '2rem' }}>
-                            <h3 className="mono-text text-muted" style={{
-                                fontSize: '0.9rem', marginBottom: '1rem',
-                                borderBottom: '1px solid var(--border-color)', paddingBottom: '0.25rem'
-                            }}>
-                                NPC AGENCIES
-                            </h3>
+                            <header className="block-head" style={{ marginBottom: '1rem' }}>
+                                <span className="block-bullet">■</span>
+                                <h3>NPC AGENCIES</h3>
+                                <span className="block-line"></span>
+                                <span className="block-badge">{npcAgencies.length}</span>
+                            </header>
                             <div style={{
                                 display: 'grid',
                                 gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))',
@@ -288,7 +278,7 @@
                                     fontFamily: 'var(--font-mono)',
                                     fontSize: '0.9rem',
                                     letterSpacing: '1px',
-                                    borderRadius: 'var(--radius-sm)',
+                                    borderRadius: 0,
                                     opacity: creating ? 0.6 : 1
                                 }}
                             >
@@ -307,7 +297,7 @@
                                     fontFamily: 'var(--font-mono)',
                                     fontSize: '0.9rem',
                                     letterSpacing: '1px',
-                                    borderRadius: 'var(--radius-sm)',
+                                    borderRadius: 0,
                                     opacity: creating ? 0.6 : 1
                                 }}
                             >
@@ -324,7 +314,7 @@
                                     fontWeight: 'bold',
                                     fontSize: '0.9rem',
                                     letterSpacing: '1px',
-                                    borderRadius: 'var(--radius-sm)',
+                                    borderRadius: 0,
                                     display: 'inline-block',
                                 }}
                             >MANAGE GLOBAL FLAWS</a>
@@ -339,7 +329,7 @@
                                     fontWeight: 'bold',
                                     fontSize: '0.9rem',
                                     letterSpacing: '1px',
-                                    borderRadius: 'var(--radius-sm)',
+                                    borderRadius: 0,
                                     display: 'inline-block',
                                 }}
                             >MANAGE FTL PROJECTS</a>
@@ -354,7 +344,7 @@
                                     fontWeight: 'bold',
                                     fontSize: '0.9rem',
                                     letterSpacing: '1px',
-                                    borderRadius: 'var(--radius-sm)',
+                                    borderRadius: 0,
                                     display: 'inline-block',
                                 }}
                             >CONFIGURE BASES</a>
@@ -374,7 +364,7 @@
                                 fontWeight: 'bold',
                                 fontSize: '0.9rem',
                                 letterSpacing: '1px',
-                                borderRadius: 'var(--radius-sm)',
+                                borderRadius: 0,
                                 display: 'inline-block',
                             }}
                         >INTERSTELLAR COUNCIL</a>

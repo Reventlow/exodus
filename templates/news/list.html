@@ -41,48 +41,34 @@
         return <i data-lucide={name} width={size} height={size}></i>;
     };
 
-    // Visibility badge colors
-    const VIS_STYLES = {
-        hidden:    { color: 'var(--accent-danger)',  border: 'var(--accent-danger)' },
-        eyes_only: { color: 'var(--accent-warning)', border: 'var(--accent-warning)' },
-        public:    { color: 'var(--accent-primary)', border: 'var(--accent-primary)' },
+    // Visibility badge — Wave 2A: clearance-gate status-pill styling.
+    // Maps semantic visibility to the .status-pill .s-* class:
+    //   public    -> s-active   (visible / online)
+    //   eyes_only -> s-standby  (warning / restricted)
+    //   hidden    -> s-burned   (red / compromised / superuser-only)
+    const VIS_PILL_CLASS = {
+        hidden:    's-burned',
+        eyes_only: 's-standby',
+        public:    's-active',
     };
 
     const VisibilityBadge = ({ visibility, eyesOnlyPlayer, releasedAt }) => {
         if (releasedAt && eyesOnlyPlayer) {
-            // Released eyes-only: show both badges
+            // Released eyes-only: original eyes-only target + a "released" follow-up pill.
             return (
                 <span style={{ display: 'inline-flex', gap: '0.3rem', flexWrap: 'wrap' }}>
-                    <span className="mono-text" style={{
-                        fontSize: '0.65rem', color: 'var(--accent-warning)',
-                        border: '1px solid var(--accent-warning)',
-                        padding: '0.1rem 0.4rem', letterSpacing: '1px',
-                    }}>
+                    <span className="status-pill s-standby">
                         EYES ONLY — {eyesOnlyPlayer.toUpperCase()}
                     </span>
-                    <span className="mono-text" style={{
-                        fontSize: '0.65rem', color: 'var(--accent-primary)',
-                        border: '1px solid var(--accent-primary)',
-                        padding: '0.1rem 0.4rem', letterSpacing: '1px',
-                    }}>
-                        RELEASED
-                    </span>
+                    <span className="status-pill s-active">RELEASED</span>
                 </span>
             );
         }
-        const s = VIS_STYLES[visibility] || VIS_STYLES.public;
+        const cls = VIS_PILL_CLASS[visibility] || 's-active';
         const label = visibility === 'eyes_only'
             ? `EYES ONLY${eyesOnlyPlayer ? ' — ' + eyesOnlyPlayer.toUpperCase() : ''}`
             : visibility.toUpperCase();
-        return (
-            <span className="mono-text" style={{
-                fontSize: '0.65rem', color: s.color,
-                border: `1px solid ${s.border}`,
-                padding: '0.1rem 0.4rem', letterSpacing: '1px',
-            }}>
-                {label}
-            </span>
-        );
+        return <span className={`status-pill ${cls}`}>{label}</span>;
     };
 
     // Format date for display
@@ -165,7 +151,7 @@
                                     fontSize: '0.7rem', fontWeight: 'bold',
                                     fontFamily: 'var(--font-mono)',
                                     letterSpacing: '1px',
-                                    borderRadius: 'var(--radius-sm)',
+                                    borderRadius: 0,
                                 }}
                             >
                                 RELEASE TO ALL
@@ -458,21 +444,28 @@
 
         return (
             <div>
-                <div className="glass-panel" style={{ padding: '2rem', maxWidth: '1100px', margin: '2rem auto' }}>
-                    <h2 className="mono-text" style={{
-                        marginBottom: '1.5rem',
-                        borderBottom: '1px solid var(--border-color)',
-                        paddingBottom: '0.5rem',
-                        display: 'flex', flexWrap: 'wrap',
-                        justifyContent: 'space-between', alignItems: 'center', gap: '0.5rem',
-                    }}>
-                        <span className="text-accent">
-                            <Icon name="radio" size={20} /> BIFROST DISPATCH
-                        </span>
-                        <span className="text-muted" style={{ fontSize: '0.8rem' }}>
-                            {filtered.length} ARTICLE{filtered.length !== 1 ? 'S' : ''}
-                        </span>
+                {/* Wave 2A: brackets-card chrome replaces the legacy glass-panel.
+                    Four corner pieces (.bk .tl/.tr/.bl/.br) supply the
+                    clearance-gate authority frame. */}
+                <div className="brackets" style={{ position: 'relative', padding: '32px 36px', maxWidth: '1100px', margin: '2rem auto' }}>
+                    <span className="bk tl"></span><span className="bk tr"></span>
+                    <span className="bk bl"></span><span className="bk br"></span>
+
+                    <div className="kicker">// BIFROST DISPATCH FEED</div>
+                    <h2 className="title" style={{ fontSize: '52px', marginBottom: '8px' }}>
+                        <span><Icon name="radio" size={28} /> DISPATCH</span>
                     </h2>
+                    <div className="sub">
+                        Open-band intelligence broadcast · clearance-gated archive
+                    </div>
+
+                    {/* Section header — bullet + label + line + count badge. */}
+                    <header className="block-head" style={{ marginBottom: '1rem' }}>
+                        <span className="block-bullet">■</span>
+                        <h3>ARTICLES</h3>
+                        <span className="block-line"></span>
+                        <span className="block-badge">{`${filtered.length} DISPATCH${filtered.length !== 1 ? 'ES' : ''}`}</span>
+                    </header>
 
                     <FilterBar active={filter} onChange={setFilter} articles={articles} />
 
@@ -484,7 +477,7 @@
                                     color: 'var(--bg-dark)', padding: '0.6rem 1.5rem',
                                     cursor: 'pointer', fontWeight: 'bold',
                                     fontFamily: 'var(--font-mono)', fontSize: '0.85rem',
-                                    letterSpacing: '1px', borderRadius: 'var(--radius-sm)',
+                                    letterSpacing: '1px', borderRadius: 0,
                                 }}>
                                 NEW ARTICLE
                             </button>

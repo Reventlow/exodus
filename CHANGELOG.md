@@ -1,5 +1,16 @@
 # Changelog
 
+## v0.14.41
+- **Wave 2 of the clearance-gate aesthetic rollout — hub & list surfaces.** 17 templates restyled across two parallel agents on disjoint file sets. ~22 bracket-frame cards, ~35 `.block-head` section markers, ~22 `.status-pill` indicators added. Every list / hub / authority page now reads native to the new aesthetic
+- News (`list.html`, `detail.html`) — DISPATCH surfaces with bracket-frame cards, `.kicker` / `.title` / `.sub` display heads, dispatch-count badges. Visibility tags converted to status pills (PUBLIC → `s-active`, EYES ONLY → `s-standby`, HIDDEN → `s-burned`)
+- Profile (`accounts/profile.html`) — three bracket cards (identity, avatar, passphrase), `.field` form primitives with `>` prompt glyphs and accent-on-focus carets, `s-active` ACTIVE badge
+- List pages — agencies, characters, pulling-strings, merits, global flaws, FTL projects all wrapped in bracket frames with `.kicker` / `.title` / `.sub` heads and section count badges
+- Read-only character viewer (`characters/view.html`) — full bracket card with 10 `.block-head` section markers (Attributes, Skills, Specialisations, Derived, Biosign Monitor with pulsing red pill, Pulling Strings, Inventory, Dossier, Dice Roller, Merits, Flaws). READ-ONLY pill at the top
+- Council (`agencies/council.html`, `council_charter.html`) — UIC governance surface gets two bracket cards (members + items registry), 6 status pills for vote results (PASSED → `s-active`, REJECTED → `s-burned`, PENDING → `s-standby`, etc.), CHARTER block-head on the charter editor
+- GM Workspace (`workspace.html`, `timeline.html`, `campaign_log.html`, `briefs.html`, `_sidebar.html`) — full splash treatment via `body.surface-splash` (vignette + heavier scanlines). Bracket shells, `.block-head` per tool, type pills (story-idea SHARED → `s-active`, PINNED → `s-standby`; timeline session → `s-active`, plot → `s-standby`, world → `s-burned`, note → `s-inactive`). Sidebar gets a `.block-head` group label and accent-glow active-rail item
+- Square corners enforced; hardcoded color literals (`#fff`, `#a855f7`, etc.) replaced with palette-token references where semantic meaning was clear. Round avatars (`border-radius: 50%`) preserved
+- Surfaces still pending Waves 3–4: agency sheet React modules, character editor sheet, NPCs detail/list, comms, settings tabs, maps, battles. Chrome inherits via Wave 1; surface-level treatment lands next
+
 ## v0.14.40
 - **Wave 1 of the clearance-gate aesthetic rollout — shared chrome.** The rest of the project now inherits the login surface's terminal look automatically. EMERALD palette, JetBrains Mono + VT323 typography, square corners everywhere, dark void background, light scanlines overlay
 - Re-tokenised `static/css/foundation.css`: new canonical `--c-primary / --c-dim / --c-glow / --c-soft / --ink / --ink-dim / --ink-mute / --bg / --font-mono / --font-display` tokens. Legacy `--accent-primary / --bg-dark / --text-primary` etc. now alias to the new tokens, so existing inline styles in JSX components keep working and pick up the new palette automatically (~hundreds of usages reflowed in one shot)

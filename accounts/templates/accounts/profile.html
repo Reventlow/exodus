@@ -3,37 +3,64 @@
 {% block title %}PROFILE // {{ user.username|upper }}{% endblock %}
 
 {% block content %}
-<div style="max-width: 500px; margin: 2rem auto;">
-    <div class="glass-panel" style="padding: 2rem; margin-bottom: 1.5rem;">
-        <h2 class="mono-text text-accent" style="margin-bottom: 0.5rem; letter-spacing: 2px;">
-            OPERATIVE PROFILE
-        </h2>
-        <div class="tech-border" style="padding: 1rem; margin-top: 1rem;">
-            <div style="display: flex; justify-content: space-between; margin-bottom: 0.5rem;">
-                <span class="text-secondary mono-text" style="font-size: 0.8rem;">CODENAME</span>
-                <span class="mono-text text-accent">{{ user.username }}</span>
+<div style="max-width: 560px; margin: 2rem auto;">
+
+    {# ============================================================
+       Authority card — operative profile summary.
+       Wave 2A clearance-gate chrome: brackets frame + corner cuts.
+       Replaces the old glass-panel/tech-border combo.
+       ============================================================ #}
+    <div class="brackets" style="position: relative; padding: 28px 32px; margin-bottom: 1.5rem;">
+        <span class="bk tl"></span><span class="bk tr"></span>
+        <span class="bk bl"></span><span class="bk br"></span>
+
+        <div class="kicker">// OPERATIVE PROFILE</div>
+        <div class="title" style="font-size: 42px; margin-bottom: 18px;">
+            <span>{{ user.username|upper }}</span>
+        </div>
+
+        {# Identity dossier — three labelled spec rows. #}
+        <div class="block" style="gap: 8px;">
+            <div style="display: flex; justify-content: space-between; padding: 6px 0; border-bottom: 1px solid var(--c-dim);">
+                <span class="field-label" style="margin: 0;">
+                    <span class="field-arrow">▸</span> CODENAME
+                </span>
+                <span class="mono-text text-accent" style="letter-spacing: 0.18em;">{{ user.username }}</span>
             </div>
-            <div style="display: flex; justify-content: space-between; margin-bottom: 0.5rem;">
-                <span class="text-secondary mono-text" style="font-size: 0.8rem;">STATUS</span>
-                <span class="mono-text" style="color: var(--accent-success);">ACTIVE</span>
+            <div style="display: flex; justify-content: space-between; padding: 6px 0; border-bottom: 1px solid var(--c-dim);">
+                <span class="field-label" style="margin: 0;">
+                    <span class="field-arrow">▸</span> STATUS
+                </span>
+                <span class="status-pill s-active">ACTIVE</span>
             </div>
-            <div style="display: flex; justify-content: space-between;">
-                <span class="text-secondary mono-text" style="font-size: 0.8rem;">CLEARANCE</span>
-                <span class="mono-text">{% if user.is_superuser %}ADMINISTRATOR{% else %}OPERATIVE{% endif %}</span>
+            <div style="display: flex; justify-content: space-between; padding: 6px 0;">
+                <span class="field-label" style="margin: 0;">
+                    <span class="field-arrow">▸</span> CLEARANCE
+                </span>
+                <span class="mono-text" style="letter-spacing: 0.18em; color: var(--ink);">{% if user.is_superuser %}ADMINISTRATOR{% else %}OPERATIVE{% endif %}</span>
             </div>
         </div>
     </div>
 
-    <div class="glass-panel" style="padding: 2rem; margin-bottom: 1.5rem;">
-        <h3 class="mono-text text-accent" style="margin-bottom: 1.5rem; border-bottom: 1px solid var(--border-color); padding-bottom: 0.5rem;">
-            AVATAR
-        </h3>
-        <div style="display: flex; align-items: center; gap: 1.5rem; margin-bottom: 1rem;">
+    {# ============================================================
+       Avatar card. Round avatar preserved (border-radius: 50%).
+       ============================================================ #}
+    <div class="brackets" style="position: relative; padding: 28px 32px; margin-bottom: 1.5rem;">
+        <span class="bk tl"></span><span class="bk tr"></span>
+        <span class="bk bl"></span><span class="bk br"></span>
+
+        <header class="block-head" style="margin-bottom: 1.25rem;">
+            <span class="block-bullet">■</span>
+            <h3>AVATAR</h3>
+            <span class="block-line"></span>
+        </header>
+
+        <div style="display: flex; align-items: center; gap: 1.5rem; margin-bottom: 0.5rem;">
             {% if profile.avatar %}
             <img src="{{ profile.avatar.url }}" alt="Avatar"
-                style="width: 80px; height: 80px; border-radius: 50%; object-fit: cover; border: 2px solid var(--border-color);">
+                style="width: 80px; height: 80px; border-radius: 50%; object-fit: cover; border: 2px solid var(--c-dim);">
             {% else %}
-            <div style="width: 80px; height: 80px; border-radius: 50%; background: var(--bg-input); border: 2px solid var(--border-color); display: flex; align-items: center; justify-content: center;">
+            <div style="width: 80px; height: 80px; border-radius: 50%; background: var(--bg-input); border: 2px solid var(--c-dim); display: flex; align-items: center; justify-content: center;">
                 <span class="mono-text text-secondary" style="font-size: 2rem;">{{ user.username|first|upper }}</span>
             </div>
             {% endif %}
@@ -42,15 +69,15 @@
                     {% csrf_token %}
                     <input type="hidden" name="action" value="avatar">
                     <div style="display: flex; gap: 0.5rem; align-items: center; flex-wrap: wrap;">
-                        <label style="background: var(--bg-input); border: 1px solid var(--border-color); padding: 0.5rem 1rem; cursor: pointer; font-family: var(--font-mono); font-size: 0.8rem; color: var(--text-secondary);">
+                        <label class="btn-cyber" style="cursor: pointer;">
                             CHOOSE FILE
                             <input type="file" name="avatar" accept="image/*"
                                 onchange="this.form.submit()"
                                 style="display: none;">
                         </label>
                         {% if profile.avatar %}
-                        <button type="submit" name="remove_avatar" value="1"
-                            style="background: none; border: 1px solid var(--accent-danger, #c0392b); color: var(--accent-danger, #c0392b); padding: 0.5rem 1rem; cursor: pointer; font-family: var(--font-mono); font-size: 0.8rem;">
+                        <button type="submit" name="remove_avatar" value="1" class="btn-cyber"
+                            style="border-color: var(--accent-danger); color: var(--accent-danger);">
                             REMOVE
                         </button>
                         {% endif %}
@@ -60,15 +87,24 @@
         </div>
     </div>
 
-    <div class="glass-panel" style="padding: 2rem;">
-        <h3 class="mono-text text-accent" style="margin-bottom: 1.5rem; border-bottom: 1px solid var(--border-color); padding-bottom: 0.5rem;">
-            UPDATE PASSPHRASE
-        </h3>
+    {# ============================================================
+       Passphrase update card — uses the .field primitive recipe
+       so each input gets the > prompt glyph and accent focus state.
+       ============================================================ #}
+    <div class="brackets" style="position: relative; padding: 28px 32px;">
+        <span class="bk tl"></span><span class="bk tr"></span>
+        <span class="bk bl"></span><span class="bk br"></span>
+
+        <header class="block-head" style="margin-bottom: 1.25rem;">
+            <span class="block-bullet">■</span>
+            <h3>UPDATE PASSPHRASE</h3>
+            <span class="block-line"></span>
+        </header>
 
         {% if messages %}
         <div style="margin-bottom: 1rem;">
             {% for message in messages %}
-            <div class="mono-text" style="color: {% if message.tags == 'success' %}var(--accent-success){% else %}var(--accent-danger){% endif %}; font-size: 0.85rem; padding: 0.5rem; border-left: 2px solid {% if message.tags == 'success' %}var(--accent-success){% else %}var(--accent-danger){% endif %}; margin-bottom: 0.5rem;">
+            <div class="mono-text" style="color: {% if message.tags == 'success' %}var(--c-primary){% else %}var(--accent-danger){% endif %}; font-size: 0.85rem; padding: 0.5rem; border-left: 2px solid {% if message.tags == 'success' %}var(--c-primary){% else %}var(--accent-danger){% endif %}; margin-bottom: 0.5rem;">
                 {{ message }}
             </div>
             {% endfor %}
@@ -77,30 +113,47 @@
 
         <form method="post">
             {% csrf_token %}
-            <div style="margin-bottom: 1.5rem;">
-                <label class="text-secondary mono-text" style="font-size: 0.8rem; display: block; margin-bottom: 0.25rem;">CURRENT PASSPHRASE</label>
-                <input type="password" name="old_password" required
-                    style="width: 100%; background: var(--bg-input); border: 1px solid var(--border-color); color: var(--text-primary); padding: 0.75rem; font-family: var(--font-mono); font-size: 1rem;">
+
+            {# Each field follows the clearance_gate.css recipe — label + prompt + caret. #}
+            <div class="field" style="margin-bottom: 1.25rem;">
+                <label class="field-label" for="prof-old-pass">
+                    <span class="field-arrow">▸</span> CURRENT PASSPHRASE
+                </label>
+                <div class="field-wrap">
+                    <span class="field-prompt">&gt;</span>
+                    <input class="field-input" id="prof-old-pass" type="password" name="old_password" required>
+                    <span class="field-caret"></span>
+                </div>
             </div>
-            <div style="margin-bottom: 1.5rem;">
-                <label class="text-secondary mono-text" style="font-size: 0.8rem; display: block; margin-bottom: 0.25rem;">NEW PASSPHRASE</label>
-                <input type="password" name="new_password1" required
-                    style="width: 100%; background: var(--bg-input); border: 1px solid var(--border-color); color: var(--text-primary); padding: 0.75rem; font-family: var(--font-mono); font-size: 1rem;">
+            <div class="field" style="margin-bottom: 1.25rem;">
+                <label class="field-label" for="prof-new-pass1">
+                    <span class="field-arrow">▸</span> NEW PASSPHRASE
+                    <span class="field-spec">MIN 4 · ZEROIZED ON SUBMIT</span>
+                </label>
+                <div class="field-wrap">
+                    <span class="field-prompt">&gt;</span>
+                    <input class="field-input" id="prof-new-pass1" type="password" name="new_password1" required>
+                    <span class="field-caret"></span>
+                </div>
             </div>
-            <div style="margin-bottom: 2rem;">
-                <label class="text-secondary mono-text" style="font-size: 0.8rem; display: block; margin-bottom: 0.25rem;">CONFIRM NEW PASSPHRASE</label>
-                <input type="password" name="new_password2" required
-                    style="width: 100%; background: var(--bg-input); border: 1px solid var(--border-color); color: var(--text-primary); padding: 0.75rem; font-family: var(--font-mono); font-size: 1rem;">
+            <div class="field" style="margin-bottom: 1.75rem;">
+                <label class="field-label" for="prof-new-pass2">
+                    <span class="field-arrow">▸</span> CONFIRM NEW PASSPHRASE
+                </label>
+                <div class="field-wrap">
+                    <span class="field-prompt">&gt;</span>
+                    <input class="field-input" id="prof-new-pass2" type="password" name="new_password2" required>
+                    <span class="field-caret"></span>
+                </div>
             </div>
-            <button type="submit"
-                style="width: 100%; background: var(--accent-primary); color: var(--bg-dark); border: none; padding: 0.75rem; font-family: var(--font-mono); font-size: 1rem; font-weight: bold; cursor: pointer; letter-spacing: 1px;">
+            <button type="submit" class="btn-primary" style="width: 100%;">
                 UPDATE PASSPHRASE
             </button>
         </form>
     </div>
 
     <div style="text-align: center; margin-top: 1.5rem;">
-        <a href="/" class="text-accent mono-text" style="font-size: 0.85rem; text-decoration: none;">
+        <a href="/" class="text-accent mono-text" style="font-size: 0.85rem; text-decoration: none; letter-spacing: 0.18em;">
             &lt; RETURN TO DATABASE
         </a>
     </div>

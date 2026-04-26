@@ -64,12 +64,12 @@
         const inputStyle = {
             background: 'transparent', border: '1px solid var(--border-color)',
             color: 'var(--text-primary)', padding: '0.25rem', width: '100%',
-            fontFamily: 'var(--font-mono)', fontSize: '0.8rem', borderRadius: '3px',
+            fontFamily: 'var(--font-mono)', fontSize: '0.8rem', borderRadius: 0,
         };
         const btnStyle = (color) => ({
             background: 'transparent', border: `1px solid var(--${color})`,
             color: `var(--${color})`, padding: '0.2rem 0.5rem', cursor: 'pointer',
-            borderRadius: '3px', fontFamily: 'var(--font-mono)', fontSize: '0.75rem',
+            borderRadius: 0, fontFamily: 'var(--font-mono)', fontSize: '0.75rem',
             marginRight: '0.25rem',
         });
 
@@ -165,27 +165,43 @@
         const inputStyle = {
             background: 'transparent', border: '1px solid var(--border-color)',
             color: 'var(--text-primary)', padding: '0.4rem', width: '100%',
-            fontFamily: 'var(--font-mono)', fontSize: '0.85rem', borderRadius: '3px',
+            fontFamily: 'var(--font-mono)', fontSize: '0.85rem', borderRadius: 0,
         };
 
         return (
-            <div className="glass-panel" style={{ padding: '1.5rem', maxWidth: '1400px', margin: '0 auto' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
-                    <h2 className="mono-text text-accent" style={{ margin: 0 }}>PULLING STRINGS CATALOG ({visible.length})</h2>
+            // Wave 2A: brackets-card chrome replaces glass-panel.
+            <div className="brackets" style={{ position: 'relative', padding: '28px 32px', maxWidth: '1400px', margin: '2rem auto' }}>
+                <span className="bk tl"></span><span className="bk tr"></span>
+                <span className="bk bl"></span><span className="bk br"></span>
+
+                <div className="kicker">// PULLING STRINGS CATALOG</div>
+                <h2 className="title" style={{ fontSize: '44px', marginBottom: '8px' }}>
+                    <span>PULLING STRINGS</span>
+                </h2>
+                <div className="sub" style={{ marginBottom: '1.25rem' }}>
+                    Catalog · {visible.length} ENTR{visible.length === 1 ? 'Y' : 'IES'} VISIBLE
+                </div>
+
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem', gap: '0.5rem', flexWrap: 'wrap' }}>
+                    <header className="block-head" style={{ flex: 1, minWidth: '200px' }}>
+                        <span className="block-bullet">■</span>
+                        <h3>FILTER · CATEGORY</h3>
+                        <span className="block-line"></span>
+                    </header>
                     <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
                         {(IS_ADMIN ? ['all', ...CATEGORIES] : ['all', 'general', CHARACTER_CLASS].filter(Boolean)).map(c => (
                             <button key={c} onClick={() => setFilter(c)} style={{
                                 background: filter === c ? 'var(--accent-primary)' : 'transparent',
                                 border: '1px solid var(--accent-primary)',
                                 color: filter === c ? 'var(--bg-dark)' : 'var(--accent-primary)',
-                                padding: '0.25rem 0.75rem', borderRadius: '3px', cursor: 'pointer',
+                                padding: '0.25rem 0.75rem', borderRadius: 0, cursor: 'pointer',
                                 fontFamily: 'var(--font-mono)', fontSize: '0.75rem',
                             }}>{c === 'all' ? 'ALL' : c.toUpperCase()}</button>
                         ))}
                         {IS_ADMIN && <button onClick={() => setShowAdd(!showAdd)} style={{
                             background: showAdd ? 'var(--accent-danger)' : 'var(--accent-primary)',
                             border: 'none', color: 'var(--bg-dark)',
-                            padding: '0.25rem 0.75rem', borderRadius: '3px', cursor: 'pointer',
+                            padding: '0.25rem 0.75rem', borderRadius: 0, cursor: 'pointer',
                             fontFamily: 'var(--font-mono)', fontSize: '0.75rem',
                         }}>{showAdd ? 'CANCEL' : '+ ADD'}</button>}
                     </div>
@@ -225,7 +241,7 @@
                             background: form.name ? 'var(--accent-primary)' : 'transparent',
                             border: '1px solid var(--accent-primary)',
                             color: form.name ? 'var(--bg-dark)' : 'var(--text-muted)',
-                            padding: '0.4rem 1rem', borderRadius: '3px',
+                            padding: '0.4rem 1rem', borderRadius: 0,
                             cursor: form.name ? 'pointer' : 'default',
                             fontFamily: 'var(--font-mono)', fontSize: '0.85rem', marginTop: '0.75rem',
                         }}>CREATE PULLING STRING</button>

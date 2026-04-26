@@ -42,46 +42,30 @@
         return <i data-lucide={name} width={size} height={size}></i>;
     };
 
-    const VIS_STYLES = {
-        hidden:    { color: 'var(--accent-danger)',  border: 'var(--accent-danger)' },
-        eyes_only: { color: 'var(--accent-warning)', border: 'var(--accent-warning)' },
-        public:    { color: 'var(--accent-primary)', border: 'var(--accent-primary)' },
+    // Wave 2A: clearance-gate status-pill mapping for visibility tags.
+    //   public -> s-active, eyes_only -> s-standby, hidden -> s-burned.
+    const VIS_PILL_CLASS = {
+        hidden:    's-burned',
+        eyes_only: 's-standby',
+        public:    's-active',
     };
 
     const VisibilityBadge = ({ visibility, eyesOnlyPlayer, releasedAt }) => {
         if (releasedAt && eyesOnlyPlayer) {
             return (
                 <span style={{ display: 'inline-flex', gap: '0.3rem', flexWrap: 'wrap' }}>
-                    <span className="mono-text" style={{
-                        fontSize: '0.7rem', color: 'var(--accent-warning)',
-                        border: '1px solid var(--accent-warning)',
-                        padding: '0.15rem 0.5rem', letterSpacing: '1px',
-                    }}>
+                    <span className="status-pill s-standby">
                         EYES ONLY — {eyesOnlyPlayer.toUpperCase()}
                     </span>
-                    <span className="mono-text" style={{
-                        fontSize: '0.7rem', color: 'var(--accent-primary)',
-                        border: '1px solid var(--accent-primary)',
-                        padding: '0.15rem 0.5rem', letterSpacing: '1px',
-                    }}>
-                        RELEASED
-                    </span>
+                    <span className="status-pill s-active">RELEASED</span>
                 </span>
             );
         }
-        const s = VIS_STYLES[visibility] || VIS_STYLES.public;
+        const cls = VIS_PILL_CLASS[visibility] || 's-active';
         const label = visibility === 'eyes_only'
             ? `EYES ONLY${eyesOnlyPlayer ? ' — ' + eyesOnlyPlayer.toUpperCase() : ''}`
             : visibility.toUpperCase();
-        return (
-            <span className="mono-text" style={{
-                fontSize: '0.7rem', color: s.color,
-                border: `1px solid ${s.border}`,
-                padding: '0.15rem 0.5rem', letterSpacing: '1px',
-            }}>
-                {label}
-            </span>
-        );
+        return <span className={`status-pill ${cls}`}>{label}</span>;
     };
 
     const formatDate = (iso) => {
@@ -389,10 +373,16 @@
         }
 
         if (!article) {
+            // Wave 2A: brackets card for the not-found surface, too.
             return (
-                <div className="glass-panel" style={{ padding: '2rem', maxWidth: '800px', margin: '2rem auto', textAlign: 'center' }}>
-                    <h2 className="mono-text text-muted">ARTICLE NOT FOUND</h2>
-                    <a href="/" className="mono-text text-accent" style={{ textDecoration: 'none' }}>
+                <div className="brackets" style={{ position: 'relative', padding: '32px 36px', maxWidth: '800px', margin: '2rem auto', textAlign: 'center' }}>
+                    <span className="bk tl"></span><span className="bk tr"></span>
+                    <span className="bk bl"></span><span className="bk br"></span>
+                    <div className="kicker">// 404 — UNINDEXED</div>
+                    <h2 className="title" style={{ fontSize: '42px', justifyContent: 'center' }}>
+                        <span>ARTICLE NOT FOUND</span>
+                    </h2>
+                    <a href="/" className="mono-text text-accent" style={{ textDecoration: 'none', letterSpacing: '0.18em' }}>
                         RETURN TO DISPATCH
                     </a>
                 </div>
@@ -400,7 +390,10 @@
         }
 
         return (<>
-            <div className="glass-panel" style={{ padding: '2rem', maxWidth: '800px', margin: '2rem auto' }}>
+            {/* Wave 2A: brackets-card chrome for the dispatch detail page. */}
+            <div className="brackets" style={{ position: 'relative', padding: '32px 36px', maxWidth: '800px', margin: '2rem auto' }}>
+                <span className="bk tl"></span><span className="bk tr"></span>
+                <span className="bk bl"></span><span className="bk br"></span>
                 {/* Header */}
                 <div style={{ marginBottom: '1.5rem' }}>
                     <a href="/" className="mono-text text-muted" style={{
@@ -430,7 +423,7 @@
                                     color: 'var(--bg-dark)', padding: '0.4rem 0.75rem',
                                     cursor: 'pointer', fontSize: '0.75rem', fontWeight: 'bold',
                                     fontFamily: 'var(--font-mono)', letterSpacing: '1px',
-                                    borderRadius: 'var(--radius-sm)',
+                                    borderRadius: 0,
                                 }}>
                                 RELEASE TO ALL
                             </button>
@@ -443,7 +436,7 @@
                                     color: 'var(--accent-warning)', padding: '0.4rem 0.75rem',
                                     cursor: 'pointer', fontSize: '0.75rem', fontWeight: 'bold',
                                     fontFamily: 'var(--font-mono)', letterSpacing: '1px',
-                                    borderRadius: 'var(--radius-sm)',
+                                    borderRadius: 0,
                                 }}>
                                 SHARE WITH...
                             </button>
@@ -490,7 +483,7 @@
                 {/* Featured image */}
                 {article.featuredImage && (
                     <div style={{
-                        marginBottom: '1.5rem', borderRadius: 'var(--radius-sm)',
+                        marginBottom: '1.5rem', borderRadius: 0,
                         overflow: 'hidden', border: '1px solid var(--border-color)',
                     }}>
                         <img src={article.featuredImage} alt={article.title}
@@ -503,15 +496,17 @@
                     </div>
                 )}
 
-                {/* Title */}
+                {/* Title — Wave 2A: VT323 display title with kicker meta. */}
                 {!editing && (
-                    <h1 className="mono-text text-accent" style={{
-                        fontSize: '1.5rem', marginBottom: '1.5rem',
-                        borderBottom: '1px solid var(--border-color)',
-                        paddingBottom: '0.75rem', lineHeight: '1.3',
-                    }}>
-                        {article.title}
-                    </h1>
+                    <>
+                        <div className="kicker" style={{ marginTop: '1rem' }}>// DISPATCH</div>
+                        <h1 className="title" style={{ fontSize: '54px', marginBottom: '8px', lineHeight: '1' }}>
+                            <span>{article.title}</span>
+                        </h1>
+                        <div className="sub" style={{ marginBottom: '1.5rem', borderBottom: '1px solid var(--c-dim)', paddingBottom: '0.75rem' }}>
+                            {article.gameDate || formatDate(article.publishedAt || article.createdAt)}
+                        </div>
+                    </>
                 )}
 
                 {/* Edit mode or content */}
@@ -532,15 +527,17 @@
                     />
                 )}
 
-                {/* Image upload for admins */}
+                {/* Image upload for admins — Wave 2A: block-head section. */}
                 {IS_ADMIN && !editing && (
                     <div style={{
                         marginTop: '2rem', paddingTop: '1rem',
-                        borderTop: '1px solid var(--border-color)',
+                        borderTop: '1px solid var(--c-dim)',
                     }}>
-                        <label className="mono-text text-muted" style={{ fontSize: '0.75rem', display: 'block', marginBottom: '0.5rem' }}>
-                            FEATURED IMAGE
-                        </label>
+                        <header className="block-head" style={{ marginBottom: '0.5rem' }}>
+                            <span className="block-bullet">■</span>
+                            <h3>FEATURED IMAGE</h3>
+                            <span className="block-line"></span>
+                        </header>
                         <input type="file" accept="image/*" onChange={handleImageUpload}
                             style={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}
                         />
@@ -567,17 +564,22 @@
                     </div>
                 )}
 
-                {/* Attachments */}
+                {/* Attachments — Wave 2A: block-head section pattern. */}
                 {(article.attachments?.length > 0 || IS_ADMIN) && (
                     <div style={{
                         marginTop: '1.5rem', paddingTop: '1rem',
-                        borderTop: '1px solid var(--border-color)',
+                        borderTop: '1px solid var(--c-dim)',
                     }}>
-                        <h3 className="mono-text text-muted" style={{
-                            fontSize: '0.85rem', marginBottom: '0.75rem', letterSpacing: '1px',
-                        }}>
-                            <Icon name="paperclip" size={14} /> ATTACHMENTS
-                        </h3>
+                        <header className="block-head" style={{ marginBottom: '0.75rem' }}>
+                            <span className="block-bullet">■</span>
+                            <h3>
+                                <Icon name="paperclip" size={12} /> ATTACHMENTS
+                            </h3>
+                            <span className="block-line"></span>
+                            {article.attachments && article.attachments.length > 0 && (
+                                <span className="block-badge">{article.attachments.length}</span>
+                            )}
+                        </header>
 
                         {article.attachments?.map(att => (
                             <div key={att.id} style={{
@@ -705,13 +707,13 @@
     .markdown-content code {
         background: var(--bg-dark);
         padding: 0.15rem 0.4rem;
-        border-radius: 3px;
+        border-radius: 0;
         font-size: 0.85em;
     }
     .markdown-content pre {
         background: var(--bg-dark);
         padding: 1rem;
-        border-radius: var(--radius-sm);
+        border-radius: 0;
         overflow-x: auto;
         margin-bottom: 1rem;
     }
@@ -721,7 +723,7 @@
     }
     .markdown-content img {
         max-width: 100%;
-        border-radius: var(--radius-sm);
+        border-radius: 0;
         border: 1px solid var(--border-color);
         margin: 0.5rem 0;
     }

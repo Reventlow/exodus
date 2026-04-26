@@ -60,7 +60,7 @@
                     fontSize: '0.85rem',
                     width: '100%',
                     boxSizing: 'border-box',
-                    borderRadius: 'var(--radius-sm)',
+                    borderRadius: 0,
                     ...style,
                 }}
                 onBlur={() => {
@@ -88,7 +88,7 @@
                     fontSize: '0.85rem',
                     width: '100%',
                     boxSizing: 'border-box',
-                    borderRadius: 'var(--radius-sm)',
+                    borderRadius: 0,
                     resize: 'vertical',
                     fontFamily: 'var(--font-mono)',
                 }}
@@ -139,7 +139,7 @@
                                 padding: '0.3rem 0.5rem',
                                 fontSize: '0.8rem',
                                 flex: 1,
-                                borderRadius: 'var(--radius-sm)',
+                                borderRadius: 0,
                             }}
                         />
                         <button
@@ -166,7 +166,7 @@
                         cursor: 'pointer',
                         fontSize: '0.75rem',
                         marginTop: '0.25rem',
-                        borderRadius: 'var(--radius-sm)',
+                        borderRadius: 0,
                     }}
                 >
                     + Add {field === 'pros' ? 'Pro' : 'Con'}
@@ -209,7 +209,8 @@
                             background: 'transparent', border: '1px solid var(--accent-danger)',
                             color: 'var(--accent-danger)', cursor: 'pointer',
                             padding: '0.3rem 0.6rem', fontSize: '0.75rem',
-                            fontFamily: 'var(--font-mono)', borderRadius: 'var(--radius-sm)',
+                            fontFamily: 'var(--font-mono)', borderRadius: 0,
+                            letterSpacing: '0.18em', textTransform: 'uppercase',
                             marginTop: '1rem',
                         }}
                     >
@@ -360,28 +361,33 @@
 
         return (
             <div style={{ maxWidth: '1000px', margin: '0 auto', padding: '2rem 1rem' }}>
-                {/* Header */}
-                <div style={{ marginBottom: '2rem' }}>
+                {/* Header — Wave 2A: brackets-card chrome.
+                    FTL surface keeps its blue accent in the kicker/title shadow
+                    via inline style so the surface stays visually distinct. */}
+                <div style={{ marginBottom: '1rem' }}>
                     <a href="/agencies/" className="mono-text text-muted"
-                        style={{ textDecoration: 'none', fontSize: '0.8rem', display: 'block', marginBottom: '0.5rem' }}>
+                        style={{ textDecoration: 'none', fontSize: '0.8rem', display: 'block', marginBottom: '0.5rem', letterSpacing: '0.18em' }}>
                         &lt; BACK TO AGENCIES
                     </a>
-                    <h1 className="mono-text" style={{
-                        color: FTL_ACCENT,
-                        fontSize: '1.5rem',
-                        letterSpacing: '2px',
-                        borderBottom: `2px solid ${FTL_ACCENT}`,
-                        paddingBottom: '0.5rem'
-                    }}>
-                        FTL PROJECTS // MANAGEMENT
-                    </h1>
-                    <p className="text-muted mono-text" style={{ fontSize: '0.75rem', marginTop: '0.5rem' }}>
-                        Faster Than Light travel research projects. Assign to agencies to track progress toward completion.
-                    </p>
                 </div>
+                <div className="brackets" style={{ position: 'relative', padding: '28px 32px', marginBottom: '1rem' }}>
+                    <span className="bk tl"></span><span className="bk tr"></span>
+                    <span className="bk bl"></span><span className="bk br"></span>
 
-                {/* Project cards */}
-                <div className="glass-panel" style={{ padding: '1.5rem' }}>
+                    <div className="kicker" style={{ color: FTL_ACCENT }}>// FTL RESEARCH REGISTRY</div>
+                    <h1 className="title" style={{ fontSize: '48px', marginBottom: '8px' }}>
+                        <span>FTL PROJECTS</span>
+                    </h1>
+                    <div className="sub">
+                        Faster Than Light travel research · assigned per-agency · progress toward completion
+                    </div>
+
+                    <header className="block-head" style={{ marginTop: '1.25rem', marginBottom: '0.75rem' }}>
+                        <span className="block-bullet">■</span>
+                        <h3>PROJECT REGISTRY</h3>
+                        <span className="block-line"></span>
+                        <span className="block-badge">{projects.length} PROJECTS</span>
+                    </header>
                     {projects.length === 0 && (
                         <p className="text-muted mono-text" style={{
                             textAlign: 'center', padding: '2rem 0', fontStyle: 'italic', fontSize: '0.85rem'
@@ -416,7 +422,7 @@
                                 fontFamily: 'var(--font-mono)',
                                 fontSize: '0.85rem',
                                 letterSpacing: '1px',
-                                borderRadius: 'var(--radius-sm)',
+                                borderRadius: 0,
                                 opacity: creating ? 0.6 : 1,
                             }}
                         >

@@ -10,7 +10,21 @@
             &lt; BACK TO COUNCIL
         </a>
     </div>
-    <div id="charter-content" class="glass-panel" style="padding: 2rem; line-height: 1.7;"></div>
+
+    {# Authority card: bracket-frame chrome wrapping the charter render. #}
+    <div class="brackets" style="position: relative; padding: 32px 36px;">
+        <span class="bk tl"></span><span class="bk tr"></span>
+        <span class="bk bl"></span><span class="bk br"></span>
+
+        <header class="block-head" style="margin-bottom: 1.25rem;">
+            <span class="block-bullet">■</span>
+            <h3>CHARTER</h3>
+            <span class="block-line"></span>
+            <span class="block-badge">UIC</span>
+        </header>
+
+        <div id="charter-content" style="line-height: 1.7;"></div>
+    </div>
 </div>
 {% endblock %}
 
@@ -21,23 +35,25 @@
     const el = document.getElementById('charter-content');
     el.innerHTML = html;
 
-    // Style headings and rules to match the theme
+    // Style headings and rules to match the clearance-gate theme.
+    // Colors keyed off CSS custom properties so palette swaps cascade.
     el.querySelectorAll('h1').forEach(h => {
         h.classList.add('mono-text');
-        h.style.color = '#a855f7';
+        h.style.color = 'var(--accent-primary)';
         h.style.fontSize = '1.5rem';
         h.style.letterSpacing = '2px';
-        h.style.borderBottom = '2px solid #a855f7';
+        h.style.borderBottom = '2px solid var(--accent-primary)';
         h.style.paddingBottom = '0.5rem';
         h.style.marginTop = '2rem';
+        h.style.textShadow = '0 0 8px var(--c-glow)';
     });
     el.querySelectorAll('h2').forEach(h => {
         h.classList.add('mono-text');
-        h.style.color = '#a855f7';
+        h.style.color = 'var(--accent-primary)';
         h.style.fontSize = '1.1rem';
         h.style.letterSpacing = '1px';
         h.style.marginTop = '1.5rem';
-        h.style.borderBottom = '1px solid rgba(168, 85, 247, 0.3)';
+        h.style.borderBottom = '1px solid var(--c-dim)';
         h.style.paddingBottom = '0.3rem';
     });
     el.querySelectorAll('h3').forEach(h => {
@@ -54,7 +70,7 @@
         em.style.color = 'var(--text-muted)';
     });
     el.querySelectorAll('hr').forEach(hr => {
-        hr.style.borderColor = 'rgba(168, 85, 247, 0.2)';
+        hr.style.borderColor = 'var(--c-dim)';
         hr.style.margin = '1.5rem 0';
     });
     el.querySelectorAll('ol').forEach(ol => {

@@ -1,83 +1,108 @@
 {% extends "base.html" %}
 {% load static %}
 {% block title %}GM WORKSPACE // EXODUS{% endblock %}
+{# Command surface: heavier vignette + scanlines via splash class. #}
+{% block body_class %}surface-splash{% endblock %}
 
 {% block content %}
 <style>
-    .gm-shell { display: flex; min-height: calc(100vh - 120px); }
+    /* GM workspace shell — clearance-gate chrome.
+       The whole shell sits inside a .brackets frame to read as
+       a single command surface. Inputs use square corners and
+       palette-keyed colors so they auto-track palette swaps. */
+    .gm-shell-wrap {
+        max-width: 1500px; margin: 1.5rem auto; padding: 0 1rem;
+    }
+    .gm-shell {
+        display: flex;
+        min-height: calc(100vh - 180px);
+        position: relative;
+        padding: 24px;
+    }
+    .gm-shell .bk { z-index: 2; }
     .gm-main { flex: 1; display: flex; min-width: 0; }
     .gm-list {
         width: 320px; flex-shrink: 0;
-        border-right: 1px solid var(--border-color);
+        border-right: 1px solid var(--c-dim);
         display: flex; flex-direction: column;
-        min-height: calc(100vh - 120px);
+        min-height: calc(100vh - 220px);
     }
     .gm-list-header {
-        padding: 0.75rem; border-bottom: 1px solid var(--border-color);
+        padding: 0.75rem; border-bottom: 1px solid var(--c-dim);
         display: flex; gap: 0.5rem; flex-direction: column;
     }
     .gm-list-scroll { overflow-y: auto; flex: 1; }
     .gm-note-item {
         padding: 0.75rem; cursor: pointer;
-        border-bottom: 1px solid rgba(51,65,85,0.4);
+        border-bottom: 1px solid var(--c-dim);
         transition: background 0.1s;
+        border-left: 2px solid transparent;
     }
-    .gm-note-item:hover { background: rgba(56,189,248,0.04); }
+    .gm-note-item:hover { background: var(--c-soft); }
     .gm-note-item.active {
-        background: rgba(56,189,248,0.08);
-        border-left: 2px solid var(--accent-primary);
+        background: var(--c-soft);
+        border-left: 2px solid var(--c-primary);
     }
     .gm-editor { flex: 1; padding: 1.25rem; overflow-y: auto; }
     .gm-input {
-        background: transparent; border: 1px solid var(--border-color);
+        background: rgba(0,0,0,0.45); border: 1px solid var(--c-dim);
         color: var(--text-primary); padding: 0.5rem;
         font-family: var(--font-mono); width: 100%;
-        border-radius: 3px; font-size: 0.9rem;
+        border-radius: 0; font-size: 0.9rem;
     }
-    .gm-input:focus { border-color: var(--accent-primary); outline: none; }
+    .gm-input:focus {
+        border-color: var(--c-primary);
+        box-shadow: 0 0 0 1px var(--c-primary), 0 0 12px var(--c-glow);
+        outline: none;
+    }
     .gm-textarea {
-        background: transparent; border: 1px solid var(--border-color);
+        background: rgba(0,0,0,0.45); border: 1px solid var(--c-dim);
         color: var(--text-primary); padding: 0.75rem;
         font-family: var(--font-mono); width: 100%;
         min-height: 400px; resize: vertical;
-        border-radius: 3px; font-size: 0.85rem;
+        border-radius: 0; font-size: 0.85rem;
         line-height: 1.5;
     }
-    .gm-textarea:focus { border-color: var(--accent-primary); outline: none; }
+    .gm-textarea:focus {
+        border-color: var(--c-primary);
+        box-shadow: 0 0 0 1px var(--c-primary), 0 0 12px var(--c-glow);
+        outline: none;
+    }
     .gm-btn {
-        background: transparent; border: 1px solid var(--border-color);
+        background: transparent; border: 1px solid var(--c-dim);
         color: var(--text-secondary); padding: 0.35rem 0.75rem;
         cursor: pointer; font-family: var(--font-mono);
-        font-size: 0.75rem; letter-spacing: 1px; border-radius: 3px;
+        font-size: 0.75rem; letter-spacing: 1px; border-radius: 0;
     }
-    .gm-btn.primary { border-color: var(--accent-primary); color: var(--accent-primary); }
+    .gm-btn.primary { border-color: var(--c-primary); color: var(--c-primary); }
     .gm-btn.danger { border-color: var(--accent-danger); color: var(--accent-danger); }
-    .gm-btn:hover:not(:disabled) { background: rgba(255,255,255,0.04); }
+    .gm-btn:hover:not(:disabled) { background: var(--c-soft); }
     .gm-btn:disabled { opacity: 0.4; cursor: not-allowed; }
     .gm-chip {
         display: inline-block; padding: 0.1rem 0.4rem;
-        background: rgba(56,189,248,0.08); color: var(--accent-primary);
-        border: 1px solid var(--accent-primary); border-radius: 3px;
+        background: var(--c-soft); color: var(--c-primary);
+        border: 1px solid var(--c-primary); border-radius: 0;
         font-family: var(--font-mono); font-size: 0.65rem;
         margin-right: 0.25rem; letter-spacing: 1px;
     }
     .gm-preview {
-        background: rgba(0,0,0,0.25); border: 1px solid var(--border-color);
-        border-radius: 3px; padding: 1rem;
+        background: rgba(0,0,0,0.35); border: 1px solid var(--c-dim);
+        border-radius: 0; padding: 1rem;
         color: var(--text-primary); line-height: 1.6;
         min-height: 400px;
     }
     .gm-preview h1, .gm-preview h2, .gm-preview h3 {
         color: var(--accent-primary); font-family: var(--font-mono);
         margin-top: 1rem; margin-bottom: 0.5rem;
+        text-shadow: 0 0 6px var(--c-glow);
     }
     .gm-preview code {
-        background: rgba(255,255,255,0.08); padding: 0.1rem 0.3rem;
-        border-radius: 2px; font-size: 0.85em;
+        background: rgba(255,255,255,0.06); padding: 0.1rem 0.3rem;
+        border-radius: 0; font-size: 0.85em;
     }
     .gm-preview pre {
-        background: rgba(0,0,0,0.4); padding: 0.75rem;
-        border-radius: 3px; overflow-x: auto;
+        background: rgba(0,0,0,0.5); padding: 0.75rem;
+        border-radius: 0; overflow-x: auto;
     }
     .gm-preview blockquote {
         border-left: 3px solid var(--accent-primary);
@@ -88,9 +113,13 @@
     .gm-preview ul, .gm-preview ol { padding-left: 1.5rem; }
 </style>
 
-<div class="gm-shell">
-    {% include "gm_workspace/_sidebar.html" %}
-    <div id="gm-root" style="flex: 1; display: flex; min-width: 0;"></div>
+<div class="gm-shell-wrap">
+    <div class="gm-shell brackets">
+        <span class="bk tl"></span><span class="bk tr"></span>
+        <span class="bk bl"></span><span class="bk br"></span>
+        {% include "gm_workspace/_sidebar.html" %}
+        <div id="gm-root" style="flex: 1; display: flex; min-width: 0;"></div>
+    </div>
 </div>
 
 <script>
@@ -131,18 +160,19 @@ function NoteListItem({ note, active, onClick }) {
     return (
         <div className={`gm-note-item ${active ? "active" : ""}`} onClick={onClick}>
             <div style={{ display: "flex", alignItems: "center", gap: "0.3rem", marginBottom: "0.2rem" }}>
-                {note.pinned && <span style={{ color: "var(--accent-warning)" }}>★</span>}
                 <span className="mono-text" style={{
                     color: "var(--text-primary)", fontSize: "0.85rem",
-                    overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap"
+                    overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
+                    flex: 1, minWidth: 0,
                 }}>
                     {note.title || "Untitled"}
                 </span>
+                {/* Status pills: shared (active/green) + pinned (standby/amber). */}
                 {note.isShared && (
-                    <span style={{
-                        color: "var(--accent-success)", fontSize: "0.6rem",
-                        fontFamily: "var(--font-mono)", letterSpacing: "1px",
-                    }} title="Shared with players">◉</span>
+                    <span className="status-pill s-active" title="Shared with players">SHARED</span>
+                )}
+                {note.pinned && (
+                    <span className="status-pill s-standby" title="Pinned">PINNED</span>
                 )}
             </div>
             <div className="text-muted" style={{ fontSize: "0.7rem", marginBottom: "0.25rem" }}>
@@ -226,20 +256,20 @@ function Editor({ note, players, onSave, onDelete, saveStatus }) {
                     style={pinned ? { borderColor: "var(--accent-warning)", color: "var(--accent-warning)" } : {}}>
                     {pinned ? "★ PINNED" : "☆ PIN"}
                 </button>
-                <div style={{ display: "inline-flex", border: "1px solid var(--border-color)", borderRadius: "3px", overflow: "hidden" }}>
+                <div style={{ display: "inline-flex", border: "1px solid var(--c-dim)", borderRadius: 0, overflow: "hidden" }}>
                     {["edit", "split", "preview"].map(m => (
                         <button key={m}
                             onClick={() => setView(m)}
                             className="mono-text"
                             style={{
-                                background: viewMode === m ? "rgba(56,189,248,0.12)" : "transparent",
-                                color: viewMode === m ? "var(--accent-primary)" : "var(--text-secondary)",
+                                background: viewMode === m ? "var(--c-soft)" : "transparent",
+                                color: viewMode === m ? "var(--c-primary)" : "var(--text-secondary)",
                                 border: "none",
                                 padding: "0.35rem 0.75rem",
                                 cursor: "pointer",
                                 fontSize: "0.75rem",
                                 letterSpacing: "1px",
-                                borderRight: m !== "preview" ? "1px solid var(--border-color)" : "none",
+                                borderRight: m !== "preview" ? "1px solid var(--c-dim)" : "none",
                             }}>
                             {m.toUpperCase()}
                         </button>
@@ -264,12 +294,14 @@ function Editor({ note, players, onSave, onDelete, saveStatus }) {
 
             {showShare && (
                 <div style={{
-                    background: "rgba(0,0,0,0.25)", border: "1px solid var(--border-color)",
-                    padding: "0.75rem", borderRadius: "3px", marginBottom: "0.75rem",
+                    background: "rgba(0,0,0,0.35)", border: "1px solid var(--c-dim)",
+                    padding: "0.75rem", borderRadius: 0, marginBottom: "0.75rem",
                 }}>
-                    <div className="mono-text text-muted" style={{ fontSize: "0.7rem", letterSpacing: "1px", marginBottom: "0.5rem" }}>
-                        SHARE WITH PLAYERS
-                    </div>
+                    <header className="block-head" style={{ marginBottom: "0.5rem" }}>
+                        <span className="block-bullet">■</span>
+                        <h3>SHARE WITH PLAYERS</h3>
+                        <span className="block-line"></span>
+                    </header>
                     <div style={{ display: "flex", flexWrap: "wrap", gap: "0.4rem" }}>
                         {players.length === 0 && (
                             <span className="text-muted" style={{ fontSize: "0.75rem", fontStyle: "italic" }}>
@@ -428,10 +460,13 @@ function App() {
         <div className="gm-main">
                 <div className="gm-list">
                     <div className="gm-list-header">
-                        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                            <span className="mono-text text-accent" style={{ fontSize: "0.9rem", letterSpacing: "2px" }}>
-                                STORY IDEAS
-                            </span>
+                        <header className="block-head" style={{ marginBottom: 0 }}>
+                            <span className="block-bullet">■</span>
+                            <h3>STORY IDEAS</h3>
+                            <span className="block-line"></span>
+                            <span className="block-badge">{filteredNotes.length.toString().padStart(2, "0")}</span>
+                        </header>
+                        <div style={{ display: "flex", justifyContent: "flex-end" }}>
                             <button className="gm-btn primary" onClick={create}>+ NEW</button>
                         </div>
                         <input className="gm-input" value={filter} onChange={e => setFilter(e.target.value)}

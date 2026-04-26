@@ -8,6 +8,14 @@
         <h1 class="mono-text">LOADING COUNCIL REGISTRY...</h1>
     </div>
 </div>
+<style>
+    /* Council page — clearance-gate authority surface.
+       Auth chrome via .brackets, square-corner inputs, palette-keyed
+       borders so accent flips cascade through votes / cards / pills. */
+    .council-shell { max-width: 1000px; margin: 0 auto; padding: 2rem 1rem; }
+    .council-card.brackets { padding: 1.5rem; margin-bottom: 1.5rem; }
+    .council-card.brackets-tight { padding: 1.25rem 1.5rem; margin-bottom: 1.5rem; }
+</style>
 {% endblock %}
 
 {% block scripts %}
@@ -157,6 +165,20 @@
         emergency_suspended: '#ef4444',
     };
 
+    // Map item statuses to status-pill semantic classes.
+    //   active   → s-active   (ratified, in force)
+    //   voting   → s-standby  (vote in progress)
+    //   proposed → s-dormant  (queued, awaiting vote)
+    //   suspended/repealed/emergency → s-burned (out / killed)
+    const STATUS_PILL = {
+        active: 's-active',
+        voting: 's-standby',
+        proposed: 's-dormant',
+        suspended: 's-burned',
+        repealed: 's-burned',
+        emergency_suspended: 's-burned',
+    };
+
     const TYPE_ICONS = {
         agreement: 'handshake',
         initiative: 'target',
@@ -193,6 +215,21 @@
         tied: 'var(--accent-warning)',
         no_quorum: 'var(--text-muted)',
         emergency_suspended: '#ef4444',
+    };
+
+    // Map vote results → status-pill semantic classes.
+    //   passed*  → s-active   (success)
+    //   failed*  → s-burned   (rejected)
+    //   tied     → s-standby  (chairman tie-break pending)
+    //   no_quorum / emergency → s-inactive / s-burned
+    const RESULT_PILL = {
+        passed: 's-active',
+        passed_chairman: 's-active',
+        failed: 's-burned',
+        failed_chairman: 's-burned',
+        tied: 's-standby',
+        no_quorum: 's-inactive',
+        emergency_suspended: 's-burned',
     };
 
     const VotingPanel = ({ item, members, onVote }) => {
@@ -275,7 +312,7 @@
                                         <span className="mono-text" style={{
                                             fontSize: '0.55rem', padding: '1px 3px',
                                             background: COUNCIL_ACCENT, color: 'var(--bg-dark)',
-                                            borderRadius: '2px',
+                                            borderRadius: 0,
                                         }}>CHAIR</span>
                                     )}
                                 </div>
@@ -313,8 +350,8 @@
                     {tally.totalMembers > 0 && (
                         <div style={{
                             width: '100%', height: '8px', display: 'flex',
-                            borderRadius: '4px', overflow: 'hidden',
-                            border: '1px solid var(--border-color)',
+                            borderRadius: 0, overflow: 'hidden',
+                            border: '1px solid var(--c-dim)',
                             background: 'rgba(255,255,255,0.05)',
                         }}>
                             {tally.votesFor > 0 && <div style={{
@@ -343,13 +380,7 @@
                     }}>
                         QUORUM: {tally.quorumMet ? 'MET' : 'NOT MET'} ({tally.totalPresent || 0} present, {tally.quorumNeeded} needed)
                     </span>
-                    <span className="mono-text" style={{
-                        fontSize: '0.75rem', fontWeight: 'bold',
-                        color: RESULT_COLORS[tally.result] || 'var(--text-muted)',
-                        padding: '2px 6px',
-                        border: `1px solid ${RESULT_COLORS[tally.result] || 'var(--text-muted)'}`,
-                        borderRadius: 'var(--radius-sm)',
-                    }}>
+                    <span className={`status-pill ${RESULT_PILL[tally.result] || 's-inactive'}`}>
                         {RESULT_LABELS[tally.result] || tally.result}
                     </span>
                 </div>
@@ -450,11 +481,7 @@
                                 options={STATUS_OPTIONS}
                             />
                         ) : (
-                            <span className="mono-text" style={{
-                                fontSize: '0.8rem', padding: '2px 6px',
-                                border: `1px solid ${STATUS_COLORS[item.status] || 'var(--text-muted)'}`,
-                                color: STATUS_COLORS[item.status] || 'var(--text-muted)',
-                            }}>
+                            <span className={`status-pill ${STATUS_PILL[item.status] || 's-inactive'}`}>
                                 {statusLabel.toUpperCase()}
                             </span>
                         )}
@@ -574,7 +601,7 @@
                                                     fontSize: '0.6rem',
                                                     fontFamily: 'var(--font-mono)',
                                                     fontWeight: current === opt ? 'bold' : 'normal',
-                                                    borderRadius: '2px',
+                                                    borderRadius: 0,
                                                     letterSpacing: '0.5px',
                                                 }}
                                             >
@@ -687,17 +714,15 @@
         const quorumMet = presentCount >= quorumNeeded;
 
         return (
-            <div className="glass-panel" style={{ padding: '1.5rem', marginBottom: '1.5rem' }}>
-                <h2 className="mono-text" style={{
-                    color: COUNCIL_ACCENT, fontSize: '1rem', letterSpacing: '1px',
-                    borderBottom: `1px solid ${COUNCIL_ACCENT}`, paddingBottom: '0.5rem',
-                    marginBottom: '1rem',
-                }}>
-                    COUNCIL MEMBERS
-                    <span className="text-muted" style={{ fontSize: '0.7rem', marginLeft: '0.5rem' }}>
-                        ({members.length} member{members.length !== 1 ? 's' : ''})
-                    </span>
-                </h2>
+            <div className="brackets council-card" style={{ position: 'relative', marginBottom: '1.5rem' }}>
+                <span className="bk tl"></span><span className="bk tr"></span>
+                <span className="bk bl"></span><span className="bk br"></span>
+                <header className="block-head" style={{ marginBottom: '1rem' }}>
+                    <span className="block-bullet">■</span>
+                    <h3>COUNCIL MEMBERS</h3>
+                    <span className="block-line"></span>
+                    <span className="block-badge">{String(members.length).padStart(2, '0')}</span>
+                </header>
 
                 {chairman && (
                     <div style={{
@@ -770,18 +795,10 @@
                                         {member.name}
                                     </a>
                                     {member.isPlayerAgency && (
-                                        <span className="mono-text" style={{
-                                            fontSize: '0.6rem', padding: '1px 4px',
-                                            border: '1px solid var(--accent-primary)',
-                                            color: 'var(--accent-primary)',
-                                        }}>PLAYER</span>
+                                        <span className="status-pill s-active">PLAYER</span>
                                     )}
                                     {member.isCouncilChairman && (
-                                        <span className="mono-text" style={{
-                                            fontSize: '0.6rem', padding: '1px 4px',
-                                            background: COUNCIL_ACCENT, color: 'var(--bg-dark)',
-                                            borderRadius: 'var(--radius-sm)', fontWeight: 'bold',
-                                        }}>CHAIRMAN</span>
+                                        <span className="status-pill s-standby">CHAIRMAN</span>
                                     )}
                                 </div>
                                 <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
@@ -1012,36 +1029,34 @@
         };
 
         return (
-            <div style={{ maxWidth: '1000px', margin: '0 auto', padding: '2rem 1rem' }}>
-                {/* Header */}
+            <div className="council-shell">
+                {/* Header — kicker + title clearance-gate display */}
                 <div style={{ marginBottom: '2rem' }}>
                     <a href="/agencies/" className="mono-text text-muted"
-                        style={{ textDecoration: 'none', fontSize: '0.8rem', display: 'block', marginBottom: '0.5rem' }}>
+                        style={{ textDecoration: 'none', fontSize: '0.8rem', display: 'block', marginBottom: '0.75rem' }}>
                         &lt; BACK TO AGENCIES
                     </a>
-                    <h1 className="mono-text" style={{
-                        color: COUNCIL_ACCENT,
-                        fontSize: '1.5rem',
-                        letterSpacing: '2px',
-                        borderBottom: `2px solid ${COUNCIL_ACCENT}`,
-                        paddingBottom: '0.5rem'
-                    }}>
-                        <Icon name="landmark" size={22} /> UNITED INTERSTELLAR COUNCIL
-                    </h1>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', marginTop: '0.5rem' }}>
+                    <div className="kicker">UIC // GOVERNANCE</div>
+                    <header className="block-head" style={{ marginBottom: '0.75rem' }}>
+                        <span className="block-bullet">■</span>
+                        <h3>UNITED INTERSTELLAR COUNCIL</h3>
+                        <span className="block-line"></span>
+                    </header>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', marginTop: '0.5rem', gap: '1rem' }}>
                         <p className="text-muted mono-text" style={{ fontSize: '0.75rem', margin: 0 }}>
                             Agreements, common goal initiatives, and laws established by the council. Visible on all agency sheets.
                         </p>
                         <a href="/agencies/council/charter/" className="mono-text" style={{
                             textDecoration: 'none',
-                            border: `1px solid ${COUNCIL_ACCENT}`,
-                            color: COUNCIL_ACCENT,
+                            border: `1px solid var(--c-primary)`,
+                            color: 'var(--c-primary)',
                             padding: '0.4rem 1rem',
                             fontSize: '0.8rem',
                             fontWeight: 'bold',
                             letterSpacing: '1px',
-                            borderRadius: 'var(--radius-sm)',
+                            borderRadius: 0,
                             whiteSpace: 'nowrap',
+                            textShadow: '0 0 6px var(--c-glow)',
                         }}>
                             <Icon name="scroll-text" size={14} /> CHARTER
                         </a>
@@ -1099,8 +1114,16 @@
                     ))}
                 </div>
 
-                {/* Items */}
-                <div className="glass-panel" style={{ padding: '1.5rem' }}>
+                {/* Items — authority frame with bracket corners */}
+                <div className="brackets council-card" style={{ position: 'relative' }}>
+                    <span className="bk tl"></span><span className="bk tr"></span>
+                    <span className="bk bl"></span><span className="bk br"></span>
+                    <header className="block-head" style={{ marginBottom: '1rem' }}>
+                        <span className="block-bullet">■</span>
+                        <h3>COUNCIL REGISTRY</h3>
+                        <span className="block-line"></span>
+                        <span className="block-badge">{String(filtered.length).padStart(2, '0')} / {String(items.length).padStart(2, '0')}</span>
+                    </header>
                     {filtered.length === 0 && (
                         <p className="text-muted mono-text" style={{
                             textAlign: 'center', padding: '2rem 0', fontStyle: 'italic', fontSize: '0.85rem'

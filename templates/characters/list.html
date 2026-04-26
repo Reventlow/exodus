@@ -161,24 +161,19 @@
 
         return (
             <div>
-                <div className="glass-panel" style={{ padding: '2rem', maxWidth: '900px', margin: '2rem auto' }}>
-                    <h2 className="mono-text" style={{
-                        marginBottom: '1.5rem',
-                        borderBottom: '1px solid var(--border-color)',
-                        paddingBottom: '0.5rem',
-                        display: 'flex',
-                        flexWrap: 'wrap',
-                        justifyContent: 'space-between',
-                        alignItems: 'center',
-                        gap: '0.5rem'
-                    }}>
-                        <span className="text-accent">
-                            <Icon name="users" size={20} /> OPERATIVE DATABASE
-                        </span>
-                        <span className="text-muted" style={{ fontSize: '0.8rem' }}>
-                            {characters.length} RECORD{characters.length !== 1 ? 'S' : ''}
-                        </span>
+                {/* Wave 2A: brackets card replaces glass-panel; title-block above
+                    the operative roster. */}
+                <div className="brackets" style={{ position: 'relative', padding: '32px 36px', maxWidth: '900px', margin: '2rem auto' }}>
+                    <span className="bk tl"></span><span className="bk tr"></span>
+                    <span className="bk bl"></span><span className="bk br"></span>
+
+                    <div className="kicker">// OPERATIVE REGISTRY</div>
+                    <h2 className="title" style={{ fontSize: '52px', marginBottom: '8px' }}>
+                        <span><Icon name="users" size={28} /> OPERATIVES</span>
                     </h2>
+                    <div className="sub" style={{ marginBottom: '1rem' }}>
+                        Personnel records · {characters.length} RECORD{characters.length !== 1 ? 'S' : ''}
+                    </div>
 
                     <p className="text-secondary" style={{
                         fontSize: '0.85rem', marginBottom: '1.5rem',
@@ -188,6 +183,13 @@
                         Create your operative to define their identity, skills, and background.
                         Each player maintains one operative record.
                     </p>
+
+                    <header className="block-head" style={{ marginBottom: '1rem' }}>
+                        <span className="block-bullet">■</span>
+                        <h3>ROSTER</h3>
+                        <span className="block-line"></span>
+                        <span className="block-badge">{characters.length} ACTIVE</span>
+                    </header>
 
                     <div style={{
                         display: 'grid',
@@ -222,7 +224,7 @@
                                     fontFamily: 'var(--font-mono)',
                                     fontSize: '1rem',
                                     letterSpacing: '1px',
-                                    borderRadius: 'var(--radius-sm)',
+                                    borderRadius: 0,
                                     opacity: creating ? 0.6 : 1
                                 }}
                             >

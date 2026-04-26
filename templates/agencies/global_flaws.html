@@ -58,7 +58,7 @@
                     fontSize: '0.85rem',
                     width: '100%',
                     boxSizing: 'border-box',
-                    borderRadius: 'var(--radius-sm)',
+                    borderRadius: 0,
                 }}
                 onBlur={() => {
                     const v = type === 'number' ? parseInt(ref.current.value, 10) || 0 : ref.current.value;
@@ -139,28 +139,31 @@
 
         return (
             <div style={{ maxWidth: '1000px', margin: '0 auto', padding: '2rem 1rem' }}>
-                {/* Header */}
-                <div style={{ marginBottom: '2rem' }}>
+                {/* Header — Wave 2A: brackets card with kicker/title/sub. */}
+                <div style={{ marginBottom: '1rem' }}>
                     <a href="/agencies/" className="mono-text text-muted"
-                        style={{ textDecoration: 'none', fontSize: '0.8rem', display: 'block', marginBottom: '0.5rem' }}>
+                        style={{ textDecoration: 'none', fontSize: '0.8rem', display: 'block', marginBottom: '0.5rem', letterSpacing: '0.18em' }}>
                         &lt; BACK TO AGENCIES
                     </a>
-                    <h1 className="mono-text" style={{
-                        color: 'var(--accent-warning)',
-                        fontSize: '1.5rem',
-                        letterSpacing: '2px',
-                        borderBottom: '2px solid var(--accent-warning)',
-                        paddingBottom: '0.5rem'
-                    }}>
-                        GLOBAL FLAWS // MANAGEMENT
-                    </h1>
-                    <p className="text-muted mono-text" style={{ fontSize: '0.75rem', marginTop: '0.5rem' }}>
-                        Global flaws apply to ALL agencies. Only administrators can manage this registry.
-                    </p>
                 </div>
+                <div className="brackets" style={{ position: 'relative', padding: '28px 32px', marginBottom: '1rem' }}>
+                    <span className="bk tl"></span><span className="bk tr"></span>
+                    <span className="bk bl"></span><span className="bk br"></span>
 
-                {/* Table */}
-                <div className="glass-panel" style={{ padding: '1.5rem' }}>
+                    <div className="kicker" style={{ color: 'var(--accent-warning)' }}>// REGISTRY · ADMIN-ONLY</div>
+                    <h1 className="title" style={{ fontSize: '48px', marginBottom: '8px' }}>
+                        <span>GLOBAL FLAWS</span>
+                    </h1>
+                    <div className="sub">
+                        Global flaws apply to ALL agencies · only administrators can manage this registry
+                    </div>
+
+                    <header className="block-head" style={{ marginTop: '1.25rem', marginBottom: '0.75rem' }}>
+                        <span className="block-bullet">■</span>
+                        <h3>FLAW LEDGER</h3>
+                        <span className="block-line"></span>
+                        <span className="block-badge">{flaws.length} ENTRIES</span>
+                    </header>
                     {/* Column headers */}
                     <div style={{
                         display: 'grid',
@@ -233,7 +236,7 @@
                                 fontFamily: 'var(--font-mono)',
                                 fontSize: '0.85rem',
                                 letterSpacing: '1px',
-                                borderRadius: 'var(--radius-sm)',
+                                borderRadius: 0,
                                 opacity: creating ? 0.6 : 1,
                             }}
                         >

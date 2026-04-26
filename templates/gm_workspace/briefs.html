@@ -1,22 +1,29 @@
 {% extends "base.html" %}
 {% block title %}BRIEFS // EXODUS{% endblock %}
+{# Player-facing read-only briefs. Splash treatment for the heavy
+   vignette + scanline overlay that marks command surfaces. #}
+{% block body_class %}surface-splash{% endblock %}
 
 {% block content %}
 <style>
     .br-shell { max-width: 900px; margin: 2rem auto; padding: 0 1.5rem; }
-    .br-header {
-        font-family: var(--font-mono); color: var(--accent-primary);
-        letter-spacing: 2px; font-size: 1.2rem;
-        border-bottom: 1px solid var(--border-color);
-        padding-bottom: 0.75rem; margin-bottom: 1.5rem;
+    .br-frame {
+        position: relative;
+        padding: 32px 36px;
     }
     .br-card {
-        border: 1px solid var(--border-color);
-        border-radius: 4px; padding: 1rem 1.25rem;
-        margin-bottom: 1rem; background: rgba(0,0,0,0.15);
-        cursor: pointer; transition: border-color 0.1s;
+        border: 1px solid var(--c-dim);
+        border-radius: 0;
+        padding: 1rem 1.25rem;
+        margin-bottom: 1rem;
+        background: rgba(0,0,0,0.25);
+        cursor: pointer;
+        transition: border-color 0.1s, box-shadow 0.1s;
     }
-    .br-card:hover { border-color: var(--accent-primary); }
+    .br-card:hover {
+        border-color: var(--c-primary);
+        box-shadow: 0 0 12px var(--c-glow);
+    }
     .br-title {
         font-family: var(--font-mono); color: var(--text-primary);
         font-size: 1rem; margin-bottom: 0.3rem;
@@ -25,27 +32,28 @@
     .br-excerpt { color: var(--text-secondary); font-size: 0.85rem; margin-top: 0.5rem; line-height: 1.5; }
     .br-chip {
         display: inline-block; padding: 0.1rem 0.4rem;
-        background: rgba(56,189,248,0.08); color: var(--accent-primary);
-        border: 1px solid var(--accent-primary); border-radius: 3px;
+        background: var(--c-soft); color: var(--c-primary);
+        border: 1px solid var(--c-primary); border-radius: 0;
         font-family: var(--font-mono); font-size: 0.65rem;
         margin-right: 0.25rem; letter-spacing: 1px;
     }
     .br-detail {
-        background: rgba(0,0,0,0.25); border: 1px solid var(--border-color);
-        border-radius: 4px; padding: 1.5rem; color: var(--text-primary);
+        background: rgba(0,0,0,0.35); border: 1px solid var(--c-dim);
+        border-radius: 0; padding: 1.5rem; color: var(--text-primary);
         line-height: 1.7;
     }
     .br-detail h1, .br-detail h2, .br-detail h3 {
         color: var(--accent-primary); font-family: var(--font-mono);
         margin-top: 1rem; margin-bottom: 0.5rem;
+        text-shadow: 0 0 6px var(--c-glow);
     }
     .br-detail code {
-        background: rgba(255,255,255,0.08); padding: 0.1rem 0.3rem;
-        border-radius: 2px; font-size: 0.85em;
+        background: rgba(255,255,255,0.06); padding: 0.1rem 0.3rem;
+        border-radius: 0; font-size: 0.85em;
     }
     .br-detail pre {
-        background: rgba(0,0,0,0.4); padding: 0.75rem;
-        border-radius: 3px; overflow-x: auto;
+        background: rgba(0,0,0,0.5); padding: 0.75rem;
+        border-radius: 0; overflow-x: auto;
     }
     .br-detail blockquote {
         border-left: 3px solid var(--accent-primary);
@@ -54,13 +62,13 @@
     }
     .br-detail a { color: var(--accent-primary); }
     .br-back {
-        background: transparent; border: 1px solid var(--border-color);
+        background: transparent; border: 1px solid var(--c-dim);
         color: var(--text-secondary); padding: 0.3rem 0.75rem;
         font-family: var(--font-mono); font-size: 0.75rem;
-        letter-spacing: 1px; cursor: pointer; border-radius: 3px;
+        letter-spacing: 1px; cursor: pointer; border-radius: 0;
         margin-bottom: 1rem;
     }
-    .br-back:hover { border-color: var(--accent-primary); color: var(--accent-primary); }
+    .br-back:hover { border-color: var(--c-primary); color: var(--c-primary); }
 </style>
 
 <div id="briefs-root" class="br-shell"></div>
@@ -109,19 +117,29 @@ function BriefDetail({ brief, onBack }) {
 
     return (
         <div>
-            <button className="br-back" onClick={onBack}>← BACK TO BRIEFS</button>
-            <div className="br-header">{brief.title || "Untitled"}</div>
-            <div className="br-meta" style={{ marginBottom: "1rem" }}>
-                Updated {new Date(brief.updatedAt).toLocaleDateString("en-GB", {
-                    day: "numeric", month: "short", year: "numeric"
-                })}
-                {tags.length > 0 && (
-                    <span style={{ marginLeft: "0.75rem" }}>
-                        {tags.map(t => <span key={t} className="br-chip">{t}</span>)}
-                    </span>
-                )}
+            <button className="br-back" onClick={onBack}>&lt; BACK TO BRIEFS</button>
+            <div className="brackets br-frame">
+                <span className="bk tl"></span><span className="bk tr"></span>
+                <span className="bk bl"></span><span className="bk br"></span>
+
+                <div className="kicker">RECEIVED // GM</div>
+                <header className="block-head" style={{ marginBottom: "1rem" }}>
+                    <span className="block-bullet">■</span>
+                    <h3>{brief.title || "Untitled"}</h3>
+                    <span className="block-line"></span>
+                </header>
+                <div className="br-meta" style={{ marginBottom: "1rem" }}>
+                    Updated {new Date(brief.updatedAt).toLocaleDateString("en-GB", {
+                        day: "numeric", month: "short", year: "numeric"
+                    })}
+                    {tags.length > 0 && (
+                        <span style={{ marginLeft: "0.75rem" }}>
+                            {tags.map(t => <span key={t} className="br-chip">{t}</span>)}
+                        </span>
+                    )}
+                </div>
+                <div className="br-detail" dangerouslySetInnerHTML={{ __html: rendered }} />
             </div>
-            <div className="br-detail" dangerouslySetInnerHTML={{ __html: rendered }} />
         </div>
     );
 }
@@ -153,8 +171,17 @@ function App() {
     }
 
     return (
-        <div>
-            <div className="br-header">BRIEFS</div>
+        <div className="brackets br-frame">
+            <span className="bk tl"></span><span className="bk tr"></span>
+            <span className="bk bl"></span><span className="bk br"></span>
+
+            <div className="kicker">RECEIVED // GM</div>
+            <header className="block-head" style={{ marginBottom: "1.25rem" }}>
+                <span className="block-bullet">■</span>
+                <h3>BRIEFS</h3>
+                <span className="block-line"></span>
+                <span className="block-badge">{briefs.length.toString().padStart(2, "0")}</span>
+            </header>
             {error && <div style={{ color: "var(--accent-danger)", fontFamily: "var(--font-mono)", fontSize: "0.85rem", marginBottom: "1rem" }}>{error}</div>}
             {briefs.length === 0 ? (
                 <div className="br-meta" style={{ fontStyle: "italic" }}>
