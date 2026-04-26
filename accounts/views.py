@@ -58,17 +58,19 @@ def _format_since(delta_seconds):
 
 
 def _build_login_roster():
-    """Snapshot the active roster shown on the Clearance Gate login.
+    """Snapshot the roster shown on the Clearance Gate login.
 
-    One row per active player using their first character's name.
-    Superusers appear as ``GM``. Sorted by activity status priority
+    One row per user (active or burned), using their first character's
+    name. Superusers appear as ``GM``. Burned operatives (``User.is_active
+    = False`` — left the group, kept for historical record) appear at the
+    bottom of the list with status ``BURNED``. Sorted by status priority
     then codename. Returns ``(rows, active_count)``.
     """
     now = timezone.now()
-    sort_order = {"ACTIVE": 0, "STANDBY": 1, "DORMANT": 2, "INACTIVE": 3}
+    sort_order = {"ACTIVE": 0, "STANDBY": 1, "DORMANT": 2, "INACTIVE": 3, "BURNED": 4}
     rows = []
     users = (
-        User.objects.filter(is_active=True)
+        User.objects.all()
         .select_related("profile")
         .prefetch_related("characters")
     )
@@ -86,7 +88,13 @@ def _build_login_roster():
             else:
                 codename = u.username.upper()
                 node = "—"
-        status = _compute_activity_status(last, now)
+        # is_active=False overrides the time-based status — the operative
+        # has been removed from the roster but the row stays for the
+        # in-fiction "burned" tag.
+        if not u.is_active:
+            status = "BURNED"
+        else:
+            status = _compute_activity_status(last, now)
         delta_sec = (now - last).total_seconds() if last else None
         rows.append({
             "codename": codename,

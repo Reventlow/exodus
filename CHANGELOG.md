@@ -1,5 +1,10 @@
 # Changelog
 
+## v0.14.47
+- The login roster now shows **`BURNED`** for users with `User.is_active=False` (operative left the group, kept on the roster for historical record). Sort order extended: ACTIVE → STANDBY → DORMANT → INACTIVE → **BURNED**. Status pill renders red via the existing `.s-burned` class
+- `LastActivityMiddleware._maybe_logout_inactive` now also kicks out users whose `is_active` has been cleared, even if their session cookie is still valid. Belt-and-braces: `is_active=False` already blocks fresh logins; this also closes the existing session on their next request
+- To mark a player as burned: visit `/admin/auth/user/`, click their username, uncheck **Active**, save. They'll show as `BURNED` on the next login page load and get force-logged-out on their next site request
+
 ## v0.14.46
 - **Wave 5 of the clearance-gate aesthetic rollout — polish.** Adds the utility classes that Waves 2–4 agents repeatedly improvised inline. Future template work picks them up automatically; existing inline styles keep working until refactored
 - New utility classes in `foundation.css`:

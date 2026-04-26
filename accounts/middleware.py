@@ -79,11 +79,21 @@ class LastActivityMiddleware:
 
     @classmethod
     def _maybe_logout_inactive(cls, request):
-        """Log out users whose last_activity is older than the cutoff."""
+        """Log out users whose last_activity is older than the cutoff,
+        OR whose ``User.is_active`` flag has been cleared (burned —
+        operative removed from the roster).
+        """
         if cls._is_excluded(request):
             return
         from accounts.models import UserProfile
         from django.contrib.auth import logout
+
+        # Burned operative — boot them on their next request even if their
+        # session cookie is still valid. Belt-and-braces: ``is_active``
+        # already prevents fresh logins; this also kicks the existing one.
+        if not request.user.is_active:
+            logout(request)
+            return
 
         profile = UserProfile.objects.filter(user=request.user).only(
             "last_activity",
