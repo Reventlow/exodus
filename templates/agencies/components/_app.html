@@ -246,10 +246,24 @@ const {
         // AutoSaveInput is uncontrolled, so the user's typing is preserved
         // in the DOM — they can re-blur to save against the new version.
         const handleConflict = useCallback((sectionKey, currentValue) => {
+            // Section-specific messages. "Adjust" verbs that match the UI
+            // affordance: text-input sections ask for re-blur; button-driven
+            // sections (projects, base toggles) ask for a re-click.
+            let message;
+            if (sectionKey === 'projects') {
+                message = 'Another player just changed the projects list. The view has been refreshed — your last action was NOT applied. Click again if you still want it.';
+            } else if (typeof sectionKey === 'string' && sectionKey.startsWith('base:')) {
+                const tail = sectionKey.split(':').slice(2).join(':') || 'this base';
+                message = `Another player just edited ${tail} on this base. The view has been refreshed — your last action was NOT applied.`;
+            } else {
+                const friendly = sectionKey === 'admin-flags' ? 'agency settings' : sectionKey;
+                message = `Another user updated "${friendly}". The view has been refreshed — re-blur the field (or click the button again) to apply your change against the new version.`;
+            }
+            const myTs = Date.now();
             setConflictBanner({
                 sectionKey: sectionKey,
-                message: `Another user updated "${sectionKey}". Refreshed to latest — re-blur to save your changes.`,
-                ts: Date.now(),
+                message: message,
+                ts: myTs,
             });
             // Best-effort: try to slot the server's current_value back into
             // the agency state for top-level sections (notes, merits, ...).
@@ -266,10 +280,13 @@ const {
                 agencyRef.current = next;
                 setAgency(next);
             }
-            // Auto-clear the banner after 6s.
+            // Auto-clear the banner after 9s — long enough to read and
+            // understand a section name like "admin-flags" or "base:7:facilities".
+            // We track the timestamp so a later, distinct conflict doesn't get
+            // dismissed prematurely by an earlier banner's pending timeout.
             setTimeout(() => {
-                setConflictBanner(prev => (prev && prev.sectionKey === sectionKey ? null : prev));
-            }, 6000);
+                setConflictBanner(prev => (prev && prev.ts === myTs ? null : prev));
+            }, 9000);
         }, []);
 
         const sectionContextValue = useMemo(() => ({
@@ -522,26 +539,53 @@ const {
         return (
             <SectionSaveContext.Provider value={sectionContextValue}>
             <div className="fade-in">
-                {/* Conflict banner — shown when another user wrote a section
-                    we just tried to save. Auto-clears after ~6s. */}
+                {/* Conflict banner — fixed-position toast at top-right.
+                    Stays visible regardless of where the user is scrolled
+                    in the long agency sheet. Auto-clears after ~9s. */}
                 {conflictBanner && (
-                    <div style={{
-                        marginBottom: '0.75rem', padding: '0.65rem 1rem',
-                        borderRadius: 'var(--radius-sm)',
-                        background: 'rgba(234, 179, 8, 0.12)',
-                        border: '1px solid var(--accent-warning, #eab308)',
-                        color: 'var(--accent-warning, #eab308)',
+                    <div
+                        key={conflictBanner.ts}
+                        role="status"
+                        aria-live="polite"
+                        style={{
+                        position: 'fixed',
+                        top: '1rem',
+                        right: '1rem',
+                        maxWidth: 'min(420px, calc(100vw - 2rem))',
+                        zIndex: 9999,
+                        padding: '0.75rem 1rem',
+                        borderRadius: 'var(--radius-sm, 4px)',
+                        background: 'rgba(234, 179, 8, 0.95)',
+                        border: '1px solid #b45309',
+                        color: '#1c1917',
                         fontFamily: 'var(--font-mono)', fontSize: '0.8rem',
-                        display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+                        display: 'flex', gap: '0.75rem', alignItems: 'flex-start',
+                        boxShadow: '0 8px 24px rgba(0, 0, 0, 0.4)',
+                        animation: 'conflictBannerIn 0.2s ease-out',
                     }}>
-                        <span>CONFLICT // {conflictBanner.message}</span>
-                        <button onClick={() => setConflictBanner(null)} style={{
-                            background: 'transparent', border: 'none', color: 'inherit',
-                            cursor: 'pointer', fontFamily: 'inherit', fontSize: '1rem',
-                            padding: '0 0.25rem',
-                        }}>×</button>
+                        <span style={{ flex: 1, lineHeight: 1.4 }}>
+                            <strong style={{ display: 'block', marginBottom: '0.2rem', letterSpacing: '0.05em' }}>
+                                ⚠ EDIT CONFLICT
+                            </strong>
+                            {conflictBanner.message}
+                        </span>
+                        <button
+                            onClick={() => setConflictBanner(null)}
+                            aria-label="Dismiss"
+                            style={{
+                                background: 'transparent', border: 'none', color: 'inherit',
+                                cursor: 'pointer', fontFamily: 'inherit', fontSize: '1.1rem',
+                                padding: '0 0.25rem', flexShrink: 0,
+                            }}
+                        >×</button>
                     </div>
                 )}
+                <style>{`
+                    @keyframes conflictBannerIn {
+                        from { opacity: 0; transform: translateX(20px); }
+                        to   { opacity: 1; transform: translateX(0); }
+                    }
+                `}</style>
                 {/* Sub-header with save status */}
                 <div style={{
                     display: 'flex', justifyContent: 'space-between', alignItems: 'center',

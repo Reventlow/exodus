@@ -1,5 +1,11 @@
 # Changelog
 
+## v0.14.34
+- Fix: the **edit-conflict banner is now actually visible**. Previously the banner was rendered as a normal block element at the top of the agency sheet, which meant if you were scrolled down (e.g., looking at the projects section) and your save was rejected by another player's concurrent edit, the banner appeared above your viewport and you never saw it — you only saw the option silently disappear from the UI as the state refreshed. Now positioned `fixed` at the top-right of the viewport with a solid yellow background, drop shadow, slide-in animation, and a `⚠ EDIT CONFLICT` heading
+- Section-specific messages: a conflict on `projects` says *"Another player just changed the projects list. The view has been refreshed — your last action was NOT applied. Click again if you still want it."*; conflicts on bases say *"Another player just edited &lt;section&gt; on this base..."*; text-input sections still ask for a re-blur
+- Banner duration extended from 6s to 9s so longer section names (e.g., `base:7:facilities`) have time to read; multiple conflicts no longer prematurely dismiss each other (each banner tracks its own timestamp)
+- `role="status"` + `aria-live="polite"` for accessibility
+
 ## v0.14.33
 - Fix: extends the v0.14.32 multi-player concurrency fix to **projects**. Every write that touches `Agency.projects` (the section endpoint, dark grants, live testing, stimulants / unlock / synth, fringe-effect roll-modify branches, complete-project, project rolls) now goes through an atomic compare-and-swap on the shared `section_versions["projects"]` slot. Two players adjusting projects at the same time can no longer silently overwrite each other
 - New `PATCH /api/agencies/<id>/section/projects/` endpoint with `If-Match` semantics, identical contract to the other 12 section endpoints from v0.14.32
