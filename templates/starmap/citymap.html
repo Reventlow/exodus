@@ -4,21 +4,30 @@
 
 {% block content %}
 <style>
+    /* Outer authority frame around the map surface. The canvas + Leaflet
+       config below stays untouched — only the chrome around it changes. */
+    .citymap-frame {
+        position: relative;
+        margin: 16px;
+        padding: 18px 20px 20px;
+    }
     #citymap-container {
         position: relative;
         width: 100%;
-        height: calc(100vh - 100px);
+        height: calc(100vh - 140px);
         overflow: hidden;
         background: var(--bg-dark, #0a0a0f);
+        border: 1px solid var(--border-color);
     }
     #citymap { height: 100%; width: 100%; }
 
-    /* Leaflet base — themed via CSS vars */
+    /* Leaflet base — themed via CSS vars (--map-* tokens are stable, do not touch) */
     .leaflet-container { background: var(--map-void-leaflet); }
     .leaflet-control-zoom a {
         background: var(--bg-panel, #1a1a2e) !important;
         color: var(--text-primary, #e0e0e0) !important;
         border-color: var(--border-color, #333) !important;
+        border-radius: 0 !important;
     }
     .leaflet-control-attribution {
         background: var(--bg-panel-translucent) !important;
@@ -30,7 +39,7 @@
         background: var(--bg-panel, #1a1a2e) !important;
         color: var(--text-primary, #e0e0e0) !important;
         border: 1px solid var(--border-color, #333) !important;
-        border-radius: var(--radius-sm, 4px) !important;
+        border-radius: 0 !important;
         font-family: var(--font-mono, monospace) !important;
         font-size: 0.85rem !important;
     }
@@ -41,58 +50,76 @@
         position: absolute; top: 1rem; left: 1rem; z-index: 1000;
         font-family: var(--font-mono); font-size: 0.85rem;
         color: var(--text-primary); background: var(--bg-panel-translucent);
-        border: 1px solid var(--border-color); border-radius: var(--radius-sm);
+        border: 1px solid var(--border-color); border-radius: 0;
         padding: 0.75rem 1rem; backdrop-filter: blur(6px);
+        min-width: 200px;
     }
-    #city-info .label {
-        color: var(--text-muted); font-size: 0.7rem;
-        text-transform: uppercase; letter-spacing: 1.5px; margin-bottom: 0.25rem;
-    }
+    #city-info .block-head { margin-bottom: 0.5rem; }
     #city-info .value {
-        color: var(--accent-primary); font-size: 1rem; margin-bottom: 0.5rem;
+        color: var(--accent-primary); font-size: 1rem; margin-bottom: 0.4rem;
+        font-family: var(--font-mono);
     }
 </style>
 
-<div id="citymap-container">
-    <div id="city-info">
-        <div class="label">LOCATION</div>
-        <div class="value">{{ city.name|upper }}</div>
-        <div style="color: var(--text-muted); font-size: 0.75rem;">
-            {{ city.latitude|floatformat:4 }}° N, {{ city.longitude|floatformat:4 }}° E
-        </div>
-    </div>
+<!-- Outer authority bracket frame around the map surface and overlays -->
+<div class="brackets citymap-frame">
+    <span class="bk tl"></span><span class="bk tr"></span>
+    <span class="bk bl"></span><span class="bk br"></span>
 
-    <!-- Controls hint — bottom-left -->
-    <div style="
-        position: absolute; bottom: 1rem; left: 1rem; z-index: 1000;
-        font-family: var(--font-mono); font-size: 0.65rem;
-        color: var(--text-muted); line-height: 1.8;
-        background: var(--bg-panel-translucent); padding: 0.5rem 0.75rem;
-        border: 1px solid var(--border-color); border-radius: var(--radius-sm);
-        backdrop-filter: blur(4px); pointer-events: none;
-    ">
-        {% if user.is_superuser %}
-        <div style="color: var(--accent-primary); font-size: 0.6rem; letter-spacing: 1px; margin-bottom: 0.3rem;">GM CONTROLS</div>
-        <div>RIGHT-CLICK &middot; Place marker</div>
-        <div>CLICK MARKER &middot; View details &middot; Delete</div>
-        <div>DRAG PLAYER &middot; Move player position</div>
-        <div>SCROLL &middot; Zoom &middot; DRAG &middot; Pan</div>
-        <div style="margin-top: 0.3rem; color: var(--text-muted); font-size: 0.6rem;">
-            Marker types: <span style="color: #06b6d4;">BASE</span> &middot;
-            <span style="color: #ef4444;">MISSION</span> &middot;
-            <span style="color: #f59e0b;">NPC</span> &middot;
-            <span style="color: #c084fc;">PLAYER</span> &middot;
-            <span style="color: #00ff88;">CUSTOM</span>
-        </div>
-        {% else %}
-        <div style="color: var(--accent-primary); font-size: 0.6rem; letter-spacing: 1px; margin-bottom: 0.3rem;">CONTROLS</div>
-        <div>CLICK MARKER &middot; View details</div>
-        <div>SCROLL &middot; Zoom in/out</div>
-        <div>DRAG &middot; Pan the map</div>
-        {% endif %}
-    </div>
+    <header class="block-head" style="margin-bottom: 14px;">
+        <span class="block-bullet">■</span>
+        <h3>CITY MAP // {{ city.name|upper }}</h3>
+        <span class="block-line"></span>
+        <span class="status-pill s-active">LIVE</span>
+    </header>
 
-    <div id="citymap"></div>
+    <div id="citymap-container">
+        <!-- LOCATION DETAILS overlay (top-left) -->
+        <div id="city-info">
+            <header class="block-head">
+                <span class="block-bullet">■</span>
+                <h3>LOCATION DETAILS</h3>
+                <span class="block-line"></span>
+            </header>
+            <div class="value">{{ city.name|upper }}</div>
+            <div style="color: var(--text-muted); font-size: 0.75rem;">
+                {{ city.latitude|floatformat:4 }}° N, {{ city.longitude|floatformat:4 }}° E
+            </div>
+        </div>
+
+        <!-- Controls hint — bottom-left -->
+        <div style="
+            position: absolute; bottom: 1rem; left: 1rem; z-index: 1000;
+            font-family: var(--font-mono); font-size: 0.65rem;
+            color: var(--text-muted); line-height: 1.8;
+            background: var(--bg-panel-translucent); padding: 0.5rem 0.75rem;
+            border: 1px solid var(--border-color); border-radius: 0;
+            backdrop-filter: blur(4px); pointer-events: none;
+        ">
+            {% if user.is_superuser %}
+            <div style="color: var(--accent-primary); font-size: 0.6rem; letter-spacing: 1px; margin-bottom: 0.3rem;">GM CONTROLS</div>
+            <div>RIGHT-CLICK &middot; Place marker</div>
+            <div>CLICK MARKER &middot; View details &middot; Delete</div>
+            <div>DRAG PLAYER &middot; Move player position</div>
+            <div>SCROLL &middot; Zoom &middot; DRAG &middot; Pan</div>
+            <div style="margin-top: 0.3rem; color: var(--text-muted); font-size: 0.6rem;">
+                Marker types: <span style="color: #06b6d4;">BASE</span> &middot;
+                <span style="color: #ef4444;">MISSION</span> &middot;
+                <span style="color: #f59e0b;">NPC</span> &middot;
+                <span style="color: #c084fc;">PLAYER</span> &middot;
+                <span style="color: #00ff88;">CUSTOM</span>
+            </div>
+            {% else %}
+            <div style="color: var(--accent-primary); font-size: 0.6rem; letter-spacing: 1px; margin-bottom: 0.3rem;">CONTROLS</div>
+            <div>CLICK MARKER &middot; View details</div>
+            <div>SCROLL &middot; Zoom in/out</div>
+            <div>DRAG &middot; Pan the map</div>
+            {% endif %}
+        </div>
+
+        <!-- Leaflet mount point — drawing code untouched -->
+        <div id="citymap"></div>
+    </div>
 </div>
 
 <!-- Leaflet CSS/JS -->

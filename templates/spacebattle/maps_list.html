@@ -4,23 +4,33 @@
 
 {% block content %}
 <style>
-    .map-list { padding: 1rem; max-width: 900px; margin: 0 auto; }
+    /* Battle-maps list: bracket-framed shell with a section header.
+       Rows keep the existing dossier-row look but with squared corners. */
+    .map-list { padding: 1rem; max-width: 900px; margin: 1rem auto; }
     .map-row {
         display: flex; align-items: center; gap: 1rem;
         padding: 0.8rem 1rem; border: 1px solid var(--border-color);
-        border-radius: var(--radius-sm); margin-bottom: 0.5rem;
+        margin-bottom: 0.5rem;
         cursor: pointer;
+        transition: border-color 0.15s;
     }
     .map-row:hover { border-color: var(--accent-primary); }
 </style>
 
-<div class="map-list">
-    <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 1rem;">
-        <h2 class="mono-text" style="color: var(--accent-primary); letter-spacing: 2px; margin: 0;">BATTLE MAPS</h2>
-        <div style="display: flex; gap: 0.5rem;">
-            <a href="{% url 'spacebattle:list' %}" class="mono-text" style="background: transparent; border: 1px solid var(--border-color); color: var(--text-primary); padding: 0.5rem 1rem; text-decoration: none; letter-spacing: 1px;">← BATTLES</a>
-            <button onclick="createMap()" class="mono-text" style="background: var(--accent-primary); border: none; color: var(--bg-dark); padding: 0.5rem 1rem; cursor: pointer; font-weight: bold; letter-spacing: 1px;">NEW MAP</button>
-        </div>
+<div class="map-list brackets" style="position: relative; padding: 32px 36px;">
+    <span class="bk tl"></span><span class="bk tr"></span>
+    <span class="bk bl"></span><span class="bk br"></span>
+
+    <header class="block-head">
+        <span class="block-bullet">■</span>
+        <h3>BATTLE MAPS</h3>
+        <span class="block-line"></span>
+        <span class="block-badge" id="map-count-badge">[…]</span>
+    </header>
+
+    <div style="display: flex; align-items: center; justify-content: flex-end; gap: 0.5rem; margin-bottom: 1rem;">
+        <a href="{% url 'spacebattle:list' %}" class="mono-text" style="background: transparent; border: 1px solid var(--border-color); color: var(--text-primary); padding: 0.5rem 1rem; text-decoration: none; letter-spacing: 1px;">← BATTLES</a>
+        <button onclick="createMap()" class="mono-text" style="background: var(--accent-primary); border: none; color: var(--bg-dark); padding: 0.5rem 1rem; cursor: pointer; font-weight: bold; letter-spacing: 1px;">NEW MAP</button>
     </div>
     <div id="map-list-body"><span class="mono-text text-muted">Loading…</span></div>
 </div>
@@ -36,7 +46,7 @@ function loadMaps() {
             html += '<div class="map-row" onclick="window.location = \'/spacebattle/maps/' + m.id + '/\'">';
             html += '<div style="flex:1;">';
             html += '<div class="mono-text" style="font-size: 0.95rem; color: var(--text-primary);">' + escapeHtml(m.name) + '</div>';
-            html += '<div class="mono-text text-muted" style="font-size: 0.65rem;">' + m.grid_width + '\u00D7' + m.grid_height + ' grid \u00B7 ' + m.terrain_count + ' terrain features</div>';
+            html += '<div class="mono-text text-muted" style="font-size: 0.65rem;">' + m.grid_width + '×' + m.grid_height + ' grid · ' + m.terrain_count + ' terrain features</div>';
             if (m.description) html += '<div class="mono-text text-muted" style="font-size: 0.6rem; margin-top: 0.2rem;">' + escapeHtml(m.description) + '</div>';
             html += '</div>';
             html += '<button onclick="event.stopPropagation(); deleteMap(' + m.id + ', \'' + escapeHtml(m.name).replace(/\'/g, '\\\'') + '\')" class="mono-text" style="background: transparent; border: 1px solid var(--accent-danger); color: var(--accent-danger); padding: 0.3rem 0.6rem; cursor: pointer; font-size: 0.65rem;">DELETE</button>';
@@ -44,6 +54,8 @@ function loadMaps() {
         });
         if (!maps.length) html = '<div class="mono-text text-muted" style="text-align: center; padding: 3rem;">No maps yet.</div>';
         document.getElementById('map-list-body').innerHTML = html;
+        var badge = document.getElementById('map-count-badge');
+        if (badge) badge.textContent = '[' + maps.length + ']';
     });
 }
 

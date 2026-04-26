@@ -4,22 +4,28 @@
 
 {% block content %}
 <style>
-    .ship-layout { display: grid; grid-template-columns: 320px 1fr; gap: 1rem; padding: 1rem; min-height: calc(100vh - 80px); }
-    .ship-sidebar { border: 1px solid var(--border-color); padding: 0.75rem; border-radius: var(--radius-sm); }
-    .ship-main    { border: 1px solid var(--border-color); padding: 1rem; border-radius: var(--radius-sm); }
+    /* Starship-bay chrome: bracket-framed shell + .block-head section
+       headers. Stat-pill colour tokens stay semantic (HEALTH / SHIELD /
+       SPEED etc.) — those are not restyled. */
+    .ship-layout { display: grid; grid-template-columns: 320px 1fr; gap: 1rem; padding: 0; min-height: calc(100vh - 80px); }
+    .ship-sidebar { border: 1px solid var(--border-color); padding: 0.75rem; }
+    .ship-main    { border: 1px solid var(--border-color); padding: 1rem; }
     .ship-tab { padding: 0.4rem 0.8rem; border: 1px solid var(--border-color); background: transparent; color: var(--text-primary); font-family: var(--font-mono); font-size: 0.75rem; cursor: pointer; letter-spacing: 1px; }
     .ship-tab.active { background: var(--accent-primary); color: var(--bg-dark); border-color: var(--accent-primary); }
-    .class-row { padding: 0.5rem 0.6rem; border: 1px solid var(--border-color); border-radius: var(--radius-sm); margin-bottom: 0.35rem; cursor: pointer; }
+    .class-row { padding: 0.5rem 0.6rem; border: 1px solid var(--border-color); margin-bottom: 0.35rem; cursor: pointer; }
     .class-row.selected { border-color: var(--accent-primary); background: rgba(6, 182, 212, 0.08); }
     .class-row .ship-class-name { font-size: 0.85rem; color: var(--text-primary); }
     .class-row .ship-class-meta { font-size: 0.6rem; color: var(--text-muted); margin-top: 0.15rem; }
-    .slot-bar { height: 10px; background: rgba(255,255,255,0.08); border-radius: 5px; overflow: hidden; }
-    .slot-bar-fill { height: 100%; transition: width 0.2s; border-radius: 5px; }
-    .stat-pill { display: inline-flex; align-items: center; gap: 0.35rem; padding: 0.25rem 0.55rem; border: 1px solid var(--border-color); border-radius: var(--radius-sm); font-size: 0.7rem; color: var(--text-primary); background: rgba(255,255,255,0.02); }
+    /* Slot bar keeps a tiny radius for the rounded fill — 50% rule
+       carve-out for ergonomic progress bars. We zero its outer radius
+       to match the squared aesthetic. */
+    .slot-bar { height: 10px; background: rgba(255,255,255,0.08); overflow: hidden; }
+    .slot-bar-fill { height: 100%; transition: width 0.2s; }
+    .stat-pill { display: inline-flex; align-items: center; gap: 0.35rem; padding: 0.25rem 0.55rem; border: 1px solid var(--border-color); font-size: 0.7rem; color: var(--text-primary); background: rgba(255,255,255,0.02); }
     .warn-error { border-color: #ef4444; color: #ef4444; }
     .warn-warn  { border-color: #f59e0b; color: #f59e0b; }
     .warn-info  { border-color: #06b6d4; color: #06b6d4; }
-    .module-row { display: flex; align-items: center; gap: 0.5rem; padding: 0.35rem 0.45rem; border: 1px solid var(--border-color); border-radius: var(--radius-sm); margin-bottom: 0.25rem; }
+    .module-row { display: flex; align-items: center; gap: 0.5rem; padding: 0.35rem 0.45rem; border: 1px solid var(--border-color); margin-bottom: 0.25rem; }
     .pill-cat { font-size: 0.55rem; color: var(--accent-primary); border: 1px solid var(--accent-primary); padding: 0.05rem 0.3rem; min-width: 5rem; text-align: center; }
     .mono-input { background: var(--bg-input); border: 1px solid var(--border-color); color: var(--text-primary); padding: 0.35rem; font-family: var(--font-mono); font-size: 0.75rem; }
     .btn-primary { background: var(--accent-primary); border: none; color: var(--bg-dark); padding: 0.4rem 0.9rem; cursor: pointer; font-family: var(--font-mono); font-size: 0.72rem; font-weight: bold; letter-spacing: 1px; }
@@ -27,26 +33,45 @@
     .btn-danger  { background: transparent; border: 1px solid var(--accent-danger); color: var(--accent-danger); padding: 0.2rem 0.5rem; cursor: pointer; font-family: var(--font-mono); font-size: 0.65rem; }
 </style>
 
-<div class="ship-layout">
+<div class="brackets" style="position: relative; padding: 28px 32px; margin: 1rem;">
+    <span class="bk tl"></span><span class="bk tr"></span>
+    <span class="bk bl"></span><span class="bk br"></span>
+
+    <div class="ship-layout">
     <!-- SIDEBAR — list (tab-aware) -->
     <div class="ship-sidebar">
         <div id="sidebar-classes" style="display: block;">
-            <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 0.75rem;">
-                <h3 class="mono-text" style="color: var(--accent-primary); font-size: 0.85rem; letter-spacing: 1px; margin: 0;">CLASSES</h3>
+            <header class="block-head">
+                <span class="block-bullet">■</span>
+                <h3>CLASSES</h3>
+                <span class="block-line"></span>
+                <span class="block-badge" id="class-count-badge">[…]</span>
+            </header>
+            <div style="display: flex; justify-content: flex-end; margin-bottom: 0.6rem;">
                 <button class="btn-primary" onclick="createClass()">NEW</button>
             </div>
             <div id="class-list"><span class="mono-text text-muted" style="font-size: 0.75rem;">Loading…</span></div>
         </div>
         <div id="sidebar-ships" style="display: none;">
-            <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 0.75rem;">
-                <h3 class="mono-text" style="color: var(--accent-primary); font-size: 0.85rem; letter-spacing: 1px; margin: 0;">SHIPS</h3>
+            <header class="block-head">
+                <span class="block-bullet">■</span>
+                <h3>SHIPS</h3>
+                <span class="block-line"></span>
+                <span class="block-badge" id="ship-count-badge">[…]</span>
+            </header>
+            <div style="display: flex; justify-content: flex-end; margin-bottom: 0.6rem;">
                 <button class="btn-primary" onclick="buildHullFromPrompt()">BUILD</button>
             </div>
             <div id="ship-list"><span class="mono-text text-muted" style="font-size: 0.75rem;">Loading…</span></div>
         </div>
         <div id="sidebar-fleets" style="display: none;">
-            <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 0.75rem;">
-                <h3 class="mono-text" style="color: var(--accent-primary); font-size: 0.85rem; letter-spacing: 1px; margin: 0;">FLEETS</h3>
+            <header class="block-head">
+                <span class="block-bullet">■</span>
+                <h3>FLEETS</h3>
+                <span class="block-line"></span>
+                <span class="block-badge" id="fleet-count-badge">[…]</span>
+            </header>
+            <div style="display: flex; justify-content: flex-end; margin-bottom: 0.6rem;">
                 <button class="btn-primary" onclick="createFleet()">NEW</button>
             </div>
             <div id="fleet-list"><span class="mono-text text-muted" style="font-size: 0.75rem;">Loading…</span></div>
@@ -75,6 +100,7 @@
                 Select a fleet from the sidebar, or press NEW to create one.
             </div>
         </div>
+    </div>
     </div>
 </div>
 
@@ -227,6 +253,8 @@ function renderShipList() {
     });
     if (!SHIPS_CACHE.length) html = '<span class="mono-text text-muted" style="font-size: 0.75rem;">No ships yet. Press BUILD to commission one from a class.</span>';
     document.getElementById('ship-list').innerHTML = html;
+    var sb = document.getElementById('ship-count-badge');
+    if (sb) sb.textContent = '[' + SHIPS_CACHE.length + ']';
 }
 
 function selectShip(id) {
@@ -265,10 +293,19 @@ function renderShipEditor(ship) {
     html += '</div>';
 
     // Status + stats row
-    html += '<div style="display: flex; gap: 0.4rem; flex-wrap: wrap; margin-bottom: 0.6rem;">';
-    // Status pill with colour
-    html += '<span class="stat-pill" style="color:' + statusColor + ';border-color:' + statusColor + ';">' +
-        '<span class="mono-text">STATUS</span> ' + escapeHtml(ship.status_label.toUpperCase()) + '</span>';
+    html += '<div style="display: flex; gap: 0.4rem; flex-wrap: wrap; margin-bottom: 0.6rem; align-items: center;">';
+    // Clearance-gate status pill — semantic class drives the colour:
+    //   active        → s-active
+    //   under_constr  → s-standby (amber)
+    //   damaged       → s-burned  (danger red)
+    //   in_dock       → s-dormant (muted blue-grey)
+    //   decommissioned/lost → s-inactive (faded)
+    var sCls = ship.status === 'active' ? 's-active'
+        : ship.status === 'under_construction' ? 's-standby'
+        : ship.status === 'damaged' ? 's-burned'
+        : ship.status === 'in_dock' ? 's-dormant'
+        : 's-inactive';
+    html += '<span class="status-pill ' + sCls + '">' + escapeHtml(ship.status_label.toUpperCase()) + '</span>';
     html += '<span class="stat-pill"><span class="mono-text text-muted">CREW</span> ' + ship.current_crew + '/' + ship.required_crew + '</span>';
     html += '<span class="stat-pill"><span class="mono-text text-muted">MAINT</span> ' + ship.maintenance_state + '%</span>';
     if (ship.status === 'under_construction') {
@@ -466,6 +503,8 @@ function renderFleetList() {
     });
     if (!FLEETS_CACHE.length) html = '<span class="mono-text text-muted" style="font-size: 0.75rem;">No fleets yet. Press NEW to create one.</span>';
     document.getElementById('fleet-list').innerHTML = html;
+    var fb = document.getElementById('fleet-count-badge');
+    if (fb) fb.textContent = '[' + FLEETS_CACHE.length + ']';
 }
 
 function selectFleet(id) {
@@ -529,7 +568,10 @@ function renderFleetEditor(fleet) {
     html += '</div>';
 
     // Assigned ships
-    html += '<div class="mono-text text-muted" style="font-size: 0.6rem; letter-spacing: 1px; margin-bottom: 0.3rem;">ASSIGNED SHIPS</div>';
+    html += '<header class="block-head" style="margin-bottom: 0.4rem;">' +
+            '<span class="block-bullet">■</span><h3>ASSIGNED SHIPS</h3>' +
+            '<span class="block-line"></span>' +
+            '<span class="block-badge">[' + ((fleet.ships || []).length) + ']</span></header>';
     html += '<div>';
     if (!fleet.ships || !fleet.ships.length) {
         html += '<div class="mono-text text-muted" style="font-size: 0.75rem; font-style: italic; padding: 0.75rem 0;">No ships assigned yet.</div>';
@@ -649,6 +691,8 @@ function renderClassList() {
     });
     if (!CLASSES_CACHE.length) html = '<span class="mono-text text-muted" style="font-size: 0.75rem;">No classes yet. Press NEW to design one.</span>';
     document.getElementById('class-list').innerHTML = html;
+    var cb = document.getElementById('class-count-badge');
+    if (cb) cb.textContent = '[' + CLASSES_CACHE.length + ']';
 }
 
 function selectClass(id) {
@@ -761,7 +805,10 @@ function renderClassEditor(cls) {
 
     // Arsenal — list of weapon modules with their individual profiles
     if (stats.arsenal && stats.arsenal.length) {
-        html += '<div class="mono-text text-muted" style="font-size: 0.6rem; letter-spacing: 1px; margin: 0.25rem 0 0.3rem 0;">ARSENAL</div>';
+        html += '<header class="block-head" style="margin: 0.6rem 0 0.4rem 0;">' +
+                '<span class="block-bullet">■</span><h3>ARSENAL</h3>' +
+                '<span class="block-line"></span>' +
+                '<span class="block-badge">[' + stats.arsenal.length + ']</span></header>';
         html += '<div style="display: flex; flex-direction: column; gap: 0.2rem; margin-bottom: 0.6rem;">';
         stats.arsenal.forEach(function(w) {
             var bias = w.size_bias > 0 ? 'anti-large +' + w.size_bias
@@ -771,7 +818,7 @@ function renderClassEditor(cls) {
             var travelStr = w.travel_turns ? ' · travel ' + w.travel_turns + 't' : '';
             var batStr = w.battery_cost ? ' · bat ' + w.battery_cost : '';
             var qtyStr = w.quantity > 1 ? ' ×' + w.quantity : '';
-            html += '<div style="display:flex; align-items:center; gap:0.5rem; padding:0.3rem 0.5rem; border: 1px solid var(--border-color); border-radius: var(--radius-sm); font-size: 0.7rem;">';
+            html += '<div style="display:flex; align-items:center; gap:0.5rem; padding:0.3rem 0.5rem; border: 1px solid var(--border-color); font-size: 0.7rem;">';
             html += '<span style="color:#ef4444; min-width: 2.5rem; text-align: center;">DMG ' + w.damage + '</span>';
             html += '<span style="color: var(--text-primary); flex: 1;">' + escapeHtml(w.name) + qtyStr + '</span>';
             html += '<span class="mono-text text-muted" style="font-size: 0.58rem;">rng ' + rangeStr + travelStr + batStr + '</span>';
@@ -812,7 +859,10 @@ function renderClassEditor(cls) {
     html += '</div>';
 
     // Module list
-    html += '<div class="mono-text text-muted" style="font-size: 0.6rem; letter-spacing: 1px; margin-bottom: 0.3rem;">INSTALLED MODULES</div>';
+    html += '<header class="block-head" style="margin-bottom: 0.4rem;">' +
+            '<span class="block-bullet">■</span><h3>INSTALLED MODULES</h3>' +
+            '<span class="block-line"></span>' +
+            '<span class="block-badge">[' + (cls.modules.length) + ']</span></header>';
     html += '<div id="module-list">';
     if (!cls.modules.length) {
         html += '<div class="mono-text text-muted" style="font-size: 0.75rem; font-style: italic; padding: 0.75rem 0;">No modules installed yet.</div>';

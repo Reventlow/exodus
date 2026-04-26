@@ -44,6 +44,7 @@
     };
 
     // --- Shared input styling ---
+    // Square inputs (border-radius: 0) for the clearance-gate aesthetic.
     const inputStyle = {
         background: 'rgba(255,255,255,0.03)',
         border: '1px solid var(--border-color)',
@@ -52,7 +53,7 @@
         fontSize: '0.85rem',
         width: '100%',
         boxSizing: 'border-box',
-        borderRadius: 'var(--radius-sm)',
+        borderRadius: 0,
         fontFamily: 'var(--font-mono)',
     };
 
@@ -111,40 +112,52 @@
     );
 
     // --- Collapsible section panel ---
+    // Each section uses a `.block-head`-styled heading bar (bullet, title,
+    // line, count badge) and a square 1px border body. Click the bar to
+    // toggle. We avoid placing block-level <header>/<h3> inside <button>
+    // (React/HTML5 disallows it) — instead the button itself is the
+    // section header and we apply the .block-head class to it directly.
     const SectionPanel = ({ title, count, children, defaultOpen = false }) => {
         const [open, setOpen] = useState(defaultOpen);
         return (
-            <div className="glass-panel" style={{ marginBottom: '1.5rem', overflow: 'hidden' }}>
+            <div style={{
+                marginBottom: '1.5rem',
+                border: '1px solid var(--border-color)',
+                background: 'var(--bg-panel-translucent)',
+                borderRadius: 0,
+                overflow: 'hidden',
+            }}>
                 <button
                     onClick={() => setOpen(!open)}
-                    className="mono-text"
+                    className="block-head mono-text"
                     style={{
                         width: '100%',
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'space-between',
-                        padding: '1rem 1.5rem',
                         background: 'transparent',
-                        border: 'none',
+                        borderTop: 'none',
+                        borderLeft: 'none',
+                        borderRight: 'none',
                         borderBottom: open ? '1px solid var(--border-color)' : 'none',
-                        color: BASE_ACCENT,
                         cursor: 'pointer',
-                        fontSize: '0.95rem',
-                        fontWeight: 'bold',
-                        letterSpacing: '1.5px',
                         textAlign: 'left',
-                        fontFamily: 'var(--font-mono)',
+                        padding: '0.75rem 1rem',
+                        borderRadius: 0,
+                        marginBottom: 0,
                     }}
                 >
-                    <span>
-                        {open ? '[-]' : '[+]'} {title}
-                        <span className="text-muted" style={{ fontSize: '0.75rem', marginLeft: '0.75rem', fontWeight: 'normal' }}>
-                            ({count} {count === 1 ? 'ENTRY' : 'ENTRIES'})
-                        </span>
-                    </span>
-                    <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>
-                        {open ? 'COLLAPSE' : 'EXPAND'}
-                    </span>
+                    <span className="block-bullet">■</span>
+                    <span style={{
+                        fontFamily: 'var(--font-mono)',
+                        letterSpacing: '0.18em',
+                        textTransform: 'uppercase',
+                        color: BASE_ACCENT,
+                        fontSize: '0.85rem',
+                        fontWeight: 'bold',
+                    }}>{title}</span>
+                    <span className="block-line"></span>
+                    <span className="block-badge">[{count}]</span>
+                    <span className="text-muted" style={{
+                        fontSize: '0.65rem', marginLeft: '0.5rem', letterSpacing: '1px',
+                    }}>{open ? 'COLLAPSE' : 'EXPAND'}</span>
                 </button>
                 {open && (
                     <div style={{ padding: '1.5rem' }}>
@@ -193,7 +206,7 @@
                     fontFamily: 'var(--font-mono)',
                     fontSize: '0.85rem',
                     letterSpacing: '1px',
-                    borderRadius: 'var(--radius-sm)',
+                    borderRadius: 0,
                     opacity: disabled ? 0.6 : 1,
                 }}
             >
@@ -221,7 +234,7 @@
                 color: colors[status],
                 padding: '0.2rem 0.5rem',
                 border: `1px solid ${colors[status]}`,
-                borderRadius: 'var(--radius-sm)',
+                borderRadius: 0,
                 animation: status === 'saving' ? 'pulse 1s infinite' : 'none',
             }}>
                 {labels[status]}
@@ -524,7 +537,7 @@
                 color: disabled ? 'var(--bg-panel)' : 'var(--text-muted)',
                 cursor: disabled ? 'default' : 'pointer',
                 padding: '0.1rem 0.35rem', fontSize: '0.75rem', lineHeight: 1,
-                borderRadius: 'var(--radius-sm)', fontFamily: 'var(--font-mono)',
+                borderRadius: 0, fontFamily: 'var(--font-mono)',
             }}>{label}</button>
         );
 
@@ -532,7 +545,7 @@
             <SectionPanel title="FACILITY TYPES" count={items.length}>
                 {categories.map((cat, catIdx) => (
                     <div key={cat.name} style={{
-                        marginBottom: '1.5rem', borderRadius: 'var(--radius-sm)', padding: '0.25rem',
+                        marginBottom: '1.5rem', borderRadius: 0, padding: '0.25rem',
                     }}>
                         <div style={{
                             display: 'flex', alignItems: 'center', gap: '0.5rem',
@@ -591,14 +604,14 @@
                                             background: 'transparent', border: '1px solid var(--accent-danger)',
                                             color: 'var(--accent-danger)', cursor: 'pointer',
                                             padding: '0.3rem 0.6rem', fontSize: '0.7rem',
-                                            fontFamily: 'var(--font-mono)', borderRadius: 'var(--radius-sm)',
+                                            fontFamily: 'var(--font-mono)', borderRadius: 0,
                                             marginTop: '1rem', flexShrink: 0,
                                         }}>DELETE</button>
                                 </div>
 
                                 {/* Levels */}
                                 <div style={{
-                                    background: 'rgba(0,0,0,0.15)', borderRadius: 'var(--radius-sm)', padding: '0.75rem',
+                                    background: 'rgba(0,0,0,0.15)', borderRadius: 0, padding: '0.75rem',
                                 }}>
                                     <span className="mono-text" style={{
                                         fontSize: '0.7rem', color: BASE_ACCENT, letterSpacing: '1px',
@@ -647,7 +660,7 @@
                                             background: 'transparent', border: '1px dashed var(--border-color)',
                                             color: 'var(--text-muted)', width: '100%', padding: '0.35rem',
                                             cursor: 'pointer', fontSize: '0.75rem', marginTop: '0.5rem',
-                                            borderRadius: 'var(--radius-sm)', fontFamily: 'var(--font-mono)',
+                                            borderRadius: 0, fontFamily: 'var(--font-mono)',
                                         }}>+ ADD LEVEL</button>
                                 </div>
                             </div>
@@ -660,7 +673,7 @@
                 {/* Add new category */}
                 <div style={{
                     display: 'flex', gap: '0.5rem', alignItems: 'center', marginTop: '1rem',
-                    padding: '0.75rem', border: '1px dashed var(--border-color)', borderRadius: 'var(--radius-sm)',
+                    padding: '0.75rem', border: '1px dashed var(--border-color)', borderRadius: 0,
                 }}>
                     <input value={newCat} onChange={e => setNewCat(e.target.value)}
                         onKeyDown={e => e.key === 'Enter' && addCategory()}
@@ -668,7 +681,7 @@
                         style={{
                             background: 'transparent', border: '1px solid var(--border-color)',
                             color: 'var(--text-primary)', padding: '0.35rem 0.5rem', flex: 1,
-                            fontFamily: 'var(--font-mono)', fontSize: '0.8rem', borderRadius: 'var(--radius-sm)',
+                            fontFamily: 'var(--font-mono)', fontSize: '0.8rem', borderRadius: 0,
                         }} />
                     <button onClick={addCategory} className="mono-text" disabled={!newCat.trim()}
                         style={{
@@ -676,7 +689,7 @@
                             border: `1px solid ${BASE_ACCENT}`,
                             color: newCat.trim() ? 'var(--bg-dark)' : 'var(--text-muted)',
                             padding: '0.35rem 0.75rem', cursor: newCat.trim() ? 'pointer' : 'default',
-                            fontFamily: 'var(--font-mono)', fontSize: '0.75rem', borderRadius: 'var(--radius-sm)',
+                            fontFamily: 'var(--font-mono)', fontSize: '0.75rem', borderRadius: 0,
                         }}>+ ADD CATEGORY</button>
                 </div>
             </SectionPanel>
@@ -881,50 +894,48 @@
 
         return (
             <div style={{ maxWidth: '1100px', margin: '0 auto', padding: '2rem 1rem' }}>
-                {/* Header */}
-                <div style={{ marginBottom: '2rem' }}>
-                    <a href="/agencies/" className="mono-text text-muted"
-                        style={{ textDecoration: 'none', fontSize: '0.8rem', display: 'block', marginBottom: '0.5rem' }}>
-                        &lt; BACK TO AGENCIES
-                    </a>
-                    <div style={{
-                        display: 'flex', justifyContent: 'space-between',
-                        alignItems: 'center', flexWrap: 'wrap', gap: '0.5rem',
-                    }}>
-                        <h1 className="mono-text" style={{
-                            color: BASE_ACCENT,
-                            fontSize: '1.5rem',
-                            letterSpacing: '2px',
-                            borderBottom: `2px solid ${BASE_ACCENT}`,
-                            paddingBottom: '0.5rem',
-                        }}>
-                            BASE CONFIGURATION // MANAGEMENT
-                        </h1>
-                        <SaveIndicator status={saveStatus} />
-                    </div>
-                    <p className="text-muted mono-text" style={{ fontSize: '0.75rem', marginTop: '0.5rem' }}>
-                        Configure location types, merits, facilities, and equipment available for agency bases.
-                        Changes save automatically on blur.
-                    </p>
-                </div>
+                {/* Authority bracket frame around the entire base config UI */}
+                <div className="brackets" style={{ position: 'relative', padding: '32px 36px' }}>
+                    <span className="bk tl"></span><span className="bk tr"></span>
+                    <span className="bk bl"></span><span className="bk br"></span>
 
-                {/* Sections */}
-                <LocationTypesSection
-                    items={config.locationTypes || []}
-                    onUpdate={handleUpdate}
-                />
-                <LocationMeritsSection
-                    items={config.locationMerits || []}
-                    onUpdate={handleUpdate}
-                />
-                <FacilityTypesSection
-                    items={config.facilityTypes || []}
-                    onUpdate={handleUpdate}
-                />
-                <EquipmentTypesSection
-                    items={config.equipmentTypes || []}
-                    onUpdate={handleUpdate}
-                />
+                    {/* Header */}
+                    <div style={{ marginBottom: '1.5rem' }}>
+                        <a href="/agencies/" className="mono-text text-muted"
+                            style={{ textDecoration: 'none', fontSize: '0.8rem', display: 'block', marginBottom: '0.75rem' }}>
+                            &lt; BACK TO AGENCIES
+                        </a>
+                        <div className="kicker">// ADMIN // BLACKLOG.NET</div>
+                        <header className="block-head" style={{ marginBottom: '0.6rem' }}>
+                            <span className="block-bullet">■</span>
+                            <h3>BASE CONFIGURATION // MANAGEMENT</h3>
+                            <span className="block-line"></span>
+                            <SaveIndicator status={saveStatus} />
+                        </header>
+                        <p className="text-muted mono-text" style={{ fontSize: '0.75rem', marginTop: '0.25rem' }}>
+                            Configure location types, merits, facilities, and equipment available for agency bases.
+                            Changes save automatically on blur.
+                        </p>
+                    </div>
+
+                    {/* Sections */}
+                    <LocationTypesSection
+                        items={config.locationTypes || []}
+                        onUpdate={handleUpdate}
+                    />
+                    <LocationMeritsSection
+                        items={config.locationMerits || []}
+                        onUpdate={handleUpdate}
+                    />
+                    <FacilityTypesSection
+                        items={config.facilityTypes || []}
+                        onUpdate={handleUpdate}
+                    />
+                    <EquipmentTypesSection
+                        items={config.equipmentTypes || []}
+                        onUpdate={handleUpdate}
+                    />
+                </div>
             </div>
         );
     };

@@ -3,9 +3,25 @@
 {% block title %}WORLD MAP // BLACKLOG.NET{% endblock %}
 
 {% block content %}
-<div id="app-root">
-    <div class="loading-screen">
-        <h1 class="mono-text">LOADING GLOBAL INTELLIGENCE MAP...</h1>
+<!-- Outer authority bracket frame around the global Leaflet world map.
+     The Leaflet container, GeoJSON layer config and country highlight
+     logic inside the React component stay untouched — only the chrome
+     around it is restyled. -->
+<div class="brackets" style="position: relative; margin: 16px; padding: 18px 20px 20px;">
+    <span class="bk tl"></span><span class="bk tr"></span>
+    <span class="bk bl"></span><span class="bk br"></span>
+
+    <header class="block-head" style="margin-bottom: 14px;">
+        <span class="block-bullet">■</span>
+        <h3>GLOBAL INTELLIGENCE MAP</h3>
+        <span class="block-line"></span>
+        <span class="status-pill s-active">LIVE</span>
+    </header>
+
+    <div id="app-root">
+        <div class="loading-screen">
+            <h1 class="mono-text">LOADING GLOBAL INTELLIGENCE MAP...</h1>
+        </div>
     </div>
 </div>
 {% endblock %}
@@ -283,79 +299,81 @@
 
         return (
             <div className="fade-in">
-                <div style={{
-                    display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-                    marginBottom: '0.75rem', flexWrap: 'wrap', gap: '0.5rem'
-                }}>
-                    <h2 className="mono-text text-accent" style={{ fontSize: '1.2rem' }}>
-                        GLOBAL INTELLIGENCE MAP
-                    </h2>
-                </div>
-
-                {/* Map container */}
+                {/* Map container — Leaflet mount point. The map's GeoJSON layer
+                    config and country highlight logic above stay untouched. */}
                 <div ref={mapRef} style={{
-                    width: '100%', height: 'calc(100vh - 200px)', minHeight: '400px',
-                    borderRadius: 'var(--radius-sm)',
+                    width: '100%', height: 'calc(100vh - 220px)', minHeight: '400px',
+                    borderRadius: 0,
                     border: '1px solid var(--border-color)',
                 }} />
 
-                {/* Legend / Agency Filter */}
+                {/* Agency filter row — section header + status-style pills */}
                 {activeAgencies.length > 0 && (
-                    <div className="glass-panel" style={{
-                        padding: '1rem', marginTop: '0.75rem',
-                        display: 'flex', flexWrap: 'wrap', gap: '0.5rem', alignItems: 'center',
-                    }}>
-                        <button
-                            onClick={() => setSelectedIds(null)}
-                            className="mono-text"
-                            style={{
-                                background: selectedIds === null ? 'rgba(255,255,255,0.1)' : 'transparent',
-                                border: '1px solid ' + (selectedIds === null ? 'var(--accent-primary)' : 'var(--border-color)'),
-                                color: selectedIds === null ? 'var(--accent-primary)' : 'var(--text-muted)',
-                                padding: '0.3rem 0.7rem', cursor: 'pointer', fontSize: '0.8rem',
-                                borderRadius: 'var(--radius-sm)',
-                            }}>
-                            ALL
-                        </button>
-                        {activeAgencies.map(a => {
-                            const isActive = selectedIds === null || selectedIds.has(a.id);
-                            return (
-                                <button key={a.id}
-                                    onClick={() => {
-                                        if (selectedIds === null) {
-                                            // From "all" -> select only this one
-                                            setSelectedIds(new Set([a.id]));
-                                        } else if (selectedIds.has(a.id) && selectedIds.size === 1) {
-                                            // Deselecting the only one -> back to all
-                                            setSelectedIds(null);
-                                        } else if (selectedIds.has(a.id)) {
-                                            // Remove from selection
-                                            const next = new Set(selectedIds);
-                                            next.delete(a.id);
-                                            setSelectedIds(next);
-                                        } else {
-                                            // Add to selection
-                                            setSelectedIds(new Set([...selectedIds, a.id]));
-                                        }
-                                    }}
-                                    className="mono-text"
-                                    style={{
-                                        background: isActive ? a.color + '22' : 'transparent',
-                                        border: '1px solid ' + (isActive ? a.color : 'var(--border-color)'),
-                                        color: isActive ? a.color : 'var(--text-muted)',
-                                        padding: '0.3rem 0.7rem', cursor: 'pointer', fontSize: '0.8rem',
-                                        borderRadius: 'var(--radius-sm)',
-                                        display: 'flex', alignItems: 'center', gap: '0.4rem',
-                                        opacity: isActive ? 1 : 0.4,
-                                    }}>
-                                    <div style={{
-                                        width: '10px', height: '10px', borderRadius: '2px',
-                                        background: a.color,
-                                    }} />
-                                    {a.name}
-                                </button>
-                            );
-                        })}
+                    <div style={{ marginTop: '0.75rem' }}>
+                        <header className="block-head" style={{ marginBottom: '0.6rem' }}>
+                            <span className="block-bullet">■</span>
+                            <h3>AGENCY FILTERS</h3>
+                            <span className="block-line"></span>
+                            <span className="block-badge">[{activeAgencies.length}]</span>
+                        </header>
+                        <div style={{
+                            padding: '0.75rem 1rem',
+                            border: '1px solid var(--border-color)',
+                            background: 'var(--bg-panel-translucent)',
+                            display: 'flex', flexWrap: 'wrap', gap: '0.5rem', alignItems: 'center',
+                        }}>
+                            <button
+                                onClick={() => setSelectedIds(null)}
+                                className="mono-text"
+                                style={{
+                                    background: selectedIds === null ? 'rgba(255,255,255,0.1)' : 'transparent',
+                                    border: '1px solid ' + (selectedIds === null ? 'var(--accent-primary)' : 'var(--border-color)'),
+                                    color: selectedIds === null ? 'var(--accent-primary)' : 'var(--text-muted)',
+                                    padding: '0.3rem 0.7rem', cursor: 'pointer', fontSize: '0.8rem',
+                                    borderRadius: 0,
+                                }}>
+                                ALL
+                            </button>
+                            {activeAgencies.map(a => {
+                                const isActive = selectedIds === null || selectedIds.has(a.id);
+                                return (
+                                    <button key={a.id}
+                                        onClick={() => {
+                                            if (selectedIds === null) {
+                                                // From "all" -> select only this one
+                                                setSelectedIds(new Set([a.id]));
+                                            } else if (selectedIds.has(a.id) && selectedIds.size === 1) {
+                                                // Deselecting the only one -> back to all
+                                                setSelectedIds(null);
+                                            } else if (selectedIds.has(a.id)) {
+                                                // Remove from selection
+                                                const next = new Set(selectedIds);
+                                                next.delete(a.id);
+                                                setSelectedIds(next);
+                                            } else {
+                                                // Add to selection
+                                                setSelectedIds(new Set([...selectedIds, a.id]));
+                                            }
+                                        }}
+                                        className="mono-text"
+                                        style={{
+                                            background: isActive ? a.color + '22' : 'transparent',
+                                            border: '1px solid ' + (isActive ? a.color : 'var(--border-color)'),
+                                            color: isActive ? a.color : 'var(--text-muted)',
+                                            padding: '0.3rem 0.7rem', cursor: 'pointer', fontSize: '0.8rem',
+                                            borderRadius: 0,
+                                            display: 'flex', alignItems: 'center', gap: '0.4rem',
+                                            opacity: isActive ? 1 : 0.4,
+                                        }}>
+                                        <div style={{
+                                            width: '10px', height: '10px', borderRadius: 0,
+                                            background: a.color,
+                                        }} />
+                                        {a.name}
+                                    </button>
+                                );
+                            })}
+                        </div>
                     </div>
                 )}
             </div>
@@ -374,7 +392,7 @@
         font-family: var(--font-mono, monospace) !important;
         font-size: 0.8rem !important;
         padding: 0.4rem 0.6rem !important;
-        border-radius: 2px !important;
+        border-radius: 0 !important;
         box-shadow: 0 2px 8px rgba(0,0,0,0.5) !important;
     }
     .map-tooltip::before {

@@ -1,5 +1,14 @@
 # Changelog
 
+## v0.14.45
+- **Wave 4 of the clearance-gate aesthetic rollout — maps, battles, settings, starships.** 10 templates restyled across three parallel agents on disjoint files. Canvas, Three.js, Leaflet, and SVG terrain content untouched per spec — chrome-only restyle around them
+- Site settings (`site_settings.html`, ~1900L → 2054L): outer bracket frame around the whole shell, sidebar gets the rail-item active-pattern matching GM workspace, **17 `.block-head` section markers** (Game Date, Comms Lock, Map Visibility, Council, Nav Labels, Base Access, Clearance Gate / TWEAKS, City Maps, Star Map Config, Seed Star Systems, Starships, Ship Types, Module Sections, Ship Modules, View As Player, Transfer Player, Sidebar group), **14 status pills** for ENABLED/DISABLED/LOCKED/OPEN/UNLOCKED states. New TWEAKS scope note clarifies that palette propagates to the authenticated app via `<html data-palette>`
+- Star map (`starmap/demo.html`, `citymap.html`) and world map (`agencies/world_map.html`): bracket frames around the canvas/Leaflet container, side panels get `.block-head` per section. Three.js scene setup, Leaflet GeoJSON layers, and `--map-*` tokens **not touched**
+- Base config (`agencies/base_config.html`): bracket frame, custom `SectionPanel` `.block-head` directly on the collapse `<button>` with bullet/title/line/badge (avoids invalid HTML nesting)
+- Spacebattle (`battle.html`, `list.html`, `map_editor.html`, `maps_list.html`, `_terrain_render.html`): bracket frames + 10 `.block-head` blocks (turn order, battle map, unit details, terrain palette, etc.). Status pills dynamically map participant.status → s-active (engaged/active), s-burned (destroyed), s-inactive (withdrawn), s-dormant (waiting). Hex-grid canvas drawing, ship-token rendering, SVG terrain rendering **not touched**. `_terrain_render.html` is pure canvas helpers — no chrome to restyle, left alone
+- Starships (`starships/page.html`): bracket frame, 6 `.block-head` (Classes / Ships / Weapons / Shields / Batteries / Chassis), ship-status pill maps active → s-active, under_construction → s-standby, damaged → s-burned, in_dock → s-dormant, decommissioned/lost → s-inactive
+- Total Wave 4: ~10 templates, +500 net LOC, 7 brackets, 35 block-heads, 21 status pills, ~24 `borderRadius` zeroings
+
 ## v0.14.44
 - New admin-only endpoint `POST /accounts/api/admin/set-last-activity/` for bulk-setting `UserProfile.last_activity` timestamps. Body: `{"users": "all_non_superuser" | ["username1", ...], "timestamp": "ISO-8601"}`. Useful for testing the roster status pills (drift users into ACTIVE / STANDBY / DORMANT / INACTIVE bands without waiting for real time to pass)
 

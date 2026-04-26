@@ -4,10 +4,12 @@
 
 {% block content %}
 <style>
-    .editor-layout { display: grid; grid-template-columns: 240px 1fr; gap: 0.75rem; padding: 0.75rem; min-height: calc(100vh - 80px); }
-    .panel { border: 1px solid var(--border-color); padding: 0.75rem; border-radius: var(--radius-sm); overflow: auto; }
-    .panel h3 { margin: 0 0 0.5rem 0; font-size: 0.8rem; color: var(--accent-primary); letter-spacing: 1px; }
-    #editor-canvas-wrap { position: relative; border: 1px solid var(--border-color); border-radius: var(--radius-sm); padding: 0.25rem; background: var(--map-void); overflow: auto; }
+    /* Map-editor chrome: bracket-framed shell, square-cornered panels.
+       The hex grid + terrain rendering inside #editor-canvas is untouched
+       (it reads --map-* tokens directly). */
+    .editor-layout { display: grid; grid-template-columns: 240px 1fr; gap: 0.75rem; padding: 0; min-height: calc(100vh - 80px); }
+    .panel { border: 1px solid var(--border-color); padding: 0.75rem; overflow: auto; }
+    #editor-canvas-wrap { position: relative; border: 1px solid var(--border-color); padding: 0.25rem; background: var(--map-void); overflow: auto; }
     #editor-canvas { display: block; }
     .zoom-controls {
         position: sticky;
@@ -19,7 +21,6 @@
         gap: 0.2rem;
         background: var(--bg-panel-translucent);
         border: 1px solid var(--border-color);
-        border-radius: var(--radius-sm);
         padding: 0.2rem;
         margin-bottom: 0.2rem;
     }
@@ -28,39 +29,53 @@
     .zoom-label { color: var(--text-muted); font-family: var(--font-mono); font-size: 0.65rem; padding: 0.15rem 0.35rem; }
 </style>
 
-<div class="editor-layout">
-    <div class="panel">
-        <h3 id="map-name">Loading…</h3>
-        <div style="display: flex; flex-direction: column; gap: 0.4rem; margin-top: 0.5rem;">
-            <a href="{% url 'spacebattle:maps' %}" class="mono-text" style="background: transparent; border: 1px solid var(--border-color); color: var(--text-primary); padding: 0.3rem 0.6rem; text-decoration: none; font-size: 0.65rem; text-align: center;">← MAPS</a>
-            <button onclick="renameMap()" class="mono-text" style="background: transparent; border: 1px solid var(--border-color); color: var(--text-primary); padding: 0.3rem 0.6rem; cursor: pointer; font-size: 0.65rem;">RENAME</button>
-            <button onclick="resizeMap()" class="mono-text" style="background: transparent; border: 1px solid var(--border-color); color: var(--text-primary); padding: 0.3rem 0.6rem; cursor: pointer; font-size: 0.65rem;">RESIZE GRID</button>
-            <button onclick="clearMap()" class="mono-text" style="background: transparent; border: 1px solid #ef4444; color: #ef4444; padding: 0.3rem 0.6rem; cursor: pointer; font-size: 0.65rem;">CLEAR ALL</button>
-            <button onclick="saveMap()" class="mono-text" style="background: var(--accent-primary); border: none; color: var(--bg-dark); padding: 0.4rem 0.6rem; cursor: pointer; font-weight: bold; font-size: 0.72rem; letter-spacing: 1px;">SAVE</button>
+<div class="brackets" style="position: relative; padding: 28px 32px; margin: 0.75rem;">
+    <span class="bk tl"></span><span class="bk tr"></span>
+    <span class="bk bl"></span><span class="bk br"></span>
+
+    <div class="editor-layout">
+        <div class="panel">
+            <header class="block-head">
+                <span class="block-bullet">■</span>
+                <h3 id="map-name">LOADING…</h3>
+                <span class="block-line"></span>
+            </header>
+            <div style="display: flex; flex-direction: column; gap: 0.4rem; margin-top: 0.5rem;">
+                <a href="{% url 'spacebattle:maps' %}" class="mono-text" style="background: transparent; border: 1px solid var(--border-color); color: var(--text-primary); padding: 0.3rem 0.6rem; text-decoration: none; font-size: 0.65rem; text-align: center;">← MAPS</a>
+                <button onclick="renameMap()" class="mono-text" style="background: transparent; border: 1px solid var(--border-color); color: var(--text-primary); padding: 0.3rem 0.6rem; cursor: pointer; font-size: 0.65rem;">RENAME</button>
+                <button onclick="resizeMap()" class="mono-text" style="background: transparent; border: 1px solid var(--border-color); color: var(--text-primary); padding: 0.3rem 0.6rem; cursor: pointer; font-size: 0.65rem;">RESIZE GRID</button>
+                <button onclick="clearMap()" class="mono-text" style="background: transparent; border: 1px solid #ef4444; color: #ef4444; padding: 0.3rem 0.6rem; cursor: pointer; font-size: 0.65rem;">CLEAR ALL</button>
+                <button onclick="saveMap()" class="mono-text" style="background: var(--accent-primary); border: none; color: var(--bg-dark); padding: 0.4rem 0.6rem; cursor: pointer; font-weight: bold; font-size: 0.72rem; letter-spacing: 1px;">SAVE</button>
+            </div>
+
+            <header class="block-head" style="margin-top: 1rem;">
+                <span class="block-bullet">■</span>
+                <h3>TERRAIN TYPE</h3>
+                <span class="block-line"></span>
+            </header>
+            <select id="terrain-type-select" class="mono-text" style="width: 100%; background: var(--bg-input); border: 1px solid var(--border-color); color: var(--text-primary); padding: 0.35rem; font-size: 0.7rem;">
+                <option value="asteroid">Asteroid Field</option>
+                <option value="nebula">Nebula</option>
+                <option value="debris">Debris Field</option>
+                <option value="planet">Planet / Moon</option>
+                <option value="sun">Star / Sun Hazard</option>
+                <option value="gravity_well">Gravity Well</option>
+                <option value="minefield">Minefield</option>
+                <option value="station">Station / Platform</option>
+                <option value="zone">Scenario Zone</option>
+                <option value="custom">Custom</option>
+            </select>
+            <div class="mono-text text-muted" style="font-size: 0.55rem; margin-top: 0.3rem;">Click empty hex to place. Click existing hex to delete.</div>
         </div>
-        <h3 style="margin-top: 1rem;">TERRAIN TYPE</h3>
-        <select id="terrain-type-select" class="mono-text" style="width: 100%; background: var(--bg-input); border: 1px solid var(--border-color); color: var(--text-primary); padding: 0.35rem; font-size: 0.7rem;">
-            <option value="asteroid">Asteroid Field</option>
-            <option value="nebula">Nebula</option>
-            <option value="debris">Debris Field</option>
-            <option value="planet">Planet / Moon</option>
-            <option value="sun">Star / Sun Hazard</option>
-            <option value="gravity_well">Gravity Well</option>
-            <option value="minefield">Minefield</option>
-            <option value="station">Station / Platform</option>
-            <option value="zone">Scenario Zone</option>
-            <option value="custom">Custom</option>
-        </select>
-        <div class="mono-text text-muted" style="font-size: 0.55rem; margin-top: 0.3rem;">Click empty hex to place. Click existing hex to delete.</div>
-    </div>
-    <div id="editor-canvas-wrap">
-        <div class="zoom-controls">
-            <button type="button" onclick="zoomOut()" title="Zoom out">−</button>
-            <span class="zoom-label" id="zoom-label">100%</span>
-            <button type="button" onclick="zoomIn()" title="Zoom in">+</button>
-            <button type="button" onclick="resetZoom()" title="Reset zoom">⟲</button>
+        <div id="editor-canvas-wrap">
+            <div class="zoom-controls">
+                <button type="button" onclick="zoomOut()" title="Zoom out">−</button>
+                <span class="zoom-label" id="zoom-label">100%</span>
+                <button type="button" onclick="zoomIn()" title="Zoom in">+</button>
+                <button type="button" onclick="resetZoom()" title="Reset zoom">⟲</button>
+            </div>
+            <canvas id="editor-canvas" width="800" height="600"></canvas>
         </div>
-        <canvas id="editor-canvas" width="800" height="600"></canvas>
     </div>
 </div>
 

@@ -4,13 +4,27 @@
 
 {% block content %}
 <style>
-    /* Fill the viewport below the nav bar */
+    /* Bracket frame around the entire star map surface. The Three.js
+       canvas, scene setup, and shaders below stay untouched. */
+    .starmap-frame {
+        position: relative;
+        margin: 16px;
+        padding: 18px 20px 20px;
+    }
+    .starmap-header { margin-bottom: 14px; }
+    .starmap-title-row {
+        display: flex; align-items: baseline; gap: 14px; margin-bottom: 4px;
+    }
+    .starmap-title-row .kicker { margin-bottom: 0; }
+    .starmap-title-row .sub { margin-bottom: 0; }
+    /* Fill the viewport below the nav bar minus the bracket chrome */
     #starmap-container {
         position: relative;
         width: 100%;
-        height: calc(100vh - 60px);
+        height: calc(100vh - 140px);
         overflow: hidden;
         background: var(--bg-dark, #0a0a0f);
+        border: 1px solid var(--border-color);
     }
 
     #starmap-container canvas {
@@ -19,7 +33,7 @@
         height: 100%;
     }
 
-    /* Info panel — top-left overlay */
+    /* Info panel — top-left overlay (SHIP DETAILS / SCANNING) */
     #star-info {
         position: absolute;
         top: 1rem;
@@ -30,13 +44,14 @@
         color: var(--text-primary, #e0e0e0);
         background: var(--bg-panel-translucent);
         border: 1px solid var(--border-color, #333);
-        border-radius: var(--radius-sm, 4px);
+        border-radius: 0;
         padding: 0.75rem 1rem;
-        min-width: 220px;
+        min-width: 240px;
         pointer-events: none;
         backdrop-filter: blur(6px);
     }
 
+    #star-info .block-head { margin-bottom: 0.4rem; }
     #star-info .label {
         color: var(--text-muted, #666);
         font-size: 0.7rem;
@@ -78,65 +93,101 @@
         color: var(--accent-primary, #00ff88);
         background: var(--bg-panel-translucent);
         padding: 2px 8px;
-        border-radius: 3px;
+        border-radius: 0;
         pointer-events: none;
         display: none;
         white-space: nowrap;
     }
 </style>
 
-<div id="starmap-container">
-    <div id="star-info">
-        <div class="label">STAR SYSTEM</div>
-        <div class="value" id="info-name">-- hover a star --</div>
-        <div class="detail" id="info-distance"></div>
-        <div class="detail" id="info-spectral"></div>
-        <div class="detail" id="info-planets"></div>
-        <div class="detail" id="info-scan"></div>
-        <div id="info-planet-list" style="margin-top: 0.5rem; display: none;">
-            <div class="label" style="margin-bottom: 0.3rem;">PLANETS OF INTEREST</div>
-            <div id="planet-rows"></div>
-        </div>
-        <div id="info-resources" style="margin-top: 0.5rem; display: none;">
-            <div class="label" style="margin-bottom: 0.3rem;">RESOURCE PROBABILITY</div>
-            <div id="resource-bars"></div>
-        </div>
-    </div>
+<!-- Outer authority bracket frame around the Three.js star map -->
+<div class="brackets starmap-frame">
+    <span class="bk tl"></span><span class="bk tr"></span>
+    <span class="bk bl"></span><span class="bk br"></span>
 
-    <!-- Drive & Route panel — top-right -->
-    <div id="drive-panel" style="
-        position: absolute; top: 1rem; right: 1rem; z-index: 10;
-        font-family: var(--font-mono, 'Courier New', monospace);
-        font-size: 0.8rem; color: var(--text-primary, #e0e0e0);
-        background: var(--bg-panel-translucent); border: 1px solid var(--border-color, #333);
-        border-radius: var(--radius-sm, 4px); padding: 0.75rem 1rem;
-        min-width: 220px; backdrop-filter: blur(6px);
-    ">
-        <div style="color: var(--text-muted, #666); font-size: 0.7rem; text-transform: uppercase; letter-spacing: 1.5px; margin-bottom: 0.5rem;">DISPLACEMENT DRIVE</div>
-        <div id="drive-buttons" style="display: flex; gap: 0.3rem; margin-bottom: 0.75rem; flex-wrap: wrap;"></div>
-        <div style="color: var(--text-muted, #666); font-size: 0.7rem; text-transform: uppercase; letter-spacing: 1.5px; margin-bottom: 0.3rem;">ROUTE</div>
-        <div id="route-info" style="font-size: 0.75rem; color: var(--text-secondary, #aaa); line-height: 1.6;"></div>
-        <div style="margin-top: 0.5rem; display: flex; gap: 0.3rem;">
-            <button id="btn-clear-route" style="
-                background: transparent; border: 1px solid var(--border-color, #333);
-                color: var(--text-muted, #666); padding: 0.25rem 0.5rem; cursor: pointer;
-                font-family: var(--font-mono); font-size: 0.65rem; letter-spacing: 1px;
-            ">CLEAR ROUTE</button>
+    <header class="starmap-header">
+        <div class="kicker">// NAVIGATION SYSTEM // EXODUS</div>
+        <div class="starmap-title-row">
+            <span class="title-sep">&gt;</span>
+            <h2 style="font-family: var(--font-mono); font-size: 1.1rem; letter-spacing: 2px; color: var(--text-primary); margin: 0; text-transform: uppercase;">STAR MAP</h2>
+            <span class="block-line" style="flex: 1; height: 1px; background: var(--border-color);"></span>
+            <span class="status-pill s-active">LIVE</span>
         </div>
-        <div style="margin-top: 0.75rem; color: var(--text-muted, #666); font-size: 0.6rem; line-height: 1.5;">
-            <div style="margin-bottom: 0.2rem;">NAVIGATION DIFFICULTY</div>
-            <div><span style="color: #22c55e;">&bull;</span> SHORT 0-5 ly — Routine</div>
-            <div><span style="color: #f59e0b;">&bull;</span> MEDIUM 5-12 ly — Challenging</div>
-            <div><span style="color: #f97316;">&bull;</span> LONG 12-25 ly — Dangerous</div>
-            <div><span style="color: #ef4444;">&bull;</span> EXTREME 25+ ly — Near-impossible</div>
+        <div class="sub">Interstellar cartography &middot; displacement drive route planner</div>
+    </header>
+
+    <div id="starmap-container">
+        <!-- SHIP DETAILS / SCANNING side panel -->
+        <div id="star-info">
+            <header class="block-head">
+                <span class="block-bullet">■</span>
+                <h3>SHIP DETAILS</h3>
+                <span class="block-line"></span>
+            </header>
+            <div class="label">STAR SYSTEM</div>
+            <div class="value" id="info-name">-- hover a star --</div>
+            <div class="detail" id="info-distance"></div>
+            <div class="detail" id="info-spectral"></div>
+            <div class="detail" id="info-planets"></div>
+
+            <header class="block-head" style="margin-top: 0.6rem;">
+                <span class="block-bullet">■</span>
+                <h3>SCANNING</h3>
+                <span class="block-line"></span>
+            </header>
+            <div class="detail" id="info-scan"></div>
+
+            <div id="info-planet-list" style="margin-top: 0.5rem; display: none;">
+                <div class="label" style="margin-bottom: 0.3rem;">PLANETS OF INTEREST</div>
+                <div id="planet-rows"></div>
+            </div>
+            <div id="info-resources" style="margin-top: 0.5rem; display: none;">
+                <div class="label" style="margin-bottom: 0.3rem;">RESOURCE PROBABILITY</div>
+                <div id="resource-bars"></div>
+            </div>
         </div>
-    </div>
 
-    <div id="controls-hint">
-        ORBIT: left-drag &middot; ZOOM: scroll &middot; PAN: right-drag &middot; CLICK: add to route
-    </div>
+        <!-- FTL ROUTE PLANNING panel — top-right -->
+        <div id="drive-panel" style="
+            position: absolute; top: 1rem; right: 1rem; z-index: 10;
+            font-family: var(--font-mono, 'Courier New', monospace);
+            font-size: 0.8rem; color: var(--text-primary, #e0e0e0);
+            background: var(--bg-panel-translucent); border: 1px solid var(--border-color, #333);
+            border-radius: 0; padding: 0.75rem 1rem;
+            min-width: 240px; backdrop-filter: blur(6px);
+        ">
+            <header class="block-head">
+                <span class="block-bullet">■</span>
+                <h3>FTL ROUTE PLANNING</h3>
+                <span class="block-line"></span>
+            </header>
+            <div style="color: var(--text-muted, #666); font-size: 0.7rem; text-transform: uppercase; letter-spacing: 1.5px; margin-bottom: 0.5rem;">DISPLACEMENT DRIVE</div>
+            <div id="drive-buttons" style="display: flex; gap: 0.3rem; margin-bottom: 0.75rem; flex-wrap: wrap;"></div>
+            <div style="color: var(--text-muted, #666); font-size: 0.7rem; text-transform: uppercase; letter-spacing: 1.5px; margin-bottom: 0.3rem;">ROUTE</div>
+            <div id="route-info" style="font-size: 0.75rem; color: var(--text-secondary, #aaa); line-height: 1.6;"></div>
+            <div style="margin-top: 0.5rem; display: flex; gap: 0.3rem;">
+                <button id="btn-clear-route" style="
+                    background: transparent; border: 1px solid var(--border-color, #333);
+                    color: var(--text-muted, #666); padding: 0.25rem 0.5rem; cursor: pointer;
+                    font-family: var(--font-mono); font-size: 0.65rem; letter-spacing: 1px;
+                    border-radius: 0;
+                ">CLEAR ROUTE</button>
+            </div>
+            <div style="margin-top: 0.75rem; color: var(--text-muted, #666); font-size: 0.6rem; line-height: 1.5;">
+                <div style="margin-bottom: 0.2rem;">NAVIGATION DIFFICULTY</div>
+                <div><span style="color: #22c55e;">&bull;</span> SHORT 0-5 ly — Routine</div>
+                <div><span style="color: #f59e0b;">&bull;</span> MEDIUM 5-12 ly — Challenging</div>
+                <div><span style="color: #f97316;">&bull;</span> LONG 12-25 ly — Dangerous</div>
+                <div><span style="color: #ef4444;">&bull;</span> EXTREME 25+ ly — Near-impossible</div>
+            </div>
+        </div>
 
-    <div id="hover-label"></div>
+        <div id="controls-hint">
+            ORBIT: left-drag &middot; ZOOM: scroll &middot; PAN: right-drag &middot; CLICK: add to route
+        </div>
+
+        <div id="hover-label"></div>
+    </div>
 </div>
 
 <!-- Three.js from CDN -->
@@ -635,7 +686,7 @@
         DRIVES.forEach(function(d) {
             var btn = document.createElement("button");
             btn.textContent = d.label + " (" + d.jumps + ")";
-            btn.style.cssText = "font-family: var(--font-mono); font-size: 0.7rem; padding: 0.25rem 0.5rem; cursor: pointer; letter-spacing: 1px; border-radius: 2px; transition: all 0.2s;";
+            btn.style.cssText = "font-family: var(--font-mono); font-size: 0.7rem; padding: 0.25rem 0.5rem; cursor: pointer; letter-spacing: 1px; border-radius: 0; transition: all 0.2s;";
             btn.onclick = function() {
                 selectedDrive = d;
                 updateDriveButtons();

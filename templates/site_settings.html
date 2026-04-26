@@ -4,60 +4,131 @@
 
 {% block content %}
 <style>
+    /* ============================================================
+       Site settings — Wave 4A clearance-gate chrome.
+       Outer .brackets authority frame contains the sidebar + content;
+       sidebar items use the rail-item pattern (border-left accent +
+       text-shadow glow on .active) shared with GM workspace + comms.
+       ============================================================ */
+    .settings-shell {
+        max-width: 960px;
+        margin: 2rem auto;
+        padding: 18px;  /* room for the bracket corners */
+    }
     .settings-layout {
-        display: flex; gap: 0; max-width: 900px; margin: 2rem auto;
-        min-height: calc(100vh - 160px);
+        display: flex;
+        gap: 0;
+        min-height: calc(100vh - 220px);
     }
     .settings-sidebar {
-        width: 200px; flex-shrink: 0; padding: 1.5rem 0;
-        border-right: 1px solid var(--border-color);
-        position: sticky; top: 80px; align-self: flex-start;
+        width: 220px;
+        flex-shrink: 0;
+        padding: 0 0 1.5rem 0;
+        border-right: 1px solid var(--c-dim);
+        position: sticky;
+        top: 80px;
+        align-self: flex-start;
+    }
+    .settings-sidebar .block-head {
+        padding: 0 0.75rem 0.6rem;
+        margin-bottom: 0.4rem;
+        border-bottom: 1px solid var(--c-dim);
     }
     .settings-content {
-        flex: 1; padding: 1.5rem 2rem; min-width: 0;
+        flex: 1;
+        padding: 0 0 1.5rem 1.75rem;
+        min-width: 0;
     }
     .sidebar-group {
-        margin-bottom: 1.5rem;
+        margin-bottom: 1rem;
     }
     .sidebar-group-label {
-        font-family: var(--font-mono); font-size: 0.6rem;
-        color: var(--text-muted); letter-spacing: 2px;
-        text-transform: uppercase; padding: 0 1rem; margin-bottom: 0.5rem;
+        font-family: var(--font-mono);
+        font-size: 0.6rem;
+        color: var(--ink-mute);
+        letter-spacing: 0.22em;
+        text-transform: uppercase;
+        padding: 0 0.75rem;
+        margin-bottom: 0.4rem;
     }
     .sidebar-group-label.danger { color: var(--accent-danger); }
+    /* Rail-item pattern: accented border-left + soft background + glow on active. */
     .sidebar-item {
-        display: block; padding: 0.4rem 1rem; cursor: pointer;
-        font-family: var(--font-mono); font-size: 0.8rem;
-        color: var(--text-muted); text-decoration: none;
-        border-left: 2px solid transparent; transition: all 0.15s;
-        background: none; border-top: none; border-bottom: none; border-right: none;
-        width: 100%; text-align: left;
+        display: block;
+        padding: 0.4rem 0.75rem;
+        cursor: pointer;
+        font-family: var(--font-mono);
+        font-size: 0.78rem;
+        letter-spacing: 0.08em;
+        color: var(--ink-dim);
+        text-decoration: none;
+        border-left: 2px solid transparent;
+        background: none;
+        border-top: none;
+        border-bottom: none;
+        border-right: none;
+        width: 100%;
+        text-align: left;
+        transition: background 0.15s, color 0.15s;
     }
-    .sidebar-item:hover { color: var(--text-primary); }
+    .sidebar-item:hover {
+        color: var(--ink);
+        background: rgba(255, 255, 255, 0.02);
+    }
     .sidebar-item.active {
-        color: var(--accent-primary);
-        border-left-color: var(--accent-primary);
+        color: var(--c-primary);
+        border-left-color: var(--c-primary);
+        background: var(--c-soft);
+        text-shadow: 0 0 6px var(--c-glow);
     }
     .sidebar-item.danger { color: var(--accent-danger); }
-    .sidebar-item.danger.active { border-left-color: var(--accent-danger); }
+    .sidebar-item.danger.active {
+        border-left-color: var(--accent-danger);
+        background: rgba(239, 68, 68, 0.08);
+        text-shadow: 0 0 6px rgba(239, 68, 68, 0.55);
+    }
 
     .settings-section { display: none; }
     .settings-section.active { display: block; }
+    .settings-section .block-head { margin-bottom: 1.25rem; }
 
-    .settings-section h3 {
-        font-family: var(--font-mono); font-size: 1rem;
-        color: var(--accent-primary); letter-spacing: 2px;
-        margin-bottom: 1.5rem; padding-bottom: 0.5rem;
-        border-bottom: 1px solid var(--border-color);
+    /* Plain card frame — square corners, palette-token border. */
+    .ss-card {
+        padding: 1rem;
+        border: 1px solid var(--c-dim);
+        border-radius: 0;
+        margin-bottom: 1.5rem;
     }
-    .settings-section h3.danger { color: var(--accent-danger); }
+    .ss-card.danger {
+        border-color: var(--accent-danger);
+        background: rgba(239, 68, 68, 0.04);
+    }
+    .ss-input {
+        width: 100%;
+        background: var(--bg-input);
+        border: 1px solid var(--c-dim);
+        color: var(--ink);
+        padding: 0.5rem;
+        font-family: var(--font-mono);
+        border-radius: 0;
+    }
+    .ss-label {
+        font-family: var(--font-mono);
+        font-size: 0.75rem;
+        letter-spacing: 0.18em;
+        text-transform: uppercase;
+        color: var(--ink-dim);
+        display: block;
+        margin-bottom: 0.25rem;
+    }
 
     @media (max-width: 768px) {
+        .settings-shell { padding: 12px; }
         .settings-layout { flex-direction: column; }
         .settings-sidebar {
             width: 100%; position: static; border-right: none;
-            border-bottom: 1px solid var(--border-color);
-            padding: 0.5rem 0; display: flex; flex-wrap: wrap; gap: 0;
+            border-bottom: 1px solid var(--c-dim);
+            padding: 0.5rem 0;
         }
         .sidebar-group { margin-bottom: 0; display: flex; flex-wrap: wrap; }
         .sidebar-group-label { display: none; }
@@ -65,14 +136,25 @@
             border-left: none; border-bottom: 2px solid transparent;
             padding: 0.5rem 0.75rem; font-size: 0.7rem;
         }
-        .sidebar-item.active { border-bottom-color: var(--accent-primary); border-left: none; }
-        .settings-content { padding: 1rem; }
+        .sidebar-item.active { border-bottom-color: var(--c-primary); border-left: none; }
+        .settings-content { padding: 1rem 0 0; }
     }
 </style>
 
-<div class="settings-layout">
+<div class="settings-shell brackets">
+    <span class="bk tl"></span><span class="bk tr"></span>
+    <span class="bk bl"></span><span class="bk br"></span>
+
+    <div class="settings-layout">
     <!-- Sidebar -->
     <div class="settings-sidebar">
+        {# Authority header for the rail — block-head with section count badge. #}
+        <div class="block-head">
+            <span class="block-bullet">&#9679;</span>
+            <h3>SITE SETTINGS</h3>
+            <span class="block-line"></span>
+            <span class="block-badge">15</span>
+        </div>
         <div class="sidebar-group">
             <div class="sidebar-group-label">SESSION</div>
             <button class="sidebar-item active" onclick="showSection('game-date', this)">Game Date</button>
@@ -128,170 +210,210 @@
 
         <!-- Game Date -->
         <div id="sec-game-date" class="settings-section active">
-            <h3>GAME DATE</h3>
+            <div class="block-head">
+                <span class="block-bullet">&#9679;</span>
+                <h3>GAME DATE</h3>
+                <span class="block-line"></span>
+            </div>
             <div style="margin-bottom: 1.5rem;">
-                <label class="text-secondary mono-text" style="font-size: 0.8rem; display: block; margin-bottom: 0.25rem;">NEXT GAME DATE</label>
+                <label class="ss-label">NEXT GAME DATE</label>
                 <input type="date" name="next_game_date" value="{{ settings_obj.next_game_date|date:'Y-m-d' }}"
-                    style="width: 100%; background: var(--bg-input); border: 1px solid var(--border-color); color: var(--text-primary); padding: 0.75rem; font-family: var(--font-mono); font-size: 1rem;">
+                    class="ss-input" style="padding: 0.75rem; font-size: 1rem;">
                 <span class="text-muted mono-text" style="font-size: 0.7rem;">Leave blank to hide from navbar.</span>
             </div>
-            <button type="submit" class="mono-text" style="width: 100%; background: var(--accent-primary); color: var(--bg-dark); border: none; padding: 0.6rem; cursor: pointer; font-weight: bold; font-size: 0.9rem; letter-spacing: 1px;">SAVE</button>
+            <button type="submit" class="btn-primary" style="width: 100%;">SAVE</button>
         </div>
 
         <!-- Comms Lock -->
         <div id="sec-comms-lock" class="settings-section">
-            <h3>COMMS & CYBER TERMINAL</h3>
-            <div style="margin-bottom: 1.5rem; padding: 1rem; border: 1px solid var(--border-color); border-radius: var(--radius-sm);">
+            <div class="block-head">
+                <span class="block-bullet">&#9679;</span>
+                <h3>COMMS &amp; CYBER TERMINAL</h3>
+                <span class="block-line"></span>
+                <span class="status-pill {% if settings_obj.lock_comms %}s-burned{% else %}s-active{% endif %}">{% if settings_obj.lock_comms %}LOCKED{% else %}OPEN{% endif %}</span>
+            </div>
+            <div class="ss-card">
                 <label style="display: flex; align-items: center; gap: 0.75rem; cursor: pointer;">
                     <input type="checkbox" name="lock_comms" {% if not settings_obj.lock_comms %}checked{% endif %}
-                        style="width: 20px; height: 20px; accent-color: var(--accent-primary);">
-                    <span class="mono-text" style="font-size: 0.9rem; color: var(--text-primary);">COMMS & CYBER TERMINAL UNLOCKED</span>
+                        style="width: 20px; height: 20px; accent-color: var(--c-primary);">
+                    <span class="mono-text" style="font-size: 0.9rem; color: var(--ink);">COMMS &amp; CYBER TERMINAL UNLOCKED</span>
                 </label>
                 <span class="text-muted mono-text" style="font-size: 0.7rem; display: block; margin-top: 0.5rem; padding-left: 2.75rem;">
                     {% if settings_obj.lock_comms %}
-                        STATUS: <span style="color: var(--accent-danger);">LOCKED</span> — Players cannot send messages or use the cyber terminal.
+                        STATUS: <span class="status-pill s-burned">DISABLED</span> &mdash; Players cannot send messages or use the cyber terminal.
                     {% else %}
-                        STATUS: <span style="color: var(--accent-primary);">UNLOCKED</span> — Players can communicate and use the cyber terminal.
+                        STATUS: <span class="status-pill s-active">ENABLED</span> &mdash; Players can communicate and use the cyber terminal.
                     {% endif %}
                 </span>
             </div>
-            <button type="submit" class="mono-text" style="width: 100%; background: var(--accent-primary); color: var(--bg-dark); border: none; padding: 0.6rem; cursor: pointer; font-weight: bold; font-size: 0.9rem; letter-spacing: 1px;">SAVE</button>
+            <button type="submit" class="btn-primary" style="width: 100%;">SAVE</button>
         </div>
 
         <!-- Map Visibility -->
         <div id="sec-map-vis" class="settings-section">
-            <h3>MAP VISIBILITY</h3>
-            <div style="margin-bottom: 1.5rem; padding: 1rem; border: 1px solid var(--border-color); border-radius: var(--radius-sm);">
+            <div class="block-head">
+                <span class="block-bullet">&#9679;</span>
+                <h3>MAP VISIBILITY</h3>
+                <span class="block-line"></span>
+            </div>
+            <div class="ss-card">
                 <label style="display: flex; align-items: center; gap: 0.75rem; cursor: pointer; margin-bottom: 0.5rem;">
                     <input type="checkbox" name="show_world_map" {% if settings_obj.show_world_map %}checked{% endif %}
-                        style="width: 20px; height: 20px; accent-color: var(--accent-primary);">
-                    <span class="mono-text" style="font-size: 0.9rem; color: var(--text-primary);">WORLD MAP</span>
+                        style="width: 20px; height: 20px; accent-color: var(--c-primary);">
+                    <span class="mono-text" style="font-size: 0.9rem; color: var(--ink);">WORLD MAP</span>
+                    <span class="status-pill {% if settings_obj.show_world_map %}s-active{% else %}s-inactive{% endif %}" style="margin-left:auto;">{% if settings_obj.show_world_map %}ENABLED{% else %}DISABLED{% endif %}</span>
                 </label>
                 <label style="display: flex; align-items: center; gap: 0.75rem; cursor: pointer;">
                     <input type="checkbox" name="show_star_map" {% if settings_obj.show_star_map %}checked{% endif %}
-                        style="width: 20px; height: 20px; accent-color: var(--accent-primary);">
-                    <span class="mono-text" style="font-size: 0.9rem; color: var(--text-primary);">STAR MAP</span>
+                        style="width: 20px; height: 20px; accent-color: var(--c-primary);">
+                    <span class="mono-text" style="font-size: 0.9rem; color: var(--ink);">STAR MAP</span>
+                    <span class="status-pill {% if settings_obj.show_star_map %}s-active{% else %}s-inactive{% endif %}" style="margin-left:auto;">{% if settings_obj.show_star_map %}ENABLED{% else %}DISABLED{% endif %}</span>
                 </label>
                 <label style="display: flex; align-items: center; gap: 0.75rem; cursor: pointer; margin-top: 0.5rem;">
                     <input type="checkbox" name="show_starships" {% if settings_obj.show_starships %}checked{% endif %}
-                        style="width: 20px; height: 20px; accent-color: var(--accent-primary);">
-                    <span class="mono-text" style="font-size: 0.9rem; color: var(--text-primary);">STARSHIPS</span>
+                        style="width: 20px; height: 20px; accent-color: var(--c-primary);">
+                    <span class="mono-text" style="font-size: 0.9rem; color: var(--ink);">STARSHIPS</span>
+                    <span class="status-pill {% if settings_obj.show_starships %}s-active{% else %}s-inactive{% endif %}" style="margin-left:auto;">{% if settings_obj.show_starships %}ENABLED{% else %}DISABLED{% endif %}</span>
                 </label>
                 <span class="text-muted mono-text" style="font-size: 0.7rem; display: block; margin-top: 0.5rem; padding-left: 2.75rem;">
                     Controls which maps and pages are visible to players in the nav bar. Staff always sees everything.
                 </span>
             </div>
-            <button type="submit" class="mono-text" style="width: 100%; background: var(--accent-primary); color: var(--bg-dark); border: none; padding: 0.6rem; cursor: pointer; font-weight: bold; font-size: 0.9rem; letter-spacing: 1px;">SAVE</button>
+            <button type="submit" class="btn-primary" style="width: 100%;">SAVE</button>
         </div>
 
         <!-- Council -->
         <div id="sec-council" class="settings-section">
-            <h3>COUNCIL</h3>
-            <div style="margin-bottom: 1.5rem; padding: 1rem; border: 1px solid var(--border-color); border-radius: var(--radius-sm);">
+            <div class="block-head">
+                <span class="block-bullet">&#9679;</span>
+                <h3>COUNCIL</h3>
+                <span class="block-line"></span>
+                <span class="status-pill {% if settings_obj.show_council %}s-active{% else %}s-inactive{% endif %}">{% if settings_obj.show_council %}ENABLED{% else %}DISABLED{% endif %}</span>
+            </div>
+            <div class="ss-card">
                 <label style="display: flex; align-items: center; gap: 0.75rem; cursor: pointer; margin-bottom: 0.5rem;">
                     <input type="checkbox" name="show_council" {% if settings_obj.show_council %}checked{% endif %}
-                        style="width: 20px; height: 20px; accent-color: var(--accent-primary);">
-                    <span class="mono-text" style="font-size: 0.9rem; color: var(--text-primary);">COUNCIL ENABLED</span>
+                        style="width: 20px; height: 20px; accent-color: var(--c-primary);">
+                    <span class="mono-text" style="font-size: 0.9rem; color: var(--ink);">COUNCIL ENABLED</span>
                 </label>
                 <div style="margin-top: 0.5rem;">
-                    <label class="text-secondary mono-text" style="font-size: 0.8rem; display: block; margin-bottom: 0.25rem;">COUNCIL MODE</label>
-                    <select name="council_mode" style="width: 100%; background: var(--bg-input); border: 1px solid var(--border-color); color: var(--text-primary); padding: 0.5rem; font-family: var(--font-mono);">
+                    <label class="ss-label">COUNCIL MODE</label>
+                    <select name="council_mode" class="ss-input">
                         <option value="agency" {% if settings_obj.council_mode == "agency" %}selected{% endif %}>Agency / Group Based</option>
                         <option value="player" {% if settings_obj.council_mode == "player" %}selected{% endif %}>Player / NPC Based</option>
                     </select>
                 </div>
             </div>
-            <button type="submit" class="mono-text" style="width: 100%; background: var(--accent-primary); color: var(--bg-dark); border: none; padding: 0.6rem; cursor: pointer; font-weight: bold; font-size: 0.9rem; letter-spacing: 1px;">SAVE</button>
+            <button type="submit" class="btn-primary" style="width: 100%;">SAVE</button>
         </div>
 
         <!-- Nav Labels -->
         <div id="sec-nav-labels" class="settings-section">
-            <h3>NAV BAR LABELS</h3>
+            <div class="block-head">
+                <span class="block-bullet">&#9679;</span>
+                <h3>NAV BAR LABELS</h3>
+                <span class="block-line"></span>
+            </div>
             <span class="text-muted mono-text" style="font-size: 0.7rem; display: block; margin-bottom: 1rem;">
                 Customise the names shown in the navigation bar.
             </span>
             <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.75rem; margin-bottom: 1.5rem;">
                 <div>
-                    <label class="text-muted mono-text" style="font-size: 0.65rem;">DISPATCH</label>
-                    <input type="text" name="label_dispatch" value="{{ settings_obj.label_dispatch }}" style="width: 100%; background: var(--bg-input); border: 1px solid var(--border-color); color: var(--text-primary); padding: 0.4rem; font-family: var(--font-mono); font-size: 0.8rem;">
+                    <label class="ss-label" style="font-size: 0.65rem;">DISPATCH</label>
+                    <input type="text" name="label_dispatch" value="{{ settings_obj.label_dispatch }}" class="ss-input" style="padding: 0.4rem; font-size: 0.8rem;">
                 </div>
                 <div>
-                    <label class="text-muted mono-text" style="font-size: 0.65rem;">PLAYERS</label>
-                    <input type="text" name="label_players" value="{{ settings_obj.label_players }}" style="width: 100%; background: var(--bg-input); border: 1px solid var(--border-color); color: var(--text-primary); padding: 0.4rem; font-family: var(--font-mono); font-size: 0.8rem;">
+                    <label class="ss-label" style="font-size: 0.65rem;">PLAYERS</label>
+                    <input type="text" name="label_players" value="{{ settings_obj.label_players }}" class="ss-input" style="padding: 0.4rem; font-size: 0.8rem;">
                 </div>
                 <div>
-                    <label class="text-muted mono-text" style="font-size: 0.65rem;">AGENCIES</label>
-                    <input type="text" name="label_agencies" value="{{ settings_obj.label_agencies }}" style="width: 100%; background: var(--bg-input); border: 1px solid var(--border-color); color: var(--text-primary); padding: 0.4rem; font-family: var(--font-mono); font-size: 0.8rem;">
+                    <label class="ss-label" style="font-size: 0.65rem;">AGENCIES</label>
+                    <input type="text" name="label_agencies" value="{{ settings_obj.label_agencies }}" class="ss-input" style="padding: 0.4rem; font-size: 0.8rem;">
                 </div>
                 <div>
-                    <label class="text-muted mono-text" style="font-size: 0.65rem;">COUNCIL</label>
-                    <input type="text" name="label_council" value="{{ settings_obj.label_council }}" style="width: 100%; background: var(--bg-input); border: 1px solid var(--border-color); color: var(--text-primary); padding: 0.4rem; font-family: var(--font-mono); font-size: 0.8rem;">
+                    <label class="ss-label" style="font-size: 0.65rem;">COUNCIL</label>
+                    <input type="text" name="label_council" value="{{ settings_obj.label_council }}" class="ss-input" style="padding: 0.4rem; font-size: 0.8rem;">
                 </div>
                 <div>
-                    <label class="text-muted mono-text" style="font-size: 0.65rem;">NPC'S</label>
-                    <input type="text" name="label_npcs" value="{{ settings_obj.label_npcs }}" style="width: 100%; background: var(--bg-input); border: 1px solid var(--border-color); color: var(--text-primary); padding: 0.4rem; font-family: var(--font-mono); font-size: 0.8rem;">
+                    <label class="ss-label" style="font-size: 0.65rem;">NPC'S</label>
+                    <input type="text" name="label_npcs" value="{{ settings_obj.label_npcs }}" class="ss-input" style="padding: 0.4rem; font-size: 0.8rem;">
                 </div>
                 <div>
-                    <label class="text-muted mono-text" style="font-size: 0.65rem;">COMMS</label>
-                    <input type="text" name="label_comms" value="{{ settings_obj.label_comms }}" style="width: 100%; background: var(--bg-input); border: 1px solid var(--border-color); color: var(--text-primary); padding: 0.4rem; font-family: var(--font-mono); font-size: 0.8rem;">
+                    <label class="ss-label" style="font-size: 0.65rem;">COMMS</label>
+                    <input type="text" name="label_comms" value="{{ settings_obj.label_comms }}" class="ss-input" style="padding: 0.4rem; font-size: 0.8rem;">
                 </div>
             </div>
-            <button type="submit" class="mono-text" style="width: 100%; background: var(--accent-primary); color: var(--bg-dark); border: none; padding: 0.6rem; cursor: pointer; font-weight: bold; font-size: 0.9rem; letter-spacing: 1px;">SAVE</button>
+            <button type="submit" class="btn-primary" style="width: 100%;">SAVE</button>
         </div>
 
         <!-- Base Access (class unlocks) -->
         <div id="sec-base-access" class="settings-section">
-            <h3>BASE ACCESS</h3>
+            <div class="block-head">
+                <span class="block-bullet">&#9679;</span>
+                <h3>BASE ACCESS</h3>
+                <span class="block-line"></span>
+                <span class="block-badge">CLASS UNLOCKS</span>
+            </div>
             <span class="text-muted mono-text" style="font-size: 0.7rem; display: block; margin-bottom: 1rem;">
                 Base-building items (locations, merits, facilities, equipment) can be locked to a specific character class. If your campaign has no character of that class, tick a box below to unlock those items for every character.
             </span>
             <input type="hidden" name="class_unlock_submitted" value="1">
-            <div style="margin-bottom: 1.5rem; padding: 1rem; border: 1px solid var(--border-color); border-radius: var(--radius-sm); display: grid; gap: 0.65rem;">
+            <div class="ss-card" style="display: grid; gap: 0.65rem;">
                 {% with flags=settings_obj.class_unlock_flags %}
                 <label style="display: flex; align-items: center; gap: 0.75rem; cursor: pointer;">
                     <input type="checkbox" name="class_unlock_soldier" {% if flags.soldier %}checked{% endif %}
-                        style="width: 20px; height: 20px; accent-color: var(--accent-primary);">
-                    <span class="mono-text" style="font-size: 0.9rem; color: var(--text-primary);">UNLOCK SOLDIER ITEMS FOR ALL</span>
+                        style="width: 20px; height: 20px; accent-color: var(--c-primary);">
+                    <span class="mono-text" style="font-size: 0.9rem; color: var(--ink); flex: 1;">UNLOCK SOLDIER ITEMS FOR ALL</span>
+                    <span class="status-pill {% if flags.soldier %}s-active{% else %}s-inactive{% endif %}">{% if flags.soldier %}UNLOCKED{% else %}LOCKED{% endif %}</span>
                 </label>
                 <label style="display: flex; align-items: center; gap: 0.75rem; cursor: pointer;">
                     <input type="checkbox" name="class_unlock_science" {% if flags.science %}checked{% endif %}
-                        style="width: 20px; height: 20px; accent-color: var(--accent-primary);">
-                    <span class="mono-text" style="font-size: 0.9rem; color: var(--text-primary);">UNLOCK SCIENCE ITEMS FOR ALL</span>
+                        style="width: 20px; height: 20px; accent-color: var(--c-primary);">
+                    <span class="mono-text" style="font-size: 0.9rem; color: var(--ink); flex: 1;">UNLOCK SCIENCE ITEMS FOR ALL</span>
+                    <span class="status-pill {% if flags.science %}s-active{% else %}s-inactive{% endif %}">{% if flags.science %}UNLOCKED{% else %}LOCKED{% endif %}</span>
                 </label>
                 <label style="display: flex; align-items: center; gap: 0.75rem; cursor: pointer;">
                     <input type="checkbox" name="class_unlock_engineer" {% if flags.engineer %}checked{% endif %}
-                        style="width: 20px; height: 20px; accent-color: var(--accent-primary);">
-                    <span class="mono-text" style="font-size: 0.9rem; color: var(--text-primary);">UNLOCK ENGINEER ITEMS FOR ALL</span>
+                        style="width: 20px; height: 20px; accent-color: var(--c-primary);">
+                    <span class="mono-text" style="font-size: 0.9rem; color: var(--ink); flex: 1;">UNLOCK ENGINEER ITEMS FOR ALL</span>
+                    <span class="status-pill {% if flags.engineer %}s-active{% else %}s-inactive{% endif %}">{% if flags.engineer %}UNLOCKED{% else %}LOCKED{% endif %}</span>
                 </label>
                 <label style="display: flex; align-items: center; gap: 0.75rem; cursor: pointer;">
                     <input type="checkbox" name="class_unlock_fixer" {% if flags.fixer %}checked{% endif %}
-                        style="width: 20px; height: 20px; accent-color: var(--accent-primary);">
-                    <span class="mono-text" style="font-size: 0.9rem; color: var(--text-primary);">UNLOCK FIXER ITEMS FOR ALL</span>
+                        style="width: 20px; height: 20px; accent-color: var(--c-primary);">
+                    <span class="mono-text" style="font-size: 0.9rem; color: var(--ink); flex: 1;">UNLOCK FIXER ITEMS FOR ALL</span>
+                    <span class="status-pill {% if flags.fixer %}s-active{% else %}s-inactive{% endif %}">{% if flags.fixer %}UNLOCKED{% else %}LOCKED{% endif %}</span>
                 </label>
                 <label style="display: flex; align-items: center; gap: 0.75rem; cursor: pointer;">
                     <input type="checkbox" name="class_unlock_ai" {% if flags.ai %}checked{% endif %}
-                        style="width: 20px; height: 20px; accent-color: var(--accent-primary);">
-                    <span class="mono-text" style="font-size: 0.9rem; color: var(--text-primary);">UNLOCK AI ITEMS FOR ALL</span>
+                        style="width: 20px; height: 20px; accent-color: var(--c-primary);">
+                    <span class="mono-text" style="font-size: 0.9rem; color: var(--ink); flex: 1;">UNLOCK AI ITEMS FOR ALL</span>
+                    <span class="status-pill {% if flags.ai %}s-active{% else %}s-inactive{% endif %}">{% if flags.ai %}UNLOCKED{% else %}LOCKED{% endif %}</span>
                 </label>
                 {% endwith %}
                 <span class="text-muted mono-text" style="font-size: 0.7rem; display: block; margin-top: 0.25rem;">
                     Superusers always see every item regardless of these toggles. "General" items are available to everyone and are unaffected.
                 </span>
             </div>
-            <button type="submit" class="mono-text" style="width: 100%; background: var(--accent-primary); color: var(--bg-dark); border: none; padding: 0.6rem; cursor: pointer; font-weight: bold; font-size: 0.9rem; letter-spacing: 1px;">SAVE</button>
+            <button type="submit" class="btn-primary" style="width: 100%;">SAVE</button>
         </div>
 
         <!-- Clearance Gate Tweaks -->
         <div id="sec-tweaks" class="settings-section">
-            <h3>CLEARANCE GATE</h3>
+            <div class="block-head">
+                <span class="block-bullet">&#9679;</span>
+                <h3>CLEARANCE GATE</h3>
+                <span class="block-line"></span>
+                <span class="block-badge">TWEAKS</span>
+            </div>
             <span class="text-muted mono-text" style="font-size: 0.7rem; display: block; margin-bottom: 1rem;">
                 Presentation tweaks for the unauthenticated login screen ("clearance gate"). Defaults: EMERALD palette, OPS_MAP backdrop, all effects on.
             </span>
             <input type="hidden" name="tweaks_submitted" value="1">
 
             {# THEME -- Palette radio #}
-            <div style="margin-bottom: 1.25rem; padding: 1rem; border: 1px solid var(--border-color); border-radius: var(--radius-sm);">
-                <div class="text-secondary mono-text" style="font-size: 0.75rem; letter-spacing: 0.18em; margin-bottom: 0.6rem;">THEME / PALETTE</div>
+            <div class="ss-card" style="margin-bottom: 1.25rem;">
+                <div class="ss-label" style="margin-bottom: 0.6rem;">THEME / PALETTE</div>
                 <div style="display: flex; flex-wrap: wrap; gap: 1rem;">
                     <label style="display: inline-flex; align-items: center; gap: 0.45rem; font-family: var(--font-mono); font-size: 0.85rem; cursor: pointer;">
                         <input type="radio" name="tweaks_palette" value="emerald" {% if tweaks.palette == 'emerald' %}checked{% endif %}>
@@ -314,11 +436,15 @@
                         BONE
                     </label>
                 </div>
+                {# Wave 4 scope note: palette propagates to authenticated chrome via <html data-palette> since v0.14.40. #}
+                <span class="text-muted mono-text" style="font-size: 0.65rem; display: block; margin-top: 0.6rem; line-height: 1.4;">
+                    SCOPE: applies to BOTH the login / clearance-gate screen AND the authenticated dashboard chrome &mdash; the palette propagates via <code style="font-family: var(--font-mono); color: var(--c-primary);">&lt;html data-palette&gt;</code> (v0.14.40+).
+                </span>
             </div>
 
             {# BACKGROUND -- Backdrop radio + conditional sliders #}
-            <div style="margin-bottom: 1.25rem; padding: 1rem; border: 1px solid var(--border-color); border-radius: var(--radius-sm);">
-                <div class="text-secondary mono-text" style="font-size: 0.75rem; letter-spacing: 0.18em; margin-bottom: 0.6rem;">BACKGROUND / BACKDROP</div>
+            <div class="ss-card" style="margin-bottom: 1.25rem;">
+                <div class="ss-label" style="margin-bottom: 0.6rem;">BACKGROUND / BACKDROP</div>
                 <div style="display: flex; flex-wrap: wrap; gap: 1rem; margin-bottom: 1rem;">
                     <label style="display: inline-flex; align-items: center; gap: 0.45rem; font-family: var(--font-mono); font-size: 0.85rem; cursor: pointer;">
                         <input type="radio" name="tweaks_backdrop" value="ops_map" {% if tweaks.backdrop == 'ops_map' %}checked{% endif %}>
@@ -335,7 +461,7 @@
                 </div>
 
                 {# OPS_MAP sub-controls #}
-                <div style="display: grid; gap: 0.6rem; padding: 0.65rem; border: 1px dashed var(--border-color);">
+                <div style="display: grid; gap: 0.6rem; padding: 0.65rem; border: 1px dashed var(--c-dim);">
                     <div class="text-muted mono-text" style="font-size: 0.7rem; letter-spacing: 0.16em;">OPS_MAP CONTROLS</div>
                     <label style="display: flex; align-items: center; gap: 0.75rem; font-family: var(--font-mono); font-size: 0.8rem;">
                         <span style="min-width: 9rem;">Map intensity</span>
@@ -347,23 +473,22 @@
                     </label>
                     <label style="display: flex; align-items: center; gap: 0.75rem; cursor: pointer; font-family: var(--font-mono); font-size: 0.8rem;">
                         <input type="checkbox" name="tweaks_show_radar" {% if tweaks.show_radar %}checked{% endif %}
-                            style="width: 18px; height: 18px; accent-color: var(--accent-primary);">
+                            style="width: 18px; height: 18px; accent-color: var(--c-primary);">
                         Radar sweep
                     </label>
                     <label style="display: flex; align-items: center; gap: 0.75rem; cursor: pointer; font-family: var(--font-mono); font-size: 0.8rem;">
                         <input type="checkbox" name="tweaks_show_nodes" {% if tweaks.show_nodes %}checked{% endif %}
-                            style="width: 18px; height: 18px; accent-color: var(--accent-primary);">
+                            style="width: 18px; height: 18px; accent-color: var(--c-primary);">
                         Node markers
                     </label>
                 </div>
 
                 {# CODE_RAIN sub-controls #}
-                <div style="display: grid; gap: 0.6rem; padding: 0.65rem; border: 1px dashed var(--border-color); margin-top: 0.6rem;">
+                <div style="display: grid; gap: 0.6rem; padding: 0.65rem; border: 1px dashed var(--c-dim); margin-top: 0.6rem;">
                     <div class="text-muted mono-text" style="font-size: 0.7rem; letter-spacing: 0.16em;">CODE_RAIN CONTROLS</div>
                     <label style="display: flex; align-items: center; gap: 0.75rem; font-family: var(--font-mono); font-size: 0.8rem;">
                         <span style="min-width: 9rem;">Glyphs</span>
-                        <select name="tweaks_rain_style"
-                            style="flex: 1; background: var(--bg-input); border: 1px solid var(--border-color); color: var(--text-primary); padding: 0.4rem; font-family: var(--font-mono);">
+                        <select name="tweaks_rain_style" class="ss-input" style="flex: 1; padding: 0.4rem;">
                             <option value="katakana" {% if tweaks.rain_style == 'katakana' %}selected{% endif %}>KATAKANA</option>
                             <option value="hex" {% if tweaks.rain_style == 'hex' %}selected{% endif %}>HEX</option>
                             <option value="binary" {% if tweaks.rain_style == 'binary' %}selected{% endif %}>BINARY</option>
@@ -390,43 +515,43 @@
             </div>
 
             {# EFFECTS toggles #}
-            <div style="margin-bottom: 1.25rem; padding: 1rem; border: 1px solid var(--border-color); border-radius: var(--radius-sm); display: grid; gap: 0.55rem;">
-                <div class="text-secondary mono-text" style="font-size: 0.75rem; letter-spacing: 0.18em; margin-bottom: 0.4rem;">EFFECTS</div>
+            <div class="ss-card" style="margin-bottom: 1.25rem; display: grid; gap: 0.55rem;">
+                <div class="ss-label" style="margin-bottom: 0.4rem;">EFFECTS</div>
                 <label style="display: flex; align-items: center; gap: 0.75rem; cursor: pointer; font-family: var(--font-mono); font-size: 0.85rem;">
                     <input type="checkbox" name="tweaks_scanlines" {% if tweaks.scanlines %}checked{% endif %}
-                        style="width: 18px; height: 18px; accent-color: var(--accent-primary);">
+                        style="width: 18px; height: 18px; accent-color: var(--c-primary);">
                     Scanlines
                 </label>
                 <label style="display: flex; align-items: center; gap: 0.75rem; cursor: pointer; font-family: var(--font-mono); font-size: 0.85rem;">
                     <input type="checkbox" name="tweaks_vignette" {% if tweaks.vignette %}checked{% endif %}
-                        style="width: 18px; height: 18px; accent-color: var(--accent-primary);">
+                        style="width: 18px; height: 18px; accent-color: var(--c-primary);">
                     Vignette
                 </label>
                 <label style="display: flex; align-items: center; gap: 0.75rem; cursor: pointer; font-family: var(--font-mono); font-size: 0.85rem;">
                     <input type="checkbox" name="tweaks_show_rails" {% if tweaks.show_rails %}checked{% endif %}
-                        style="width: 18px; height: 18px; accent-color: var(--accent-primary);">
+                        style="width: 18px; height: 18px; accent-color: var(--c-primary);">
                     Side telemetry rails
                 </label>
             </div>
 
             {# BRANDING #}
-            <div style="margin-bottom: 1.25rem; padding: 1rem; border: 1px solid var(--border-color); border-radius: var(--radius-sm); display: grid; gap: 0.6rem;">
-                <div class="text-secondary mono-text" style="font-size: 0.75rem; letter-spacing: 0.18em; margin-bottom: 0.2rem;">BRANDING</div>
+            <div class="ss-card" style="margin-bottom: 1.25rem; display: grid; gap: 0.6rem;">
+                <div class="ss-label" style="margin-bottom: 0.2rem;">BRANDING</div>
                 <label style="display: flex; flex-direction: column; gap: 0.25rem;">
-                    <span class="text-secondary mono-text" style="font-size: 0.75rem;">DIRECTORATE</span>
+                    <span class="ss-label" style="font-size: 0.7rem; margin-bottom: 0;">DIRECTORATE</span>
                     <input type="text" name="tweaks_agency_name" maxlength="50"
                         value="{{ tweaks.agency_name|default:'BLACKLOG.NET' }}"
-                        style="background: var(--bg-input); border: 1px solid var(--border-color); color: var(--text-primary); padding: 0.5rem; font-family: var(--font-mono); font-size: 0.9rem;">
+                        class="ss-input" style="font-size: 0.9rem;">
                 </label>
                 <label style="display: flex; flex-direction: column; gap: 0.25rem;">
-                    <span class="text-secondary mono-text" style="font-size: 0.75rem;">PROJECT</span>
+                    <span class="ss-label" style="font-size: 0.7rem; margin-bottom: 0;">PROJECT</span>
                     <input type="text" name="tweaks_op_codename" maxlength="50"
                         value="{{ tweaks.op_codename|default:'OMEGA-7' }}"
-                        style="background: var(--bg-input); border: 1px solid var(--border-color); color: var(--text-primary); padding: 0.5rem; font-family: var(--font-mono); font-size: 0.9rem;">
+                        class="ss-input" style="font-size: 0.9rem;">
                 </label>
             </div>
 
-            <button type="submit" class="mono-text" style="width: 100%; background: var(--accent-primary); color: var(--bg-dark); border: none; padding: 0.6rem; cursor: pointer; font-weight: bold; font-size: 0.9rem; letter-spacing: 1px;">SAVE</button>
+            <button type="submit" class="btn-primary" style="width: 100%;">SAVE</button>
 
             {# Initialise slider readouts to current % values on load.
                Stored values are 0..1; the slider runs 0..100. #}
@@ -450,12 +575,15 @@
 
         <!-- City Maps -->
         <div id="sec-city-maps" class="settings-section">
-            <h3>CITY MAPS</h3>
+            <div class="block-head">
+                <span class="block-bullet">&#9679;</span>
+                <h3>CITY MAPS</h3>
+                <span class="block-line"></span>
+            </div>
             <div style="display: flex; gap: 0.5rem; margin-bottom: 1rem;">
                 <input type="text" id="city-search-input" placeholder="Search city..."
-                    style="flex: 1; background: var(--bg-input); border: 1px solid var(--border-color); color: var(--text-primary); padding: 0.5rem; font-family: var(--font-mono); font-size: 0.85rem;">
-                <button onclick="addCityMap()" class="mono-text"
-                    style="background: var(--accent-primary); border: none; color: var(--bg-dark); padding: 0.5rem 1rem; cursor: pointer; font-family: var(--font-mono); font-size: 0.85rem; font-weight: bold; letter-spacing: 1px;">ADD</button>
+                    class="ss-input" style="flex: 1; padding: 0.5rem; font-size: 0.85rem;">
+                <button onclick="addCityMap()" class="btn-primary" style="padding: 0.5rem 1rem; font-size: 0.85rem;">ADD</button>
             </div>
             <div id="city-search-result" style="margin-bottom: 1rem; display: none;"></div>
             <div id="city-list"></div>
@@ -463,7 +591,11 @@
 
         <!-- Star Map Config -->
         <div id="sec-starmap-config" class="settings-section">
-            <h3>STAR MAP CONFIGURATION</h3>
+            <div class="block-head">
+                <span class="block-bullet">&#9679;</span>
+                <h3>STAR MAP CONFIGURATION</h3>
+                <span class="block-line"></span>
+            </div>
 
             <!-- Resource Types -->
             <div style="margin-bottom: 2rem;">
@@ -482,7 +614,7 @@
             <div>
                 <div class="mono-text text-muted" style="font-size: 0.7rem; margin-bottom: 0.75rem; letter-spacing: 1px;">CIVILISATIONS</div>
                 <div id="civ-list"></div>
-                <div style="margin-top: 0.75rem; padding: 0.75rem; border: 1px solid var(--border-color); border-radius: var(--radius-sm);">
+                <div style="margin-top: 0.75rem; padding: 0.75rem; border: 1px solid var(--border-color); border-radius: 0;">
                     <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.5rem; margin-bottom: 0.5rem;">
                         <div>
                             <label class="text-muted mono-text" style="font-size: 0.6rem;">NAME</label>
@@ -534,10 +666,10 @@
                     </select>
                 </div>
 
-                <div id="star-resources" style="display: none; margin-bottom: 0.75rem; padding: 0.5rem; border: 1px solid var(--border-color); border-radius: var(--radius-sm);"></div>
+                <div id="star-resources" style="display: none; margin-bottom: 0.75rem; padding: 0.5rem; border: 1px solid var(--border-color); border-radius: 0;"></div>
                 <div id="planet-list"></div>
 
-                <div id="planet-add-form" style="display: none; margin-top: 0.75rem; padding: 0.75rem; border: 1px solid var(--border-color); border-radius: var(--radius-sm);">
+                <div id="planet-add-form" style="display: none; margin-top: 0.75rem; padding: 0.75rem; border: 1px solid var(--border-color); border-radius: 0;">
                     <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.5rem; margin-bottom: 0.5rem;">
                         <div>
                             <label class="text-muted mono-text" style="font-size: 0.6rem;">NAME</label>
@@ -630,8 +762,13 @@
             </div>
 
             <!-- Seed Star Systems -->
-            <div style="margin-top: 2rem; padding: 1rem; border: 1px solid var(--accent-danger); border-radius: var(--radius-sm); background: rgba(239, 68, 68, 0.03);">
-                <div class="mono-text" style="font-size: 0.75rem; color: var(--accent-danger); letter-spacing: 1px; margin-bottom: 0.75rem;">SEED STAR SYSTEMS</div>
+            <div class="ss-card danger" style="margin-top: 2rem;">
+                <div class="block-head" style="margin-bottom: 0.6rem;">
+                    <span class="block-bullet" style="color: var(--accent-danger);">&#9679;</span>
+                    <h3 style="color: var(--accent-danger);">SEED STAR SYSTEMS</h3>
+                    <span class="block-line"></span>
+                    <span class="status-pill s-burned">DANGER</span>
+                </div>
                 <span class="text-muted mono-text" style="font-size: 0.65rem; display: block; margin-bottom: 1rem;">
                     Generates resources, planets, and civilisations for all star systems. This will OVERWRITE all existing data.
                 </span>
@@ -694,29 +831,34 @@
         <!-- Starships Config -->
         <!-- Starships → General -->
         <div id="sec-starships-general" class="settings-section">
-            <h3>STARSHIPS</h3>
+            <div class="block-head">
+                <span class="block-bullet">&#9679;</span>
+                <h3>STARSHIPS</h3>
+                <span class="block-line"></span>
+                <span class="status-pill {% if settings_obj.enforce_ship_slot_budget %}s-active{% else %}s-standby{% endif %}">{% if settings_obj.enforce_ship_slot_budget %}ENFORCED{% else %}WARN ONLY{% endif %}</span>
+            </div>
 
             <!-- Slot budget enforcement toggle — this one lives in the outer form. -->
-            <div style="margin-bottom: 1.5rem; padding: 1rem; border: 1px solid var(--border-color); border-radius: var(--radius-sm);">
+            <div class="ss-card">
                 <label style="display: flex; align-items: center; gap: 0.75rem; cursor: pointer;">
                     <input type="checkbox" name="enforce_ship_slot_budget" {% if settings_obj.enforce_ship_slot_budget %}checked{% endif %}
-                        style="width: 20px; height: 20px; accent-color: var(--accent-primary);">
-                    <span class="mono-text" style="font-size: 0.9rem; color: var(--text-primary);">ENFORCE SLOT BUDGET</span>
+                        style="width: 20px; height: 20px; accent-color: var(--c-primary);">
+                    <span class="mono-text" style="font-size: 0.9rem; color: var(--ink);">ENFORCE SLOT BUDGET</span>
                 </label>
                 <span class="text-muted mono-text" style="font-size: 0.7rem; display: block; margin-top: 0.5rem; padding-left: 2.75rem;">
-                    When on, the class editor rejects designs that exceed the ship type's slot budget. When off, it only warns — useful for sketching in-progress designs.
+                    When on, the class editor rejects designs that exceed the ship type's slot budget. When off, it only warns &mdash; useful for sketching in-progress designs.
                 </span>
-                <button type="submit" class="mono-text" style="margin-top: 0.75rem; background: var(--accent-primary); color: var(--bg-dark); border: none; padding: 0.4rem 0.9rem; cursor: pointer; font-weight: bold; font-size: 0.75rem; letter-spacing: 1px;">SAVE TOGGLE</button>
+                <button type="submit" class="btn-primary" style="margin-top: 0.75rem; padding: 0.4rem 0.9rem; font-size: 0.75rem;">SAVE TOGGLE</button>
             </div>
 
             <!-- Legacy fleet import -->
-            <div style="margin-bottom: 1.5rem; padding: 1rem; border: 1px solid var(--border-color); border-radius: var(--radius-sm);">
-                <div class="mono-text text-muted" style="font-size: 0.7rem; margin-bottom: 0.5rem; letter-spacing: 1px;">LEGACY FLEET IMPORT</div>
-                <div id="legacy-status" class="mono-text text-muted" style="font-size: 0.7rem; margin-bottom: 0.5rem;">Checking…</div>
+            <div class="ss-card">
+                <div class="ss-label" style="margin-bottom: 0.5rem;">LEGACY FLEET IMPORT</div>
+                <div id="legacy-status" class="mono-text text-muted" style="font-size: 0.7rem; margin-bottom: 0.5rem;">Checking&hellip;</div>
                 <div style="display: flex; gap: 0.5rem; flex-wrap: wrap;">
-                    <button type="button" onclick="previewLegacyImport()" class="mono-text" style="background: transparent; border: 1px solid var(--border-color); color: var(--text-primary); padding: 0.4rem 0.8rem; cursor: pointer; font-size: 0.72rem;">PREVIEW (DRY RUN)</button>
-                    <button type="button" id="legacy-import-btn" onclick="runLegacyImport(false)" class="mono-text" style="background: var(--accent-primary); border: none; color: var(--bg-dark); padding: 0.4rem 0.8rem; cursor: pointer; font-size: 0.72rem; font-weight: bold;">IMPORT LEGACY FLEET</button>
-                    <button type="button" onclick="runLegacyImport(true)" class="mono-text" style="background: transparent; border: 1px solid var(--accent-warning); color: var(--accent-warning); padding: 0.4rem 0.8rem; cursor: pointer; font-size: 0.72rem;" title="Re-import even agencies already tagged">FORCE RE-IMPORT</button>
+                    <button type="button" onclick="previewLegacyImport()" class="mono-text" style="background: transparent; border: 1px solid var(--c-dim); color: var(--ink); padding: 0.4rem 0.8rem; cursor: pointer; font-size: 0.72rem; border-radius: 0;">PREVIEW (DRY RUN)</button>
+                    <button type="button" id="legacy-import-btn" onclick="runLegacyImport(false)" class="btn-primary" style="padding: 0.4rem 0.8rem; font-size: 0.72rem;">IMPORT LEGACY FLEET</button>
+                    <button type="button" onclick="runLegacyImport(true)" class="mono-text" style="background: transparent; border: 1px solid var(--accent-warning); color: var(--accent-warning); padding: 0.4rem 0.8rem; cursor: pointer; font-size: 0.72rem; border-radius: 0;" title="Re-import even agencies already tagged">FORCE RE-IMPORT</button>
                 </div>
                 <span class="text-muted mono-text" style="font-size: 0.65rem; display: block; margin-top: 0.5rem;">
                     Reads each Agency.fleet JSON blob and creates matching StarshipClass + Starship records, tagging imported hulls with [legacy-import] in notes. The JSON blob itself is left untouched for Release G to clean up.
@@ -726,40 +868,55 @@
 
         <!-- Starships → Ship Types -->
         <div id="sec-ship-types" class="settings-section">
-            <h3>SHIP TYPES</h3>
+            <div class="block-head">
+                <span class="block-bullet">&#9679;</span>
+                <h3>SHIP TYPES</h3>
+                <span class="block-line"></span>
+                <span class="block-badge">HULL CATEGORIES</span>
+            </div>
             <span class="text-muted mono-text" style="font-size: 0.7rem; display: block; margin-bottom: 1rem;">
-                Hull categories — drones, shuttles, cruisers, carriers, dreadnaughts. Each type defines a default slot budget, allowed hull size range, and baseline crew/energy/maintenance before modules are added.
+                Hull categories &mdash; drones, shuttles, cruisers, carriers, dreadnaughts. Each type defines a default slot budget, allowed hull size range, and baseline crew/energy/maintenance before modules are added.
             </span>
             <div id="ship-type-list"></div>
             <div style="display: flex; gap: 0.5rem; margin-top: 0.75rem; flex-wrap: wrap;">
-                <input type="text" id="st-key" placeholder="key" style="width: 100px; background: var(--bg-input); border: 1px solid var(--border-color); color: var(--text-primary); padding: 0.4rem; font-family: var(--font-mono); font-size: 0.75rem;">
-                <input type="text" id="st-name" placeholder="Display Name" style="flex: 1; min-width: 140px; background: var(--bg-input); border: 1px solid var(--border-color); color: var(--text-primary); padding: 0.4rem; font-family: var(--font-mono); font-size: 0.75rem;">
-                <button type="button" onclick="addShipType()" class="mono-text" style="background: var(--accent-primary); border: none; color: var(--bg-dark); padding: 0.4rem 0.75rem; cursor: pointer; font-size: 0.75rem; font-weight: bold;">ADD TYPE</button>
+                <input type="text" id="st-key" placeholder="key" class="ss-input" style="width: 100px; padding: 0.4rem; font-size: 0.75rem;">
+                <input type="text" id="st-name" placeholder="Display Name" class="ss-input" style="flex: 1; min-width: 140px; padding: 0.4rem; font-size: 0.75rem;">
+                <button type="button" onclick="addShipType()" class="btn-primary" style="padding: 0.4rem 0.75rem; font-size: 0.75rem;">ADD TYPE</button>
             </div>
         </div>
 
         <!-- Starships → Module Sections -->
         <div id="sec-module-sections" class="settings-section">
-            <h3>MODULE SECTIONS</h3>
+            <div class="block-head">
+                <span class="block-bullet">&#9679;</span>
+                <h3>MODULE SECTIONS</h3>
+                <span class="block-line"></span>
+                <span class="block-badge">TIER FAMILIES</span>
+            </div>
             <span class="text-muted mono-text" style="font-size: 0.7rem; display: block; margin-bottom: 1rem;">
-                Tier families — each section holds up to 5 module levels, and only one tier from a section can be installed on a class at a time. Use for weapon ladders (Fighter Guns L1–L5), shield tiers, armour tiers, etc.
+                Tier families &mdash; each section holds up to 5 module levels, and only one tier from a section can be installed on a class at a time. Use for weapon ladders (Fighter Guns L1&ndash;L5), shield tiers, armour tiers, etc.
             </span>
             <div id="module-section-list"></div>
             <div style="display: flex; gap: 0.5rem; margin-top: 0.75rem; flex-wrap: wrap;">
-                <input type="text" id="sec-key" placeholder="key" style="width: 140px; background: var(--bg-input); border: 1px solid var(--border-color); color: var(--text-primary); padding: 0.4rem; font-family: var(--font-mono); font-size: 0.75rem;">
-                <input type="text" id="sec-name" placeholder="Display Name" style="flex: 1; min-width: 160px; background: var(--bg-input); border: 1px solid var(--border-color); color: var(--text-primary); padding: 0.4rem; font-family: var(--font-mono); font-size: 0.75rem;">
-                <button type="button" onclick="addModuleSection()" class="mono-text" style="background: var(--accent-primary); border: none; color: var(--bg-dark); padding: 0.4rem 0.75rem; cursor: pointer; font-size: 0.75rem; font-weight: bold;">ADD SECTION</button>
+                <input type="text" id="sec-key" placeholder="key" class="ss-input" style="width: 140px; padding: 0.4rem; font-size: 0.75rem;">
+                <input type="text" id="sec-name" placeholder="Display Name" class="ss-input" style="flex: 1; min-width: 160px; padding: 0.4rem; font-size: 0.75rem;">
+                <button type="button" onclick="addModuleSection()" class="btn-primary" style="padding: 0.4rem 0.75rem; font-size: 0.75rem;">ADD SECTION</button>
             </div>
         </div>
 
         <!-- Starships → Ship Modules -->
         <div id="sec-ship-modules" class="settings-section">
-            <h3>SHIP MODULES</h3>
+            <div class="block-head">
+                <span class="block-bullet">&#9679;</span>
+                <h3>SHIP MODULES</h3>
+                <span class="block-line"></span>
+                <span class="block-badge">CATALOGUE</span>
+            </div>
             <span class="text-muted mono-text" style="font-size: 0.7rem; display: block; margin-bottom: 1rem;">
                 Individual module rows. Each entry defines its slot cost, crew/energy/maintenance deltas, ship type restrictions, build XP, and optionally a section + level when it belongs to a tier family.
             </span>
             <div style="display: flex; align-items: center; justify-content: flex-end; margin-bottom: 0.75rem;">
-                <select id="sm-filter-category" onchange="loadShipModules()" class="mono-text" style="background: var(--bg-input); border: 1px solid var(--border-color); color: var(--text-primary); padding: 0.3rem; font-size: 0.7rem;">
+                <select id="sm-filter-category" onchange="loadShipModules()" class="ss-input mono-text" style="width: auto; padding: 0.3rem; font-size: 0.7rem;">
                     <option value="">All categories</option>
                     <option value="propulsion">Propulsion</option>
                     <option value="power">Power</option>
@@ -775,9 +932,9 @@
             </div>
             <div id="ship-module-list"></div>
             <div style="display: flex; gap: 0.5rem; margin-top: 0.75rem; flex-wrap: wrap;">
-                <input type="text" id="sm-key" placeholder="key" style="width: 100px; background: var(--bg-input); border: 1px solid var(--border-color); color: var(--text-primary); padding: 0.4rem; font-family: var(--font-mono); font-size: 0.75rem;">
-                <input type="text" id="sm-name" placeholder="Display Name" style="flex: 1; min-width: 140px; background: var(--bg-input); border: 1px solid var(--border-color); color: var(--text-primary); padding: 0.4rem; font-family: var(--font-mono); font-size: 0.75rem;">
-                <select id="sm-category" class="mono-text" style="background: var(--bg-input); border: 1px solid var(--border-color); color: var(--text-primary); padding: 0.4rem; font-size: 0.75rem;">
+                <input type="text" id="sm-key" placeholder="key" class="ss-input" style="width: 100px; padding: 0.4rem; font-size: 0.75rem;">
+                <input type="text" id="sm-name" placeholder="Display Name" class="ss-input" style="flex: 1; min-width: 140px; padding: 0.4rem; font-size: 0.75rem;">
+                <select id="sm-category" class="ss-input mono-text" style="width: auto; padding: 0.4rem; font-size: 0.75rem;">
                     <option value="propulsion">Propulsion</option>
                     <option value="power">Power</option>
                     <option value="weapons">Weapons</option>
@@ -789,13 +946,17 @@
                     <option value="command">Command &amp; Control</option>
                     <option value="special" selected>Special</option>
                 </select>
-                <button type="button" onclick="addShipModule()" class="mono-text" style="background: var(--accent-primary); border: none; color: var(--bg-dark); padding: 0.4rem 0.75rem; cursor: pointer; font-size: 0.75rem; font-weight: bold;">ADD MODULE</button>
+                <button type="button" onclick="addShipModule()" class="btn-primary" style="padding: 0.4rem 0.75rem; font-size: 0.75rem;">ADD MODULE</button>
             </div>
         </div>
 
         <!-- Impersonate -->
         <div id="sec-impersonate" class="settings-section">
-            <h3>VIEW AS PLAYER</h3>
+            <div class="block-head">
+                <span class="block-bullet">&#9679;</span>
+                <h3>VIEW AS PLAYER</h3>
+                <span class="block-line"></span>
+            </div>
             <span class="text-muted mono-text" style="font-size: 0.7rem; display: block; margin-bottom: 1rem;">
                 Switch to a player's view to see exactly what they see. Use RETURN TO GM to switch back.
             </span>
@@ -805,9 +966,9 @@
                     {% for u in users %}
                         {% if not u.is_superuser %}
                         <button type="submit" name="user_id" value="{{ u.id }}" class="mono-text"
-                            style="background: transparent; border: 1px solid var(--border-color); color: var(--text-secondary); padding: 0.5rem 1rem; cursor: pointer; font-family: var(--font-mono); font-size: 0.85rem; letter-spacing: 1px; transition: all 0.2s;"
-                            onmouseover="this.style.borderColor='var(--accent-primary)';this.style.color='var(--accent-primary)'"
-                            onmouseout="this.style.borderColor='var(--border-color)';this.style.color='var(--text-secondary)'">
+                            style="background: transparent; border: 1px solid var(--c-dim); color: var(--ink-dim); padding: 0.5rem 1rem; cursor: pointer; font-family: var(--font-mono); font-size: 0.85rem; letter-spacing: 1px; transition: all 0.2s; border-radius: 0;"
+                            onmouseover="this.style.borderColor='var(--c-primary)';this.style.color='var(--c-primary)'"
+                            onmouseout="this.style.borderColor='var(--c-dim)';this.style.color='var(--ink-dim)'">
                             {{ u.username|upper }}
                         </button>
                         {% endif %}
@@ -818,23 +979,28 @@
 
         <!-- Transfer Player -->
         <div id="sec-transfer" class="settings-section">
-            <h3 class="danger">TRANSFER PLAYER TO AGENCY</h3>
-            <div style="padding: 1rem; border: 1px solid var(--accent-danger); border-radius: var(--radius-sm); margin-bottom: 1.5rem; background: rgba(239, 68, 68, 0.05);">
+            <div class="block-head">
+                <span class="block-bullet" style="color: var(--accent-danger);">&#9679;</span>
+                <h3 style="color: var(--accent-danger);">TRANSFER PLAYER TO AGENCY</h3>
+                <span class="block-line"></span>
+                <span class="status-pill s-burned">DANGER</span>
+            </div>
+            <div class="ss-card danger">
                 <span class="mono-text" style="font-size: 0.75rem; color: var(--accent-danger); display: block; margin-bottom: 0.5rem;">
                     WARNING: This converts the player character to an NPC dossier, moves all assigned NPCs, and optionally transfers XP and merits. This action is PERMANENT and cannot be undone.
                 </span>
             </div>
 
             <div style="margin-bottom: 1rem;">
-                <label class="text-secondary mono-text" style="font-size: 0.8rem; display: block; margin-bottom: 0.25rem;">SOURCE PLAYER</label>
-                <select id="transfer-source-user" style="width: 100%; background: var(--bg-input); border: 1px solid var(--border-color); color: var(--text-primary); padding: 0.5rem; font-family: var(--font-mono);">
+                <label class="ss-label">SOURCE PLAYER</label>
+                <select id="transfer-source-user" class="ss-input">
                     <option value="">-- Select player --</option>
                     {% for u in users %}{% if not u.is_superuser %}<option value="{{ u.id }}">{{ u.username }}</option>{% endif %}{% endfor %}
                 </select>
             </div>
             <div style="margin-bottom: 1rem;">
-                <label class="text-secondary mono-text" style="font-size: 0.8rem; display: block; margin-bottom: 0.25rem;">TARGET AGENCY</label>
-                <select id="transfer-target-agency" style="width: 100%; background: var(--bg-input); border: 1px solid var(--border-color); color: var(--text-primary); padding: 0.5rem; font-family: var(--font-mono);">
+                <label class="ss-label">TARGET AGENCY</label>
+                <select id="transfer-target-agency" class="ss-input">
                     <option value="">-- Select agency --</option>
                     {% for a in npc_agencies %}<option value="{{ a.id }}">{{ a.name }}</option>{% endfor %}
                 </select>
@@ -842,20 +1008,21 @@
             <div style="margin-bottom: 1rem;">
                 <label style="display: flex; align-items: center; gap: 0.5rem; cursor: pointer;">
                     <input type="checkbox" id="transfer-xp-check" style="width: 16px; height: 16px; accent-color: var(--accent-danger);">
-                    <span class="mono-text text-secondary" style="font-size: 0.8rem;">TRANSFER XP & MERITS FROM:</span>
+                    <span class="mono-text text-secondary" style="font-size: 0.8rem;">TRANSFER XP &amp; MERITS FROM:</span>
                 </label>
-                <select id="transfer-source-agency" style="width: 100%; margin-top: 0.25rem; background: var(--bg-input); border: 1px solid var(--border-color); color: var(--text-primary); padding: 0.5rem; font-family: var(--font-mono);">
+                <select id="transfer-source-agency" class="ss-input" style="margin-top: 0.25rem;">
                     {% for a in player_agencies %}<option value="{{ a.id }}">{{ a.name }}</option>{% endfor %}
                 </select>
             </div>
             <div id="transfer-result" style="margin-bottom: 1rem; display: none;"></div>
             <button onclick="executeTransfer()" class="mono-text"
-                style="width: 100%; background: var(--accent-danger); color: var(--bg-dark); border: none; padding: 0.75rem; font-family: var(--font-mono); font-size: 1rem; font-weight: bold; cursor: pointer; letter-spacing: 1px;">TRANSFER</button>
+                style="width: 100%; background: var(--accent-danger); color: var(--bg-dark); border: none; padding: 0.75rem; font-family: var(--font-mono); font-size: 1rem; font-weight: bold; cursor: pointer; letter-spacing: 0.18em; border-radius: 0;">TRANSFER</button>
         </div>
 
         <div style="text-align: center; margin-top: 2rem;">
             <a href="/" class="text-accent mono-text" style="font-size: 0.85rem; text-decoration: none;">&lt; RETURN TO DATABASE</a>
         </div>
+    </div>
     </div>
 </div>
 
@@ -1739,7 +1906,7 @@ function loadPlanets() {
             var current = 0;
             if (cell && typeof cell === 'object') current = cell.value || 0;
             else if (typeof cell === 'number') current = cell;
-            html += '<div style="display: flex; flex-direction: column; gap: 0.15rem; padding: 0.4rem; border: 1px solid var(--border-color); border-radius: var(--radius-sm);">';
+            html += '<div style="display: flex; flex-direction: column; gap: 0.15rem; padding: 0.4rem; border: 1px solid var(--border-color); border-radius: 0;">';
             html += '<div style="display: flex; align-items: center; gap: 0.35rem;">';
             html += '<span style="display:inline-block; width: 10px; height: 10px; border-radius: 50%; background: ' + t.color + ';"></span>';
             html += '<span class="mono-text" style="font-size: 0.7rem; color: var(--text-primary); flex: 1;">' + (t.icon ? t.icon + ' ' : '') + t.name + '</span>';

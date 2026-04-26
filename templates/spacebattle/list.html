@@ -4,27 +4,31 @@
 
 {% block content %}
 <style>
-    .battle-list { padding: 1rem; max-width: 1000px; margin: 0 auto; }
+    /* Battles list: bracket-framed shell with section header. The status
+       chip uses the global .status-pill / .s-* tokens so SETUP / ACTIVE /
+       CONCLUDED tracks the rest of the clearance-gate aesthetic. */
+    .battle-list { padding: 1rem; max-width: 1000px; margin: 1rem auto; }
     .battle-row {
         display: flex; align-items: center; gap: 1rem;
         padding: 0.8rem 1rem; border: 1px solid var(--border-color);
-        border-radius: var(--radius-sm); margin-bottom: 0.5rem;
+        margin-bottom: 0.5rem;
         cursor: pointer; transition: border-color 0.15s;
     }
     .battle-row:hover { border-color: var(--accent-primary); }
-    .battle-status {
-        display: inline-block; padding: 0.2rem 0.6rem;
-        font-size: 0.65rem; font-family: var(--font-mono); letter-spacing: 1px;
-        border: 1px solid; min-width: 5rem; text-align: center;
-    }
-    .st-setup { color: var(--text-muted); }
-    .st-active { color: #22c55e; border-color: #22c55e; }
-    .st-concluded { color: #f59e0b; border-color: #f59e0b; }
 </style>
 
-<div class="battle-list">
-    <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 1rem;">
-        <h2 class="mono-text" style="color: var(--accent-primary); letter-spacing: 2px; margin: 0;">SPACE BATTLES</h2>
+<div class="battle-list brackets" style="position: relative; padding: 32px 36px;">
+    <span class="bk tl"></span><span class="bk tr"></span>
+    <span class="bk bl"></span><span class="bk br"></span>
+
+    <header class="block-head">
+        <span class="block-bullet">■</span>
+        <h3>SPACE BATTLES</h3>
+        <span class="block-line"></span>
+        <span class="block-badge" id="battle-count-badge">[…]</span>
+    </header>
+
+    <div style="display: flex; align-items: center; justify-content: flex-end; margin-bottom: 1rem;">
         {% if is_staff %}
         <button onclick="createBattle()" class="mono-text" style="background: var(--accent-primary); border: none; color: var(--bg-dark); padding: 0.5rem 1rem; cursor: pointer; font-weight: bold; letter-spacing: 1px;">NEW BATTLE</button>
         {% endif %}
@@ -37,17 +41,24 @@ function csrfToken() {
     return document.cookie.match(/csrftoken=([^;]+)/)?.[1] || '';
 }
 
+// Map a battle's lifecycle status onto the global .s-* semantic palette.
+function statusClass(status) {
+    if (status === 'active') return 's-active';
+    if (status === 'concluded') return 's-standby';
+    return 's-dormant';  // setup / unknown
+}
+
 function loadBattles() {
     fetch('/api/spacebattle/battles/').then(function(r) { return r.json(); }).then(function(battles) {
         var html = '';
         battles.forEach(function(b) {
-            var stClass = 'st-' + b.status;
+            var sCls = statusClass(b.status);
             var date = b.created_at ? b.created_at.slice(0, 10) : '';
             html += '<div class="battle-row" onclick="window.location = \'/spacebattle/' + b.id + '/\'">';
-            html += '<span class="battle-status ' + stClass + '">' + b.status.toUpperCase() + '</span>';
+            html += '<span class="status-pill ' + sCls + '" style="min-width: 5.5rem; text-align: center;">' + b.status.toUpperCase() + '</span>';
             html += '<div style="flex: 1;">';
             html += '<div class="mono-text" style="font-size: 0.95rem; color: var(--text-primary);">' + escapeHtml(b.name) + '</div>';
-            html += '<div class="mono-text text-muted" style="font-size: 0.65rem;">round ' + b.round_number + ' \u00B7 ' + b.grid_width + '\u00D7' + b.grid_height + ' grid \u00B7 created ' + date + '</div>';
+            html += '<div class="mono-text text-muted" style="font-size: 0.65rem;">round ' + b.round_number + ' · ' + b.grid_width + '×' + b.grid_height + ' grid · created ' + date + '</div>';
             html += '</div>';
             html += '</div>';
         });
@@ -55,6 +66,8 @@ function loadBattles() {
             html = '<div class="mono-text text-muted" style="text-align: center; padding: 3rem;">No battles yet.</div>';
         }
         document.getElementById('battle-list-body').innerHTML = html;
+        var badge = document.getElementById('battle-count-badge');
+        if (badge) badge.textContent = '[' + battles.length + ']';
     }).catch(function() {
         document.getElementById('battle-list-body').innerHTML = '<div class="mono-text" style="color: var(--accent-danger);">Failed to load battles.</div>';
     });

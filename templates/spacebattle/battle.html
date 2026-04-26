@@ -4,25 +4,26 @@
 
 {% block content %}
 <style>
+    /* Battle view chrome: bracket-framed shell wraps the 3-column layout
+       (turn order / hex canvas / unit details). The hex canvas, ship
+       tokens and terrain rendering inside #battle-canvas are not
+       restyled here — they read --map-* tokens directly. */
     .battle-layout {
         display: grid;
         grid-template-columns: 260px 1fr 280px;
         gap: 0.75rem;
-        padding: 0.75rem;
+        padding: 0;
         min-height: calc(100vh - 80px);
     }
     .panel {
         border: 1px solid var(--border-color);
         padding: 0.75rem;
-        border-radius: var(--radius-sm);
         background: var(--bg-panel, rgba(10,12,20,0.6));
         overflow: auto;
     }
-    .panel h3 { margin: 0 0 0.5rem 0; font-size: 0.8rem; color: var(--accent-primary); letter-spacing: 1px; }
     #canvas-wrap {
         position: relative;
         border: 1px solid var(--border-color);
-        border-radius: var(--radius-sm);
         padding: 0.25rem;
         background: var(--map-void);
         display: flex;
@@ -41,7 +42,6 @@
         gap: 0.2rem;
         background: var(--bg-panel-translucent);
         border: 1px solid var(--border-color);
-        border-radius: var(--radius-sm);
         padding: 0.2rem;
     }
     .zoom-controls button {
@@ -74,7 +74,6 @@
         display: flex; align-items: center; gap: 0.4rem;
         padding: 0.35rem 0.5rem;
         border: 1px solid var(--border-color);
-        border-radius: var(--radius-sm);
         margin-bottom: 0.3rem;
         cursor: pointer;
         transition: border-color 0.1s;
@@ -85,10 +84,19 @@
     .side-neutral { border-left: 3px solid var(--text-muted); }
 </style>
 
-<div class="battle-layout">
+<div class="brackets" style="position: relative; padding: 28px 32px; margin: 0.75rem;">
+    <span class="bk tl"></span><span class="bk tr"></span>
+    <span class="bk bl"></span><span class="bk br"></span>
+
+    <div class="battle-layout">
     <!-- LEFT: info + initiative + participants -->
     <div class="panel">
-        <h3 id="header-name">Loading…</h3>
+        <header class="block-head">
+            <span class="block-bullet">■</span>
+            <h3 id="header-name">LOADING…</h3>
+            <span class="block-line"></span>
+            <span class="block-badge" id="round-badge">[R 0]</span>
+        </header>
         <div id="header-meta" class="mono-text text-muted" style="font-size: 0.65rem;"></div>
 
         <div style="display: flex; gap: 0.3rem; flex-wrap: wrap; margin-top: 0.6rem;">
@@ -106,7 +114,7 @@
             {% endif %}
         </div>
         {% if is_superuser %}
-        <div id="terrain-toolbar" style="display: none; margin-top: 0.5rem; padding: 0.5rem; border: 1px solid #8a7a6a; border-radius: var(--radius-sm);">
+        <div id="terrain-toolbar" style="display: none; margin-top: 0.5rem; padding: 0.5rem; border: 1px solid #8a7a6a;">
             <div class="mono-text text-muted" style="font-size: 0.58rem; margin-bottom: 0.3rem;">TERRAIN TYPE</div>
             <select id="terrain-type-select" class="mono-text" style="width: 100%; background: var(--bg-input); border: 1px solid var(--border-color); color: var(--text-primary); padding: 0.3rem; font-size: 0.7rem;">
                 <option value="asteroid">Asteroid Field</option>
@@ -124,38 +132,65 @@
         </div>
         {% endif %}
 
-        <h3 style="margin-top: 1rem;">INITIATIVE</h3>
+        <header class="block-head" style="margin-top: 1rem;">
+            <span class="block-bullet">■</span>
+            <h3>INITIATIVE</h3>
+            <span class="block-line"></span>
+        </header>
         <div id="initiative-list" class="mono-text text-muted" style="font-size: 0.65rem;">—</div>
 
-        <h3 style="margin-top: 1rem;">PARTICIPANTS</h3>
+        <header class="block-head" style="margin-top: 1rem;">
+            <span class="block-bullet">■</span>
+            <h3>PARTICIPANTS</h3>
+            <span class="block-line"></span>
+            <span class="block-badge" id="participant-badge">[0]</span>
+        </header>
         <div id="participant-list"></div>
     </div>
 
     <!-- CENTER: canvas -->
-    <div id="canvas-wrap">
-        <div class="zoom-controls">
-            <button type="button" onclick="zoomOut()" title="Zoom out">−</button>
-            <span class="zoom-label" id="zoom-label">100%</span>
-            <button type="button" onclick="zoomIn()" title="Zoom in">+</button>
-            <button type="button" onclick="resetZoom()" title="Reset zoom">⟲</button>
+    <div>
+        <header class="block-head">
+            <span class="block-bullet">■</span>
+            <h3>BATTLE MAP</h3>
+            <span class="block-line"></span>
+            <span class="block-badge" id="map-badge">[0 PARTICIPANTS]</span>
+        </header>
+        <div id="canvas-wrap">
+            <div class="zoom-controls">
+                <button type="button" onclick="zoomOut()" title="Zoom out">−</button>
+                <span class="zoom-label" id="zoom-label">100%</span>
+                <button type="button" onclick="zoomIn()" title="Zoom in">+</button>
+                <button type="button" onclick="resetZoom()" title="Reset zoom">⟲</button>
+            </div>
+            <canvas id="battle-canvas" width="800" height="600"></canvas>
         </div>
-        <canvas id="battle-canvas" width="800" height="600"></canvas>
     </div>
 
     <!-- RIGHT: selection details + action log -->
     <div class="panel">
-        <h3 id="detail-title">SELECTION</h3>
+        <header class="block-head">
+            <span class="block-bullet">■</span>
+            <h3 id="detail-title">UNIT DETAILS</h3>
+            <span class="block-line"></span>
+            <span class="status-pill s-dormant" id="detail-status-pill" style="display:none;">WAITING</span>
+        </header>
         <div id="detail-body" class="mono-text text-muted" style="font-size: 0.7rem;">Nothing selected.</div>
         <div id="detail-actions" style="margin-top: 0.5rem; display: flex; flex-direction: column; gap: 0.35rem;"></div>
 
-        <h3 style="margin-top: 1rem;">ACTION LOG</h3>
+        <header class="block-head" style="margin-top: 1rem;">
+            <span class="block-bullet">■</span>
+            <h3>ACTION LOG</h3>
+            <span class="block-line"></span>
+        </header>
         <div id="log-body" style="max-height: 40vh; overflow-y: auto;"></div>
+    </div>
     </div>
 </div>
 
 <!-- Placement modal -->
 <div id="place-modal" style="display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.7); z-index: 100; align-items: center; justify-content: center;">
-    <div style="background: var(--bg-panel, #0b0f1a); border: 1px solid var(--accent-primary); border-radius: var(--radius-sm); padding: 1rem; width: 520px; max-height: 80vh; overflow-y: auto;">
+    <div style="background: var(--bg-panel, #0b0f1a); border: 1px solid var(--accent-primary); padding: 1rem; width: 520px; max-height: 80vh; overflow-y: auto;">
         <h3 class="mono-text" style="color: var(--accent-primary); letter-spacing: 1px; margin: 0 0 0.75rem 0;">PLACE SHIPS</h3>
         <div class="mono-text text-muted" style="font-size: 0.65rem; margin-bottom: 0.6rem;">
             Pick a fleet, set the side, then click ships to add them. They land at (0,0) — drag or edit coordinates once Release E ships.
@@ -170,7 +205,7 @@
                 <option value="neutral">NEUTRAL</option>
             </select>
         </div>
-        <div id="place-ship-list" style="max-height: 40vh; overflow-y: auto; border: 1px solid var(--border-color); border-radius: var(--radius-sm); padding: 0.3rem;"></div>
+        <div id="place-ship-list" style="max-height: 40vh; overflow-y: auto; border: 1px solid var(--border-color); padding: 0.3rem;"></div>
         <div style="display: flex; justify-content: flex-end; gap: 0.5rem; margin-top: 0.75rem;">
             <button onclick="closePlacementModal()" class="mono-text" style="background: transparent; border: 1px solid var(--border-color); color: var(--text-primary); padding: 0.4rem 0.9rem; cursor: pointer; font-size: 0.72rem;">CLOSE</button>
         </div>
@@ -347,7 +382,16 @@ function render() {
 }
 
 function renderHeader() {
-    document.getElementById('header-name').textContent = BATTLE.name;
+    document.getElementById('header-name').textContent = (BATTLE.name || '').toUpperCase();
+    // Round badge in left-column block-head.
+    var rb = document.getElementById('round-badge');
+    if (rb) rb.textContent = '[R ' + BATTLE.round_number + ']';
+    // Center-column participant badge.
+    var mb = document.getElementById('map-badge');
+    if (mb) {
+        var n = (BATTLE.participants || []).length;
+        mb.textContent = '[' + n + ' PARTICIPANT' + (n === 1 ? '' : 'S') + ']';
+    }
     document.getElementById('header-meta').innerHTML =
         'Status: <span style="color:' +
         (BATTLE.status === 'active' ? '#22c55e' : BATTLE.status === 'concluded' ? '#f59e0b' : 'var(--text-muted)') +
@@ -392,6 +436,9 @@ function renderParticipants() {
     });
     if (!html) html = '<span class="mono-text text-muted" style="font-size: 0.65rem;">None yet.</span>';
     document.getElementById('participant-list').innerHTML = html;
+    // Update left-column participants count badge.
+    var pb = document.getElementById('participant-badge');
+    if (pb) pb.textContent = '[' + (BATTLE.participants || []).length + ']';
 }
 
 function renderLog() {
@@ -420,13 +467,29 @@ function selectParticipant(id) {
 function renderDetail() {
     var el = document.getElementById('detail-body');
     var actions = document.getElementById('detail-actions');
+    var pill = document.getElementById('detail-status-pill');
     if (SELECTED_PARTICIPANT_ID == null || !BATTLE) {
         el.textContent = 'Nothing selected.';
         actions.innerHTML = '';
+        if (pill) pill.style.display = 'none';
         return;
     }
     var p = (BATTLE.participants || []).find(function(x) { return x.id === SELECTED_PARTICIPANT_ID; });
-    if (!p) { el.textContent = 'Selection not found.'; actions.innerHTML = ''; return; }
+    if (!p) { el.textContent = 'Selection not found.'; actions.innerHTML = ''; if (pill) pill.style.display = 'none'; return; }
+    // Status pill — map combat status onto the global s-* palette.
+    if (pill) {
+        var s = (p.status || '').toLowerCase();
+        var label = s.toUpperCase() || 'WAITING';
+        var sCls = 's-dormant';  // default = waiting
+        if (BATTLE.initiative_order && BATTLE.initiative_order[BATTLE.active_participant_index] === p.id) {
+            sCls = 's-active'; label = 'ACTIVE';
+        } else if (s === 'destroyed') sCls = 's-burned';
+        else if (s === 'withdrawn') sCls = 's-inactive';
+        else if (s === 'active' || s === 'engaged') sCls = 's-active';
+        pill.className = 'status-pill ' + sCls;
+        pill.textContent = label;
+        pill.style.display = '';
+    }
     var html = '<div class="mono-text" style="color: var(--text-primary); font-size: 0.8rem;">' + escapeHtml(p.starship_name) + '</div>';
     html += '<div class="mono-text text-muted" style="font-size: 0.6rem;">' + escapeHtml(p.starship_class_name) + ' \u00B7 ' + escapeHtml(p.ship_type_name) + '</div>';
     // Combat stat grid — from compute_class_stats, so module deltas
