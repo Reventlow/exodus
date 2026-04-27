@@ -1,5 +1,11 @@
 # Changelog
 
+## v0.14.58
+- New **SPECIALISATIONS** multi-select in the project dice-pool config — pick one or more of the assigned character's specialisations and each match adds **+1 die** to the project roll (standard WoD 2.0 specialisation bonus). Sits next to the existing MERITS and PULLING STRINGS pickers
+- Specialisation labels render as `<skill>: <name>` (e.g., `Investigation: Forensics`) so it's clear which sub-category applies. Multiple specialisations can stack
+- Roll breakdown now shows specialisation rows as `<skill>: <name> +1` in the dice-pool detail
+- Stored on `project.dicePoolConfig.matchingSpecialisations` (list of specialisation names). Server-side computation in `_compute_project_dice_pool`; serializer now exposes `specialisations` per character in `assignableCharacters`
+
 ## v0.14.57
 - Fix: the council page (`/agencies/council/`) was keyed to a hardcoded purple accent (`#a855f7`) instead of the palette token, so it read as off-theme even after the clearance-gate rollout. Council borders, badges, filter pills, and vote tags now follow `var(--c-primary)` and respect palette flips in `/settings/ → THEME`. Abstain-vote color moved off purple to a neutral grey so it doesn't clash with whichever palette is active
 

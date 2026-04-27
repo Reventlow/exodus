@@ -929,6 +929,7 @@ const { Icon, AutoSaveInput, Classified, VisibilityToggle, getCookie, useProject
             }
             var charMerits = charData && charData.merits ? charData.merits : [];
             var charPS = charData && charData.pullingStrings ? charData.pullingStrings : [];
+            var charSpecs = charData && charData.specialisations ? charData.specialisations : [];
 
             var selStyle = { background: 'var(--bg-input, #1a1a2e)', border: 'none', borderBottom: '1px solid var(--border-color)', color: 'var(--text-primary)', width: '100%', fontSize: '0.75rem', fontFamily: 'var(--font-mono)', padding: '0.2rem 0' };
             var labelStyle = { fontSize: '0.6rem', marginBottom: '0.15rem' };
@@ -1021,8 +1022,8 @@ const { Icon, AutoSaveInput, Classified, VisibilityToggle, getCookie, useProject
                             </div>
                             {!p.player ? (
                                 <div className="mono-text text-muted" style={{ fontSize: '0.6rem' }}>Assign a player to configure merits and pulling strings.</div>
-                            ) : charMerits.length === 0 && charPS.length === 0 ? (
-                                <div className="mono-text text-muted" style={{ fontSize: '0.6rem' }}>{p.player} has no merits or pulling strings.</div>
+                            ) : charMerits.length === 0 && charPS.length === 0 && charSpecs.length === 0 ? (
+                                <div className="mono-text text-muted" style={{ fontSize: '0.6rem' }}>{p.player} has no merits, specialisations, or pulling strings.</div>
                             ) : (
                                 <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap' }}>
                                     {charMerits.length > 0 ? (
@@ -1057,6 +1058,22 @@ const { Icon, AutoSaveInput, Classified, VisibilityToggle, getCookie, useProject
                                         </div>
                                         );
                                     })()}
+                                    {charSpecs.length > 0 ? (
+                                        <div style={{ flex: 1, minWidth: '150px' }}>
+                                            <div className="text-muted mono-text" style={labelStyle}>SPECIALISATIONS — {p.player} (+1 each)</div>
+                                            <select multiple value={cfg.matchingSpecialisations || []} onChange={function(e) {
+                                                var opts = e.target.options;
+                                                var sel = [];
+                                                for (var i = 0; i < opts.length; i++) { if (opts[i].selected) sel.push(opts[i].value); }
+                                                updateConfig(idx, 'matchingSpecialisations', sel);
+                                            }} style={{ background: 'var(--bg-input, #1a1a2e)', border: '1px solid var(--border-color)', color: 'var(--text-primary)', width: '100%', fontSize: '0.65rem', fontFamily: 'var(--font-mono)', height: '80px' }}>
+                                                {charSpecs.map(function(s, si) {
+                                                    var label = s.skill ? (s.skill + ': ' + s.name) : s.name;
+                                                    return <option key={si} value={s.name}>{label}</option>;
+                                                })}
+                                            </select>
+                                        </div>
+                                    ) : null}
                                 </div>
                             )}
                             <div className="mono-text text-muted" style={{ fontSize: '0.55rem', marginTop: '0.35rem' }}>

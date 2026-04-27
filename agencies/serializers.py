@@ -369,6 +369,20 @@ def _compute_project_dice_pool(project, agency, characters_by_name, bases_list):
                 pool += cm.rating
                 parts.append({"label": cm.merit.name, "value": cm.rating, "type": "merit"})
 
+    # 5b. Matching specialisations (+1 each — WoD 2.0 specialisation bonus)
+    matching_specs = config.get("matchingSpecialisations") or []
+    if char and matching_specs:
+        wanted = {s.lower() for s in matching_specs if isinstance(s, str)}
+        for spec in (char.specialisations or []):
+            if not isinstance(spec, dict):
+                continue
+            spec_name = spec.get("name") or ""
+            if spec_name and spec_name.lower() in wanted:
+                pool += 1
+                skill_prefix = (spec.get("skill") or "").strip()
+                label = f"{skill_prefix}: {spec_name}" if skill_prefix else spec_name
+                parts.append({"label": label, "value": 1, "type": "specialisation"})
+
     # 6. Workspace quality bonus
     base_id = project.get("baseId")
     if char and base_id:
@@ -782,6 +796,14 @@ def serialize_agency(agency, user):
                     "linkedNpcBonus": (1 + (cps.linked_npc.experience or 0) // 15) if cps.linked_npc else 0,
                 }
                 for cps in c.character_pulling_strings.select_related("pulling_string", "linked_npc").all()
+            ],
+            # Each WoD 2.0 specialisation grants +1 die when relevant.
+            # Exposed here so the project dice-pool config can offer a
+            # multi-select alongside merits and pulling strings.
+            "specialisations": [
+                {"skill": s.get("skill", ""), "name": s.get("name", "")}
+                for s in (c.specialisations or [])
+                if isinstance(s, dict) and s.get("name")
             ],
         }
         for c in Character.objects.select_related("owner").prefetch_related(
