@@ -191,6 +191,16 @@ class SiteSettings(models.Model):
         ),
     )
 
+    # Armor catalogue. List of {"name", "category", "rating", "str_min",
+    # "penalty", "notes"} dicts. Categories: light, medium, heavy, vacuum.
+    armor = models.JSONField(
+        default=list, blank=True,
+        help_text=(
+            "List of armor entries. See SiteSettings.default_armor() for "
+            "the seed catalogue and field reference."
+        ),
+    )
+
     class Meta:
         verbose_name = "Site Settings"
         verbose_name_plural = "Site Settings"
@@ -315,6 +325,78 @@ class SiteSettings(models.Model):
                 "range": w.get("range", "") or "",
                 "capacity": w.get("capacity", "") or "",
                 "notes": w.get("notes", "") or "",
+            })
+        return hydrated
+
+    @staticmethod
+    def default_armor():
+        """Seed catalogue of armor with WoD 2.0 stats.
+
+        Each entry: ``name``, ``category`` (``light`` / ``medium`` /
+        ``heavy`` / ``vacuum``), ``rating`` (``B/L`` subtraction, e.g.
+        ``"1/2"``), ``str_min`` (Strength minimum to wear without
+        penalty, ``"—"`` if none), ``penalty`` (combined Defense /
+        Speed / Initiative penalty, e.g. ``"−1 Def, −1 Spd"``), and
+        free-text ``notes``.
+        """
+        return [
+            # ----- Light --------------------------------------------------
+            {"name": "Reinforced Coat", "category": "light", "rating": "1/0",
+             "str_min": "—", "penalty": "—",
+             "notes": "Concealable. Slash-resistant lining; bullets pass."},
+            {"name": "Kevlar Vest", "category": "light", "rating": "1/2",
+             "str_min": "—", "penalty": "—",
+             "notes": "Soft armor. Concealable under street clothes."},
+            {"name": "Tactical Vest", "category": "light", "rating": "2/2",
+             "str_min": "—", "penalty": "−1 Def",
+             "notes": "Visible. MOLLE attachments. Civilian-legal."},
+            # ----- Medium -------------------------------------------------
+            {"name": "Riot Gear", "category": "medium", "rating": "2/3",
+             "str_min": "1", "penalty": "−1 Def, −1 Spd",
+             "notes": "Helmet + chest + limb plates. Police standard."},
+            {"name": "Plate Carrier", "category": "medium", "rating": "3/3",
+             "str_min": "2", "penalty": "−1 Def, −1 Spd",
+             "notes": "Ceramic / steel inserts. Visible. Combat-grade."},
+            {"name": "EOD Suit", "category": "medium", "rating": "4/4",
+             "str_min": "2", "penalty": "−2 Def, −2 Spd",
+             "notes": "Bomb disposal. Helmet + groin plate. Limited mobility."},
+            # ----- Heavy --------------------------------------------------
+            {"name": "Full Ballistic", "category": "heavy", "rating": "4/4",
+             "str_min": "2", "penalty": "−2 Def, −1 Spd",
+             "notes": "Full body coverage. Modern military issue."},
+            {"name": "Combat Plate", "category": "heavy", "rating": "5/5",
+             "str_min": "3", "penalty": "−2 Def, −2 Spd",
+             "notes": "Hardened ceramic + composite. Visible armor signature."},
+            {"name": "Powered Exo-Frame", "category": "heavy", "rating": "5/5",
+             "str_min": "—", "penalty": "−1 Def",
+             "notes": "Powered assist (+2 effective Str). 8h charge. Loud."},
+            # ----- Vacuum -------------------------------------------------
+            {"name": "EVA Suit", "category": "vacuum", "rating": "1/1",
+             "str_min": "—", "penalty": "−1 Def",
+             "notes": "Sealed pressure suit. 6h life support. Industrial standard."},
+            {"name": "Hardsuit", "category": "vacuum", "rating": "3/3",
+             "str_min": "2", "penalty": "−2 Def, −1 Spd",
+             "notes": "Sealed combat suit. 12h life support. Helmet HUD."},
+            {"name": "Industrial Hardsuit", "category": "vacuum", "rating": "4/4",
+             "str_min": "2", "penalty": "−2 Def, −2 Spd",
+             "notes": "Sealed. Powered manipulators (+2 Str for lifting). 24h life support."},
+        ]
+
+    def get_armor(self):
+        """Return the armor list, hydrated with empty strings for any
+        missing fields so the UI handles legacy entries uniformly."""
+        armor = self.armor if isinstance(self.armor, list) and self.armor else self.default_armor()
+        hydrated = []
+        for a in armor:
+            if not isinstance(a, dict):
+                continue
+            hydrated.append({
+                "name": a.get("name", ""),
+                "category": a.get("category", ""),
+                "rating": a.get("rating", "") or "",
+                "str_min": a.get("str_min", "") or "",
+                "penalty": a.get("penalty", "") or "",
+                "notes": a.get("notes", "") or "",
             })
         return hydrated
 

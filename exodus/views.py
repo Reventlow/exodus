@@ -108,6 +108,31 @@ def site_settings(request):
             if val:
                 setattr(settings_obj, f"label_{lbl}", val)
 
+        # ARMOR catalogue. Same shape as weapons — parallel arrays per
+        # category. Empty-name rows are dropped.
+        if "armor_submitted" in request.POST:
+            arm_categories = ("light", "medium", "heavy", "vacuum")
+            new_armor = []
+            for cat in arm_categories:
+                names = request.POST.getlist(f"armor_{cat}_name")
+                ratings = request.POST.getlist(f"armor_{cat}_rating")
+                str_mins = request.POST.getlist(f"armor_{cat}_str_min")
+                penalties = request.POST.getlist(f"armor_{cat}_penalty")
+                notes_list = request.POST.getlist(f"armor_{cat}_notes")
+                for i, raw_name in enumerate(names):
+                    name = (raw_name or "").strip()[:80]
+                    if not name:
+                        continue
+                    new_armor.append({
+                        "name": name,
+                        "category": cat,
+                        "rating": (ratings[i] if i < len(ratings) else "").strip()[:32],
+                        "str_min": (str_mins[i] if i < len(str_mins) else "").strip()[:16],
+                        "penalty": (penalties[i] if i < len(penalties) else "").strip()[:48],
+                        "notes": (notes_list[i] if i < len(notes_list) else "").strip()[:240],
+                    })
+            settings_obj.armor = new_armor
+
         # WEAPONS catalogue. Submitted as parallel arrays per category
         # (name / damage / range / capacity / notes). Empty-name rows
         # are dropped so the editor's add-row button can leave blank
@@ -165,6 +190,26 @@ def site_settings(request):
          "rows": weapons_by_cat["thrown"]},
     ]
 
+    # Pre-grouped armor sections for the structured editor.
+    armor_by_cat = {"light": [], "medium": [], "heavy": [], "vacuum": []}
+    for a in settings_obj.get_armor():
+        if isinstance(a, dict) and a.get("category") in armor_by_cat:
+            armor_by_cat[a["category"]].append(a)
+    armor_sections = [
+        {"cat": "light", "label": "LIGHT",
+         "hint": "Concealable. Minimal penalty.",
+         "rows": armor_by_cat["light"]},
+        {"cat": "medium", "label": "MEDIUM",
+         "hint": "Visible. Moderate protection, moderate penalty.",
+         "rows": armor_by_cat["medium"]},
+        {"cat": "heavy", "label": "HEAVY",
+         "hint": "Full ballistic / plate. Significant penalty.",
+         "rows": armor_by_cat["heavy"]},
+        {"cat": "vacuum", "label": "VACUUM",
+         "hint": "Sealed pressure suit. Includes life support.",
+         "rows": armor_by_cat["vacuum"]},
+    ]
+
     return render(request, "site_settings.html", {
         "settings_obj": settings_obj,
         "users": users,
@@ -173,6 +218,7 @@ def site_settings(request):
         "npc_agencies": npc_agencies,
         "tweaks": settings_obj.get_tweaks(),
         "weapons_sections": weapons_sections,
+        "armor_sections": armor_sections,
     })
 
 
@@ -362,6 +408,115 @@ def rules_page(request):
 
 
 @require_http_methods(["GET", "POST"])
+def api_armor(request):
+    """List or create armor in the site catalogue.
+
+    GET   → ``{"count": N, "armor": [...]}``
+    POST  → create new. Body: ``{name, category, rating?, str_min?,
+            penalty?, notes?}``. 409 on duplicate name.
+
+    Admin / MCP-superuser only.
+    """
+    if not request.user.is_superuser:
+        return JsonResponse({"error": "ACCESS DENIED."}, status=403)
+
+    settings_obj = SiteSettings.load()
+    armor_list = list(settings_obj.get_armor())
+
+    if request.method == "GET":
+        return JsonResponse({"count": len(armor_list), "armor": armor_list})
+
+    try:
+        body = json.loads(request.body) if request.body else {}
+    except json.JSONDecodeError:
+        return JsonResponse({"error": "Invalid JSON."}, status=400)
+
+    name = (body.get("name") or "").strip()
+    if not name:
+        return JsonResponse({"error": "'name' is required."}, status=400)
+    cat = (body.get("category") or "").strip().lower()
+    if cat not in ("light", "medium", "heavy", "vacuum"):
+        return JsonResponse({
+            "error": "'category' must be one of: light, medium, heavy, vacuum.",
+        }, status=400)
+    if any((a.get("name") or "").lower() == name.lower() for a in armor_list):
+        return JsonResponse({
+            "error": f"Armor named '{name}' already exists. Use PUT on the detail URL to update.",
+        }, status=409)
+
+    new_a = {
+        "name": name[:80],
+        "category": cat,
+        "rating": (body.get("rating") or "").strip()[:32],
+        "str_min": (body.get("str_min") or "").strip()[:16],
+        "penalty": (body.get("penalty") or "").strip()[:48],
+        "notes": (body.get("notes") or "").strip()[:240],
+    }
+    armor_list.append(new_a)
+    settings_obj.armor = armor_list
+    settings_obj.save(update_fields=["armor"])
+    return JsonResponse(new_a, status=201)
+
+
+@require_http_methods(["GET", "PUT", "DELETE"])
+def api_armor_detail(request, name):
+    """Get / update / delete a single armor entry by (case-insensitive) name."""
+    if not request.user.is_superuser:
+        return JsonResponse({"error": "ACCESS DENIED."}, status=403)
+
+    settings_obj = SiteSettings.load()
+    armor_list = list(settings_obj.get_armor())
+
+    idx = next(
+        (i for i, a in enumerate(armor_list)
+         if (a.get("name") or "").lower() == name.lower()),
+        None,
+    )
+    if idx is None:
+        return JsonResponse({"error": f"Armor '{name}' not found."}, status=404)
+
+    if request.method == "GET":
+        return JsonResponse(armor_list[idx])
+
+    if request.method == "DELETE":
+        removed = armor_list.pop(idx)
+        settings_obj.armor = armor_list
+        settings_obj.save(update_fields=["armor"])
+        return JsonResponse({"deleted": removed})
+
+    # PUT — partial
+    try:
+        body = json.loads(request.body) if request.body else {}
+    except json.JSONDecodeError:
+        return JsonResponse({"error": "Invalid JSON."}, status=400)
+
+    a = dict(armor_list[idx])
+    if "name" in body:
+        new_name = (body["name"] or "").strip()
+        if new_name:
+            if any(
+                i != idx and (other.get("name") or "").lower() == new_name.lower()
+                for i, other in enumerate(armor_list)
+            ):
+                return JsonResponse({
+                    "error": f"Armor named '{new_name}' already exists.",
+                }, status=409)
+            a["name"] = new_name[:80]
+    if "category" in body:
+        cat = (body["category"] or "").strip().lower()
+        if cat in ("light", "medium", "heavy", "vacuum"):
+            a["category"] = cat
+    for field, limit in (("rating", 32), ("str_min", 16),
+                         ("penalty", 48), ("notes", 240)):
+        if field in body:
+            a[field] = (body[field] or "").strip()[:limit]
+    armor_list[idx] = a
+    settings_obj.armor = armor_list
+    settings_obj.save(update_fields=["armor"])
+    return JsonResponse(a)
+
+
+@require_http_methods(["GET", "POST"])
 def api_weapons(request):
     """List or create weapons in the site catalogue.
 
@@ -503,9 +658,31 @@ def combat_page(request):
          "hint": "Dexterity + Athletics · Strength × range",
          "rows": weapons_by_cat["thrown"]},
     ]
+
+    armor_by_cat = {"light": [], "medium": [], "heavy": [], "vacuum": []}
+    for a in settings_obj.get_armor():
+        if isinstance(a, dict) and a.get("category") in armor_by_cat:
+            armor_by_cat[a["category"]].append(a)
+    armor_sections = [
+        {"cat": "light", "label": "LIGHT",
+         "hint": "Concealable. Minimal penalty.",
+         "rows": armor_by_cat["light"]},
+        {"cat": "medium", "label": "MEDIUM",
+         "hint": "Visible. Moderate protection.",
+         "rows": armor_by_cat["medium"]},
+        {"cat": "heavy", "label": "HEAVY",
+         "hint": "Full ballistic / plate. Significant penalty.",
+         "rows": armor_by_cat["heavy"]},
+        {"cat": "vacuum", "label": "VACUUM",
+         "hint": "Sealed. Includes life support.",
+         "rows": armor_by_cat["vacuum"]},
+    ]
+
     return render(request, "combat.html", {
         "weapons_by_cat": weapons_by_cat,
         "combat_weapon_sections": sections,
+        "armor_by_cat": armor_by_cat,
+        "combat_armor_sections": armor_sections,
     })
 
 

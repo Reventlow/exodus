@@ -173,6 +173,7 @@
         <div class="sidebar-group">
             <div class="sidebar-group-label">COMBAT</div>
             <button class="sidebar-item" onclick="showSection('weapons', this)">Weapons</button>
+            <button class="sidebar-item" onclick="showSection('armor', this)">Armor</button>
         </div>
         <div class="sidebar-group">
             <div class="sidebar-group-label">THEME</div>
@@ -479,6 +480,81 @@
                             '<td><input type="text" name="weapons_' + cat + '_range" maxlength="48" placeholder="—"></td>' +
                             '<td><input type="text" name="weapons_' + cat + '_capacity" maxlength="48" placeholder="—"></td>' +
                             '<td><input type="text" name="weapons_' + cat + '_notes" maxlength="240" placeholder=""></td>' +
+                            '<td><button type="button" class="weap-del" onclick="this.closest(\'tr\').remove()">×</button></td>';
+                        tbody.appendChild(tr);
+                        var firstInput = tr.querySelector('input');
+                        if (firstInput) firstInput.focus();
+                    });
+                });
+            })();
+            </script>
+        </div>
+
+        <!-- Armor catalogue -->
+        <div id="sec-armor" class="settings-section">
+            <div class="block-head">
+                <span class="block-bullet">&#9679;</span>
+                <h3>ARMOR</h3>
+                <span class="block-line"></span>
+                <span class="block-badge">CATALOGUE</span>
+            </div>
+            <span class="text-muted mono-text" style="font-size: 0.7rem; display: block; margin-bottom: 1rem;">
+                Reference list of personal armor with WoD 2.0 stats. Rating is bashing/lethal subtraction (e.g. <strong>1/2</strong> means −1 bashing, −2 lethal). Penalty stacks Defense / Speed / Init negatives. The catalogue renders live in the combat reference at <a href="{% url 'combat-page' %}" class="text-accent" style="text-decoration: none;">/rules/combat/</a>.
+            </span>
+            <form method="post">
+                {% csrf_token %}
+                <input type="hidden" name="armor_submitted" value="1">
+
+                {% for sec in armor_sections %}
+                <div class="ss-card" style="margin-bottom: 1rem; padding: 1rem;">
+                    <div style="display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 0.4rem;">
+                        <div class="ss-label" style="margin: 0;">{{ sec.label }}</div>
+                        <span class="text-muted mono-text" style="font-size: 0.65rem;">{{ sec.hint }}</span>
+                    </div>
+                    <table class="weap-table" data-cat="{{ sec.cat }}">
+                        <thead>
+                            <tr>
+                                <th style="width: 24%;">NAME</th>
+                                <th style="width: 10%;">RATING</th>
+                                <th style="width: 8%;">STR MIN</th>
+                                <th style="width: 18%;">PENALTY</th>
+                                <th>NOTES</th>
+                                <th style="width: 1%;"></th>
+                            </tr>
+                        </thead>
+                        <tbody data-rows>
+                            {% for a in sec.rows %}
+                            <tr>
+                                <td><input type="text" name="armor_{{ sec.cat }}_name" value="{{ a.name }}" maxlength="80"></td>
+                                <td><input type="text" name="armor_{{ sec.cat }}_rating" value="{{ a.rating }}" maxlength="32"></td>
+                                <td><input type="text" name="armor_{{ sec.cat }}_str_min" value="{{ a.str_min }}" maxlength="16"></td>
+                                <td><input type="text" name="armor_{{ sec.cat }}_penalty" value="{{ a.penalty }}" maxlength="48"></td>
+                                <td><input type="text" name="armor_{{ sec.cat }}_notes" value="{{ a.notes }}" maxlength="240"></td>
+                                <td><button type="button" class="weap-del" onclick="this.closest('tr').remove()">×</button></td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                    <button type="button" class="weap-add" data-add-armor-cat="{{ sec.cat }}">＋ ADD ARMOR</button>
+                </div>
+                {% endfor %}
+
+                <button type="submit" class="btn-primary" style="width: 100%; margin-top: 1rem;">SAVE ARMOR</button>
+            </form>
+
+            <script>
+            (function () {
+                document.querySelectorAll('[data-add-armor-cat]').forEach(function (btn) {
+                    btn.addEventListener('click', function () {
+                        var cat = btn.getAttribute('data-add-armor-cat');
+                        var tbody = btn.parentElement.querySelector('tbody[data-rows]');
+                        var tr = document.createElement('tr');
+                        tr.innerHTML =
+                            '<td><input type="text" name="armor_' + cat + '_name" maxlength="80" placeholder="NAME"></td>' +
+                            '<td><input type="text" name="armor_' + cat + '_rating" maxlength="32" placeholder="1/2"></td>' +
+                            '<td><input type="text" name="armor_' + cat + '_str_min" maxlength="16" placeholder="—"></td>' +
+                            '<td><input type="text" name="armor_' + cat + '_penalty" maxlength="48" placeholder="—"></td>' +
+                            '<td><input type="text" name="armor_' + cat + '_notes" maxlength="240" placeholder=""></td>' +
                             '<td><button type="button" class="weap-del" onclick="this.closest(\'tr\').remove()">×</button></td>';
                         tbody.appendChild(tr);
                         var firstInput = tr.querySelector('input');

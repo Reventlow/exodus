@@ -1,5 +1,13 @@
 # Changelog
 
+## v0.14.64
+- New **ARMOR** catalogue mirroring the weapons setup. Stored on `SiteSettings.armor` with seeded defaults across four categories: **LIGHT** (Reinforced Coat, Kevlar Vest, Tactical Vest), **MEDIUM** (Riot Gear, Plate Carrier, EOD Suit), **HEAVY** (Full Ballistic, Combat Plate, Powered Exo-Frame), **VACUUM** (EVA Suit, Hardsuit, Industrial Hardsuit)
+- Each armor entry: `name`, `category`, `rating` (B/L subtraction, e.g. `1/2`), `str_min` (Strength minimum, `—` if none), `penalty` (combined Defense/Speed/Init negatives), and free-text `notes`
+- New **`/settings/ → COMBAT → Armor`** structured editor (row-based table per category, `＋ ADD ARMOR` button per category, delete button per row)
+- Combat reference at `/rules/combat/` now renders an **ARMOR CATALOGUE** section as four tables (one per category) below the weapons catalogue
+- Two new admin-only API endpoints (`/api/admin/armor/` list+create, `/api/admin/armor/<name>/` get+put+delete) and five MCP tools (`list_armor`, `get_armor`, `create_armor`, `update_armor`, `delete_armor`) so Claude can manage the catalogue without the admin UI
+- Migration `exodus/0019_sitesettings_armor` adds the field and seeds the default catalogue on first apply
+
 ## v0.14.63
 - Two new admin-only API endpoints for the weapons catalogue:
   - `GET /api/admin/weapons/` — list all
