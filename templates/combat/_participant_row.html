@@ -1,0 +1,32 @@
+{% comment %}
+Single participant row inside the encounter PARTICIPANTS faction columns.
+
+Inputs:
+    p          — Participant instance
+    encounter  — parent Encounter (used to build the remove URL)
+
+Renders the kind badge, name, weapon, HP triplet (B/L/A of Max), and
+a small "× REMOVE" form posting to combat:participant_remove.
+{% endcomment %}
+<div class="part-row">
+    <div class="part-meta">
+        {% if p.participant_kind == "character" %}
+            <span class="part-kind-badge pc">PC</span>
+        {% elif p.participant_kind == "npc" %}
+            <span class="part-kind-badge npc">NPC</span>
+        {% else %}
+            <span class="part-kind-badge mook">MOOK</span>
+        {% endif %}
+        <span class="part-name">{{ p.name }}</span>
+        <span class="part-stats">
+            HP {{ p.health_bashing }}/{{ p.health_lethal }}/{{ p.health_aggravated }} of {{ p.health_max }}
+            {% if p.weapon_name %} &middot; {{ p.weapon_name }}{% endif %}
+        </span>
+    </div>
+    <form method="post" action="{% url 'combat:participant_remove' encounter.id p.id %}"
+          style="display:inline;"
+          onsubmit="return confirm('Remove {{ p.name|escapejs }} from this encounter?');">
+        {% csrf_token %}
+        <button type="submit" class="part-remove">&times; REMOVE</button>
+    </form>
+</div>

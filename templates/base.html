@@ -205,6 +205,7 @@
                         <a href="{% url 'admin:index' %}" role="menuitem">ADMIN</a>
                         {% if user.is_superuser %}
                             <a href="/gm/" role="menuitem">GM</a>
+                            <a href="{% url 'combat:list' %}" role="menuitem">COMBAT</a>
                         {% endif %}
                     </div>
                 </div>

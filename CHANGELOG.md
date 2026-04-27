@@ -1,5 +1,15 @@
 # Changelog
 
+## v0.15.2
+- **GM-only Encounter CRUD at `/combat/`.** New encounter list page (with collapsible "+ NEW ENCOUNTER" form) and per-encounter detail page covering header / scene / participants / add-participant / timeline. Status pills map `setup → s-standby`, `active → s-active`, `concluded → s-dormant`. EDIT toggles an inline metadata form; DELETE is `confirm()`-guarded
+- Three participant spawn sources: **CHARACTER** (player sheet — `health_max = size + Stamina`, `willpower_max = Resolve + Composure`, with KeyError fallbacks `7` / `0`); **NPC** (full NPC dossiers, `is_npc_dossier=False`); **TEMPLATE** (Combat NPC catalogue entry snapshotted as a mook). Templates are grouped by category in `<optgroup>`s in the spawn form
+- **Snapshot model:** catalogue entries are denormalised into the Participant row at spawn time (`mook_combat_pool`, `mook_defense`, `mook_armor_rating`, `weapon_name`, `notes`, `health_max`). Later catalogue edits do **not** retroactively mutate active encounters — defensive `int()` casts (`_safe_int`) handle the all-strings catalogue shape gracefully
+- **Read-only timeline.** Every CRUD operation appends a `CombatLog` row with `action_type="system"` and a monotonic per-encounter sequence (allocated through the `_next_sequence` helper so the unique `(encounter, sequence)` constraint can never break). Encounter creation seeds sequence 1 with "Encounter created."
+- New `/combat/` link in the OPERATIONS dropdown (under GM, superuser-only)
+- All POST views are CSRF-protected and reject non-POST with `HttpResponseNotAllowed(["POST"])`. All views (GET + POST) return `HttpResponseForbidden("ACCESS DENIED.")` for non-superusers
+- **No rolls / initiative / real-time fan-out yet** — those land in v0.15.3+ (attacks + damage), v0.15.4 (full attack loop), v0.15.5 (WebSocket fan-out)
+- No schema changes; phase-0 models from v0.15.0 are unchanged
+
 ## v0.15.1
 - New **COMBAT NPC TEMPLATES** catalogue — stock combat-ready stat blocks the GM can spawn as mook participants in encounters. 15 seed entries across 5 categories: **GUARD** (Generic Guard, Building Security, Bouncer), **RAZOR** (Street Razor, Cyber-Razor, Pit Fighter), **CORPORATE** (Corp Sec Officer, Executive Bodyguard, Black Ops Operator), **CULTIST** (Initiate, Adept, Champion), **DRONE / NON-HUMAN** (Sentry Drone, Combat Drone, Guard Dog). The drone category covers both autonomous machines and biological attack animals — mechanically they fight the same way (no morale, no intimidation, attack on command)
 - Each entry: `name`, `category`, `combat_pool` (attack dice pool), `defense` (passive defense), `health_max` (total HP boxes), `armor_rating` (B/L subtraction or `—`), `weapon` (free-text or matches the weapons catalogue), `notes` (free-text flavor / behavioral notes)

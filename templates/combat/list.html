@@ -1,18 +1,208 @@
-{% extends 'base.html' %}
+{% extends "base.html" %}
 
-{% block title %}Combat — Exodus{% endblock %}
+{% block title %}COMBAT // ENCOUNTERS // BLACKLOG.NET{% endblock %}
 
 {% block content %}
-<div class="brackets" style="position: relative; padding: 32px 36px; max-width: 720px; margin: 0 auto;">
+{% comment %}
+v0.15.2 encounter directory.
+
+Outer .brackets authority frame contains a "+ NEW ENCOUNTER"
+collapsible form (<details>) and an ACTIVE ENCOUNTERS table.
+
+Status pill mapping:
+    setup     -> .s-standby (amber, "in prep")
+    active    -> .s-active  (primary glow, "live")
+    concluded -> .s-dormant (muted blue-grey, "archived")
+
+Aesthetic tokens are pulled from foundation.css; any per-page style
+lives in the inline <style> block below to keep the catalogue
+self-contained.
+{% endcomment %}
+
+<style>
+    /* Encounter list — bracket-framed shell with table layout that
+       mirrors the SiteSettings weapons / armor / cover catalogues. */
+    .enc-shell {
+        max-width: 960px;
+        margin: 2rem auto;
+        padding: 32px 36px;
+        position: relative;
+    }
+
+    .enc-create-form {
+        margin: 0 0 1.5rem 0;
+        padding: 1rem;
+        border: 1px solid var(--c-dim);
+        border-radius: 0;
+        background: rgba(0, 0, 0, 0.25);
+    }
+    .enc-create-form summary {
+        cursor: pointer;
+        font-family: var(--font-mono);
+        font-size: 0.78rem;
+        letter-spacing: 0.18em;
+        color: var(--c-primary);
+        text-shadow: 0 0 6px var(--c-glow);
+        text-transform: uppercase;
+        padding: 0.25rem 0;
+        list-style: none;
+        outline: none;
+    }
+    .enc-create-form summary::-webkit-details-marker { display: none; }
+    .enc-create-form summary::before {
+        content: "+ ";
+        color: var(--c-primary);
+    }
+    .enc-create-form[open] summary::before { content: "− "; }
+
+    .enc-create-form .field-label {
+        margin-top: 0.75rem;
+    }
+    .enc-create-form .ss-input,
+    .enc-create-form textarea.ss-input {
+        margin-bottom: 0.4rem;
+        font-size: 0.85rem;
+    }
+    .enc-create-form textarea.ss-input { min-height: 4rem; resize: vertical; }
+
+    /* Encounter table — square corners, dim borders, mono cells. */
+    .enc-table {
+        width: 100%;
+        border-collapse: collapse;
+        font-family: var(--font-mono);
+        font-size: 0.78rem;
+    }
+    .enc-table th {
+        text-align: left;
+        padding: 0.4rem 0.5rem;
+        color: var(--ink-mute);
+        font-weight: 500;
+        font-size: 0.65rem;
+        letter-spacing: 0.18em;
+        text-transform: uppercase;
+        border-bottom: 1px solid var(--c-dim);
+    }
+    .enc-table td {
+        padding: 0.55rem 0.5rem;
+        border-bottom: 1px dashed var(--c-dim);
+        color: var(--ink-dim);
+        vertical-align: middle;
+    }
+    .enc-table tr:hover td { color: var(--ink); background: rgba(255, 255, 255, 0.02); }
+
+    .enc-enter-btn {
+        display: inline-block;
+        padding: 0.3rem 0.7rem;
+        border: 1px solid var(--c-dim);
+        color: var(--c-primary);
+        background: transparent;
+        font-family: var(--font-mono);
+        font-size: 0.7rem;
+        letter-spacing: 0.16em;
+        text-decoration: none;
+        text-transform: uppercase;
+        transition: background 0.15s, border-color 0.15s, text-shadow 0.15s;
+    }
+    .enc-enter-btn:hover {
+        border-color: var(--c-primary);
+        background: var(--c-soft);
+        text-shadow: 0 0 6px var(--c-glow);
+    }
+
+    .enc-empty {
+        padding: 2rem 0;
+        text-align: center;
+        color: var(--ink-mute);
+        font-family: var(--font-mono);
+        font-size: 0.8rem;
+        letter-spacing: 0.1em;
+    }
+</style>
+
+<div class="brackets enc-shell">
     <span class="bk tl"></span><span class="bk tr"></span>
     <span class="bk bl"></span><span class="bk br"></span>
-    <div class="kicker" style="margin-bottom: 0.4rem;">DIRECTORATE COMBAT // ENCOUNTERS</div>
-    <h1 class="title" style="margin: 0 0 0.4rem 0;">COMBAT</h1>
-    <div class="sub" style="margin-bottom: 1.6rem;">PERSONAL COMBAT MODULE — INITIALISING</div>
 
-    <p class="text-secondary" style="font-size: 0.9rem; line-height: 1.6;">
-        Combat module skeleton is online. Encounter list arrives in v0.15.1.
-        See <a href="{% url 'combat-page' %}" class="text-accent" style="text-decoration: none;">/rules/combat/</a> for the WoD 2.0 reference.
-    </p>
+    <div class="kicker" style="margin-bottom: 0.4rem;">DIRECTORATE COMBAT // ENCOUNTERS</div>
+    <h1 class="title" style="margin: 0 0 0.4rem 0;">ENCOUNTERS</h1>
+    <div class="sub" style="margin-bottom: 1.6rem;">PERSONAL COMBAT — GM ONLY</div>
+
+    {# New-encounter form: collapsed by default. #}
+    <details class="enc-create-form">
+        <summary>NEW ENCOUNTER</summary>
+        <form method="post" action="{% url 'combat:create' %}" style="margin-top: 0.75rem;">
+            {% csrf_token %}
+            <label class="field-label" for="enc-title">TITLE</label>
+            <input class="ss-input" type="text" id="enc-title" name="title"
+                   maxlength="200" required placeholder="OP NAME / SCENE">
+
+            <label class="field-label" for="enc-loc">LOCATION</label>
+            <input class="ss-input" type="text" id="enc-loc" name="location_text"
+                   maxlength="200" placeholder="DECK / SECTOR / WORLD">
+
+            <label class="field-label" for="enc-scene">SCENE</label>
+            <textarea class="ss-input" id="enc-scene" name="scene_description" rows="3"
+                      placeholder="OPENING NARRATION, HAZARDS, GOALS"></textarea>
+
+            <button type="submit" class="btn-primary" style="width: 100%; margin-top: 0.75rem;">
+                CREATE ENCOUNTER
+            </button>
+        </form>
+    </details>
+
+    <div class="block-head">
+        <span class="block-bullet">&#9679;</span>
+        <h3>ACTIVE ENCOUNTERS</h3>
+        <span class="block-line"></span>
+        <span class="block-badge">{{ encounters|length }}</span>
+    </div>
+
+    {% if encounters %}
+        <table class="enc-table">
+            <thead>
+                <tr>
+                    <th style="width: 32%;">TITLE</th>
+                    <th style="width: 14%;">STATUS</th>
+                    <th style="width: 10%;">ROUND</th>
+                    <th style="width: 14%;">PARTICIPANTS</th>
+                    <th style="width: 16%;">CREATED</th>
+                    <th style="width: 14%; text-align: right;">&nbsp;</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for enc in encounters %}
+                <tr>
+                    <td>
+                        <a href="{% url 'combat:detail' enc.id %}" style="color: var(--ink); text-decoration: none;">
+                            {{ enc.title|upper }}
+                        </a>
+                        {% if enc.location_text %}
+                        <div class="muted" style="font-size: 0.65rem; margin-top: 2px;">
+                            {{ enc.location_text }}
+                        </div>
+                        {% endif %}
+                    </td>
+                    <td>
+                        {% if enc.status == "active" %}
+                            <span class="status-pill s-active">ACTIVE</span>
+                        {% elif enc.status == "concluded" %}
+                            <span class="status-pill s-dormant">CONCLUDED</span>
+                        {% else %}
+                            <span class="status-pill s-standby">SETUP</span>
+                        {% endif %}
+                    </td>
+                    <td>R{{ enc.round_number }}</td>
+                    <td>{{ enc.participant_count }}</td>
+                    <td>{{ enc.created_at|date:"Y-m-d H:i" }}</td>
+                    <td style="text-align: right;">
+                        <a class="enc-enter-btn" href="{% url 'combat:detail' enc.id %}">ENTER &rarr;</a>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    {% else %}
+        <div class="enc-empty muted">No encounters yet.</div>
+    {% endif %}
 </div>
 {% endblock %}

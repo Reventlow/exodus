@@ -1,13 +1,504 @@
-{% extends 'base.html' %}
+{% extends "base.html" %}
 
-{% block title %}Encounter #{{ encounter_id }} — Combat — Exodus{% endblock %}
+{% block title %}ENCOUNTER #{{ encounter.id }} — {{ encounter.title|upper }}{% endblock %}
 
 {% block content %}
-<div class="brackets" style="position: relative; padding: 32px 36px; max-width: 720px; margin: 0 auto;">
-    <span class="bk tl"></span><span class="bk tr"></span>
-    <span class="bk bl"></span><span class="bk br"></span>
-    <div class="kicker" style="margin-bottom: 0.4rem;">ENCOUNTER #{{ encounter_id }}</div>
-    <h1 class="title" style="margin: 0 0 0.4rem 0;">PLACEHOLDER</h1>
-    <div class="sub">Encounter UI ships in v0.15.1.</div>
+{% comment %}
+v0.15.2 encounter detail page.
+
+Five vertically stacked .brackets sections:
+    a) HEADER          — kicker / title / sub + EDIT (toggles inline form) + DELETE
+    b) SCENE           — encounter.scene_description rendered as a quote
+    c) PARTICIPANTS    — three sub-sections (PLAYERS+ALLIES / HOSTILES / NEUTRAL)
+    d) ADD PARTICIPANT — collapsible <details> with three labelled forms
+                         (FROM CHARACTERS / FROM NPCS / FROM TEMPLATES)
+    e) TIMELINE        — read-only CombatLog table
+
+All POST forms carry a CSRF token. The EDIT form is a hidden block
+toggled by JS; the DELETE button calls confirm() before submitting.
+{% endcomment %}
+
+<style>
+    .enc-page {
+        max-width: 1100px;
+        margin: 1.5rem auto;
+        padding: 0 1rem;
+    }
+    .enc-block {
+        position: relative;
+        padding: 28px 32px;
+        margin-bottom: 1.5rem;
+    }
+
+    /* Inline EDIT / DELETE button row in the header. */
+    .enc-actions {
+        display: flex;
+        gap: 0.5rem;
+        margin-top: 1rem;
+        flex-wrap: wrap;
+    }
+    .enc-action-btn {
+        background: transparent;
+        border: 1px solid var(--c-dim);
+        color: var(--c-primary);
+        cursor: pointer;
+        padding: 0.4rem 0.9rem;
+        font-family: var(--font-mono);
+        font-size: 0.72rem;
+        letter-spacing: 0.16em;
+        text-transform: uppercase;
+        text-decoration: none;
+        display: inline-block;
+    }
+    .enc-action-btn:hover {
+        background: var(--c-soft);
+        border-color: var(--c-primary);
+        text-shadow: 0 0 6px var(--c-glow);
+    }
+    .enc-action-btn.danger {
+        color: var(--accent-danger);
+    }
+    .enc-action-btn.danger:hover {
+        background: rgba(239, 68, 68, 0.08);
+        border-color: var(--accent-danger);
+        text-shadow: 0 0 6px rgba(239, 68, 68, 0.45);
+    }
+
+    /* Hidden edit form, toggled by toggleEditForm() */
+    .enc-edit-form { display: none; margin-top: 1rem; padding-top: 1rem; border-top: 1px dashed var(--c-dim); }
+    .enc-edit-form.open { display: block; }
+    .enc-edit-form .field-label { margin-top: 0.65rem; }
+    .enc-edit-form .ss-input,
+    .enc-edit-form textarea.ss-input {
+        margin-bottom: 0.4rem;
+        font-size: 0.85rem;
+    }
+    .enc-edit-form textarea.ss-input { min-height: 4rem; resize: vertical; }
+
+    /* SCENE block — quoted block, dim left rule. */
+    .enc-scene-quote {
+        border-left: 3px solid var(--c-primary);
+        padding: 0.5rem 1rem;
+        background: rgba(0, 0, 0, 0.2);
+        font-family: var(--font-mono);
+        font-size: 0.85rem;
+        line-height: 1.6;
+        color: var(--ink-dim);
+        white-space: pre-wrap;
+    }
+
+    /* PARTICIPANTS — three columns on wide screens, stacked on narrow. */
+    .enc-faction-grid {
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 1.25rem;
+    }
+    @media (max-width: 900px) {
+        .enc-faction-grid { grid-template-columns: 1fr; }
+    }
+    .enc-faction-col h4 {
+        font-family: var(--font-mono);
+        font-size: 0.7rem;
+        letter-spacing: 0.22em;
+        text-transform: uppercase;
+        color: var(--ink-dim);
+        margin: 0 0 0.5rem 0;
+        padding-bottom: 0.4rem;
+        border-bottom: 1px solid var(--c-dim);
+    }
+    .part-row {
+        display: flex;
+        align-items: flex-start;
+        gap: 0.5rem;
+        padding: 0.5rem 0.5rem;
+        border-bottom: 1px dashed var(--c-dim);
+        font-family: var(--font-mono);
+        font-size: 0.78rem;
+    }
+    .part-row:last-child { border-bottom: none; }
+    .part-meta { flex: 1; min-width: 0; }
+    .part-name {
+        color: var(--ink);
+        font-weight: 500;
+    }
+    .part-kind-badge {
+        display: inline-block;
+        font-size: 0.6rem;
+        letter-spacing: 0.18em;
+        padding: 0 4px;
+        border: 1px solid var(--c-dim);
+        color: var(--ink-mute);
+        margin-right: 6px;
+        vertical-align: middle;
+    }
+    .part-kind-badge.pc { color: var(--c-primary); border-color: var(--c-primary); }
+    .part-kind-badge.npc { color: #ffb454; border-color: #ffb454; }
+    .part-kind-badge.mook { color: #6c8aa0; border-color: #6c8aa0; }
+    .part-stats {
+        display: block;
+        font-size: 0.65rem;
+        color: var(--ink-mute);
+        margin-top: 2px;
+        letter-spacing: 0.06em;
+    }
+    .part-remove {
+        background: transparent;
+        border: 1px solid var(--c-dim);
+        color: var(--accent-danger);
+        cursor: pointer;
+        padding: 0.15rem 0.45rem;
+        font-family: var(--font-mono);
+        font-size: 0.65rem;
+        letter-spacing: 0.14em;
+    }
+    .part-remove:hover { background: rgba(239, 68, 68, 0.08); border-color: var(--accent-danger); }
+
+    /* ADD PARTICIPANT — collapsible with three labelled sub-forms. */
+    .add-pt-shell {
+        margin: 0;
+        padding: 0;
+        border: none;
+        background: transparent;
+    }
+    .add-pt-shell summary {
+        cursor: pointer;
+        font-family: var(--font-mono);
+        font-size: 0.78rem;
+        letter-spacing: 0.18em;
+        color: var(--c-primary);
+        text-shadow: 0 0 6px var(--c-glow);
+        text-transform: uppercase;
+        list-style: none;
+        outline: none;
+        padding: 0.25rem 0;
+    }
+    .add-pt-shell summary::-webkit-details-marker { display: none; }
+    .add-pt-shell summary::before { content: "+ "; color: var(--c-primary); }
+    .add-pt-shell[open] summary::before { content: "− "; }
+
+    .add-pt-grid {
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 1rem;
+        margin-top: 1rem;
+    }
+    @media (max-width: 900px) { .add-pt-grid { grid-template-columns: 1fr; } }
+    .add-pt-card {
+        padding: 0.85rem;
+        border: 1px solid var(--c-dim);
+        background: rgba(0, 0, 0, 0.25);
+    }
+    .add-pt-card h5 {
+        margin: 0 0 0.6rem 0;
+        font-family: var(--font-mono);
+        font-size: 0.72rem;
+        letter-spacing: 0.18em;
+        text-transform: uppercase;
+        color: var(--ink-dim);
+    }
+    .add-pt-card label {
+        display: block;
+        font-family: var(--font-mono);
+        font-size: 0.6rem;
+        letter-spacing: 0.18em;
+        text-transform: uppercase;
+        color: var(--ink-mute);
+        margin: 0.4rem 0 0.2rem 0;
+    }
+    .add-pt-card select,
+    .add-pt-card input {
+        width: 100%;
+        background: var(--bg-input);
+        border: 1px solid var(--c-dim);
+        color: var(--ink);
+        padding: 0.4rem 0.5rem;
+        font-family: var(--font-mono);
+        font-size: 0.78rem;
+        border-radius: 0;
+        box-sizing: border-box;
+    }
+    .add-pt-card .btn-primary { width: 100%; margin-top: 0.75rem; padding: 0.45rem; font-size: 0.72rem; }
+
+    /* TIMELINE — same look as the encounter table. */
+    .log-table { width: 100%; border-collapse: collapse; font-family: var(--font-mono); font-size: 0.74rem; }
+    .log-table th {
+        text-align: left;
+        padding: 0.35rem 0.5rem;
+        color: var(--ink-mute);
+        font-weight: 500;
+        font-size: 0.6rem;
+        letter-spacing: 0.18em;
+        text-transform: uppercase;
+        border-bottom: 1px solid var(--c-dim);
+    }
+    .log-table td {
+        padding: 0.35rem 0.5rem;
+        border-bottom: 1px dashed var(--c-dim);
+        color: var(--ink-dim);
+        vertical-align: top;
+    }
+    .log-table tr:last-child td { border-bottom: none; }
+</style>
+
+<div class="enc-page">
+
+    {# ----- (a) HEADER ----- #}
+    <div class="brackets enc-block">
+        <span class="bk tl"></span><span class="bk tr"></span>
+        <span class="bk bl"></span><span class="bk br"></span>
+
+        <div class="kicker" style="margin-bottom: 0.4rem;">
+            ENCOUNTER #{{ encounter.id }} //
+            {% if encounter.status == "active" %}
+                <span style="color: var(--c-primary);">{{ encounter.status|upper }}</span>
+            {% elif encounter.status == "concluded" %}
+                <span class="muted">{{ encounter.status|upper }}</span>
+            {% else %}
+                <span style="color: #ffb454;">{{ encounter.status|upper }}</span>
+            {% endif %}
+        </div>
+        <h1 class="title" style="margin: 0 0 0.4rem 0;">{{ encounter.title|upper }}</h1>
+        <div class="sub" style="margin-bottom: 0.4rem;">
+            {% if encounter.location_text %}{{ encounter.location_text|upper }} //{% endif %}
+            GM: {{ encounter.gm.username|default:"—"|upper }} //
+            CREATED {{ encounter.created_at|date:"Y-m-d H:i" }} //
+            ROUND {{ encounter.round_number }}
+        </div>
+
+        <div class="enc-actions">
+            <a href="{% url 'combat:list' %}" class="enc-action-btn">&larr; BACK</a>
+            <button type="button" class="enc-action-btn"
+                    onclick="document.getElementById('enc-edit-form').classList.toggle('open');">
+                EDIT
+            </button>
+            <form method="post" action="{% url 'combat:delete' encounter.id %}"
+                  style="display:inline;"
+                  onsubmit="return confirm('Delete this encounter? This cannot be undone.');">
+                {% csrf_token %}
+                <button type="submit" class="enc-action-btn danger">&times; DELETE</button>
+            </form>
+        </div>
+
+        <div id="enc-edit-form" class="enc-edit-form">
+            <form method="post" action="{% url 'combat:update' encounter.id %}">
+                {% csrf_token %}
+                <label class="field-label" for="edit-title">TITLE</label>
+                <input class="ss-input" type="text" id="edit-title" name="title"
+                       maxlength="200" value="{{ encounter.title }}" required>
+
+                <label class="field-label" for="edit-loc">LOCATION</label>
+                <input class="ss-input" type="text" id="edit-loc" name="location_text"
+                       maxlength="200" value="{{ encounter.location_text }}">
+
+                <label class="field-label" for="edit-scene">SCENE</label>
+                <textarea class="ss-input" id="edit-scene" name="scene_description" rows="3">{{ encounter.scene_description }}</textarea>
+
+                <button type="submit" class="btn-primary" style="width: 100%; margin-top: 0.75rem;">
+                    SAVE CHANGES
+                </button>
+            </form>
+        </div>
+    </div>
+
+    {# ----- (b) SCENE ----- #}
+    <div class="brackets enc-block">
+        <span class="bk tl"></span><span class="bk tr"></span>
+        <span class="bk bl"></span><span class="bk br"></span>
+
+        <div class="block-head">
+            <span class="block-bullet">&#9679;</span>
+            <h3>SCENE</h3>
+            <span class="block-line"></span>
+        </div>
+        {% if encounter.scene_description %}
+            <div class="enc-scene-quote">{{ encounter.scene_description }}</div>
+        {% else %}
+            <em class="muted">No scene description.</em>
+        {% endif %}
+    </div>
+
+    {# ----- (c) PARTICIPANTS ----- #}
+    <div class="brackets enc-block">
+        <span class="bk tl"></span><span class="bk tr"></span>
+        <span class="bk bl"></span><span class="bk br"></span>
+
+        <div class="block-head">
+            <span class="block-bullet">&#9679;</span>
+            <h3>PARTICIPANTS</h3>
+            <span class="block-line"></span>
+            <span class="block-badge">{{ participants|length }}</span>
+        </div>
+
+        <div class="enc-faction-grid">
+            {# --- PLAYERS / ALLIES --- #}
+            <div class="enc-faction-col">
+                <h4>PLAYERS / ALLIES</h4>
+                {% for p in participants_by_faction.player_or_ally %}
+                    {% include "combat/_participant_row.html" with p=p encounter=encounter %}
+                {% empty %}
+                    <em class="muted" style="display: block; padding: 0.4rem 0.5rem;">none</em>
+                {% endfor %}
+            </div>
+
+            {# --- HOSTILES --- #}
+            <div class="enc-faction-col">
+                <h4>HOSTILES</h4>
+                {% for p in participants_by_faction.hostile %}
+                    {% include "combat/_participant_row.html" with p=p encounter=encounter %}
+                {% empty %}
+                    <em class="muted" style="display: block; padding: 0.4rem 0.5rem;">none</em>
+                {% endfor %}
+            </div>
+
+            {# --- NEUTRAL --- #}
+            <div class="enc-faction-col">
+                <h4>NEUTRAL</h4>
+                {% for p in participants_by_faction.neutral %}
+                    {% include "combat/_participant_row.html" with p=p encounter=encounter %}
+                {% empty %}
+                    <em class="muted" style="display: block; padding: 0.4rem 0.5rem;">none</em>
+                {% endfor %}
+            </div>
+        </div>
+    </div>
+
+    {# ----- (d) ADD PARTICIPANT ----- #}
+    <div class="brackets enc-block">
+        <span class="bk tl"></span><span class="bk tr"></span>
+        <span class="bk bl"></span><span class="bk br"></span>
+
+        <details class="add-pt-shell">
+            <summary>ADD PARTICIPANT</summary>
+            <div class="add-pt-grid">
+
+                {# --- FROM CHARACTERS --- #}
+                <div class="add-pt-card">
+                    <h5>FROM CHARACTERS</h5>
+                    <form method="post" action="{% url 'combat:participant_add' encounter.id %}">
+                        {% csrf_token %}
+                        <input type="hidden" name="kind" value="character">
+
+                        <label for="char-id">CHARACTER</label>
+                        <select id="char-id" name="character_id" required>
+                            <option value="">— select —</option>
+                            {% for c in available_characters %}
+                                <option value="{{ c.id }}">{{ c.name }} ({{ c.owner.username }})</option>
+                            {% endfor %}
+                        </select>
+
+                        <label for="char-faction">FACTION</label>
+                        <select id="char-faction" name="faction">
+                            <option value="player" selected>PLAYER</option>
+                            <option value="ally">ALLY</option>
+                            <option value="hostile">HOSTILE</option>
+                            <option value="neutral">NEUTRAL</option>
+                        </select>
+
+                        <button type="submit" class="btn-primary">ADD CHARACTER</button>
+                    </form>
+                </div>
+
+                {# --- FROM NPCS --- #}
+                <div class="add-pt-card">
+                    <h5>FROM NPCS</h5>
+                    <form method="post" action="{% url 'combat:participant_add' encounter.id %}">
+                        {% csrf_token %}
+                        <input type="hidden" name="kind" value="npc">
+
+                        <label for="npc-id">NPC</label>
+                        <select id="npc-id" name="npc_id" required>
+                            <option value="">— select —</option>
+                            {% for n in available_npcs %}
+                                <option value="{{ n.id }}">{{ n.name }}</option>
+                            {% endfor %}
+                        </select>
+
+                        <label for="npc-faction">FACTION</label>
+                        <select id="npc-faction" name="faction">
+                            <option value="hostile" selected>HOSTILE</option>
+                            <option value="ally">ALLY</option>
+                            <option value="player">PLAYER</option>
+                            <option value="neutral">NEUTRAL</option>
+                        </select>
+
+                        <button type="submit" class="btn-primary">ADD NPC</button>
+                    </form>
+                </div>
+
+                {# --- FROM TEMPLATES --- #}
+                <div class="add-pt-card">
+                    <h5>FROM TEMPLATES</h5>
+                    <form method="post" action="{% url 'combat:participant_add' encounter.id %}">
+                        {% csrf_token %}
+                        <input type="hidden" name="kind" value="template">
+
+                        <label for="tpl-name">TEMPLATE</label>
+                        <select id="tpl-name" name="template_name" required>
+                            <option value="">— select —</option>
+                            {% for cat, items in combat_npcs_by_cat.items %}
+                                <optgroup label="{{ cat|upper }}">
+                                    {% for entry in items %}
+                                        <option value="{{ entry.name }}">{{ entry.name }}</option>
+                                    {% endfor %}
+                                </optgroup>
+                            {% endfor %}
+                        </select>
+
+                        <label for="tpl-faction">FACTION</label>
+                        <select id="tpl-faction" name="faction">
+                            <option value="hostile" selected>HOSTILE</option>
+                            <option value="ally">ALLY</option>
+                            <option value="player">PLAYER</option>
+                            <option value="neutral">NEUTRAL</option>
+                        </select>
+
+                        <button type="submit" class="btn-primary">ADD MOOK</button>
+                    </form>
+                </div>
+
+            </div>
+        </details>
+    </div>
+
+    {# ----- (e) TIMELINE ----- #}
+    <div class="brackets enc-block">
+        <span class="bk tl"></span><span class="bk tr"></span>
+        <span class="bk bl"></span><span class="bk br"></span>
+
+        <div class="block-head">
+            <span class="block-bullet">&#9679;</span>
+            <h3>TIMELINE</h3>
+            <span class="block-line"></span>
+            <span class="block-badge">{{ log_entries|length }}</span>
+        </div>
+
+        {% if log_entries %}
+            <table class="log-table">
+                <thead>
+                    <tr>
+                        <th style="width: 6%;">#</th>
+                        <th style="width: 7%;">RND</th>
+                        <th style="width: 14%;">TYPE</th>
+                        <th>MESSAGE</th>
+                        <th style="width: 12%;">TIME</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for entry in log_entries %}
+                    <tr>
+                        <td>#{{ entry.sequence }}</td>
+                        <td>R{{ entry.round_number }}</td>
+                        <td>{{ entry.action_type|upper }}</td>
+                        <td>{{ entry.message }}</td>
+                        <td>{{ entry.created_at|date:"H:i:s" }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        {% else %}
+            <em class="muted">No log entries.</em>
+        {% endif %}
+    </div>
+
 </div>
 {% endblock %}
