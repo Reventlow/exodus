@@ -1093,7 +1093,28 @@ def encounter_page(request, pk):
 
     # Spawn sources for the "+ ADD PARTICIPANT" form.
     available_characters = Character.objects.select_related("owner").order_by("name")
-    available_npcs = NPC.objects.filter(is_npc_dossier=False).order_by("name")
+    # Include both regular (player-assigned) NPCs and agency dossiers.
+    # Group for the template so the GM can pick from any agency, not
+    # just the ones currently in play. Hidden dossiers stay GM-only —
+    # the encounter page itself is GM-gated for the ADD PARTICIPANT
+    # block via the is_gm template flag.
+    available_npcs = (
+        NPC.objects.select_related("agency")
+        .order_by("agency__name", "name")
+    )
+    npcs_by_group = {}
+    for n in available_npcs:
+        if n.is_npc_dossier:
+            label = f"DOSSIER · {n.agency.name.upper()}" if n.agency else "DOSSIER · UNASSIGNED"
+        else:
+            label = "PLAYER NPCS"
+        npcs_by_group.setdefault(label, []).append(n)
+    # Stable ordering: PLAYER NPCS first, then dossier groups alphabetically.
+    npcs_grouped = []
+    if "PLAYER NPCS" in npcs_by_group:
+        npcs_grouped.append(("PLAYER NPCS", npcs_by_group.pop("PLAYER NPCS")))
+    for label in sorted(npcs_by_group.keys()):
+        npcs_grouped.append((label, npcs_by_group[label]))
     settings_obj = SiteSettings.load()
     combat_npc_templates = settings_obj.get_combat_npcs()
 
@@ -1150,6 +1171,7 @@ def encounter_page(request, pk):
             "log_entries": log_entries,
             "available_characters": available_characters,
             "available_npcs": available_npcs,
+            "npcs_grouped": npcs_grouped,
             "combat_npc_templates": combat_npc_templates,
             "combat_npcs_by_cat": combat_npcs_by_cat,
             "weapon_choices": weapon_choices,

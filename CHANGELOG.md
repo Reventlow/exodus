@@ -1,5 +1,10 @@
 # Changelog
 
+## v0.15.11
+- **Fix:** `+ ADD PARTICIPANT → FROM NPCS` no longer hides agency dossiers. The previous `is_npc_dossier=False` filter masked every NPC dossier (the GM's antagonist roster), so the dropdown only listed the player-assigned NPCs — which in this campaign all happen to be Bifrost crew. Now any NPC can be spawned into combat
+- **NPC dropdown grouped by source via `<optgroup>`:** `PLAYER NPCS` first (the player-assigned roster), then `DOSSIER · <AGENCY>` blocks alphabetically (one per NPC agency), then `DOSSIER · UNASSIGNED` for any dossiers without an agency FK
+- The ADD PARTICIPANT block remains GM-gated, so dossiers are still GM-only at the participant-spawn surface
+
 ## v0.15.10
 - **Player-picked specialisations on the attack form.** Each specialisation matching the auto-picked weapon skill on the actor's `Character.specialisations` / `NPC.specialisations` JSONField renders as a checkbox under the SKILL input (`☐ Pistols (+1)`, etc.). Ticking a box adds `+1` dice, and the LIVE TOTAL updates client-side in real-time as the player toggles. Unticked is the default; the attack pool ceiling printed by the breakdown is the *base* (no specs) — the player decides which specs are situationally applicable per shot
 - **Server-side validation against pool inflation.** Each submitted `applied_specs` POST entry is matched (case-insensitively) against the actor's actual specialisations filtered by the resolved skill name. Names that aren't on the validated list are dropped silently — a tampered POST with arbitrary +1 stacks simply doesn't get the bonus, and there's no error to the user (the form-rendered checkboxes can never produce one). Duplicates are de-duped

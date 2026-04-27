@@ -950,8 +950,12 @@ The END button also prompts for confirmation.
                         <label for="npc-id">NPC</label>
                         <select id="npc-id" name="npc_id" required>
                             <option value="">— select —</option>
-                            {% for n in available_npcs %}
-                                <option value="{{ n.id }}">{{ n.name }}</option>
+                            {% for label, group in npcs_grouped %}
+                                <optgroup label="{{ label }}">
+                                    {% for n in group %}
+                                        <option value="{{ n.id }}">{{ n.name }}</option>
+                                    {% endfor %}
+                                </optgroup>
                             {% endfor %}
                         </select>
 
