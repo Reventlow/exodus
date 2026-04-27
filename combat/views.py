@@ -1,19 +1,24 @@
 """Views for the personal combat app.
 
-v0.15.4 — attack actions + damage. Layers a server-rolled WoD 2.0
-attack pipeline on top of the v0.15.3 initiative + turn loop, plus
-**equip-weapon / equip-armor / set-cover** endpoints that snapshot
-catalogue entries onto the active participant.
+v0.15.5 — full WoD 2.0 attack loop. Layers wound penalties, damage
+track upgrade rules, conditions / stances, willpower spend, and the
+defensive Full Defense / Dodge actions on top of the v0.15.4 attack
+pipeline.
 
-Attack pipeline:
+Attack pipeline (v0.15.5):
 
 1. Compose the attacker's pool —
    ``Dexterity + chosen weapon skill + weapon dice modifier + GM
    modifier`` for character / NPC, or ``mook_combat_pool + GM
-   modifier`` for mooks.
+   modifier`` for mooks. **Plus** wound penalty (`-1 / -2 / -3` on
+   the rightmost three filled health boxes), the sum of active
+   condition attack modifiers, and `+3` if the attacker spends a
+   willpower point (clamps at `willpower_current >= 1`).
 2. Compute the target's defense — ``min(Dex, Wits) + Athletics`` for
    character / NPC, ``mook_defense`` for mooks. ``defense_override``
-   wins if set.
+   wins if set. **Plus** condition defense modifiers. Special cases:
+   ``incapacitated`` → 0 defense; ``defense_full`` → baseline
+   doubled; ``dodging:N`` → N successes replace baseline.
 3. Apply cover — ``light=-2``, ``heavy=-4``, ``full`` blocks the
    shot entirely (logged ``outcome="blocked_by_cover"``).
 4. Floor the dice pool at ``0`` and roll — ``_roll_pool`` reuses the
@@ -22,20 +27,31 @@ Attack pipeline:
    pathological all-tens case can't run away.
 5. On any successes, compute damage — ``successes + weapon damage``,
    minus armor (``B`` track or ``L`` track from ``"B/L"`` rating;
-   aggravated bypasses armor). Apply to the matching health track,
-   capped at ``health_max``; overflow is logged but no track-upgrade
-   (bashing→lethal→aggravated) is enforced yet — that lands in
-   v0.15.5.
-6. Append two log rows on a hit: ``attack`` (the resolution payload)
+   aggravated bypasses armor). Apply through ``_apply_damage`` which
+   honours the WoD 2.0 track upgrade ladder
+   (B → L → A): lethal overflow upgrades a bashing box per point,
+   aggravated overflow upgrades a bashing then lethal box per point.
+6. If the total damage now equals or exceeds ``health_max`` the
+   target is auto-tagged ``incapacitated`` and a separate
+   ``condition_set`` log row fires.
+7. Append two log rows on a hit: ``attack`` (the resolution payload)
    and ``health_change`` (so the timeline can be filtered down to
    damage-only events). Misses write a single ``attack`` row.
 
-This release is **GM-only** — the player-facing surface lands in
-v0.15.6 with the WebSocket fan-out. Faction is decorative; the
+Conditions (v0.15.5) live as a list of strings on
+``participant.conditions``. Hardcoded vocabulary: ``prone``,
+``stunned``, ``blinded``, ``grappled``, ``incapacitated``,
+``defense_full``, ``dodging:N``, ``dodge_pending``. ``dodging:N``
+encodes the dodge pool's success count without a schema change.
+Defensive stances (``defense_full``, ``dodging:*``) auto-clear at
+the round boundary in ``next_turn``.
+
+This release is still **GM-only** — the player-facing surface lands
+in v0.15.6 with the WebSocket fan-out. Faction is decorative; the
 target picker offers every other participant in the encounter so
 PvP works out of the box.
 
-Initiative model (v0.15.3):
+Initiative model (unchanged from v0.15.3):
 
 * **Character / NPC** — ``modifier = Dexterity (attributes.finesse.physical)
   + Composure (attributes.resistance.social)``. Roll 1d10. Score is
@@ -57,11 +73,12 @@ Three participant kinds are supported (see v0.15.2 docs):
                   spawn so later catalogue edits do not mutate
                   in-flight encounters.
 
-CombatLog action types in use as of v0.15.4: ``initiative``,
+CombatLog action types in use as of v0.15.5: ``initiative``,
 ``turn_advance``, ``round_advance``, ``system``, ``attack``,
 ``health_change``, ``weapon_change``, ``armor_change``,
-``cover_change``. Real-time fan-out (WebSocket broadcast) lands in
-v0.15.6.
+``cover_change``, ``condition_set``, ``condition_clear``,
+``willpower_change``, ``full_defense``, ``dodge``. Real-time fan-out
+(WebSocket broadcast) lands in v0.15.6.
 """
 
 import secrets
@@ -171,14 +188,160 @@ def _roll_pool(n):
     return successes, dice
 
 
-def _compute_defense(participant):
-    """Compute a target's defense pool.
+# ---------------------------------------------------------------------------
+# v0.15.5 — wound penalties, conditions, damage upgrades
+# ---------------------------------------------------------------------------
 
-    Override pinned on the participant wins unconditionally. Mooks
-    return their ``mook_defense`` (``0`` if null). Character / NPC
-    uses ``min(Dex, Wits) + Athletics`` per WoD 2.0 — same defensive
-    ``try/except`` pattern as ``_compute_initiative`` so partial
-    sheets don't crash the resolver.
+
+# Hardcoded condition vocabulary. ``atk_mod`` and ``def_mod`` are
+# applied additively in ``_condition_attack_modifier`` and
+# ``_condition_defense_modifier``; sentinels (``-99`` / ``99``) are
+# clamped by the special-case branches in ``_compute_defense`` so
+# arithmetic stays safe. ``note`` is reserved for future tooltip
+# surfacing on the row template.
+CONDITION_DEFS = {
+    "prone": {
+        "label": "PRONE",
+        "atk_mod": 0,
+        "def_mod": -2,
+        "note": "Easier to hit in melee, harder to be hit at range "
+                "(GM judgment for ranged bonus).",
+    },
+    "stunned": {
+        "label": "STUNNED",
+        "atk_mod": -2,
+        "def_mod": -2,
+        "note": "Loses next turn (GM enforces on Next Turn).",
+    },
+    "blinded": {
+        "label": "BLINDED",
+        "atk_mod": -3,
+        "def_mod": -2,
+        "note": "Sees nothing — at range, attacks miss automatically "
+                "(GM call).",
+    },
+    "grappled": {
+        "label": "GRAPPLED",
+        "atk_mod": -2,
+        "def_mod": -2,
+        "note": "Cannot move; reduced pools.",
+    },
+    "incapacitated": {
+        "label": "INCAPACITATED",
+        "atk_mod": -99,
+        "def_mod": -99,
+        "note": "Out. Cannot act, cannot defend.",
+    },
+    "defense_full": {
+        "label": "FULL DEFENSE",
+        "atk_mod": 0,
+        "def_mod": 99,
+        "note": "Defense doubled this round (clears at next turn).",
+    },
+    "dodging": {
+        "label": "DODGING",
+        "atk_mod": 0,
+        "def_mod": 99,
+        "note": "Rolled dodge pool replaces normal defense (clears "
+                "at next turn).",
+    },
+}
+
+# Stance tags are managed by the FULL DEFENSE / DODGE buttons rather
+# than the generic ADD CONDITION dropdown — they require a dice roll
+# (dodge) or auto-double math (full defense) so they cannot be set
+# via raw text submission.
+_STANCE_TAGS = {"defense_full", "dodging", "dodge_pending"}
+
+
+def _wound_penalty(participant):
+    """WoD 2.0 wound penalty based on the rightmost filled health box.
+
+    The 3 rightmost boxes carry -1 / -2 / -3 penalties left → right.
+    Returns a non-positive int (``0`` = no penalty). Used by the
+    attack pool composition and surfaced as a small chip on the row.
+    """
+    total = (
+        participant.health_bashing
+        + participant.health_lethal
+        + participant.health_aggravated
+    )
+    hm = participant.health_max
+    if total >= hm:
+        return -3   # rightmost box filled (incapacitated)
+    if total == hm - 1:
+        return -2
+    if total == hm - 2:
+        return -1
+    return 0
+
+
+def _has_condition(participant, tag):
+    """Return True if a flat condition tag is set on the participant."""
+    return tag in (participant.conditions or [])
+
+
+def _has_prefix_condition(participant, prefix):
+    """Return True if any tag starts with ``prefix:`` (e.g. ``dodging:3``)."""
+    return any(c.startswith(prefix + ":") for c in (participant.conditions or []))
+
+
+def _strip_prefix_conditions(conditions, prefix):
+    """Filter a conditions list, removing any ``prefix:N`` entries."""
+    return [c for c in (conditions or []) if not c.startswith(prefix + ":")]
+
+
+def _dodge_successes(participant):
+    """Read the stored dodge pool from a ``dodging:N`` tag, or 0."""
+    for c in (participant.conditions or []):
+        if c.startswith("dodging:"):
+            try:
+                return int(c.split(":", 1)[1])
+            except (ValueError, IndexError):
+                return 0
+    return 0
+
+
+def _condition_attack_modifier(participant):
+    """Sum ``atk_mod`` across active conditions, floored at -10.
+
+    Sentinel ``-99`` from ``incapacitated`` is allowed to dominate —
+    the floor still leaves the attacker pool effectively zero after
+    the ``max(0, ...)`` clamp in the resolver.
+    """
+    mods = sum(
+        CONDITION_DEFS.get(c, {}).get("atk_mod", 0)
+        for c in (participant.conditions or [])
+    )
+    return max(-10, mods)
+
+
+def _condition_defense_modifier(participant):
+    """Sum ``def_mod`` across active conditions, floored at -10.
+
+    Sentinels (``-99`` for incapacitated, ``99`` for stances) are
+    NOT applied through this helper — ``_compute_defense`` short-
+    circuits those special cases before delegating here. This helper
+    only contributes the ordinary -2/-3 condition modifiers.
+    """
+    mods = 0
+    for c in (participant.conditions or []):
+        # Skip stance tags entirely — they're handled in
+        # _compute_defense's special-case branches.
+        if c in _STANCE_TAGS:
+            continue
+        if c.startswith("dodging:"):
+            continue
+        mods += CONDITION_DEFS.get(c, {}).get("def_mod", 0)
+    return max(-10, mods)
+
+
+def _baseline_defense(participant):
+    """Compute the unmodified defense pool (no conditions, no stances).
+
+    Mirror of the v0.15.4 ``_compute_defense`` body, factored out so
+    ``_compute_defense`` can apply stance multipliers / replacements
+    cleanly.
     """
     if participant.defense_override is not None:
         return participant.defense_override
@@ -194,6 +357,125 @@ def _compute_defense(participant):
         return min(dex, wits) + athletics
     except (KeyError, TypeError, ValueError):
         return 0
+
+
+def _compute_defense(participant):
+    """Compute a target's defense pool including conditions / stances.
+
+    Special cases honour the v0.15.5 condition vocabulary:
+
+    * ``incapacitated`` → 0 (target cannot defend at all).
+    * ``dodging:N``     → N (the rolled dodge successes replace the
+                          normal defense pool entirely).
+    * ``defense_full``  → baseline doubled, then ordinary condition
+                          modifiers applied on top.
+
+    Falls back to the v0.15.4 baseline (``min(Dex, Wits) +
+    Athletics`` for character / NPC, ``mook_defense`` for mooks,
+    overridden by ``defense_override`` if pinned) plus the sum of
+    plain condition modifiers (``prone``, ``stunned``, etc.).
+    """
+    if _has_condition(participant, "incapacitated"):
+        return 0
+    if _has_prefix_condition(participant, "dodging"):
+        return _dodge_successes(participant)
+    baseline = _baseline_defense(participant)
+    if _has_condition(participant, "defense_full"):
+        baseline *= 2
+    return max(0, baseline + _condition_defense_modifier(participant))
+
+
+def _apply_damage(participant, amount, dtype):
+    """Apply WoD 2.0 damage with track upgrade semantics.
+
+    Damage type ladder: B (lowest) → L → A (highest). Empty boxes
+    fill normally up to ``health_max``. Once full, overflow displaces
+    lower-severity damage upward:
+
+      * incoming **B** → fills empty boxes; overflow is dropped
+        (B can't displace anything).
+      * incoming **L** → fills empty boxes; overflow upgrades B → L
+        (one B box becomes one L box per overflow point).
+      * incoming **A** → fills empty boxes; overflow upgrades B → A,
+        then L → A (one box per overflow point each).
+
+    Returns ``(applied, upgraded, overflow)`` for log payload
+    purposes:
+
+    * ``applied``  — boxes filled into previously empty slots.
+    * ``upgraded`` — boxes upgraded from a lower track to this one.
+    * ``overflow`` — points that fell off the right edge entirely
+      (e.g. a B incoming on a full track, or an L incoming on a
+      track full of L+).
+    """
+    b = participant.health_bashing
+    l = participant.health_lethal
+    a = participant.health_aggravated
+    hm = participant.health_max
+    free = max(0, hm - (b + l + a))
+
+    applied = min(free, amount)
+    overflow = amount - applied
+    upgrades = 0
+
+    if dtype == "B":
+        b += applied
+        # Bashing can't displace anything — overflow is dropped.
+    elif dtype == "L":
+        l += applied
+        # Lethal overflow upgrades a single bashing box per point.
+        while overflow > 0 and b > 0:
+            b -= 1
+            l += 1
+            overflow -= 1
+            upgrades += 1
+    elif dtype == "A":
+        a += applied
+        # Aggravated overflow upgrades B then L per point.
+        while overflow > 0 and b > 0:
+            b -= 1
+            a += 1
+            overflow -= 1
+            upgrades += 1
+        while overflow > 0 and l > 0:
+            l -= 1
+            a += 1
+            overflow -= 1
+            upgrades += 1
+
+    participant.health_bashing = b
+    participant.health_lethal = l
+    participant.health_aggravated = a
+    participant.save(update_fields=[
+        "health_bashing", "health_lethal", "health_aggravated",
+    ])
+    return applied, upgrades, overflow
+
+
+def _actor_total_pool(actor, weapon_data, gm_modifier, weapon_skill_name="",
+                     spend_willpower=False):
+    """Compose the attacker's full pre-cover, pre-defense dice pool.
+
+    Wraps ``_attack_dice_pool`` (the catalogue + skill base) and adds
+    the v0.15.5 modifiers:
+
+    * Wound penalty   — non-positive int from ``_wound_penalty``.
+    * Condition mods  — sum of ``atk_mod`` across active conditions.
+    * Willpower spend — ``+3`` flat when ``spend_willpower=True``
+      (caller is responsible for actually decrementing
+      ``willpower_current`` if the spend goes through).
+    """
+    base = _attack_dice_pool(actor, weapon_data, gm_modifier, weapon_skill_name)
+    base += _wound_penalty(actor)
+    base += _condition_attack_modifier(actor)
+    if spend_willpower:
+        base += 3
+    return base
+
+
+# ---------------------------------------------------------------------------
+# Defense + cover (v0.15.4, defense extended in v0.15.5)
+# ---------------------------------------------------------------------------
 
 
 def _cover_penalty(cover_state):
@@ -394,6 +676,51 @@ def encounter_page(request, pk):
     # Participants split by faction so the three columns can each
     # iterate their own slice without re-filtering in the template.
     participants = list(encounter.participants.all().order_by("position_order", "id"))
+
+    # v0.15.5 — annotate each participant with derived chips for the
+    # row template. Done in Python (rather than a template tag) so
+    # _wound_penalty / _condition_*_modifier stay co-located with the
+    # rest of the resolver helpers.
+    for p in participants:
+        wp = _wound_penalty(p)
+        cond_atk = _condition_attack_modifier(p)
+        cond_def = _condition_defense_modifier(p)
+        p.wound_penalty = wp
+        p.attack_modifier_total = wp + cond_atk
+        p.defense_modifier_total = cond_def
+
+        # Pills for the header — color-coded (red for incapacitated,
+        # cyan for stances, amber for ordinary status conditions).
+        pills = []
+        for tag in (p.conditions or []):
+            if tag == "incapacitated":
+                pills.append((tag, CONDITION_DEFS[tag]["label"], "red"))
+            elif tag == "defense_full":
+                pills.append((tag, "FULL DEF", "cyan"))
+            elif tag == "dodge_pending":
+                pills.append((tag, "DODGE PENDING", "cyan"))
+            elif tag.startswith("dodging:"):
+                try:
+                    n = int(tag.split(":", 1)[1])
+                except (ValueError, IndexError):
+                    n = 0
+                pills.append((tag, f"DODGING ({n})", "cyan"))
+            elif tag in CONDITION_DEFS:
+                pills.append((tag, CONDITION_DEFS[tag]["label"], "amber"))
+            else:
+                # Unknown tag — render uppercased free-text.
+                pills.append((tag, tag.upper(), "amber"))
+        p.condition_pills = pills
+
+        # Options for the "ADD CONDITION" sub-form — exclude stance
+        # tags (set via dedicated buttons) and ``dodge_pending`` (set
+        # only by the dodge resolver itself).
+        p.condition_options = [
+            (key, defn["label"])
+            for key, defn in CONDITION_DEFS.items()
+            if key not in _STANCE_TAGS
+        ]
+
     by_faction = {
         "player_or_ally": [p for p in participants if p.faction in ("player", "ally")],
         "hostile": [p for p in participants if p.faction == "hostile"],
@@ -933,10 +1260,18 @@ def next_turn(request, pk):
 
     If the current participant is the last in ``initiative_order`` the
     round rolls over: ``round_number`` increments, every participant's
-    ``acted_this_round`` flag is reset, and the pointer wraps to the
-    top of the order (logged as ``round_advance``). Otherwise the
-    pointer steps forward one slot and a ``turn_advance`` row is
-    written.
+    ``acted_this_round`` flag is reset, defensive stances
+    (``defense_full``, ``dodging:N``) are cleared across the board,
+    and the pointer wraps to the top of the order (logged as
+    ``round_advance`` plus a ``system`` row noting the stance clear).
+    Otherwise the pointer steps forward one slot and a
+    ``turn_advance`` row is written.
+
+    v0.15.5 also handles **out-of-turn dodge** carry-over: when a
+    participant becomes active and they're carrying a
+    ``dodge_pending`` tag from a previous round's dodge, they're
+    immediately marked acted-this-round and the tag is stripped (the
+    eaten turn is paid).
     """
     if request.method != "POST":
         return HttpResponseNotAllowed(["POST"])
@@ -969,6 +1304,21 @@ def next_turn(request, pk):
         # End of round — roll over.
         encounter.round_number += 1
         encounter.participants.update(acted_this_round=False)
+
+        # v0.15.5 — clear defensive stances at the round boundary. We
+        # iterate (rather than .update) because the conditions list
+        # has to be filtered per row.
+        cleared_any = False
+        for p in encounter.participants.all():
+            new_conds = [
+                c for c in (p.conditions or [])
+                if c != "defense_full" and not c.startswith("dodging:")
+            ]
+            if new_conds != (p.conditions or []):
+                p.conditions = new_conds
+                p.save(update_fields=["conditions"])
+                cleared_any = True
+
         next_id = order[0]
         encounter.active_participant_id = next_id
         encounter.save(
@@ -984,6 +1334,12 @@ def next_turn(request, pk):
             f"Round {encounter.round_number} begins.",
             round_number=encounter.round_number,
         )
+        if cleared_any:
+            _log(
+                encounter,
+                "system",
+                "Defensive stances cleared at round boundary.",
+            )
     else:
         next_id = order[idx + 1]
         encounter.active_participant_id = next_id
@@ -997,6 +1353,25 @@ def next_turn(request, pk):
             "turn_advance",
             f"Turn passes to {next_name}.",
             participant_id=next_id,
+        )
+
+    # Out-of-turn dodge cost — if the now-active participant is
+    # carrying ``dodge_pending``, pay the cost immediately by marking
+    # them acted_this_round and stripping the pending tag.
+    new_active = encounter.participants.filter(
+        pk=encounter.active_participant_id
+    ).first()
+    if new_active is not None and "dodge_pending" in (new_active.conditions or []):
+        new_active.conditions = [
+            c for c in (new_active.conditions or []) if c != "dodge_pending"
+        ]
+        new_active.acted_this_round = True
+        new_active.save(update_fields=["conditions", "acted_this_round"])
+        _log(
+            encounter,
+            "system",
+            f"{new_active.name}: dodge_pending consumed — turn skipped.",
+            target_participant_id=new_active.id,
         )
 
     return redirect("combat:detail", pk=encounter.pk)
@@ -1272,7 +1647,7 @@ def set_cover(request, pk, participant_id):
 
 
 # ---------------------------------------------------------------------------
-# Attack resolution (POST)  — v0.15.4
+# Attack resolution (POST)  — v0.15.5 (full WoD attack loop)
 # ---------------------------------------------------------------------------
 
 
@@ -1291,19 +1666,22 @@ def attack(request, pk, attacker_id):
     * Target must exist in the same encounter.
     * Self-targeting is rejected (zero useful gameplay, easy to
       misclick).
-    * Faction is **not** checked — PvP is intentional. The GM can
-      have a player target another player's character.
+    * Faction is **not** checked — PvP is intentional.
 
-    The resolver writes one or two log rows depending on the outcome:
+    v0.15.5 layers wound penalties, condition modifiers, willpower
+    spend, full damage track upgrade, and auto-incapacitation onto the
+    v0.15.4 pipeline. The resolver writes one or two log rows
+    depending on the outcome (plus an optional ``condition_set`` row
+    when the target gets KO'd):
 
     * ``blocked_by_cover`` — full cover, no roll, no health change.
       Single ``attack`` row.
     * ``miss`` — pool rolled to zero successes. Single ``attack`` row.
     * ``hit`` — both ``attack`` (resolution payload) and
-      ``health_change`` (so the timeline can be filtered to
-      damage-only). Health applied to the matching B / L / A track,
-      capped at ``health_max``; overflow is logged but no track
-      upgrade is performed (that's v0.15.5).
+      ``health_change``. Damage applied via ``_apply_damage`` honours
+      the WoD 2.0 track upgrade rules (B/L/A ladder). If the target's
+      total damage now equals or exceeds ``health_max``, an extra
+      ``condition_set`` row is appended for the auto-incapacitation.
     """
     if request.method != "POST":
         return HttpResponseNotAllowed(["POST"])
@@ -1337,21 +1715,38 @@ def attack(request, pk, attacker_id):
     gm_modifier_int = _safe_int(request.POST.get("gm_modifier"), 0)
     weapon_skill = request.POST.get("weapon_skill", "").strip()
 
+    # Willpower spend gating — checkbox sets the value to "1". Defensive
+    # against the (UI-impossible but POST-craftable) zero-willpower
+    # spend so we never decrement below zero.
+    spend_wp_requested = bool(request.POST.get("spend_willpower"))
+    spent_wp = spend_wp_requested and (attacker.willpower_current or 0) > 0
+
     weapon_data = attacker.weapon_data or {}
     weapon_name = attacker.weapon_name or "(unarmed)"
 
-    attack_pool = _attack_dice_pool(
+    # v0.15.5 — full pool composition (base + wound + conditions + WP).
+    wound_pen = _wound_penalty(attacker)
+    cond_atk_mod = _condition_attack_modifier(attacker)
+    attack_pool = _actor_total_pool(
         attacker, weapon_data, gm_modifier_int, weapon_skill,
+        spend_willpower=spent_wp,
     )
     defense = _compute_defense(target)
     cover_pen = _cover_penalty(target.cover_state)
+
+    # Decrement willpower and persist if the spend went through. Done
+    # *before* logging so the payload's ``willpower_after`` is accurate.
+    if spent_wp:
+        attacker.willpower_current = max(0, (attacker.willpower_current or 0) - 1)
+        attacker.save(update_fields=["willpower_current"])
 
     # ---- Full cover short-circuit -----------------------------------------
     if cover_pen == "BLOCKED":
         _log(
             encounter,
             "attack",
-            f"{attacker.name} → {target.name}: BLOCKED BY FULL COVER.",
+            f"{attacker.name} → {target.name}: BLOCKED BY FULL COVER."
+            + (" (WP+3)" if spent_wp else ""),
             actor_participant_id=attacker.id,
             target_participant_id=target.id,
             outcome="blocked_by_cover",
@@ -1362,6 +1757,10 @@ def attack(request, pk, attacker_id):
             gm_modifier=gm_modifier_int,
             weapon_name=weapon_name,
             weapon_skill=weapon_skill,
+            wound_penalty=wound_pen,
+            condition_attack_modifier=cond_atk_mod,
+            spent_willpower=spent_wp,
+            willpower_after=attacker.willpower_current,
         )
         return redirect("combat:detail", pk=encounter.pk)
 
@@ -1373,7 +1772,8 @@ def attack(request, pk, attacker_id):
         _log(
             encounter,
             "attack",
-            f"{attacker.name} attacks {target.name}: missed.",
+            f"{attacker.name} attacks {target.name}: missed."
+            + (" (WP+3)" if spent_wp else ""),
             actor_participant_id=attacker.id,
             target_participant_id=target.id,
             outcome="miss",
@@ -1386,6 +1786,10 @@ def attack(request, pk, attacker_id):
             gm_modifier=gm_modifier_int,
             weapon_name=weapon_name,
             weapon_skill=weapon_skill,
+            wound_penalty=wound_pen,
+            condition_attack_modifier=cond_atk_mod,
+            spent_willpower=spent_wp,
+            willpower_after=attacker.willpower_current,
         )
         return redirect("combat:detail", pk=encounter.pk)
 
@@ -1420,22 +1824,10 @@ def attack(request, pk, attacker_id):
         armor_reduction = 0  # aggravated bypasses armor
 
     final_damage = max(0, raw_damage - armor_reduction)
-
-    # Apply to the matching health track, capped at health_max.
-    track_field = {
-        "B": "health_bashing",
-        "L": "health_lethal",
-        "A": "health_aggravated",
-    }[damage_type]
     type_label = {"B": "bashing", "L": "lethal", "A": "aggravated"}[damage_type]
 
-    current = getattr(target, track_field) or 0
-    cap = target.health_max or 0
-    proposed = current + final_damage
-    overflow = max(0, proposed - cap) if cap else 0
-    new_value = min(proposed, cap) if cap else proposed
-    setattr(target, track_field, new_value)
-    target.save(update_fields=[track_field])
+    # Apply via the v0.15.5 helper — handles track upgrades and saves.
+    applied, upgraded, overflow = _apply_damage(target, final_damage, damage_type)
 
     payload = dict(
         actor_participant_id=attacker.id,
@@ -1455,13 +1847,20 @@ def attack(request, pk, attacker_id):
         gm_modifier=gm_modifier_int,
         weapon_name=weapon_name,
         weapon_skill=weapon_skill,
+        applied=applied,
+        upgrades=upgraded,
         overflow=overflow,
+        wound_penalty=wound_pen,
+        condition_attack_modifier=cond_atk_mod,
+        spent_willpower=spent_wp,
+        willpower_after=attacker.willpower_current,
     )
 
     _log(
         encounter,
         "attack",
-        f"{attacker.name} hits {target.name} for {final_damage} {type_label} damage.",
+        f"{attacker.name} hits {target.name} for {final_damage} {type_label} damage."
+        + (" (WP+3)" if spent_wp else ""),
         **payload,
     )
     # Separate health_change row so the timeline can be filtered
@@ -1471,5 +1870,297 @@ def attack(request, pk, attacker_id):
         "health_change",
         f"{target.name} takes {final_damage} {type_label} damage.",
         **payload,
+    )
+
+    # Auto-incapacitation: if the total damage now fills the track,
+    # tag the target and emit a condition_set row. Idempotent — if
+    # the tag is already present we skip the second log row so a
+    # finishing-blow doesn't double-fire.
+    total_dmg = (
+        target.health_bashing + target.health_lethal + target.health_aggravated
+    )
+    if total_dmg >= target.health_max and not _has_condition(target, "incapacitated"):
+        new_conds = list(target.conditions or [])
+        new_conds.append("incapacitated")
+        target.conditions = new_conds
+        target.save(update_fields=["conditions"])
+        _log(
+            encounter,
+            "condition_set",
+            f"{target.name} is INCAPACITATED.",
+            target_participant_id=target.id,
+            condition="incapacitated",
+        )
+
+    return redirect("combat:detail", pk=encounter.pk)
+
+
+# ---------------------------------------------------------------------------
+# Conditions, willpower, defensive stances (POST) — v0.15.5
+# ---------------------------------------------------------------------------
+
+
+@login_required
+@_gm_only
+@csrf_protect
+def set_condition(request, pk, participant_id):
+    """POST — append a non-stance condition tag to a participant.
+
+    The ``condition`` form field must be one of the keys in
+    ``CONDITION_DEFS`` and must NOT be a stance tag (``defense_full``
+    or ``dodging``) — those are set via the dedicated stance buttons
+    (``full_defense`` / ``dodge``) which require a roll or auto-math.
+    Idempotent: re-submitting an already-set tag is a silent no-op
+    (no second log row).
+    """
+    if request.method != "POST":
+        return HttpResponseNotAllowed(["POST"])
+
+    encounter = get_object_or_404(Encounter, pk=pk)
+    participant = get_object_or_404(
+        Participant, pk=participant_id, encounter=encounter
+    )
+
+    tag = (request.POST.get("condition", "") or "").strip().lower()
+    if tag not in CONDITION_DEFS or tag in _STANCE_TAGS:
+        messages.error(request, "Unknown or stance-only condition.")
+        return redirect("combat:detail", pk=encounter.pk)
+
+    conds = list(participant.conditions or [])
+    if tag in conds:
+        # Idempotent — no log row for re-add.
+        return redirect("combat:detail", pk=encounter.pk)
+
+    conds.append(tag)
+    participant.conditions = conds
+    participant.save(update_fields=["conditions"])
+
+    label = CONDITION_DEFS[tag]["label"]
+    _log(
+        encounter,
+        "condition_set",
+        f"{participant.name} gained condition: {label}.",
+        target_participant_id=participant.id,
+        condition=tag,
+    )
+    return redirect("combat:detail", pk=encounter.pk)
+
+
+@login_required
+@_gm_only
+@csrf_protect
+def clear_condition(request, pk, participant_id):
+    """POST — strip a condition tag (and any ``tag:N`` variants).
+
+    The ``condition`` form field can be either a flat tag (e.g.
+    ``prone``) or a prefix family (``dodging`` clears
+    ``dodging:N`` for any N). Defensive against unknown tags — they
+    just no-op rather than 4xx.
+    """
+    if request.method != "POST":
+        return HttpResponseNotAllowed(["POST"])
+
+    encounter = get_object_or_404(Encounter, pk=pk)
+    participant = get_object_or_404(
+        Participant, pk=participant_id, encounter=encounter
+    )
+
+    tag = (request.POST.get("condition", "") or "").strip().lower()
+    if not tag:
+        return redirect("combat:detail", pk=encounter.pk)
+
+    conds = list(participant.conditions or [])
+    before = list(conds)
+
+    # Drop the flat tag, AND any ``tag:N`` family entries.
+    conds = [c for c in conds if c != tag and not c.startswith(tag + ":")]
+
+    if conds == before:
+        # Tag wasn't present — silent no-op rather than a noisy log row.
+        return redirect("combat:detail", pk=encounter.pk)
+
+    participant.conditions = conds
+    participant.save(update_fields=["conditions"])
+
+    label = CONDITION_DEFS.get(tag, {}).get("label", tag.upper())
+    _log(
+        encounter,
+        "condition_clear",
+        f"{participant.name} cleared condition: {label}.",
+        target_participant_id=participant.id,
+        condition=tag,
+    )
+    return redirect("combat:detail", pk=encounter.pk)
+
+
+@login_required
+@_gm_only
+@csrf_protect
+def adjust_willpower(request, pk, participant_id):
+    """POST — manually set ``willpower_current`` (clamped 0..max).
+
+    Lets the GM edit willpower outside of the attack flow (rest,
+    derangements, GM fiat, etc.). The submitted value is clamped to
+    ``[0, willpower_max]`` defensively.
+    """
+    if request.method != "POST":
+        return HttpResponseNotAllowed(["POST"])
+
+    encounter = get_object_or_404(Encounter, pk=pk)
+    participant = get_object_or_404(
+        Participant, pk=participant_id, encounter=encounter
+    )
+
+    new_value = _safe_int(request.POST.get("willpower_current"), participant.willpower_current)
+    new_value = max(0, min(new_value, participant.willpower_max or 0))
+
+    old_value = participant.willpower_current
+    if new_value == old_value:
+        return redirect("combat:detail", pk=encounter.pk)
+
+    participant.willpower_current = new_value
+    participant.save(update_fields=["willpower_current"])
+
+    _log(
+        encounter,
+        "willpower_change",
+        f"{participant.name}: WP {old_value} → {new_value}.",
+        target_participant_id=participant.id,
+        before=old_value,
+        after=new_value,
+    )
+    return redirect("combat:detail", pk=encounter.pk)
+
+
+@login_required
+@_gm_only
+@csrf_protect
+def full_defense(request, pk, participant_id):
+    """POST — active participant burns their turn for FULL DEFENSE.
+
+    Doubles the participant's defense until the next round. Clears
+    automatically at the round boundary in ``next_turn``. Marks the
+    participant ``acted_this_round=True`` (eats the turn) but does
+    NOT advance the active-participant pointer — the GM clicks NEXT
+    TURN to actually pass the turn, same as after an ATTACK.
+    """
+    if request.method != "POST":
+        return HttpResponseNotAllowed(["POST"])
+
+    encounter = get_object_or_404(Encounter, pk=pk)
+    if encounter.status != "active":
+        messages.error(request, "Cannot stance outside an active encounter.")
+        return redirect("combat:detail", pk=encounter.pk)
+
+    participant = get_object_or_404(
+        Participant, pk=participant_id, encounter=encounter
+    )
+
+    if encounter.active_participant_id != participant.id:
+        messages.error(request, "Full defense must be taken on your own turn.")
+        return redirect("combat:detail", pk=encounter.pk)
+
+    conds = list(participant.conditions or [])
+    if "defense_full" not in conds:
+        conds.append("defense_full")
+        participant.conditions = conds
+    participant.acted_this_round = True
+    participant.save(update_fields=["conditions", "acted_this_round"])
+
+    _log(
+        encounter,
+        "full_defense",
+        f"{participant.name} takes full defense — defense doubled until next round.",
+        actor_participant_id=participant.id,
+    )
+    return redirect("combat:detail", pk=encounter.pk)
+
+
+@login_required
+@_gm_only
+@csrf_protect
+def dodge(request, pk, participant_id):
+    """POST — roll a dodge pool and store it as a ``dodging:N`` tag.
+
+    Pool: ``Dex + Athletics`` for character / NPC, ``mook_defense``
+    for mooks. The rolled successes replace the participant's normal
+    defense via the ``dodging`` branch of ``_compute_defense``.
+
+    Turn cost:
+
+    * If the dodger is the **active** participant → eats this turn
+      (``acted_this_round=True``).
+    * Otherwise → eats their **next** turn. We tag ``dodge_pending``
+      so ``next_turn`` can mark them acted as soon as their turn
+      starts (and then immediately clear ``dodge_pending``).
+
+    Strips any prior ``dodging:*`` tags before appending so re-rolls
+    don't leave dead state behind.
+    """
+    if request.method != "POST":
+        return HttpResponseNotAllowed(["POST"])
+
+    encounter = get_object_or_404(Encounter, pk=pk)
+    if encounter.status != "active":
+        messages.error(request, "Cannot dodge outside an active encounter.")
+        return redirect("combat:detail", pk=encounter.pk)
+
+    participant = get_object_or_404(
+        Participant, pk=participant_id, encounter=encounter
+    )
+
+    # Compose the dodge pool. Same defensive try/except shape as
+    # _baseline_defense — partial sheets fall back to 0 rather than
+    # crashing the request.
+    if participant.participant_kind == "mook":
+        pool = participant.mook_defense or 0
+    else:
+        source = participant.character or participant.npc
+        if source is None:
+            pool = 0
+        else:
+            try:
+                dex = int(source.attributes["finesse"]["physical"])
+                athletics = int(source.skills["physical"].get("Athletics", 0))
+                pool = dex + athletics
+            except (KeyError, TypeError, ValueError):
+                pool = 0
+
+    # Wound + condition mods apply to dodge too — it's a dice pool.
+    pool = pool + _wound_penalty(participant) + _condition_attack_modifier(participant)
+    pool = max(0, pool)
+
+    successes, dice = _roll_pool(pool)
+
+    # Strip any prior dodge tag, then append the fresh one.
+    conds = _strip_prefix_conditions(list(participant.conditions or []), "dodging")
+
+    is_active = (encounter.active_participant_id == participant.id)
+    update_fields = ["conditions"]
+
+    if is_active:
+        participant.acted_this_round = True
+        update_fields.append("acted_this_round")
+        cost_label = "this turn"
+    else:
+        # Out-of-turn dodge — pay it next turn instead.
+        if "dodge_pending" not in conds:
+            conds.append("dodge_pending")
+        cost_label = "next turn"
+
+    conds.append(f"dodging:{successes}")
+    participant.conditions = conds
+    participant.save(update_fields=update_fields)
+
+    _log(
+        encounter,
+        "dodge",
+        f"{participant.name} dodges — {pool}d → {successes} successes "
+        f"(costs {cost_label}).",
+        actor_participant_id=participant.id,
+        pool=pool,
+        dice=dice,
+        successes=successes,
+        is_active_turn=is_active,
     )
     return redirect("combat:detail", pk=encounter.pk)

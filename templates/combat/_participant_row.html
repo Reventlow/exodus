@@ -1,8 +1,13 @@
 {% comment %}
 Single participant row inside the encounter PARTICIPANTS faction columns.
 
-Inputs:
-    p                — Participant instance
+Inputs (v0.15.5):
+    p                — Participant instance, annotated by encounter_page with:
+                         p.wound_penalty           (int, <= 0)
+                         p.attack_modifier_total   (wound + condition atk_mod)
+                         p.defense_modifier_total  (condition def_mod, no stances)
+                         p.condition_pills         (list of (tag, label, color))
+                         p.condition_options       (list of (value, label) for select)
     encounter        — parent Encounter (used to build action URLs)
     weapon_choices   — list of weapon dicts from SiteSettings.get_weapons()
     armor_choices    — list of armor dicts from SiteSettings.get_armor()
@@ -15,10 +20,11 @@ Inputs:
                        active_participant pointer (hides the ATTACK form
                        on every row but the actor's)
 
-Renders the kind badge, name, current weapon / armor / cover pill, HP
-triplet (B/L/A of Max), a × REMOVE button, and a collapsible <details>
-panel with four mini-forms: EQUIP WEAPON, EQUIP ARMOR, SET COVER, and
-(only on the active participant when the encounter is active) ATTACK.
+Renders (v0.15.5): kind badge, name, condition pills, MOD chip, wound
+chip, current weapon / armor / cover pill, HP triplet (B/L/A of Max), WP
+counter, × REMOVE button, and a collapsible <details> panel with seven
+mini-forms: EQUIP WEAPON, EQUIP ARMOR, SET COVER, ATTACK (active only),
+STANCE (full defense / dodge), ADD CONDITION, WILLPOWER.
 {% endcomment %}
 <div class="part-row">
     <div class="part-row-head">
@@ -32,14 +38,53 @@ panel with four mini-forms: EQUIP WEAPON, EQUIP ARMOR, SET COVER, and
             {% endif %}
             <span class="part-name">{{ p.name }}</span>
 
+            {% comment %}
+            Condition pills — color tier comes from the view annotation:
+            red for incapacitated, cyan for stances (full def, dodging,
+            dodge_pending), amber for ordinary status conditions.
+            Each pill has an inline × form that POSTs clear_condition.
+            {% endcomment %}
+            {% for tag, label, color in p.condition_pills %}
+                <span class="part-cond-pill {{ color }}">
+                    {{ label }}
+                    <form method="post"
+                          action="{% url 'combat:clear_condition' encounter.id p.id %}"
+                          style="display:inline; margin-left: 0.25rem;">
+                        {% csrf_token %}
+                        <input type="hidden" name="condition"
+                               value="{% if tag|slice:':8' == 'dodging:' %}dodging{% else %}{{ tag }}{% endif %}">
+                        <button type="submit" class="part-cond-clear" title="Clear {{ label }}">&times;</button>
+                    </form>
+                </span>
+            {% endfor %}
+
             {% if p.cover_state and p.cover_state != "none" %}
                 <span class="part-cover-pill {{ p.cover_state }}">
                     COVER: {{ p.cover_state|upper }}{% if p.cover_entry_name %} · {{ p.cover_entry_name }}{% endif %}
                 </span>
             {% endif %}
 
+            {% comment %}
+            POOL PREVIEW chip — at-a-glance read on the GM's screen of
+            the combined wound + condition modifier sum. Hidden when 0.
+            {% endcomment %}
+            {% if p.attack_modifier_total != 0 %}
+                <span class="part-mod-chip {% if p.attack_modifier_total < 0 %}neg{% else %}pos{% endif %}">
+                    MOD {% if p.attack_modifier_total > 0 %}+{% endif %}{{ p.attack_modifier_total }}
+                </span>
+            {% endif %}
+
+            {% comment %}
+            Wound chip — surfaces the WoD 2.0 wound penalty for the
+            three rightmost filled health boxes. Hidden when 0.
+            {% endcomment %}
+            {% if p.wound_penalty < 0 %}
+                <span class="part-wp-chip">WP {{ p.wound_penalty }}</span>
+            {% endif %}
+
             <span class="part-stats">
                 HP {{ p.health_bashing }}/{{ p.health_lethal }}/{{ p.health_aggravated }} of {{ p.health_max }}
+                &middot; WP {{ p.willpower_current }}/{{ p.willpower_max }}
                 {% if p.weapon_name %} &middot; {{ p.weapon_name }}{% endif %}
                 {% if p.armor_name %} &middot; {{ p.armor_name }}{% endif %}
             </span>
@@ -53,8 +98,8 @@ panel with four mini-forms: EQUIP WEAPON, EQUIP ARMOR, SET COVER, and
     </div>
 
     {% comment %}
-    Collapsible action panel. Holds the four sub-forms. Stays closed
-    by default so dense participant lists don't drown in form fields.
+    Collapsible action panel. Holds the sub-forms. Stays closed by
+    default so dense participant lists don't drown in form fields.
     {% endcomment %}
     <details class="part-actions">
         <summary><span>actions</span></summary>
@@ -124,7 +169,8 @@ panel with four mini-forms: EQUIP WEAPON, EQUIP ARMOR, SET COVER, and
             *every other* participant in the encounter (PvP allowed —
             faction is decorative, not enforced). The skill input has a
             datalist of the three usual WoD 2.0 weapon skills so the GM
-            can tab-complete.
+            can tab-complete. Includes the v0.15.5 willpower-spend
+            checkbox (+3 dice, costs 1 WP).
             {% endcomment %}
             {% if attack_eligible and encounter.active_participant_id == p.id %}
                 <form method="post" action="{% url 'combat:attack' encounter.id p.id %}"
@@ -156,13 +202,79 @@ panel with four mini-forms: EQUIP WEAPON, EQUIP ARMOR, SET COVER, and
                     <label for="mod-{{ p.id }}">MOD</label>
                     <input id="mod-{{ p.id }}" name="gm_modifier" type="number" value="0" step="1">
 
+                    {% if p.willpower_current > 0 %}
+                        <label class="part-wp-spend">
+                            <input type="checkbox" name="spend_willpower" value="1">
+                            SPEND WP (+3 DICE, COSTS 1 WP)
+                        </label>
+                    {% else %}
+                        <span class="part-wp-spend muted" title="No willpower to spend">
+                            (NO WP TO SPEND)
+                        </span>
+                    {% endif %}
+
                     <button type="submit" class="btn-primary">ATTACK &rarr;</button>
 
                     <span class="part-attack-preview">
-                        PREVIEW: BASE +{% if p.participant_kind == "mook" %}{{ p.mook_combat_pool|default:0 }}{% else %}DEX{% endif %} ± SKILL ± WEAPON ± MOD − DEFENSE − COVER
+                        PREVIEW: BASE +{% if p.participant_kind == "mook" %}{{ p.mook_combat_pool|default:0 }}{% else %}DEX{% endif %} ± SKILL ± WEAPON ± MOD
+                        {% if p.attack_modifier_total != 0 %} ({{ p.attack_modifier_total }} MOD){% endif %}
+                        − DEFENSE − COVER
                     </span>
                 </form>
             {% endif %}
+
+            {% comment %}
+            STANCE — full defense (active turn only) / dodge (any time).
+            {% endcomment %}
+            {% if encounter.status == "active" %}
+                <div class="part-mini-form" style="margin-top: 0.4rem; padding-top: 0.4rem; border-top: 1px solid var(--c-dim);">
+                    <label>STANCE</label>
+                    {% if encounter.active_participant_id == p.id %}
+                        <form method="post"
+                              action="{% url 'combat:full_defense' encounter.id p.id %}"
+                              style="display:inline;">
+                            {% csrf_token %}
+                            <button type="submit" title="Burn this turn for doubled defense until next round.">FULL DEFENSE</button>
+                        </form>
+                    {% else %}
+                        <button type="button" disabled title="Full defense must be taken on your own turn.">FULL DEFENSE</button>
+                    {% endif %}
+                    <form method="post"
+                          action="{% url 'combat:dodge' encounter.id p.id %}"
+                          style="display:inline;">
+                        {% csrf_token %}
+                        <button type="submit" title="Roll dodge pool — eats this turn if active, next turn otherwise.">DODGE</button>
+                    </form>
+                </div>
+            {% endif %}
+
+            {# --- ADD CONDITION --- #}
+            <form method="post"
+                  action="{% url 'combat:set_condition' encounter.id p.id %}"
+                  class="part-mini-form">
+                {% csrf_token %}
+                <label for="cond-{{ p.id }}">CONDITION</label>
+                <select id="cond-{{ p.id }}" name="condition" required>
+                    <option value="">— PICK —</option>
+                    {% for value, label in p.condition_options %}
+                        <option value="{{ value }}">{{ label }}</option>
+                    {% endfor %}
+                </select>
+                <button type="submit">ADD</button>
+            </form>
+
+            {# --- WILLPOWER --- #}
+            <form method="post"
+                  action="{% url 'combat:adjust_willpower' encounter.id p.id %}"
+                  class="part-mini-form">
+                {% csrf_token %}
+                <label for="wp-{{ p.id }}">WILLPOWER</label>
+                <input id="wp-{{ p.id }}" name="willpower_current" type="number"
+                       min="0" max="{{ p.willpower_max }}"
+                       value="{{ p.willpower_current }}">
+                <span class="muted" style="font-size: 0.6rem;">/ {{ p.willpower_max }}</span>
+                <button type="submit">SET</button>
+            </form>
 
         </div>
     </details>

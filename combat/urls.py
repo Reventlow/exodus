@@ -1,7 +1,7 @@
 """URL configuration for the personal combat app.
 
-v0.15.4 layers attack actions and equipment management on top of the
-v0.15.3 initiative + turn advance surface:
+v0.15.5 adds the WoD 2.0 condition + stance + willpower surface on
+top of the v0.15.4 attack endpoints:
 
 * ``initiative/<participant>/``                — single-participant roll
 * ``initiative/all/``                          — roll-all for unrolled participants
@@ -13,8 +13,13 @@ v0.15.3 initiative + turn advance surface:
 * ``participants/<id>/equip-armor/``   (v0.15.4) — snapshot armor catalogue entry
 * ``participants/<id>/cover/``         (v0.15.4) — set cover state + entry
 * ``participants/<attacker>/attack/``  (v0.15.4) — resolve attack vs target_id
+* ``participants/<id>/conditions/set/``   (v0.15.5) — append a condition tag
+* ``participants/<id>/conditions/clear/`` (v0.15.5) — drop a condition tag (or family)
+* ``participants/<id>/willpower/``        (v0.15.5) — manual WP adjustment
+* ``participants/<id>/full-defense/``     (v0.15.5) — own-turn FULL DEFENSE stance
+* ``participants/<id>/dodge/``            (v0.15.5) — roll dodge pool (in or out of turn)
 
-REST JSON endpoints land in v0.15.5+.
+REST JSON endpoints land in v0.15.6+.
 """
 
 from django.urls import path
@@ -90,5 +95,32 @@ urlpatterns = [
         "combat/<int:pk>/participants/<int:attacker_id>/attack/",
         views.attack,
         name="attack",
+    ),
+
+    # POST — conditions, willpower, defensive stances (v0.15.5)
+    path(
+        "combat/<int:pk>/participants/<int:participant_id>/conditions/set/",
+        views.set_condition,
+        name="set_condition",
+    ),
+    path(
+        "combat/<int:pk>/participants/<int:participant_id>/conditions/clear/",
+        views.clear_condition,
+        name="clear_condition",
+    ),
+    path(
+        "combat/<int:pk>/participants/<int:participant_id>/willpower/",
+        views.adjust_willpower,
+        name="adjust_willpower",
+    ),
+    path(
+        "combat/<int:pk>/participants/<int:participant_id>/full-defense/",
+        views.full_defense,
+        name="full_defense",
+    ),
+    path(
+        "combat/<int:pk>/participants/<int:participant_id>/dodge/",
+        views.dodge,
+        name="dodge",
     ),
 ]
