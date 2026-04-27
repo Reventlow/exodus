@@ -179,6 +179,18 @@ class SiteSettings(models.Model):
         ),
     )
 
+    # Handheld weapons catalogue. List of {"name": str, "category": str}.
+    # Categories: melee, improvised, firearm, thrown. Edited via
+    # /settings/ → COMBAT → WEAPONS.
+    weapons = models.JSONField(
+        default=list, blank=True,
+        help_text=(
+            "List of {name, category} dicts. Categories: melee, improvised, "
+            "firearm, thrown. See SiteSettings.default_weapons() for the "
+            "seed catalogue."
+        ),
+    )
+
     class Meta:
         verbose_name = "Site Settings"
         verbose_name_plural = "Site Settings"
@@ -216,6 +228,44 @@ class SiteSettings(models.Model):
         if isinstance(self.tweaks, dict):
             merged.update({k: v for k, v in self.tweaks.items() if k in merged})
         return merged
+
+    @staticmethod
+    def default_weapons():
+        """Seed catalogue of personal handheld weapons. Edited via the
+        WEAPONS section of /settings/."""
+        return [
+            # Melee — close-combat tools
+            {"name": "Knuckle Buster", "category": "melee"},
+            {"name": "Knife", "category": "melee"},
+            {"name": "Baton", "category": "melee"},
+            {"name": "Taser (Contact)", "category": "melee"},
+            # Improvised — anything-goes pickup weapons
+            {"name": "Chair", "category": "improvised"},
+            {"name": "Bottle", "category": "improvised"},
+            {"name": "Phone Book", "category": "improvised"},
+            {"name": "Hammer", "category": "improvised"},
+            # Firearms
+            {"name": "Hand Gun", "category": "firearm"},
+            {"name": "Large Hand Gun", "category": "firearm"},
+            {"name": "Sub Machine Gun", "category": "firearm"},
+            {"name": "Assault Rifle", "category": "firearm"},
+            {"name": "DMR", "category": "firearm"},
+            {"name": "Shotgun", "category": "firearm"},
+            {"name": "Twin-Barrel Shotgun", "category": "firearm"},
+            {"name": "Auto Shotgun", "category": "firearm"},
+            {"name": "Scoped Rifle", "category": "firearm"},
+            {"name": "Taser (Cartridge)", "category": "firearm"},
+            # Thrown
+            {"name": "Throwing Knife", "category": "thrown"},
+            {"name": "Throwing Axe", "category": "thrown"},
+        ]
+
+    def get_weapons(self):
+        """Return the weapons list. Empty list seeds with the default
+        catalogue so a fresh deploy ships with a useful starter set."""
+        if isinstance(self.weapons, list) and self.weapons:
+            return self.weapons
+        return self.default_weapons()
 
     def save(self, *args, **kwargs):
         """Enforce singleton: always use pk=1. Also normalise tweaks so the

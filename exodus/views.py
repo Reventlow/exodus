@@ -107,6 +107,21 @@ def site_settings(request):
             val = request.POST.get(f"label_{lbl}", "").strip()
             if val:
                 setattr(settings_obj, f"label_{lbl}", val)
+
+        # WEAPONS catalogue. Submitted as four textareas (one per category),
+        # each line a weapon name. Saved as a flat list of {name, category}
+        # dicts so projects / character sheets can reference the catalogue.
+        if "weapons_submitted" in request.POST:
+            categories = ("melee", "improvised", "firearm", "thrown")
+            new_weapons = []
+            for cat in categories:
+                raw = request.POST.get(f"weapons_{cat}", "")
+                for line in raw.splitlines():
+                    name = line.strip()[:80]
+                    if name:
+                        new_weapons.append({"name": name, "category": cat})
+            settings_obj.weapons = new_weapons
+
         settings_obj.save()
         messages.success(request, "Settings updated.")
         return redirect("site-settings")
@@ -117,6 +132,13 @@ def site_settings(request):
     all_agencies = Agency.objects.order_by("name")
     player_agencies = all_agencies.filter(is_player_agency=True)
     npc_agencies = all_agencies.filter(is_player_agency=False)
+    # Group weapons by category for the settings textareas.
+    weapons_by_cat = {"melee": [], "improvised": [], "firearm": [], "thrown": []}
+    for w in settings_obj.get_weapons():
+        if isinstance(w, dict) and w.get("category") in weapons_by_cat:
+            weapons_by_cat[w["category"]].append(w.get("name", ""))
+    weapons_text = {cat: "\n".join(names) for cat, names in weapons_by_cat.items()}
+
     return render(request, "site_settings.html", {
         "settings_obj": settings_obj,
         "users": users,
@@ -124,6 +146,7 @@ def site_settings(request):
         "player_agencies": player_agencies,
         "npc_agencies": npc_agencies,
         "tweaks": settings_obj.get_tweaks(),
+        "weapons_text": weapons_text,
     })
 
 

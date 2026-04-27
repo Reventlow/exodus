@@ -1,5 +1,10 @@
 # Changelog
 
+## v0.14.61
+- New **WEAPONS** catalogue under `/settings/ → COMBAT → Weapons`. Four textareas, one per category (MELEE / IMPROVISED / FIREARM / THROWN); one weapon name per line. Saved as a flat list of `{name, category}` dicts on `SiteSettings.weapons`
+- Migration `exodus/0017_sitesettings_weapons` adds the field with a default catalogue seeded on first apply: knuckle buster, knife, baton, taser (contact); chair, bottle, phone book, hammer; hand gun, large hand gun, sub machine gun, assault rifle, DMR, shotgun, twin-barrel shotgun, auto shotgun, scoped rifle, taser (cartridge); throwing knife, throwing axe. The two "taser" entries are disambiguated as melee (contact) vs firearm (cartridge)
+- Each category card shows a one-line cue for the WoD 2.0 attack pool that applies (e.g., MELEE → Strength + Brawl/Weaponry; FIREARM → Dexterity + Firearms; etc.) so adding a weapon is unambiguous about which dice pool it'll use
+
 ## v0.14.60
 - Combat reference subtitle drops the `WoD 2.0 — ` prefix; reads cleanly as `POOL = ATTRIBUTE + SKILL ± MODIFIERS · 8+ SUCCESS · 10-AGAIN · NET DAMAGE = SUCCESSES − ARMOR`
 

@@ -171,6 +171,10 @@
             <button class="sidebar-item" onclick="showSection('base-access', this)">Class Access</button>
         </div>
         <div class="sidebar-group">
+            <div class="sidebar-group-label">COMBAT</div>
+            <button class="sidebar-item" onclick="showSection('weapons', this)">Weapons</button>
+        </div>
+        <div class="sidebar-group">
             <div class="sidebar-group-label">THEME</div>
             <button class="sidebar-item" onclick="showSection('tweaks', this)">Tweaks</button>
         </div>
@@ -396,6 +400,61 @@
                 </span>
             </div>
             <button type="submit" class="btn-primary" style="width: 100%;">SAVE</button>
+        </div>
+
+        <!-- Weapons catalogue -->
+        <div id="sec-weapons" class="settings-section">
+            <div class="block-head">
+                <span class="block-bullet">&#9679;</span>
+                <h3>WEAPONS</h3>
+                <span class="block-line"></span>
+                <span class="block-badge">CATALOGUE</span>
+            </div>
+            <span class="text-muted mono-text" style="font-size: 0.7rem; display: block; margin-bottom: 1rem;">
+                Reference list of personal handheld weapons. One name per line; blank lines ignored. Categories drive the WoD 2.0 attack pool: melee → Strength + Brawl/Weaponry, improvised → Strength + Brawl (−1 weapon mod, breaks on hit), firearm → Dexterity + Firearms, thrown → Dexterity + Athletics. See `/rules/combat/` for the full reference.
+            </span>
+            <form method="post">
+                {% csrf_token %}
+                <input type="hidden" name="weapons_submitted" value="1">
+
+                <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 1rem;">
+
+                    <div class="ss-card" style="display: grid; gap: 0.5rem;">
+                        <div class="ss-label" style="margin-bottom: 0.2rem;">MELEE</div>
+                        <span class="text-muted mono-text" style="font-size: 0.65rem;">Strength + Brawl / Weaponry · close-combat tools</span>
+                        <textarea name="weapons_melee" rows="6" class="ss-input"
+                                  style="font-size: 0.85rem; resize: vertical; font-family: var(--font-mono);"
+                                  placeholder="One weapon name per line.">{{ weapons_text.melee }}</textarea>
+                    </div>
+
+                    <div class="ss-card" style="display: grid; gap: 0.5rem;">
+                        <div class="ss-label" style="margin-bottom: 0.2rem;">IMPROVISED</div>
+                        <span class="text-muted mono-text" style="font-size: 0.65rem;">−1 weapon mod · breaks on 2+ successes</span>
+                        <textarea name="weapons_improvised" rows="6" class="ss-input"
+                                  style="font-size: 0.85rem; resize: vertical; font-family: var(--font-mono);"
+                                  placeholder="One weapon name per line.">{{ weapons_text.improvised }}</textarea>
+                    </div>
+
+                    <div class="ss-card" style="display: grid; gap: 0.5rem;">
+                        <div class="ss-label" style="margin-bottom: 0.2rem;">FIREARM</div>
+                        <span class="text-muted mono-text" style="font-size: 0.65rem;">Dexterity + Firearms · range bands per weapon</span>
+                        <textarea name="weapons_firearm" rows="10" class="ss-input"
+                                  style="font-size: 0.85rem; resize: vertical; font-family: var(--font-mono);"
+                                  placeholder="One weapon name per line.">{{ weapons_text.firearm }}</textarea>
+                    </div>
+
+                    <div class="ss-card" style="display: grid; gap: 0.5rem;">
+                        <div class="ss-label" style="margin-bottom: 0.2rem;">THROWN</div>
+                        <span class="text-muted mono-text" style="font-size: 0.65rem;">Dexterity + Athletics · Strength × range</span>
+                        <textarea name="weapons_thrown" rows="6" class="ss-input"
+                                  style="font-size: 0.85rem; resize: vertical; font-family: var(--font-mono);"
+                                  placeholder="One weapon name per line.">{{ weapons_text.thrown }}</textarea>
+                    </div>
+
+                </div>
+
+                <button type="submit" class="btn-primary" style="width: 100%; margin-top: 1rem;">SAVE WEAPONS</button>
+            </form>
         </div>
 
         <!-- Clearance Gate Tweaks -->
