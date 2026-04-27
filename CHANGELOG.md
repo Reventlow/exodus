@@ -1,5 +1,14 @@
 # Changelog
 
+## v0.15.1
+- New **COMBAT NPC TEMPLATES** catalogue — stock combat-ready stat blocks the GM can spawn as mook participants in encounters. 15 seed entries across 5 categories: **GUARD** (Generic Guard, Building Security, Bouncer), **RAZOR** (Street Razor, Cyber-Razor, Pit Fighter), **CORPORATE** (Corp Sec Officer, Executive Bodyguard, Black Ops Operator), **CULTIST** (Initiate, Adept, Champion), **DRONE / NON-HUMAN** (Sentry Drone, Combat Drone, Guard Dog). The drone category covers both autonomous machines and biological attack animals — mechanically they fight the same way (no morale, no intimidation, attack on command)
+- Each entry: `name`, `category`, `combat_pool` (attack dice pool), `defense` (passive defense), `health_max` (total HP boxes), `armor_rating` (B/L subtraction or `—`), `weapon` (free-text or matches the weapons catalogue), `notes` (free-text flavor / behavioral notes)
+- New **`/settings/ → COMBAT → Combat NPCs`** structured editor mirroring the weapons / armor / cover pattern (row-based table per category, `＋ ADD COMBAT NPC` per category, delete-per-row, inline rename)
+- Combat reference at `/rules/combat/` now renders a **STOCK ADVERSARIES** section as five tables (one per non-empty category) below the armor catalogue. Columns: NAME / POOL / DEF / HP / ARMOR / WEAPON / NOTES. Empty categories are hidden
+- Two new admin-only API endpoints (`/api/admin/combat-npcs/` list+create, `/api/admin/combat-npcs/<name>/` get+put+delete) and five MCP tools (`list_combat_npcs`, `get_combat_npc`, `create_combat_npc`, `update_combat_npc`, `delete_combat_npc`) so Claude can manage the catalogue without the admin UI. Names are URL-encoded so spaces / hyphens (e.g. `Cyber-Razor`, `Corp Sec Officer`) work transparently
+- Migration `exodus/0021_sitesettings_combat_npcs` adds the `SiteSettings.combat_npcs` JSONField and seeds the default catalogue on first apply
+- v0.15.2 will let you spawn these templates into encounters as participants (the encounter CRUD + initiative pass)
+
 ## v0.15.0
 - **Combat module — Phase 0 skeleton.** New `combat/` Django app with `Encounter`, `Participant`, `CombatLog` models, migration `combat/0001_initial`, admin registration, placeholder `/combat/` and `/combat/<id>/` pages (GM-only), and the WebSocket consumer skeleton (`combat_<id>` group, `broadcast_combat_event` helper). The phase-0 release is internal — encounter CRUD ships in v0.15.1, real participants + initiative in v0.15.2, attacks + damage in v0.15.3, full attack loop in v0.15.4, real-time fan-out in v0.15.5, MCP + GM workspace integration in v0.15.6
 - Combat models reference the existing weapons / armor / cover catalogues (`SiteSettings`) and link to `Character` / `NPC` via `SET_NULL` so deleting an actor mid-encounter snapshots their `name` rather than corrupting the log

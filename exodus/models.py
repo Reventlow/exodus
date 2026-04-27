@@ -211,6 +211,19 @@ class SiteSettings(models.Model):
         ),
     )
 
+    # Combat NPC template catalogue. Stock stat blocks the GM can spawn
+    # as mooks in encounters. Each entry: {"name", "category",
+    # "combat_pool", "defense", "health_max", "armor_rating", "weapon",
+    # "notes"}. Categories: guard / razor / corp / cultist / drone.
+    combat_npcs = models.JSONField(
+        default=list, blank=True,
+        help_text=(
+            "List of combat NPC stat-block entries. See "
+            "SiteSettings.default_combat_npcs() for the seed catalogue "
+            "and field reference."
+        ),
+    )
+
     class Meta:
         verbose_name = "Site Settings"
         verbose_name_plural = "Site Settings"
@@ -463,6 +476,101 @@ class SiteSettings(models.Model):
                 "durability": c.get("durability", "") or "",
                 "health": c.get("health", "") or "",
                 "notes": c.get("notes", "") or "",
+            })
+        return hydrated
+
+    @staticmethod
+    def default_combat_npcs():
+        """Seed catalogue of combat NPC templates (stock stat blocks).
+
+        Each entry: ``name``, ``category`` (``guard`` / ``razor`` /
+        ``corp`` / ``cultist`` / ``drone``), ``combat_pool`` (attack
+        dice pool, numeric string), ``defense`` (passive defense,
+        numeric string), ``health_max`` (total health boxes, numeric
+        string), ``armor_rating`` (B/L subtraction or ``"—"``),
+        ``weapon`` (free-text or matches catalogue), ``notes``
+        (free-text flavor / mechanics).
+
+        The ``drone`` category covers both autonomous machines and
+        biological attack animals: mechanically they fight the same way
+        (no morale, no intimidation, attack on command).
+        """
+        return [
+            # Guard — civilian / building security
+            {"name": "Generic Guard", "category": "guard", "combat_pool": "4", "defense": "2",
+             "health_max": "7", "armor_rating": "—", "weapon": "Baton",
+             "notes": "Untrained civilian-grade security. Calls for backup early."},
+            {"name": "Building Security", "category": "guard", "combat_pool": "5", "defense": "3",
+             "health_max": "7", "armor_rating": "1/2", "weapon": "Hand Gun",
+             "notes": "Trained corporate security. Wears soft armor under uniform."},
+            {"name": "Bouncer", "category": "guard", "combat_pool": "6", "defense": "2",
+             "health_max": "8", "armor_rating": "—", "weapon": "Knuckle Buster",
+             "notes": "Big, brutish, brawler. Subdues rather than kills."},
+            # Razor — street fighters / mercenaries
+            {"name": "Street Razor", "category": "razor", "combat_pool": "5", "defense": "3",
+             "health_max": "7", "armor_rating": "—", "weapon": "Knife",
+             "notes": "Cyberware addict, jittery, unpredictable. Will close to melee."},
+            {"name": "Cyber-Razor", "category": "razor", "combat_pool": "7", "defense": "4",
+             "health_max": "7", "armor_rating": "1/2", "weapon": "Large Hand Gun",
+             "notes": "Augmented street operator. Reflex-boost wetware."},
+            {"name": "Pit Fighter", "category": "razor", "combat_pool": "7", "defense": "4",
+             "health_max": "8", "armor_rating": "—", "weapon": "Knuckle Buster",
+             "notes": "Underground brawl champion. Pain Tolerance 2 (ignore wound penalty −1)."},
+            # Corp — corporate security ladders
+            {"name": "Corp Sec Officer", "category": "corp", "combat_pool": "6", "defense": "3",
+             "health_max": "7", "armor_rating": "2/2", "weapon": "Sub Machine Gun",
+             "notes": "Mid-tier corporate security. Trained, equipped, expendable."},
+            {"name": "Executive Bodyguard", "category": "corp", "combat_pool": "7", "defense": "4",
+             "health_max": "7", "armor_rating": "3/3", "weapon": "Hand Gun",
+             "notes": "Personal protection detail. Will throw self in front of principal."},
+            {"name": "Black Ops Operator", "category": "corp", "combat_pool": "9", "defense": "5",
+             "health_max": "8", "armor_rating": "4/4", "weapon": "Assault Rifle",
+             "notes": "Special-forces grade. Suppressed weapons, night-vision optics, IR."},
+            # Cultist — zealous followers
+            {"name": "Cultist Initiate", "category": "cultist", "combat_pool": "4", "defense": "2",
+             "health_max": "7", "armor_rating": "—", "weapon": "Knife",
+             "notes": "Fanatical, no fear of death. Charges into melee shouting prayers."},
+            {"name": "Cultist Adept", "category": "cultist", "combat_pool": "6", "defense": "3",
+             "health_max": "7", "armor_rating": "—", "weapon": "Hand Gun",
+             "notes": "Combat-trained believer. Coordinates with other cultists."},
+            {"name": "Cultist Champion", "category": "cultist", "combat_pool": "8", "defense": "4",
+             "health_max": "8", "armor_rating": "3/3", "weapon": "Assault Rifle",
+             "notes": "Inner-circle warrior. Carries a relic; +1 to ally morale rolls."},
+            # Drone — autonomous / non-human (incl. biological attack animals)
+            {"name": "Sentry Drone", "category": "drone", "combat_pool": "5", "defense": "4",
+             "health_max": "5", "armor_rating": "2/2", "weapon": "Sub Machine Gun",
+             "notes": "Hovering or wheeled. Cannot be intimidated. Targets nearest threat."},
+            {"name": "Combat Drone", "category": "drone", "combat_pool": "7", "defense": "4",
+             "health_max": "7", "armor_rating": "3/3", "weapon": "Assault Rifle",
+             "notes": "Military-grade. Targets via thermal imaging — concealment less effective."},
+            {"name": "Guard Dog", "category": "drone", "combat_pool": "5", "defense": "3",
+             "health_max": "6", "armor_rating": "—", "weapon": "Bite (1L + grapple)",
+             "notes": "Trained attack animal. Grapples on hit; victim Strength + Brawl to break."},
+        ]
+
+    def get_combat_npcs(self):
+        """Return the combat NPC list, hydrated with empty strings for
+        any missing fields so the UI handles legacy entries uniformly.
+        Falls back to the default catalogue when the saved list is
+        empty so a fresh deploy still renders templates."""
+        npcs = (
+            self.combat_npcs
+            if isinstance(self.combat_npcs, list) and self.combat_npcs
+            else self.default_combat_npcs()
+        )
+        hydrated = []
+        for n in npcs:
+            if not isinstance(n, dict):
+                continue
+            hydrated.append({
+                "name": n.get("name", ""),
+                "category": n.get("category", ""),
+                "combat_pool": n.get("combat_pool", "") or "",
+                "defense": n.get("defense", "") or "",
+                "health_max": n.get("health_max", "") or "",
+                "armor_rating": n.get("armor_rating", "") or "",
+                "weapon": n.get("weapon", "") or "",
+                "notes": n.get("notes", "") or "",
             })
         return hydrated
 

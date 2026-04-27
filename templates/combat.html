@@ -252,6 +252,48 @@
     {% endfor %}
     {% endif %}
 
+    {# === STOCK ADVERSARIES (live from /settings/) ===================== #}
+    {% if combat_npcs_by_cat.guard or combat_npcs_by_cat.razor or combat_npcs_by_cat.corp or combat_npcs_by_cat.cultist or combat_npcs_by_cat.drone %}
+    <header class="block-head"><span class="block-bullet">■</span><h3>STOCK ADVERSARIES</h3><span class="block-line"></span></header>
+    <p class="text-secondary" style="font-size: 0.78rem; line-height: 1.5; margin: 0.6rem 0 1rem 0;">
+        Stock combat-ready stat blocks the GM can spawn into encounters as mooks. Edit at <a href="{% url 'site-settings' %}#combat-npcs" class="text-accent" style="text-decoration: none;">/settings/ → COMBAT → Combat NPCs</a>. <strong>POOL</strong> is the attack dice pool, <strong>DEF</strong> is passive defense, <strong>HP</strong> is total health boxes, <strong>ARMOR</strong> is bashing/lethal subtraction.
+    </p>
+
+    {% for entry in combat_npc_sections %}
+        {% if entry.rows %}
+        <h4 class="mono-text text-accent" style="font-size: 0.85rem; letter-spacing: 0.2em; margin: 1.2rem 0 0.4rem 0;">
+            {{ entry.label }} <span class="text-muted" style="font-weight: 400;">// {{ entry.hint }}</span>
+        </h4>
+        <table class="mono-text" style="width: 100%; border-collapse: collapse; font-size: 0.78rem; margin-bottom: 0.8rem;">
+            <thead style="color: var(--ink-dim);">
+                <tr style="border-bottom: 1px solid var(--c-dim);">
+                    <th style="text-align: left; padding: 0.35rem 0.5rem; width: 18%;">NAME</th>
+                    <th style="text-align: left; padding: 0.35rem 0.5rem; width: 6%;">POOL</th>
+                    <th style="text-align: left; padding: 0.35rem 0.5rem; width: 6%;">DEF</th>
+                    <th style="text-align: left; padding: 0.35rem 0.5rem; width: 6%;">HP</th>
+                    <th style="text-align: left; padding: 0.35rem 0.5rem; width: 9%;">ARMOR</th>
+                    <th style="text-align: left; padding: 0.35rem 0.5rem; width: 14%;">WEAPON</th>
+                    <th style="text-align: left; padding: 0.35rem 0.5rem;">NOTES</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for n in entry.rows %}
+                <tr style="border-bottom: 1px dotted var(--c-dim);">
+                    <td style="padding: 0.35rem 0.5rem; color: var(--ink);">{{ n.name }}</td>
+                    <td style="padding: 0.35rem 0.5rem; color: var(--c-primary);">{{ n.combat_pool|default:"—" }}</td>
+                    <td style="padding: 0.35rem 0.5rem; color: var(--c-primary);">{{ n.defense|default:"—" }}</td>
+                    <td style="padding: 0.35rem 0.5rem; color: var(--c-primary);">{{ n.health_max|default:"—" }}</td>
+                    <td style="padding: 0.35rem 0.5rem;">{{ n.armor_rating|default:"—" }}</td>
+                    <td style="padding: 0.35rem 0.5rem;">{{ n.weapon|default:"—" }}</td>
+                    <td style="padding: 0.35rem 0.5rem; color: var(--ink-dim);">{{ n.notes }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+        {% endif %}
+    {% endfor %}
+    {% endif %}
+
     {# === GLOSSARY / FOOTER =========================================== #}
     <p class="text-muted" style="margin-top: 1.5rem; font-size: 0.7rem; letter-spacing: 0.16em;
                                   border-top: 1px dashed var(--c-dim); padding-top: 1rem;">

@@ -108,6 +108,36 @@ def site_settings(request):
             if val:
                 setattr(settings_obj, f"label_{lbl}", val)
 
+        # COMBAT NPC TEMPLATES. Stock stat blocks the GM can spawn as
+        # mooks. Same parallel-array pattern as weapons/armor/cover —
+        # one set of arrays per category. Empty-name rows are dropped.
+        if "combat_npcs_submitted" in request.POST:
+            npc_categories = ("guard", "razor", "corp", "cultist", "drone")
+            new_npcs = []
+            for cat in npc_categories:
+                names = request.POST.getlist(f"combat_npcs_{cat}_name")
+                pools = request.POST.getlist(f"combat_npcs_{cat}_combat_pool")
+                defenses = request.POST.getlist(f"combat_npcs_{cat}_defense")
+                hps = request.POST.getlist(f"combat_npcs_{cat}_health_max")
+                armors = request.POST.getlist(f"combat_npcs_{cat}_armor_rating")
+                weapons_in = request.POST.getlist(f"combat_npcs_{cat}_weapon")
+                notes_list = request.POST.getlist(f"combat_npcs_{cat}_notes")
+                for i, raw_name in enumerate(names):
+                    name = (raw_name or "").strip()[:80]
+                    if not name:
+                        continue
+                    new_npcs.append({
+                        "name": name,
+                        "category": cat,
+                        "combat_pool": (pools[i] if i < len(pools) else "").strip()[:8],
+                        "defense": (defenses[i] if i < len(defenses) else "").strip()[:8],
+                        "health_max": (hps[i] if i < len(hps) else "").strip()[:8],
+                        "armor_rating": (armors[i] if i < len(armors) else "").strip()[:16],
+                        "weapon": (weapons_in[i] if i < len(weapons_in) else "").strip()[:120],
+                        "notes": (notes_list[i] if i < len(notes_list) else "").strip()[:240],
+                    })
+            settings_obj.combat_npcs = new_npcs
+
         # COVER catalogue. Same shape as weapons/armor — parallel arrays
         # per tier. Empty-name rows are dropped.
         if "cover_submitted" in request.POST:
@@ -250,6 +280,29 @@ def site_settings(request):
          "rows": cover_by_tier["full"]},
     ]
 
+    # Pre-grouped combat NPC sections for the structured editor.
+    npc_by_cat = {"guard": [], "razor": [], "corp": [], "cultist": [], "drone": []}
+    for n in settings_obj.get_combat_npcs():
+        if isinstance(n, dict) and n.get("category") in npc_by_cat:
+            npc_by_cat[n["category"]].append(n)
+    combat_npcs_sections = [
+        {"cat": "guard", "label": "GUARD",
+         "hint": "Untrained civilian / building security · low pool, no armor",
+         "rows": npc_by_cat["guard"]},
+        {"cat": "razor", "label": "RAZOR",
+         "hint": "Street fighters and mercs · mid pool, mixed armor",
+         "rows": npc_by_cat["razor"]},
+        {"cat": "corp", "label": "CORPORATE",
+         "hint": "Trained corporate security ladder · solid pool + armor",
+         "rows": npc_by_cat["corp"]},
+        {"cat": "cultist", "label": "CULTIST",
+         "hint": "Zealous fighters, no morale · low to high tier",
+         "rows": npc_by_cat["cultist"]},
+        {"cat": "drone", "label": "DRONE / NON-HUMAN",
+         "hint": "Autonomous / animal · cannot be intimidated",
+         "rows": npc_by_cat["drone"]},
+    ]
+
     return render(request, "site_settings.html", {
         "settings_obj": settings_obj,
         "users": users,
@@ -260,6 +313,7 @@ def site_settings(request):
         "weapons_sections": weapons_sections,
         "armor_sections": armor_sections,
         "cover_sections": cover_sections,
+        "combat_npcs_sections": combat_npcs_sections,
     })
 
 
@@ -551,6 +605,129 @@ def api_cover_detail(request, name):
     return JsonResponse(c)
 
 
+# ---------------------------------------------------------------------------
+# Combat NPC template catalogue (admin-only)
+# ---------------------------------------------------------------------------
+
+# Categories accepted by the combat NPC catalogue. Centralised so the
+# list and detail handlers stay in lock-step.
+_NPC_CATEGORIES = ("guard", "razor", "corp", "cultist", "drone")
+
+
+@require_http_methods(["GET", "POST"])
+def api_combat_npcs(request):
+    """List or create combat NPC templates.
+
+    GET → ``{"count", "combat_npcs": [...]}``. POST creates a new entry.
+    Body: ``{name, category, combat_pool?, defense?, health_max?,
+    armor_rating?, weapon?, notes?}``. 409 on duplicate name (case-insensitive).
+    Admin / MCP-superuser only.
+    """
+    if not request.user.is_superuser:
+        return JsonResponse({"error": "ACCESS DENIED."}, status=403)
+
+    settings_obj = SiteSettings.load()
+    npc_list = list(settings_obj.get_combat_npcs())
+
+    if request.method == "GET":
+        return JsonResponse({"count": len(npc_list), "combat_npcs": npc_list})
+
+    try:
+        body = json.loads(request.body) if request.body else {}
+    except json.JSONDecodeError:
+        return JsonResponse({"error": "Invalid JSON."}, status=400)
+
+    name = (body.get("name") or "").strip()
+    if not name:
+        return JsonResponse({"error": "'name' is required."}, status=400)
+    cat = (body.get("category") or "").strip().lower()
+    if cat not in _NPC_CATEGORIES:
+        return JsonResponse({
+            "error": f"'category' must be one of: {', '.join(_NPC_CATEGORIES)}.",
+        }, status=400)
+    if any((n.get("name") or "").lower() == name.lower() for n in npc_list):
+        return JsonResponse({
+            "error": f"Combat NPC named '{name}' already exists. Use PUT on the detail URL to update.",
+        }, status=409)
+
+    new_n = {
+        "name": name[:80],
+        "category": cat,
+        "combat_pool": (body.get("combat_pool") or "").strip()[:8],
+        "defense": (body.get("defense") or "").strip()[:8],
+        "health_max": (body.get("health_max") or "").strip()[:8],
+        "armor_rating": (body.get("armor_rating") or "").strip()[:16],
+        "weapon": (body.get("weapon") or "").strip()[:120],
+        "notes": (body.get("notes") or "").strip()[:240],
+    }
+    npc_list.append(new_n)
+    settings_obj.combat_npcs = npc_list
+    settings_obj.save(update_fields=["combat_npcs"])
+    return JsonResponse(new_n, status=201)
+
+
+@require_http_methods(["GET", "PUT", "DELETE"])
+def api_combat_npc_detail(request, name):
+    """Get / update / delete a single combat NPC template by
+    (case-insensitive) name. PUT body is partial — only the fields you
+    include are changed. Pass ``name`` to rename; collision is rejected
+    with 409."""
+    if not request.user.is_superuser:
+        return JsonResponse({"error": "ACCESS DENIED."}, status=403)
+
+    settings_obj = SiteSettings.load()
+    npc_list = list(settings_obj.get_combat_npcs())
+
+    idx = next(
+        (i for i, n in enumerate(npc_list)
+         if (n.get("name") or "").lower() == name.lower()),
+        None,
+    )
+    if idx is None:
+        return JsonResponse({"error": f"Combat NPC '{name}' not found."}, status=404)
+
+    if request.method == "GET":
+        return JsonResponse(npc_list[idx])
+
+    if request.method == "DELETE":
+        removed = npc_list.pop(idx)
+        settings_obj.combat_npcs = npc_list
+        settings_obj.save(update_fields=["combat_npcs"])
+        return JsonResponse({"deleted": removed})
+
+    # PUT — partial update
+    try:
+        body = json.loads(request.body) if request.body else {}
+    except json.JSONDecodeError:
+        return JsonResponse({"error": "Invalid JSON."}, status=400)
+
+    n = dict(npc_list[idx])
+    if "name" in body:
+        new_name = (body["name"] or "").strip()
+        if new_name:
+            if any(
+                i != idx and (other.get("name") or "").lower() == new_name.lower()
+                for i, other in enumerate(npc_list)
+            ):
+                return JsonResponse({
+                    "error": f"Combat NPC named '{new_name}' already exists.",
+                }, status=409)
+            n["name"] = new_name[:80]
+    if "category" in body:
+        cat = (body["category"] or "").strip().lower()
+        if cat in _NPC_CATEGORIES:
+            n["category"] = cat
+    for field, limit in (("combat_pool", 8), ("defense", 8),
+                         ("health_max", 8), ("armor_rating", 16),
+                         ("weapon", 120), ("notes", 240)):
+        if field in body:
+            n[field] = (body[field] or "").strip()[:limit]
+    npc_list[idx] = n
+    settings_obj.combat_npcs = npc_list
+    settings_obj.save(update_fields=["combat_npcs"])
+    return JsonResponse(n)
+
+
 @require_http_methods(["GET", "POST"])
 def api_armor(request):
     """List or create armor in the site catalogue.
@@ -835,6 +1012,32 @@ def combat_page(request):
          "rows": cover_by_tier["full"]},
     ]
 
+    # Combat NPC templates — pre-grouped by category for the dynamic
+    # STOCK ADVERSARIES section on /rules/combat/.
+    combat_npcs_by_cat = {
+        "guard": [], "razor": [], "corp": [], "cultist": [], "drone": [],
+    }
+    for n in settings_obj.get_combat_npcs():
+        if isinstance(n, dict) and n.get("category") in combat_npcs_by_cat:
+            combat_npcs_by_cat[n["category"]].append(n)
+    combat_npc_sections = [
+        {"cat": "guard", "label": "GUARD",
+         "hint": "Untrained civilian / building security",
+         "rows": combat_npcs_by_cat["guard"]},
+        {"cat": "razor", "label": "RAZOR",
+         "hint": "Street fighters and mercs",
+         "rows": combat_npcs_by_cat["razor"]},
+        {"cat": "corp", "label": "CORPORATE",
+         "hint": "Trained corporate security ladder",
+         "rows": combat_npcs_by_cat["corp"]},
+        {"cat": "cultist", "label": "CULTIST",
+         "hint": "Zealous fighters · no morale",
+         "rows": combat_npcs_by_cat["cultist"]},
+        {"cat": "drone", "label": "DRONE / NON-HUMAN",
+         "hint": "Autonomous machines & attack animals · cannot be intimidated",
+         "rows": combat_npcs_by_cat["drone"]},
+    ]
+
     return render(request, "combat.html", {
         "weapons_by_cat": weapons_by_cat,
         "combat_weapon_sections": sections,
@@ -842,6 +1045,8 @@ def combat_page(request):
         "combat_armor_sections": armor_sections,
         "cover_by_tier": cover_by_tier,
         "combat_cover_sections": combat_cover_sections,
+        "combat_npcs_by_cat": combat_npcs_by_cat,
+        "combat_npc_sections": combat_npc_sections,
     })
 
 

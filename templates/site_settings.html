@@ -175,6 +175,7 @@
             <button class="sidebar-item" onclick="showSection('weapons', this)">Weapons</button>
             <button class="sidebar-item" onclick="showSection('armor', this)">Armor</button>
             <button class="sidebar-item" onclick="showSection('cover', this)">Cover</button>
+            <button class="sidebar-item" onclick="showSection('combat-npcs', this)">Combat NPCs</button>
         </div>
         <div class="sidebar-group">
             <div class="sidebar-group-label">THEME</div>
@@ -628,6 +629,87 @@
                             '<td><input type="text" name="cover_' + tier + '_durability" maxlength="8" placeholder="3"></td>' +
                             '<td><input type="text" name="cover_' + tier + '_health" maxlength="8" placeholder="6"></td>' +
                             '<td><input type="text" name="cover_' + tier + '_notes" maxlength="240" placeholder=""></td>' +
+                            '<td><button type="button" class="weap-del" onclick="this.closest(\'tr\').remove()">×</button></td>';
+                        tbody.appendChild(tr);
+                        var firstInput = tr.querySelector('input');
+                        if (firstInput) firstInput.focus();
+                    });
+                });
+            })();
+            </script>
+        </div>
+
+        <!-- Combat NPC templates catalogue -->
+        <div id="sec-combat-npcs" class="settings-section">
+            <div class="block-head">
+                <span class="block-bullet">&#9679;</span>
+                <h3>COMBAT NPCS</h3>
+                <span class="block-line"></span>
+                <span class="block-badge">CATALOGUE</span>
+            </div>
+            <span class="text-muted mono-text" style="font-size: 0.7rem; display: block; margin-bottom: 1rem;">
+                Stock combat-ready stat blocks the GM can spawn as <strong>mook participants</strong> in encounters. Each entry has a combat dice pool, passive defense, total HP, armor B/L rating, default weapon, and free-text notes. Categories shape the AI feel — guard / razor / corp / cultist / drone. The <strong>drone</strong> category covers both autonomous machines and biological attack animals (no morale, no intimidation, attack on command). Renders live in the combat reference at <a href="{% url 'combat-page' %}" class="text-accent" style="text-decoration: none;">/rules/combat/</a>. Spawn-into-encounter UI lands in v0.15.x.
+            </span>
+            <form method="post">
+                {% csrf_token %}
+                <input type="hidden" name="combat_npcs_submitted" value="1">
+
+                {% for sec in combat_npcs_sections %}
+                <div class="ss-card" style="margin-bottom: 1rem; padding: 1rem;">
+                    <div style="display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 0.4rem;">
+                        <div class="ss-label" style="margin: 0;">{{ sec.label }}</div>
+                        <span class="text-muted mono-text" style="font-size: 0.65rem;">{{ sec.hint }}</span>
+                    </div>
+                    <table class="weap-table" data-cat="{{ sec.cat }}">
+                        <thead>
+                            <tr>
+                                <th style="width: 18%;">NAME</th>
+                                <th style="width: 7%;">POOL</th>
+                                <th style="width: 7%;">DEF</th>
+                                <th style="width: 7%;">HP</th>
+                                <th style="width: 9%;">ARMOR</th>
+                                <th style="width: 14%;">WEAPON</th>
+                                <th>NOTES</th>
+                                <th style="width: 1%;"></th>
+                            </tr>
+                        </thead>
+                        <tbody data-rows>
+                            {% for n in sec.rows %}
+                            <tr>
+                                <td><input type="text" name="combat_npcs_{{ sec.cat }}_name" value="{{ n.name }}" maxlength="80"></td>
+                                <td><input type="text" name="combat_npcs_{{ sec.cat }}_combat_pool" value="{{ n.combat_pool }}" maxlength="8"></td>
+                                <td><input type="text" name="combat_npcs_{{ sec.cat }}_defense" value="{{ n.defense }}" maxlength="8"></td>
+                                <td><input type="text" name="combat_npcs_{{ sec.cat }}_health_max" value="{{ n.health_max }}" maxlength="8"></td>
+                                <td><input type="text" name="combat_npcs_{{ sec.cat }}_armor_rating" value="{{ n.armor_rating }}" maxlength="16"></td>
+                                <td><input type="text" name="combat_npcs_{{ sec.cat }}_weapon" value="{{ n.weapon }}" maxlength="120"></td>
+                                <td><input type="text" name="combat_npcs_{{ sec.cat }}_notes" value="{{ n.notes }}" maxlength="240"></td>
+                                <td><button type="button" class="weap-del" onclick="this.closest('tr').remove()">×</button></td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                    <button type="button" class="weap-add" data-add-combat-npc-cat="{{ sec.cat }}">＋ ADD COMBAT NPC</button>
+                </div>
+                {% endfor %}
+
+                <button type="submit" class="btn-primary" style="width: 100%; margin-top: 1rem;">SAVE COMBAT NPCS</button>
+            </form>
+
+            <script>
+            (function () {
+                document.querySelectorAll('[data-add-combat-npc-cat]').forEach(function (btn) {
+                    btn.addEventListener('click', function () {
+                        var cat = btn.getAttribute('data-add-combat-npc-cat');
+                        var tbody = btn.parentElement.querySelector('tbody[data-rows]');
+                        var tr = document.createElement('tr');
+                        tr.innerHTML =
+                            '<td><input type="text" name="combat_npcs_' + cat + '_name" maxlength="80" placeholder="NAME"></td>' +
+                            '<td><input type="text" name="combat_npcs_' + cat + '_combat_pool" maxlength="8" placeholder="5"></td>' +
+                            '<td><input type="text" name="combat_npcs_' + cat + '_defense" maxlength="8" placeholder="3"></td>' +
+                            '<td><input type="text" name="combat_npcs_' + cat + '_health_max" maxlength="8" placeholder="7"></td>' +
+                            '<td><input type="text" name="combat_npcs_' + cat + '_armor_rating" maxlength="16" placeholder="—"></td>' +
+                            '<td><input type="text" name="combat_npcs_' + cat + '_weapon" maxlength="120" placeholder="Hand Gun"></td>' +
+                            '<td><input type="text" name="combat_npcs_' + cat + '_notes" maxlength="240" placeholder=""></td>' +
                             '<td><button type="button" class="weap-del" onclick="this.closest(\'tr\').remove()">×</button></td>';
                         tbody.appendChild(tr);
                         var firstInput = tr.querySelector('input');
