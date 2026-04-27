@@ -135,6 +135,19 @@ urlpatterns = [
         views.aim,
         name="aim",
     ),
+    # v0.15.15 — RELOAD action. Resets the equipped firearm's ammo
+    # tag to the catalogue magazine size. Costs the turn when called
+    # by the active participant; off-turn reloads are free GM
+    # bookkeeping. Players have unlimited magazines (no reserve
+    # tracking) so the action is always available. The view callable
+    # is ``reload_weapon`` to avoid shadowing Python's builtin
+    # ``reload`` at module scope; the URL name stays the natural
+    # ``reload`` for caller convenience.
+    path(
+        "combat/<int:pk>/participants/<int:participant_id>/reload/",
+        views.reload_weapon,
+        name="reload",
+    ),
 
     # ---------------------------------------------------------------
     # v0.15.7 — JSON API for the MCP server

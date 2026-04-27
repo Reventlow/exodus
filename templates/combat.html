@@ -176,6 +176,87 @@
         Talk briefly · drop prone · stand from prone (one turn, no penalty) · drop a held item · take cover from existing terrain · move up to <strong>Speed</strong> meters · activate a verbal merit · pull a trigger on a pre-aimed firearm.
     </div>
 
+    {# === ADVANCED ACTIONS — AIMING / BURST / AUTOFIRE / RELOAD (v0.15.15) === #}
+    {% comment %}
+    v0.15.15 — explainer for AIM (v0.15.14), burst fire (v0.15.14),
+    autofire spread (v0.15.14), and ammo / reload (v0.15.15).
+    Mirrors the live combat module's enforcement so players reading
+    /rules/combat/ get the same dice math the server applies.
+    {% endcomment %}
+    <header class="block-head"><span class="block-bullet">■</span><h3>ADVANCED ACTIONS — AIMING, BURST, AUTOFIRE, RELOAD</h3><span class="block-line"></span></header>
+    <p class="text-secondary" style="font-size: 0.78rem; line-height: 1.5; margin: 0.6rem 0 1rem 0;">
+        These are the four trigger-discipline actions exposed in the live combat module. The server enforces every cap and breakage rule below; this section is the player-facing reference.
+    </p>
+
+    <h4 class="mono-text text-accent" style="font-size: 0.85rem; letter-spacing: 0.2em; margin: 1.2rem 0 0.4rem 0;">AIMING</h4>
+    <div class="text-secondary" style="font-size: 0.85rem; line-height: 1.7; margin: 0 0 1rem 0;">
+        <p style="margin: 0 0 0.4rem 0;"><span class="mono-text text-accent">▸ COST</span> &nbsp;— spends your full turn against a specific named target. The pointer does <em>not</em> auto-advance; the GM steps the round forward when ready.</p>
+        <p style="margin: 0 0 0.4rem 0;"><span class="mono-text text-accent">▸ BENEFIT</span> &nbsp;— grants <strong>+1 dice</strong> on your next attack against that target. Stackable up to <strong>+3</strong> over consecutive aim turns (re-aiming the same target each turn).</p>
+        <p style="margin: 0 0 0.4rem 0;"><span class="mono-text text-accent">▸ BREAKS ON</span> &nbsp;— taking damage · taking full defense · dodging · attacking a different target · the round ending. Aim does <strong>not</strong> carry between rounds.</p>
+        <p style="margin: 0;"><span class="mono-text text-accent">▸ SWITCHING TARGETS</span> &nbsp;— resets the bonus to +1 (does not stack across targets).</p>
+    </div>
+
+    <h4 class="mono-text text-accent" style="font-size: 0.85rem; letter-spacing: 0.2em; margin: 1.2rem 0 0.4rem 0;">BURST FIRE</h4>
+    <p class="text-secondary" style="font-size: 0.85rem; line-height: 1.55; margin: 0 0 0.6rem 0;">
+        Available only on <strong>auto-capable</strong> firearms (catalogue flag: Sub Machine Gun, Assault Rifle, Auto Shotgun in the default seed). Single-shot pistols, DMRs, pump shotguns and bolt-action rifles stay single-fire even on a burst-mode POST — the server silently downgrades and writes a system-log row.
+    </p>
+    <table class="mono-text" style="width: 100%; border-collapse: collapse; font-size: 0.82rem; margin: 0 0 1rem 0;">
+        <thead style="color: var(--ink-dim);">
+            <tr style="border-bottom: 1px solid var(--c-dim);">
+                <th style="text-align: left; padding: 0.4rem 0.6rem; width: 28%;">MODE</th>
+                <th style="text-align: left; padding: 0.4rem 0.6rem; width: 12%;">ROUNDS</th>
+                <th style="text-align: left; padding: 0.4rem 0.6rem; width: 12%;">DICE</th>
+                <th style="text-align: left; padding: 0.4rem 0.6rem;">NOTES</th>
+            </tr>
+        </thead>
+        <tbody>
+            <tr style="border-bottom: 1px dotted var(--c-dim);">
+                <td style="padding: 0.4rem 0.6rem; color: var(--ink);">SINGLE</td>
+                <td style="padding: 0.4rem 0.6rem; color: var(--c-primary);">1</td>
+                <td style="padding: 0.4rem 0.6rem; color: var(--c-primary);">+0</td>
+                <td style="padding: 0.4rem 0.6rem; color: var(--ink-dim);">Default for every firearm. No spread.</td>
+            </tr>
+            <tr style="border-bottom: 1px dotted var(--c-dim);">
+                <td style="padding: 0.4rem 0.6rem; color: var(--ink);">SHORT BURST</td>
+                <td style="padding: 0.4rem 0.6rem; color: var(--c-primary);">3</td>
+                <td style="padding: 0.4rem 0.6rem; color: var(--c-primary);">+1</td>
+                <td style="padding: 0.4rem 0.6rem; color: var(--ink-dim);">Single target only — no spread.</td>
+            </tr>
+            <tr style="border-bottom: 1px dotted var(--c-dim);">
+                <td style="padding: 0.4rem 0.6rem; color: var(--ink);">MEDIUM BURST</td>
+                <td style="padding: 0.4rem 0.6rem; color: var(--c-primary);">10</td>
+                <td style="padding: 0.4rem 0.6rem; color: var(--c-primary);">+2</td>
+                <td style="padding: 0.4rem 0.6rem; color: var(--ink-dim);">Up to 3 targets total (1 primary + 2 extras).</td>
+            </tr>
+            <tr>
+                <td style="padding: 0.4rem 0.6rem; color: var(--ink);">LONG BURST / FULL AUTO</td>
+                <td style="padding: 0.4rem 0.6rem; color: var(--c-primary);">20</td>
+                <td style="padding: 0.4rem 0.6rem; color: var(--c-primary);">+3</td>
+                <td style="padding: 0.4rem 0.6rem; color: var(--ink-dim);">Up to 6 targets total (1 primary + 5 extras).</td>
+            </tr>
+        </tbody>
+    </table>
+
+    <h4 class="mono-text text-accent" style="font-size: 0.85rem; letter-spacing: 0.2em; margin: 1.2rem 0 0.4rem 0;">AUTOFIRE SPREAD</h4>
+    <div class="text-secondary" style="font-size: 0.85rem; line-height: 1.7; margin: 0 0 1rem 0;">
+        <p style="margin: 0 0 0.4rem 0;"><span class="mono-text text-accent">▸ ELIGIBILITY</span> &nbsp;— medium and long bursts only. Single and short bursts cannot spread.</p>
+        <p style="margin: 0 0 0.4rem 0;"><span class="mono-text text-accent">▸ TARGET CAPS</span> &nbsp;— medium burst engages up to <strong>3 targets total</strong> (1 primary + 2 extras); long burst up to <strong>6 targets total</strong> (1 primary + 5 extras).</p>
+        <p style="margin: 0 0 0.4rem 0;"><span class="mono-text text-accent">▸ ROLLS</span> &nbsp;— each spread target rolls a <strong>separate</strong> attack, with its own defense, cover, and armor mitigation.</p>
+        <p style="margin: 0 0 0.4rem 0;"><span class="mono-text text-accent">▸ PENALTY</span> &nbsp;— cumulative <strong>−1 dice per extra target</strong>. First extra: −1; second extra: −2; third: −3; and so on.</p>
+        <p style="margin: 0;"><span class="mono-text text-accent">▸ AIM</span> &nbsp;— the aim bonus only applies to the <strong>primary</strong> target. Extras get the burst bonus but not the aim bonus.</p>
+    </div>
+
+    <h4 class="mono-text text-accent" style="font-size: 0.85rem; letter-spacing: 0.2em; margin: 1.2rem 0 0.4rem 0;">AMMO &amp; RELOAD</h4>
+    <div class="text-secondary" style="font-size: 0.85rem; line-height: 1.7; margin: 0 0 1rem 0;">
+        <p style="margin: 0 0 0.4rem 0;"><span class="mono-text text-accent">▸ MAGAZINE</span> &nbsp;— each catalogue firearm carries a magazine size in rounds (Hand Gun 15 · Large Hand Gun 8 · SMG 30 · Assault Rifle 30 · DMR 10 · Shotgun 6 · Twin-Barrel 2 · Auto Shotgun 8 · Scoped Rifle 5 · Taser cartridge 1).</p>
+        <p style="margin: 0 0 0.4rem 0;"><span class="mono-text text-accent">▸ START STATE</span> &nbsp;— participants start combat with a full magazine (set on equip <em>and</em> on combat start).</p>
+        <p style="margin: 0 0 0.4rem 0;"><span class="mono-text text-accent">▸ CONSUMPTION</span> &nbsp;— single shot = 1 round · short burst = 3 · medium = 10 · long = 20.</p>
+        <p style="margin: 0 0 0.4rem 0;"><span class="mono-text text-accent">▸ INSUFFICIENT AMMO</span> &nbsp;— if the magazine has fewer rounds than the requested burst mode needs, the server silently downgrades to <strong>SINGLE</strong> and logs a system warning.</p>
+        <p style="margin: 0 0 0.4rem 0;"><span class="mono-text text-accent">▸ EMPTY MAGAZINE</span> &nbsp;— attempting to fire with zero rounds is rejected with an <strong>OUT OF AMMO</strong> flash; you must reload first.</p>
+        <p style="margin: 0 0 0.4rem 0;"><span class="mono-text text-accent">▸ RELOAD</span> &nbsp;— resets the magazine to capacity. <strong>Always available</strong> — players have unlimited magazines (no reserve tracking).</p>
+        <p style="margin: 0;"><span class="mono-text text-accent">▸ RELOAD COST</span> &nbsp;— costs your full turn when called by the active participant. Off-turn reloads (GM bookkeeping) are free but flagged in the log as out-of-band.</p>
+    </div>
+
     {# === WEAPONS CATALOGUE (live from /settings/) ===================== #}
     {% if weapons_by_cat.melee or weapons_by_cat.improvised or weapons_by_cat.firearm or weapons_by_cat.thrown %}
     <header class="block-head"><span class="block-bullet">■</span><h3>WEAPONS CATALOGUE</h3><span class="block-line"></span></header>
@@ -188,6 +269,12 @@
         <h4 class="mono-text text-accent" style="font-size: 0.85rem; letter-spacing: 0.2em; margin: 1.2rem 0 0.4rem 0;">
             {{ entry.label }} <span class="text-muted" style="font-weight: 400;">// {{ entry.hint }}</span>
         </h4>
+        {% comment %}
+        v0.15.15 — firearm catalogue gains a MAG column showing the
+        ammo-tracking magazine size in rounds. Other categories keep
+        the leaner four-column layout (no magazine concept on melee /
+        improvised / thrown).
+        {% endcomment %}
         <table class="mono-text" style="width: 100%; border-collapse: collapse; font-size: 0.78rem; margin-bottom: 0.8rem;">
             <thead style="color: var(--ink-dim);">
                 <tr style="border-bottom: 1px solid var(--c-dim);">
@@ -195,6 +282,9 @@
                     <th style="text-align: left; padding: 0.35rem 0.5rem; width: 13%;">DAMAGE</th>
                     <th style="text-align: left; padding: 0.35rem 0.5rem; width: 18%;">RANGE</th>
                     <th style="text-align: left; padding: 0.35rem 0.5rem; width: 12%;">CAPACITY</th>
+                    {% if entry.cat == "firearm" %}
+                    <th style="text-align: left; padding: 0.35rem 0.5rem; width: 7%;">MAG</th>
+                    {% endif %}
                     <th style="text-align: left; padding: 0.35rem 0.5rem;">NOTES</th>
                 </tr>
             </thead>
@@ -205,6 +295,9 @@
                     <td style="padding: 0.35rem 0.5rem; color: var(--c-primary);">{{ w.damage|default:"—" }}</td>
                     <td style="padding: 0.35rem 0.5rem;">{{ w.range|default:"—" }}</td>
                     <td style="padding: 0.35rem 0.5rem;">{{ w.capacity|default:"—" }}</td>
+                    {% if entry.cat == "firearm" %}
+                    <td style="padding: 0.35rem 0.5rem; color: var(--c-primary);">{% if w.magazine %}{{ w.magazine }}{% else %}—{% endif %}</td>
+                    {% endif %}
                     <td style="padding: 0.35rem 0.5rem; color: var(--ink-dim);">{{ w.notes }}</td>
                 </tr>
                 {% endfor %}

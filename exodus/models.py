@@ -191,8 +191,12 @@ class SiteSettings(models.Model):
             "notes (str). For firearms, an optional auto_capable (bool) "
             "flag controls whether burst-fire / autofire-spread modes "
             "are offered on the attack form (legacy entries without "
-            "the flag default to False at read time). See "
-            "SiteSettings.default_weapons() for the seed catalogue."
+            "the flag default to False at read time). For firearms, an "
+            "optional magazine (int) field defines the catalogue "
+            "magazine size in rounds (legacy entries without the field "
+            "default to 0 at read time, which suppresses ammo tracking "
+            "for that weapon). See SiteSettings.default_weapons() for "
+            "the seed catalogue."
         ),
     )
 
@@ -281,6 +285,17 @@ class SiteSettings(models.Model):
         spread). Legacy entries without the flag default to False at
         read time via ``get_weapons``. Non-firearm entries omit the
         flag entirely (the burst-fire UI is firearm-only).
+
+        v0.15.15 — firearms additionally carry ``magazine: int`` — the
+        magazine capacity in rounds. Drives the ammo tracking system:
+        each Character / NPC participant fills to ``magazine`` rounds
+        on equip and on combat start; firing consumes ammo by burst
+        mode (single=1 / short=3 / medium=10 / long=20); reload resets
+        to ``magazine``. Non-firearm entries omit the field. Legacy
+        firearm entries without the field default to ``0`` at read
+        time — which the ammo system reads as "no ammo concept", so
+        the weapon falls back to the pre-v0.15.15 unlimited-ammo
+        behaviour without a data migration.
         """
         return [
             # ----- Melee --------------------------------------------------
@@ -311,43 +326,43 @@ class SiteSettings(models.Model):
             # bolt-action rifles stay single-shot.
             {"name": "Hand Gun", "category": "firearm", "damage": "2L",
              "range": "20/40/80 m", "capacity": "12+1",
-             "auto_capable": False,
+             "auto_capable": False, "magazine": 15,
              "notes": "Concealable. 9 mm or .40 standard."},
             {"name": "Large Hand Gun", "category": "firearm", "damage": "3L",
              "range": "25/50/100 m", "capacity": "8+1",
-             "auto_capable": False,
+             "auto_capable": False, "magazine": 8,
              "notes": "Magnum / .44 / .50 AE. Heavy recoil — −1 to follow-up shots."},
             {"name": "Sub Machine Gun", "category": "firearm", "damage": "2L",
              "range": "20/40/80 m", "capacity": "30",
-             "auto_capable": True,
+             "auto_capable": True, "magazine": 30,
              "notes": "Burst-fire +1 dice; autofire +2 in close range."},
             {"name": "Assault Rifle", "category": "firearm", "damage": "3L",
              "range": "100/200/400 m", "capacity": "30",
-             "auto_capable": True,
+             "auto_capable": True, "magazine": 30,
              "notes": "Burst-fire +1; autofire +2/+3."},
             {"name": "DMR", "category": "firearm", "damage": "4L",
              "range": "200/400/800 m", "capacity": "20",
-             "auto_capable": False,
+             "auto_capable": False, "magazine": 10,
              "notes": "Semi-auto designated marksman rifle. Pairs well with optics."},
             {"name": "Shotgun", "category": "firearm", "damage": "4L close / 2L long",
              "range": "5/10/40 m", "capacity": "5+1",
-             "auto_capable": False,
+             "auto_capable": False, "magazine": 6,
              "notes": "Pump-action. Damage drops with range as shot spreads."},
             {"name": "Twin-Barrel Shotgun", "category": "firearm", "damage": "5L (both barrels)",
              "range": "5/10/40 m", "capacity": "2",
-             "auto_capable": False,
+             "auto_capable": False, "magazine": 2,
              "notes": "Fire one or both. Both = +1 damage, then full reload."},
             {"name": "Auto Shotgun", "category": "firearm", "damage": "4L",
              "range": "5/10/40 m", "capacity": "8",
-             "auto_capable": True,
+             "auto_capable": True, "magazine": 8,
              "notes": "Box-fed. Burst-fire +1 dice at close range."},
             {"name": "Scoped Rifle", "category": "firearm", "damage": "4L",
              "range": "250/500/1000 m", "capacity": "5+1",
-             "auto_capable": False,
+             "auto_capable": False, "magazine": 5,
              "notes": "−2 initiative; +1 aim per turn (max +3) with proper scope."},
             {"name": "Taser (Cartridge)", "category": "firearm", "damage": "1L + stun",
              "range": "4/8/15 m", "capacity": "1 cartridge",
-             "auto_capable": False,
+             "auto_capable": False, "magazine": 1,
              "notes": "On hit: Stamina + Resolve or stunned for [successes] turns."},
             # ----- Thrown -------------------------------------------------
             {"name": "Throwing Knife", "category": "thrown", "damage": "1L",
@@ -367,12 +382,29 @@ class SiteSettings(models.Model):
         any entry that doesn't carry the flag — legacy rows from before
         the field was introduced therefore behave as semi-auto / single-
         shot and the burst-fire UI is suppressed for them.
+
+        ``magazine`` (v0.15.15) defaults to ``0`` at read time for any
+        entry without the field. The combat ammo system reads ``0`` as
+        "no magazine size on file" and skips ammo tracking for that
+        entry, so legacy firearm rows behave the way they did before
+        v0.15.15 (unlimited ammo) until an admin gives them a real mag
+        size in /settings/.
         """
         weapons = self.weapons if isinstance(self.weapons, list) and self.weapons else self.default_weapons()
         hydrated = []
         for w in weapons:
             if not isinstance(w, dict):
                 continue
+            # v0.15.15 — coerce magazine to a non-negative int. Defensive
+            # against catalogue rows where the field was hand-edited to
+            # a non-integer string in the JSON; bad data falls back to
+            # zero (which switches off ammo tracking for that weapon).
+            try:
+                mag = int(w.get("magazine", 0) or 0)
+            except (TypeError, ValueError):
+                mag = 0
+            if mag < 0:
+                mag = 0
             hydrated.append({
                 "name": w.get("name", ""),
                 "category": w.get("category", ""),
@@ -384,6 +416,11 @@ class SiteSettings(models.Model):
                 # firearm entry) collapse to False so the burst-fire UI
                 # stays disabled unless explicitly opted in.
                 "auto_capable": bool(w.get("auto_capable", False)),
+                # v0.15.15 — magazine size in rounds. Always present on
+                # the hydrated dict so callers can use ``entry.get(...)``
+                # or ``entry["magazine"]`` interchangeably without a
+                # KeyError on legacy data.
+                "magazine": mag,
             })
         return hydrated
 

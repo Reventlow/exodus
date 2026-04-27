@@ -442,9 +442,9 @@
                         <thead>
                             <tr>
                                 <th style="width: 22%;">NAME</th>
-                                <th style="width: 13%;">DAMAGE</th>
-                                <th style="width: 19%;">RANGE</th>
-                                <th style="width: 12%;">CAPACITY</th>
+                                <th style="width: 12%;">DAMAGE</th>
+                                <th style="width: 17%;">RANGE</th>
+                                <th style="width: 10%;">CAPACITY</th>
                                 {% comment %}
                                 v0.15.14 — AUTO column appears only for
                                 firearms. The header cell is conditional;
@@ -453,9 +453,16 @@
                                 firearm rows so column alignment stays
                                 consistent if the editor is ever shown
                                 across categories side-by-side).
+                                v0.15.15 — MAG column appears only for
+                                firearms too. Drives the new ammo
+                                tracking system: each catalogue firearm
+                                entry has a ``magazine`` integer that
+                                fills participants on equip / start
+                                and is consumed by burst mode on attack.
                                 {% endcomment %}
                                 {% if sec.cat == "firearm" %}
                                 <th style="width: 6%; text-align: center;" title="Auto-capable: shows burst-fire and autofire-spread modes on the attack form.">AUTO</th>
+                                <th style="width: 7%; text-align: center;" title="Magazine size in rounds. Drives the ammo tracking system: filled on equip / combat start; consumed by single (1) / short (3) / medium (10) / long (20) burst.">MAG</th>
                                 {% endif %}
                                 <th>NOTES</th>
                                 <th style="width: 1%;"></th>
@@ -492,6 +499,23 @@
                                            class="weap-auto-cb"
                                            {% if w.auto_capable %}checked{% endif %}
                                            title="Auto-capable: shows burst-fire and autofire-spread modes on the attack form.">
+                                </td>
+                                {% comment %}
+                                v0.15.15 — magazine size cell. Pairs
+                                row-for-row with the other firearm
+                                columns through the parallel array
+                                ``weapons_firearm_magazine``. Stored as
+                                an int on the JSONField; the editor
+                                accepts any non-negative integer (zero
+                                disables ammo tracking for the entry).
+                                {% endcomment %}
+                                <td style="text-align: center;">
+                                    <input type="number"
+                                           name="weapons_firearm_magazine"
+                                           value="{{ w.magazine|default_if_none:0 }}"
+                                           min="0" max="999"
+                                           style="text-align: center;"
+                                           title="Magazine size in rounds. 0 disables ammo tracking for this entry.">
                                 </td>
                                 {% endif %}
                                 <td><input type="text" name="weapons_{{ sec.cat }}_notes" value="{{ w.notes }}" maxlength="240"></td>
@@ -534,7 +558,13 @@
                         // with a hidden flag input + a UI checkbox.
                         // The flag's name matches the server-side
                         // parallel array; the checkbox toggles it.
+                        // v0.15.15 — also render a MAG cell with the
+                        // ``weapons_firearm_magazine`` parallel-array
+                        // input. New firearm rows default to mag 0
+                        // (ammo tracking disabled) until the editor
+                        // sets a real value.
                         var autoCell = '';
+                        var magCell = '';
                         if (cat === 'firearm') {
                             autoCell =
                                 '<td style="text-align: center;">' +
@@ -544,6 +574,14 @@
                                   '<input type="checkbox" class="weap-auto-cb" ' +
                                          'title="Auto-capable: shows burst-fire and autofire-spread modes on the attack form.">' +
                                 '</td>';
+                            magCell =
+                                '<td style="text-align: center;">' +
+                                  '<input type="number" ' +
+                                         'name="weapons_firearm_magazine" ' +
+                                         'value="0" min="0" max="999" ' +
+                                         'style="text-align: center;" ' +
+                                         'title="Magazine size in rounds. 0 disables ammo tracking for this entry.">' +
+                                '</td>';
                         }
                         var tr = document.createElement('tr');
                         tr.innerHTML =
@@ -552,6 +590,7 @@
                             '<td><input type="text" name="weapons_' + cat + '_range" maxlength="48" placeholder="—"></td>' +
                             '<td><input type="text" name="weapons_' + cat + '_capacity" maxlength="48" placeholder="—"></td>' +
                             autoCell +
+                            magCell +
                             '<td><input type="text" name="weapons_' + cat + '_notes" maxlength="240" placeholder=""></td>' +
                             '<td><button type="button" class="weap-del" onclick="this.closest(\'tr\').remove()">×</button></td>';
                         tbody.appendChild(tr);

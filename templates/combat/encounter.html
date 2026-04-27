@@ -404,6 +404,35 @@ The END button also prompts for confirmation.
         color: #ffb454;
         border-color: #ffb454;
     }
+    /* v0.15.15 — MAG indicator pill on the participant row.
+       Mirrors .part-cond-pill chrome but with its own colour ladder
+       (green / amber / red) keyed off the magazine fill ratio.
+       The view annotates each Participant with ``ammo_color`` so the
+       template just emits the class. */
+    .part-ammo-pill {
+        display: inline-block;
+        font-size: 0.55rem;
+        letter-spacing: 0.18em;
+        padding: 0 5px;
+        border: 1px solid var(--c-dim);
+        margin-left: 6px;
+        text-transform: uppercase;
+        vertical-align: middle;
+        font-family: var(--font-mono, ui-monospace, monospace);
+    }
+    .part-ammo-pill.green {
+        color: #6ee7a7;
+        border-color: #6ee7a7;
+    }
+    .part-ammo-pill.amber {
+        color: #ffb454;
+        border-color: #ffb454;
+    }
+    .part-ammo-pill.red {
+        color: var(--accent-danger);
+        border-color: var(--accent-danger);
+        text-shadow: 0 0 4px rgba(239, 68, 68, 0.45);
+    }
     .part-cond-clear {
         background: transparent;
         border: none;
@@ -689,8 +718,10 @@ The END button also prompts for confirmation.
                 <label class="field-label" for="edit-scene">SCENE</label>
                 <textarea class="ss-input" id="edit-scene" name="scene_description" rows="3">{{ encounter.scene_description }}</textarea>
 
-                {# v0.15.7 — optional story-arc link. Pre-selects
-                   whatever's currently set; empty option clears it. #}
+                {% comment %}
+                v0.15.7 — optional story-arc link. Pre-selects
+                whatever's currently set; empty option clears it.
+                {% endcomment %}
                 <label class="field-label" for="edit-story">STORY ARC</label>
                 <select class="ss-input" id="edit-story" name="story_idea_id">
                     <option value="">— NO STORY ARC —</option>

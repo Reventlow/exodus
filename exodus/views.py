@@ -205,6 +205,12 @@ def site_settings(request):
             firearm_auto_flags = request.POST.getlist(
                 "weapons_firearm_auto_capable_flag"
             )
+            # v0.15.15 — magazine size parallel-array. Same shape as
+            # the auto_capable flag — paired row-for-row with the
+            # firearm column blocks, length-defensive on read.
+            firearm_magazines = request.POST.getlist(
+                "weapons_firearm_magazine"
+            )
             new_weapons = []
             for cat in categories:
                 names = request.POST.getlist(f"weapons_{cat}_name")
@@ -236,6 +242,26 @@ def site_settings(request):
                             if i < len(firearm_auto_flags) else "0"
                         )
                         entry["auto_capable"] = (flag_raw == "1")
+                        # v0.15.15 — read the parallel magazine size.
+                        # Coerce to a non-negative int; bad data falls
+                        # back to 0 (which the combat layer reads as
+                        # "no ammo tracking"). Hard cap at 999 to
+                        # mirror the editor input's max attribute and
+                        # prevent absurd JSON payloads from a tampered
+                        # POST.
+                        mag_raw = (
+                            firearm_magazines[i]
+                            if i < len(firearm_magazines) else "0"
+                        )
+                        try:
+                            mag_val = int(mag_raw)
+                        except (TypeError, ValueError):
+                            mag_val = 0
+                        if mag_val < 0:
+                            mag_val = 0
+                        if mag_val > 999:
+                            mag_val = 999
+                        entry["magazine"] = mag_val
                     new_weapons.append(entry)
             settings_obj.weapons = new_weapons
 
@@ -912,8 +938,20 @@ def api_weapons(request):
     # v0.15.14 — only firearms persist the auto_capable flag. The MCP
     # client may send the field for non-firearms; we silently ignore
     # it there to keep the schema clean.
+    # v0.15.15 — same treatment for the ``magazine`` field. Firearm-
+    # only, coerced to a non-negative int, capped at 999. Non-firearm
+    # POSTs that include the field have it silently dropped.
     if cat == "firearm":
         new_w["auto_capable"] = bool(body.get("auto_capable", False))
+        try:
+            mag_val = int(body.get("magazine", 0) or 0)
+        except (TypeError, ValueError):
+            mag_val = 0
+        if mag_val < 0:
+            mag_val = 0
+        if mag_val > 999:
+            mag_val = 999
+        new_w["magazine"] = mag_val
     weapons.append(new_w)
     settings_obj.weapons = weapons
     settings_obj.save(update_fields=["weapons"])
@@ -985,6 +1023,19 @@ def api_weapon_detail(request, name):
     # non-firearm rows silently drop the field on PUT.
     if "auto_capable" in body and w.get("category") == "firearm":
         w["auto_capable"] = bool(body["auto_capable"])
+    # v0.15.15 — magazine size (firearms only). Coerced to a non-
+    # negative int and capped at 999, mirroring the form-editor and
+    # POST-create code paths. Silently dropped on non-firearm PUTs.
+    if "magazine" in body and w.get("category") == "firearm":
+        try:
+            mag_val = int(body["magazine"] or 0)
+        except (TypeError, ValueError):
+            mag_val = 0
+        if mag_val < 0:
+            mag_val = 0
+        if mag_val > 999:
+            mag_val = 999
+        w["magazine"] = mag_val
     weapons[idx] = w
     settings_obj.weapons = weapons
     settings_obj.save(update_fields=["weapons"])

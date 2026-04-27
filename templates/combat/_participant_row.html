@@ -154,6 +154,28 @@ dodge), ADD CONDITION, WILLPOWER.
                 {% if p.weapon_name %} &middot; {{ p.weapon_name }}{% endif %}
                 {% if p.armor_name %} &middot; {{ p.armor_name }}{% endif %}
             </span>
+
+            {% comment %}
+            v0.15.15 — MAG x/y indicator. Only rendered when the
+            participant carries a firearm with a positive catalogue
+            ``magazine`` value (so non-firearm / mook / legacy rows
+            stay clean). Colour tier comes from the view annotation:
+            green ≥50%, amber 25–50%, red <25% / 0. When the mag is
+            empty, an additional EMPTY — RELOAD pill flags it loudly
+            so the attack form's OUT-OF-AMMO rejection isn't a
+            surprise.
+            {% endcomment %}
+            {% if p.ammo_max > 0 %}
+                <span class="part-ammo-pill {{ p.ammo_color }}"
+                      title="{{ p.weapon_name }} — {{ p.ammo_state|default_if_none:0 }} of {{ p.ammo_max }} rounds.">
+                    MAG {{ p.ammo_state|default_if_none:0 }}/{{ p.ammo_max }}
+                </span>
+                {% if p.ammo_state == 0 %}
+                <span class="part-ammo-pill red" title="Mag empty — must reload before firing.">
+                    EMPTY &mdash; RELOAD
+                </span>
+                {% endif %}
+            {% endif %}
         </div>
         {% comment %}
         v0.15.8 — × REMOVE is GM-only. Players never remove
@@ -331,16 +353,43 @@ dodge), ADD CONDITION, WILLPOWER.
                     a tooltip when the weapon is not auto-capable so
                     the user understands *why* the dropdown is empty.
                     {% endcomment %}
+                    {% comment %}
+                    v0.15.15 — FIRE MODE per-option ammo-cost labels.
+                    Each option spells out the rounds-fired cost so the
+                    player sees the price before picking. The inline JS
+                    further down this row also greys out options that
+                    cost more rounds than the current magazine carries
+                    and surfaces an "Insufficient ammo: would downgrade
+                    to SINGLE." note — the server still validates and
+                    auto-downgrades on submit, so the visual is purely
+                    informational.
+                    {% endcomment %}
                     <label for="burst-{{ p.id }}">FIRE MODE</label>
                     <select id="burst-{{ p.id }}" name="burst_mode"
                             {% if not p.weapon_auto_capable %}disabled title="Equipped weapon is not auto-capable."{% endif %}>
-                        <option value="single" selected>SINGLE</option>
+                        <option value="single" data-ammo-cost="1" selected>SINGLE (1 rd)</option>
                         {% if p.weapon_auto_capable %}
-                        <option value="short">SHORT BURST (3rd, +1)</option>
-                        <option value="medium">MEDIUM BURST (10rd, +2)</option>
-                        <option value="long">LONG BURST / FULL AUTO (+3)</option>
+                        <option value="short" data-ammo-cost="3">SHORT BURST (3 rd, +1)</option>
+                        <option value="medium" data-ammo-cost="10">MEDIUM BURST (10 rd, +2)</option>
+                        <option value="long" data-ammo-cost="20">LONG BURST / FULL AUTO (20 rd, +3)</option>
                         {% endif %}
                     </select>
+                    {% comment %}
+                    v0.15.15 — insufficient-ammo informational note.
+                    Hidden by default; the inline JS below toggles it
+                    when the selected mode's ammo cost exceeds the
+                    current mag count. Server-side downgrade is still
+                    the source of truth — the user is never blocked by
+                    the front-end (a mistimed AJAX state would just
+                    annoy them).
+                    {% endcomment %}
+                    {% if p.ammo_max > 0 %}
+                    <span id="ammo-warn-{{ p.id }}"
+                          class="part-ammo-warn"
+                          style="display: none; grid-column: 1 / -1; font-size: 0.65rem; color: var(--accent-danger); margin-top: 0.15rem;">
+                        Insufficient ammo: would downgrade to SINGLE.
+                    </span>
+                    {% endif %}
 
                     {% comment %}
                     v0.15.14 — additional autofire targets. The
@@ -460,8 +509,19 @@ dodge), ADD CONDITION, WILLPOWER.
                     // v0.15.14 — burst select + autofire panel + spread hint.
                     var burstSel = document.getElementById("burst-{{ p.id }}");
                     var burstBonusMap = {"single": 0, "short": 1, "medium": 2, "long": 3};
+                    var burstAmmoMap = {"single": 1, "short": 3, "medium": 10, "long": 20};
                     var ext = document.getElementById("autofire-extras-{{ p.id }}");
                     var spreadHint = document.getElementById("spread-hint-{{ p.id }}");
+                    // v0.15.15 — ammo telemetry. ``currentAmmo`` is
+                    // server-rendered into the JS at row render time
+                    // and isn't refreshed mid-form (the page reload
+                    // after each attack picks up the new state). When
+                    // the participant's weapon doesn't track ammo
+                    // (non-firearm / legacy entry / mook), ``ammoMax``
+                    // is 0 and the front-end ammo gating is suppressed.
+                    var ammoMax = {{ p.ammo_max|default:0 }};
+                    var currentAmmo = {% if p.ammo_state is None %}null{% else %}{{ p.ammo_state }}{% endif %};
+                    var ammoWarn = document.getElementById("ammo-warn-{{ p.id }}");
                     var baseTotal = {{ p.attack_preview.total }};
                     if (!modInput || !display || !liveTotal) return;
 
@@ -471,6 +531,35 @@ dodge), ADD CONDITION, WILLPOWER.
                         var show = (v === "medium" || v === "long");
                         if (ext) ext.style.display = show ? "" : "none";
                         if (spreadHint) spreadHint.style.display = show ? "" : "none";
+                    }
+
+                    function updateAmmoHints() {
+                        // v0.15.15 — grey out FIRE MODE options whose
+                        // ammo cost exceeds the current mag count, and
+                        // toggle the muted-red "would downgrade" note
+                        // when the currently selected mode is short of
+                        // ammo. Only meaningful when the equipped
+                        // weapon tracks ammo at all.
+                        if (!burstSel || ammoMax <= 0 || currentAmmo === null) return;
+                        var avail = currentAmmo;
+                        Array.prototype.forEach.call(burstSel.options, function(opt) {
+                            var cost = parseInt(opt.getAttribute("data-ammo-cost") || "1", 10);
+                            // Visual greying only — the option stays
+                            // selectable so a user who knows they're
+                            // about to reload can still click through.
+                            if (cost > avail && opt.value !== "single") {
+                                opt.style.color = "#888";
+                            } else {
+                                opt.style.color = "";
+                            }
+                        });
+                        if (!ammoWarn) return;
+                        var picked = burstSel.value;
+                        var pickedCost = burstAmmoMap[picked] || 1;
+                        ammoWarn.style.display =
+                            (pickedCost > avail && picked !== "single")
+                                ? ""
+                                : "none";
                     }
 
                     function update() {
@@ -495,10 +584,12 @@ dodge), ADD CONDITION, WILLPOWER.
                         burstSel.addEventListener("change", function() {
                             update();
                             updateAutofireVisibility();
+                            updateAmmoHints();
                         });
                     }
                     update();  // initial render — also normalises the +0 prefix
                     updateAutofireVisibility();
+                    updateAmmoHints();
                 })();
                 </script>
             {% endif %}
@@ -525,6 +616,31 @@ dodge), ADD CONDITION, WILLPOWER.
                         {% csrf_token %}
                         <button type="submit" title="Roll dodge pool — eats this turn if active, next turn otherwise.">DODGE</button>
                     </form>
+
+                    {% comment %}
+                    v0.15.15 — RELOAD button. Only rendered when the
+                    equipped weapon is a firearm with a positive
+                    catalogue magazine. Disabled when the magazine is
+                    already full (no point burning a turn just to
+                    re-state the obvious). The button label includes
+                    the live mag count for at-a-glance feedback.
+                    Players have unlimited magazines (no reserve
+                    tracking) so the action is always available
+                    on-turn; off-turn it costs nothing (GM bookkeeping).
+                    {% endcomment %}
+                    {% if p.ammo_max > 0 %}
+                        {% with current=p.ammo_state|default_if_none:0 %}
+                        <form method="post"
+                              action="{% url 'combat:reload' encounter.id p.id %}"
+                              style="display:inline;">
+                            {% csrf_token %}
+                            <button type="submit"
+                                    {% if current == p.ammo_max %}disabled title="Magazine already full."{% else %}title="Reload to full magazine. Costs the turn if you're the active actor."{% endif %}>
+                                RELOAD ({{ current }}/{{ p.ammo_max }})
+                            </button>
+                        </form>
+                        {% endwith %}
+                    {% endif %}
                     {% if encounter.active_participant_id == p.id %}
                         <form method="post"
                               action="{% url 'combat:pass_turn' encounter.id p.id %}"

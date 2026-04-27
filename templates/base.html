@@ -178,10 +178,12 @@
             {% for cm in CITY_MAPS %}
                 <a href="{% url 'starmap:citymap' cm.id %}">{{ cm.name|upper }}</a>
             {% endfor %}
-            {# v0.15.7 — top-level COMBAT link, visible to any authenticated
-               user who is a superuser or has at least one Character in any
-               encounter. The OPERATIONS dropdown still carries its own
-               COMBAT link for GM muscle memory; the redundancy is harmless. #}
+            {% comment %}
+            v0.15.7 — top-level COMBAT link, visible to any authenticated
+            user who is a superuser or has at least one Character in any
+            encounter. The OPERATIONS dropdown still carries its own
+            COMBAT link for GM muscle memory; the redundancy is harmless.
+            {% endcomment %}
             {% has_combat_visibility user as can_see_combat %}
             {% if can_see_combat %}
                 <span class="sep">|</span>

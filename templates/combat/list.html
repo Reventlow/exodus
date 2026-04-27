@@ -221,8 +221,10 @@ self-contained.
                             <span class="status-pill s-standby">SETUP</span>
                         {% endif %}
                     </td>
-                    {# Round number only meaningful while the encounter
-                       is live; show a dash in setup / concluded. #}
+                    {% comment %}
+                    Round number only meaningful while the encounter
+                    is live; show a dash in setup / concluded.
+                    {% endcomment %}
                     <td>
                         {% if enc.status == "active" %}
                             R{{ enc.round_number }}

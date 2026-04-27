@@ -429,6 +429,94 @@ def _strip_aim(participant):
     ]
 
 
+# ---------------------------------------------------------------------------
+# v0.15.15 — Ammo tracking
+# ---------------------------------------------------------------------------
+#
+# Magazines are tracked via an ``ammo:<N>`` condition tag on the
+# participant — N is the current rounds-in-magazine count. Players have
+# unlimited magazines (no reserve tracking); reload always resets the
+# count to the catalogue's ``magazine`` value. This pattern mirrors
+# ``dodging:N`` and ``aiming_at:tid:turns`` — no schema change required.
+#
+# Only Character / NPC participants with a snapshotted firearm
+# weapon_data (category=="firearm") and a non-zero magazine size carry
+# an ammo tag. Mooks remain ammo-free in v0.15.15 (their weapon is a
+# free-text catalogue label, not a snapshot dict). Non-firearm weapons
+# silently skip the ammo system.
+
+
+def _parse_ammo_tag(condition_tag):
+    """Parse ``'ammo:7'`` into the integer ``7``.
+
+    Returns ``None`` for any non-string, non-prefix, or non-numeric
+    value — defensive against legacy / hand-edited conditions lists so
+    a malformed tag never crashes the row render.
+    """
+    if not isinstance(condition_tag, str):
+        return None
+    if not condition_tag.startswith("ammo:"):
+        return None
+    try:
+        return int(condition_tag.split(":", 1)[1])
+    except (ValueError, IndexError):
+        return None
+
+
+def _ammo_state(participant):
+    """Return the current rounds-in-magazine for the participant.
+
+    Iterates the conditions list and returns the first ``ammo:N`` tag's
+    integer payload. Returns ``None`` if no ammo tag is present (which
+    the caller reads as "no ammo state on file" — typically means the
+    participant either has a non-firearm equipped, has nothing equipped,
+    or is a mook).
+    """
+    for c in (participant.conditions or []):
+        parsed = _parse_ammo_tag(c)
+        if parsed is not None:
+            return parsed
+    return None
+
+
+def _set_ammo(participant, rounds):
+    """Strip any prior ``ammo:*`` tag, then append a fresh
+    ``ammo:<rounds>`` tag in-place on ``participant.conditions``.
+
+    Caller is responsible for ``participant.save(update_fields=
+    ['conditions'])`` (or wider field set when called from another
+    action). Idempotent — calling twice with the same value yields
+    the same end state.
+    """
+    participant.conditions = [
+        c for c in (participant.conditions or [])
+        if not (isinstance(c, str) and c.startswith("ammo:"))
+    ]
+    participant.conditions.append(f"ammo:{int(rounds)}")
+
+
+def _strip_ammo(participant):
+    """Remove any ``ammo:*`` tag from ``participant.conditions``
+    in-place. Caller is responsible for ``participant.save(...)``.
+
+    Used when transitioning a participant *out* of an ammo-tracked
+    state — typically when unequipping a firearm or equipping a
+    non-firearm weapon (the previous mag count is no longer
+    meaningful).
+    """
+    participant.conditions = [
+        c for c in (participant.conditions or [])
+        if not (isinstance(c, str) and c.startswith("ammo:"))
+    ]
+
+
+# v0.15.15 — rounds-fired-per-burst-mode lookup. Mirrors the
+# ``BURST_BONUSES`` dice-bonus table but in the inverse direction
+# (cost rather than benefit). Keep these two tables aligned: any
+# new burst mode must be added to both.
+BURST_AMMO_COST = {"single": 1, "short": 3, "medium": 10, "long": 20}
+
+
 def _condition_attack_modifier(participant):
     """Sum ``atk_mod`` across active conditions, floored at -10.
 
@@ -1148,6 +1236,39 @@ def encounter_page(request, pk):
         # downgrades to single (and a system row notes the attempt).
         p.weapon_auto_capable = _weapon_is_auto_capable(p.weapon_data)
 
+        # v0.15.15 — ammo annotations. ``ammo_state`` is the current
+        # rounds-in-magazine (``None`` if no ammo tag is set);
+        # ``ammo_max`` is the catalogue magazine size from the
+        # snapshotted ``weapon_data`` (zero for non-firearm / mook /
+        # legacy data). The MAG x/y indicator on the row renders only
+        # when ``ammo_max > 0``; empty / partial states colour-code
+        # via inline conditionals in the template.
+        p.ammo_state = _ammo_state(p)
+        try:
+            p.ammo_max = int((p.weapon_data or {}).get("magazine", 0) or 0)
+        except (TypeError, ValueError):
+            p.ammo_max = 0
+        if p.ammo_max < 0:
+            p.ammo_max = 0
+        # ``ammo_pct`` drives the colour tier of the indicator —
+        # green ≥50%, amber 25–50%, red <25% / 0. Pre-computed in
+        # Python so the template stays declarative.
+        if p.ammo_max > 0 and p.ammo_state is not None:
+            p.ammo_pct = (p.ammo_state * 100) // p.ammo_max
+        else:
+            p.ammo_pct = 0
+        if p.ammo_max > 0 and p.ammo_state is not None:
+            if p.ammo_state == 0:
+                p.ammo_color = "red"
+            elif p.ammo_pct < 25:
+                p.ammo_color = "red"
+            elif p.ammo_pct < 50:
+                p.ammo_color = "amber"
+            else:
+                p.ammo_color = "green"
+        else:
+            p.ammo_color = ""
+
         # v0.15.14 — aim state for the row banner. ``aim_state`` is
         # ``(target_id, turns)`` or ``None``; resolve target_name in a
         # second pass below so the banner can display
@@ -1837,12 +1958,51 @@ def start_encounter(request, pk):
     # Reset acted_this_round on every participant for the fresh round.
     encounter.participants.update(acted_this_round=False)
 
+    # v0.15.15 — fill magazines for every Character / NPC participant
+    # whose snapshotted ``weapon_data`` is a firearm with a positive
+    # ``magazine`` value AND who doesn't already carry an ``ammo:*``
+    # tag from an earlier equip. This handles the case where a
+    # participant was equipped during setup (the equip-weapon hook
+    # already filled the mag in that path; we just don't double-fill
+    # here). Mooks are skipped — their weapon is a free-text catalogue
+    # label, not a snapshot dict, so there's no per-participant ammo
+    # state to manage.
+    filled_count = 0
+    for p in encounter.participants.all():
+        if p.participant_kind not in ("character", "npc"):
+            continue
+        wd = p.weapon_data or {}
+        if wd.get("category") != "firearm":
+            continue
+        try:
+            mag = int(wd.get("magazine", 0) or 0)
+        except (TypeError, ValueError):
+            mag = 0
+        if mag <= 0:
+            continue
+        if _ammo_state(p) is not None:
+            # Already has an ammo tag (set on equip). Don't reset —
+            # equipping mid-setup with a partial use case isn't on the
+            # table in v0.15.15, but if some path put a tag on we
+            # respect it rather than silently top up.
+            continue
+        _set_ammo(p, mag)
+        p.save(update_fields=["conditions"])
+        filled_count += 1
+
     _log(
         encounter,
         "system",
         f"Encounter started — round 1, {ordered[0].name} acts first.",
         first_participant_id=ordered[0].id,
     )
+    if filled_count > 0:
+        _log(
+            encounter,
+            "system",
+            f"Magazines filled at combat start ({filled_count} participants).",
+            filled_count=filled_count,
+        )
     return redirect("combat:detail", pk=encounter.pk)
 
 
@@ -2272,6 +2432,12 @@ def equip_weapon(request, pk, participant_id):
     retroactively rewrite the in-flight encounter.
 
     v0.15.8 — players may equip on their own character row.
+
+    v0.15.15 — equipping a firearm with a catalogue ``magazine > 0``
+    auto-fills the magazine to capacity via the ``ammo:<N>`` condition
+    tag. Equipping a non-firearm (or unequipping) strips any stale
+    ``ammo:*`` tag. Mooks aren't routed through this view in v0.15.15
+    so the ammo plumbing only touches Character / NPC participants.
     """
     if request.method != "POST":
         return HttpResponseNotAllowed(["POST"])
@@ -2284,16 +2450,19 @@ def equip_weapon(request, pk, participant_id):
     name = request.POST.get("weapon_name", "").strip()
 
     if not name:
-        # Empty submission = unequip.
+        # Empty submission = unequip. Strip any ammo tag so the next
+        # equip starts from a clean slate.
         participant.weapon_name = ""
         participant.weapon_data = {}
-        participant.save(update_fields=["weapon_name", "weapon_data"])
+        _strip_ammo(participant)
+        participant.save(update_fields=["weapon_name", "weapon_data", "conditions"])
         _log(
             encounter,
             "weapon_change",
             f"{participant.name} unequipped weapon.",
             participant_id=participant.pk,
             weapon_name="",
+            magazine_full=False,
         )
         return redirect("combat:detail", pk=encounter.pk)
 
@@ -2305,13 +2474,15 @@ def equip_weapon(request, pk, participant_id):
         # doesn't leave a half-equipped state behind.
         participant.weapon_name = ""
         participant.weapon_data = {}
-        participant.save(update_fields=["weapon_name", "weapon_data"])
+        _strip_ammo(participant)
+        participant.save(update_fields=["weapon_name", "weapon_data", "conditions"])
         _log(
             encounter,
             "weapon_change",
             f"{participant.name} unequipped weapon.",
             participant_id=participant.pk,
             weapon_name="",
+            magazine_full=False,
         )
         return redirect("combat:detail", pk=encounter.pk)
 
@@ -2319,7 +2490,24 @@ def equip_weapon(request, pk, participant_id):
     # mutations on the catalogue list don't bleed in.
     participant.weapon_name = entry.get("name", "")
     participant.weapon_data = dict(entry)
-    participant.save(update_fields=["weapon_name", "weapon_data"])
+
+    # v0.15.15 — fill the magazine on equip if the catalogue entry is a
+    # firearm with a positive magazine size. Otherwise strip any stale
+    # ammo tag (covers the swap-from-firearm-to-melee path).
+    mag = 0
+    if entry.get("category") == "firearm":
+        try:
+            mag = int(entry.get("magazine", 0) or 0)
+        except (TypeError, ValueError):
+            mag = 0
+    if mag > 0:
+        _set_ammo(participant, mag)
+        magazine_full = True
+    else:
+        _strip_ammo(participant)
+        magazine_full = False
+
+    participant.save(update_fields=["weapon_name", "weapon_data", "conditions"])
 
     _log(
         encounter,
@@ -2327,6 +2515,8 @@ def equip_weapon(request, pk, participant_id):
         f"{participant.name} equipped {participant.weapon_name}.",
         participant_id=participant.pk,
         weapon_name=participant.weapon_name,
+        magazine=mag,
+        magazine_full=magazine_full,
     )
     return redirect("combat:detail", pk=encounter.pk)
 
@@ -2800,7 +2990,64 @@ def attack(request, pk, attacker_id):
             weapon_name=weapon_name,
         )
         burst_mode = "single"
+
+    # v0.15.15 — ammo gating. Only firearms with a positive catalogue
+    # magazine size carry an ammo tag. Mooks (no weapon_data dict) and
+    # non-firearms / pre-v0.15.15 catalogue rows skip this whole block
+    # and behave the way they did in v0.15.14.
+    is_firearm = weapon_data.get("category") == "firearm"
+    try:
+        mag_size = int(weapon_data.get("magazine", 0) or 0)
+    except (TypeError, ValueError):
+        mag_size = 0
+    ammo_tracked = bool(is_firearm and mag_size > 0)
+    burst_downgraded_due_to_ammo = False
+    ammo_before = None
+    if ammo_tracked:
+        ammo_before = _ammo_state(attacker)
+        # Defensive: a firearm-equipped participant who somehow lost
+        # their ammo tag (legacy data, condition-clear collision)
+        # collapses to "no ammo on file" — we treat that as zero so
+        # the OUT-OF-AMMO branch below fires rather than silently
+        # rolling. The reload action will set them straight.
+        if ammo_before is None:
+            ammo_before = 0
+        rounds_required = BURST_AMMO_COST.get(burst_mode, 1)
+        if ammo_before == 0:
+            messages.error(
+                request,
+                f"OUT OF AMMO — RELOAD FIRST. ({weapon_name})",
+            )
+            _log(
+                encounter,
+                "system",
+                f"{attacker.name} attempted to fire {weapon_name} with empty mag — rejected.",
+                actor_participant_id=attacker.id,
+                weapon_name=weapon_name,
+                attempted_burst_mode=burst_mode,
+            )
+            return redirect("combat:detail", pk=encounter.pk)
+        if ammo_before < rounds_required:
+            # Insufficient ammo for the requested burst — silently
+            # downgrade to single. The shooter still pulls a trigger
+            # rather than getting a hard "not enough rounds" rejection,
+            # mirroring the auto_capable downgrade pattern above.
+            _log(
+                encounter,
+                "system",
+                f"Insufficient ammo for {burst_mode} burst "
+                f"({ammo_before}/{rounds_required}) — fired single instead.",
+                actor_participant_id=attacker.id,
+                weapon_name=weapon_name,
+                attempted_burst_mode=burst_mode,
+                ammo_available=ammo_before,
+                ammo_required=rounds_required,
+            )
+            burst_mode = "single"
+            burst_downgraded_due_to_ammo = True
+
     burst_bonus = BURST_BONUSES[burst_mode]
+    rounds_fired = BURST_AMMO_COST[burst_mode] if ammo_tracked else 0
 
     # v0.15.14 — aim consumption. We always strip the aim tag at the
     # end of an attack (whether consumed or broken), but the bonus
@@ -2887,6 +3134,16 @@ def attack(request, pk, attacker_id):
 
     aim_only_on_primary = (extras_total > 0 and aim_bonus > 0)
 
+    # v0.15.15 — compute the post-fire magazine state up-front so the
+    # value can be threaded into every per-target log row. The ammo
+    # tag is decremented once after the resolver pass (regardless of
+    # how many extras are engaged — burst spread fires the same
+    # rounds at multiple targets). When ammo isn't tracked the keys
+    # stay None / False so the timeline can filter on presence.
+    ammo_after = None
+    if ammo_tracked:
+        ammo_after = max(0, ammo_before - rounds_fired)
+
     extra_payload = {
         "burst_mode": burst_mode,
         "burst_bonus": burst_bonus,
@@ -2895,6 +3152,15 @@ def attack(request, pk, attacker_id):
         "aim_broken": aim_broken,
         "aim_only_on_primary": aim_only_on_primary,
         "extras_total": extras_total,
+        # v0.15.15 — ammo accounting. Present on every attack row so
+        # the timeline reads accurately even on legacy / non-firearm
+        # attacks (where the values stay None / 0 / False).
+        "ammo_tracked": ammo_tracked,
+        "ammo_before": ammo_before,
+        "ammo_after": ammo_after,
+        "rounds_fired": rounds_fired,
+        "mag_size": mag_size if ammo_tracked else 0,
+        "burst_downgraded_due_to_ammo": burst_downgraded_due_to_ammo,
     }
 
     # ---- Primary attack ----------------------------------------------------
@@ -2964,6 +3230,21 @@ def attack(request, pk, attacker_id):
             spread_penalty=spread_penalty,
             extra_payload=extra_payload,
         )
+
+    # ---- Ammo decrement (v0.15.15) -----------------------------------------
+    # Decrement the magazine once per attack regardless of how many
+    # spread targets were engaged — a burst is a single trigger pull
+    # that consumes ``rounds_fired`` rounds and can be redirected
+    # across N targets within the same burst. Decrement happens after
+    # the rolls so payload consistency on the per-target rows is
+    # preserved (each row already carries ammo_before / ammo_after).
+    # The attacker may have been refreshed during aim housekeeping
+    # earlier — re-fetch defensively to avoid stomping on the
+    # willpower decrement that already persisted.
+    if ammo_tracked:
+        attacker.refresh_from_db()
+        _set_ammo(attacker, ammo_after)
+        attacker.save(update_fields=["conditions"])
 
     # ---- Burst summary row -------------------------------------------------
     if burst_mode != "single" or extras_total > 0:
@@ -3236,6 +3517,98 @@ def full_defense(request, pk, participant_id):
             encounter,
             "system",
             f"{participant.name}'s aim broken — took full defense.",
+            actor_participant_id=participant.id,
+        )
+    return redirect("combat:detail", pk=encounter.pk)
+
+
+@login_required
+@_gm_or_owner()
+@csrf_protect
+def reload_weapon(request, pk, participant_id):
+    """POST — reload the participant's equipped firearm to a full magazine.
+
+    v0.15.15 — players have unlimited magazines (no reserve tracking),
+    so reload is always available. The action resets the ammo tag to
+    the catalogue ``magazine`` value.
+
+    Turn cost mirrors the ``full_defense`` / ``dodge`` / ``aim``
+    pattern: when called by the **active** participant, the action
+    consumes the turn (``acted_this_round=True``) but does NOT
+    auto-advance the pointer — the GM clicks NEXT TURN to actually
+    pass the turn. When called off-turn (typically a GM bookkeeping
+    nicety between rounds), no turn is consumed; an extra ``system``
+    log row notes the out-of-band reload so the timeline reads
+    accurately.
+
+    Rejected (flash + redirect) when:
+    * encounter is not active
+    * the participant has no equipped weapon, or has a non-firearm
+      equipped, or has a firearm with no ``magazine`` size on file
+      (legacy / hand-edited catalogue entry)
+
+    Note on naming: the URL is bound as ``combat:reload`` so callers
+    can use the natural verb. The Python view is named
+    ``reload_weapon`` to avoid shadowing the ``reload`` builtin at
+    module scope.
+    """
+    if request.method != "POST":
+        return HttpResponseNotAllowed(["POST"])
+
+    encounter = get_object_or_404(Encounter, pk=pk)
+    if encounter.status != "active":
+        messages.error(request, "Cannot reload outside an active encounter.")
+        return redirect("combat:detail", pk=encounter.pk)
+
+    participant = get_object_or_404(
+        Participant, pk=participant_id, encounter=encounter
+    )
+
+    weapon_data = participant.weapon_data or {}
+    if weapon_data.get("category") != "firearm":
+        messages.error(
+            request, "Cannot reload: equipped weapon is not a firearm."
+        )
+        return redirect("combat:detail", pk=encounter.pk)
+
+    try:
+        mag_size = int(weapon_data.get("magazine", 0) or 0)
+    except (TypeError, ValueError):
+        mag_size = 0
+    if mag_size <= 0:
+        messages.error(
+            request,
+            "Cannot reload: equipped weapon has no magazine size on file.",
+        )
+        return redirect("combat:detail", pk=encounter.pk)
+
+    on_turn = (encounter.active_participant_id == participant.id)
+
+    _set_ammo(participant, mag_size)
+    if on_turn:
+        participant.acted_this_round = True
+        participant.save(update_fields=["conditions", "acted_this_round"])
+    else:
+        participant.save(update_fields=["conditions"])
+
+    _log(
+        encounter,
+        "reload",
+        f"{participant.name} reloaded — {mag_size} rounds chambered.",
+        actor_participant_id=participant.id,
+        weapon_name=participant.weapon_name,
+        magazine=mag_size,
+        mag_size=mag_size,
+        on_turn=on_turn,
+    )
+    if not on_turn:
+        # Off-turn reload — flag so the timeline reads accurately.
+        # The GM can still see who reloaded between rounds without
+        # confusing it for an in-turn action.
+        _log(
+            encounter,
+            "system",
+            f"{participant.name}: out-of-band reload (off-turn — no turn consumed).",
             actor_participant_id=participant.id,
         )
     return redirect("combat:detail", pk=encounter.pk)
