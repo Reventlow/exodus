@@ -123,4 +123,48 @@ urlpatterns = [
         views.dodge,
         name="dodge",
     ),
+
+    # ---------------------------------------------------------------
+    # v0.15.7 — JSON API for the MCP server
+    # ---------------------------------------------------------------
+    # All endpoints under ``/api/admin/combat/`` honour the
+    # ``Authorization: Bearer <MCP_API_TOKEN>`` middleware in
+    # exodus.mcp_auth (or session-cookie superuser auth). Read +
+    # create + lifecycle only — attack / dodge / condition / willpower
+    # mutations stay in the web UI by design.
+    path(
+        "api/admin/combat/encounters/",
+        views.api_encounters,
+        name="api_list",
+    ),
+    path(
+        "api/admin/combat/encounters/<int:pk>/",
+        views.api_encounter_detail,
+        name="api_detail",
+    ),
+    path(
+        "api/admin/combat/encounters/<int:pk>/lifecycle/",
+        views.api_encounter_lifecycle,
+        name="api_lifecycle",
+    ),
+    path(
+        "api/admin/combat/encounters/<int:pk>/initiative/",
+        views.api_encounter_initiative,
+        name="api_initiative",
+    ),
+    path(
+        "api/admin/combat/encounters/<int:pk>/turn/",
+        views.api_encounter_turn,
+        name="api_turn",
+    ),
+    path(
+        "api/admin/combat/encounters/<int:pk>/participants/",
+        views.api_encounter_participants,
+        name="api_participants",
+    ),
+    path(
+        "api/admin/combat/encounters/<int:pk>/participants/<int:participant_id>/",
+        views.api_encounter_participant_detail,
+        name="api_participant_detail",
+    ),
 ]

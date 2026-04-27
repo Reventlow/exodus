@@ -44,10 +44,19 @@ def broadcast_combat_event(encounter_id, event_type, payload):
 class EncounterConsumer(WebsocketConsumer):
     """Per-encounter live channel.
 
-    Phase 0: connect-only; visibility check is loose (any authenticated
-    user). Phase 1+ tightens this against ``Encounter.participants`` and
-    superuser status so non-GMs only subscribe to encounters they are
-    actually in.
+    v0.15.7 — tightened authorisation. Subscription is granted to:
+
+    * Superusers (the GM driving the combat) — any encounter.
+    * Players whose Character is currently a Participant of the
+      target encounter — only that encounter.
+
+    Anyone else (anonymous, or an authenticated player with no
+    character in this fight) is dropped at connect with WebSocket
+    close code ``4403`` (analogous to HTTP 403). Bad / missing
+    encounter id closes with ``4400``; missing auth with ``4401``.
+    The check uses the ORM (the WS scope already injects the
+    AuthMiddleware'd user), so it matches the exact same ownership
+    semantics as the HTTP view layer.
     """
 
     def connect(self):
@@ -56,10 +65,30 @@ class EncounterConsumer(WebsocketConsumer):
             self.close(code=4401)
             return
         try:
-            self.encounter_id = int(self.scope["url_route"]["kwargs"]["encounter_id"])
+            encounter_id = int(self.scope["url_route"]["kwargs"]["encounter_id"])
         except (KeyError, ValueError):
             self.close(code=4400)
             return
+
+        # Authorisation:
+        # - superusers can subscribe to any encounter;
+        # - players can subscribe iff they own a Character in the
+        #   encounter's participants list (mirrors the HTTP 403 check
+        #   in encounter_page so WS visibility never widens the
+        #   surface beyond the page view).
+        if not user.is_superuser:
+            # Local import to avoid an app-loading cycle: this module
+            # is imported by combat/views.py at module load time.
+            from .models import Participant
+            is_participant = Participant.objects.filter(
+                encounter_id=encounter_id,
+                character__owner=user,
+            ).exists()
+            if not is_participant:
+                self.close(code=4403)
+                return
+
+        self.encounter_id = encounter_id
         self.group_name = f"combat_{self.encounter_id}"
         async_to_sync(self.channel_layer.group_add)(self.group_name, self.channel_name)
         self.accept()

@@ -1,7 +1,7 @@
 {% comment %}
 Single participant row inside the encounter PARTICIPANTS faction columns.
 
-Inputs (v0.15.5):
+Inputs (v0.15.5 + v0.15.7):
     p                — Participant instance, annotated by encounter_page with:
                          p.wound_penalty           (int, <= 0)
                          p.attack_modifier_total   (wound + condition atk_mod)
@@ -19,12 +19,19 @@ Inputs (v0.15.5):
     attack_eligible  — bool: encounter.status == "active" and there is an
                        active_participant pointer (hides the ATTACK form
                        on every row but the actor's)
+    read_only        — v0.15.7: True for player spectator view. When True
+                       the row renders all read-only state (kind, name,
+                       conditions, cover, MOD/wound chips, HP/WP counters)
+                       but suppresses every action surface — × REMOVE
+                       button, inline condition × clear buttons, and the
+                       entire collapsible <details> panel of mini-forms.
 
-Renders (v0.15.5): kind badge, name, condition pills, MOD chip, wound
+Renders: kind badge, name, condition pills, MOD chip, wound
 chip, current weapon / armor / cover pill, HP triplet (B/L/A of Max), WP
-counter, × REMOVE button, and a collapsible <details> panel with seven
-mini-forms: EQUIP WEAPON, EQUIP ARMOR, SET COVER, ATTACK (active only),
-STANCE (full defense / dodge), ADD CONDITION, WILLPOWER.
+counter, × REMOVE button (GM only), and a collapsible <details> panel
+with seven mini-forms (GM only): EQUIP WEAPON, EQUIP ARMOR, SET COVER,
+ATTACK (active only), STANCE (full defense / dodge), ADD CONDITION,
+WILLPOWER.
 {% endcomment %}
 <div class="part-row">
     <div class="part-row-head">
@@ -47,6 +54,11 @@ STANCE (full defense / dodge), ADD CONDITION, WILLPOWER.
             {% for tag, label, color in p.condition_pills %}
                 <span class="part-cond-pill {{ color }}">
                     {{ label }}
+                    {% comment %}
+                    v0.15.7 — inline × clear is GM-only. Spectators
+                    see the pill but no clear button.
+                    {% endcomment %}
+                    {% if not read_only %}
                     <form method="post"
                           action="{% url 'combat:clear_condition' encounter.id p.id %}"
                           style="display:inline; margin-left: 0.25rem;">
@@ -55,6 +67,7 @@ STANCE (full defense / dodge), ADD CONDITION, WILLPOWER.
                                value="{% if tag|slice:':8' == 'dodging:' %}dodging{% else %}{{ tag }}{% endif %}">
                         <button type="submit" class="part-cond-clear" title="Clear {{ label }}">&times;</button>
                     </form>
+                    {% endif %}
                 </span>
             {% endfor %}
 
@@ -89,18 +102,28 @@ STANCE (full defense / dodge), ADD CONDITION, WILLPOWER.
                 {% if p.armor_name %} &middot; {{ p.armor_name }}{% endif %}
             </span>
         </div>
+        {% comment %}
+        v0.15.7 — × REMOVE is GM-only. The header still keeps its
+        flex layout when the button is suppressed (the .part-meta
+        slot just consumes the full width).
+        {% endcomment %}
+        {% if not read_only %}
         <form method="post" action="{% url 'combat:participant_remove' encounter.id p.id %}"
               style="display:inline;"
               onsubmit="return confirm('Remove {{ p.name|escapejs }} from this encounter?');">
             {% csrf_token %}
             <button type="submit" class="part-remove">&times; REMOVE</button>
         </form>
+        {% endif %}
     </div>
 
     {% comment %}
     Collapsible action panel. Holds the sub-forms. Stays closed by
     default so dense participant lists don't drown in form fields.
+    v0.15.7 — entire panel is GM-only; spectators don't see the
+    + ACTIONS twirldown at all.
     {% endcomment %}
+    {% if not read_only %}
     <details class="part-actions">
         <summary><span>actions</span></summary>
         <div class="part-actions-grid">
@@ -278,4 +301,5 @@ STANCE (full defense / dodge), ADD CONDITION, WILLPOWER.
 
         </div>
     </details>
+    {% endif %}
 </div>

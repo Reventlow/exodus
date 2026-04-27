@@ -129,8 +129,21 @@ self-contained.
 
     <div class="kicker" style="margin-bottom: 0.4rem;">DIRECTORATE COMBAT // ENCOUNTERS</div>
     <h1 class="title" style="margin: 0 0 0.4rem 0;">ENCOUNTERS</h1>
-    <div class="sub" style="margin-bottom: 1.6rem;">PERSONAL COMBAT — GM ONLY</div>
+    <div class="sub" style="margin-bottom: 1.6rem;">
+        {% if read_only %}
+            PERSONAL COMBAT — LIVE SPECTATOR VIEW
+        {% else %}
+            PERSONAL COMBAT — GM ONLY
+        {% endif %}
+    </div>
 
+    {% comment %}
+    v0.15.7 — NEW ENCOUNTER form is GM-only. Players reach this page
+    when they have at least one character participating in any
+    encounter; for them the directory is read-only and only shows
+    encounters they're in (filtered server-side in encounter_list_page).
+    {% endcomment %}
+    {% if not read_only %}
     {# New-encounter form: collapsed by default. #}
     <details class="enc-create-form">
         <summary>NEW ENCOUNTER</summary>
@@ -148,11 +161,21 @@ self-contained.
             <textarea class="ss-input" id="enc-scene" name="scene_description" rows="3"
                       placeholder="OPENING NARRATION, HAZARDS, GOALS"></textarea>
 
+            {# v0.15.7 — optional story-arc link. Empty = no association. #}
+            <label class="field-label" for="enc-story">STORY ARC</label>
+            <select class="ss-input" id="enc-story" name="story_idea_id">
+                <option value="">— NO STORY ARC —</option>
+                {% for idea in story_ideas %}
+                    <option value="{{ idea.id }}">{{ idea.title }}</option>
+                {% endfor %}
+            </select>
+
             <button type="submit" class="btn-primary" style="width: 100%; margin-top: 0.75rem;">
                 CREATE ENCOUNTER
             </button>
         </form>
     </details>
+    {% endif %}
 
     <div class="block-head">
         <span class="block-bullet">&#9679;</span>
@@ -165,13 +188,14 @@ self-contained.
         <table class="enc-table">
             <thead>
                 <tr>
-                    <th style="width: 28%;">TITLE</th>
-                    <th style="width: 12%;">STATUS</th>
-                    <th style="width: 8%;">ROUND</th>
-                    <th style="width: 12%;">PARTICIPANTS</th>
-                    <th style="width: 13%;">STARTED</th>
-                    <th style="width: 13%;">CREATED</th>
-                    <th style="width: 14%; text-align: right;">&nbsp;</th>
+                    <th style="width: 24%;">TITLE</th>
+                    <th style="width: 11%;">STATUS</th>
+                    <th style="width: 7%;">ROUND</th>
+                    <th style="width: 10%;">PARTS</th>
+                    <th style="width: 14%;">STORY ARC</th>
+                    <th style="width: 11%;">STARTED</th>
+                    <th style="width: 11%;">CREATED</th>
+                    <th style="width: 12%; text-align: right;">&nbsp;</th>
                 </tr>
             </thead>
             <tbody>
@@ -206,6 +230,16 @@ self-contained.
                         {% endif %}
                     </td>
                     <td>{{ enc.participant_count }}</td>
+                    {# v0.15.7 — story-arc column. Renders the title or a dash. #}
+                    <td>
+                        {% if enc.story_idea %}
+                            <span title="{{ enc.story_idea.title }}">
+                                {{ enc.story_idea.title|truncatechars:24 }}
+                            </span>
+                        {% else %}
+                            <span class="muted">&mdash;</span>
+                        {% endif %}
+                    </td>
                     <td>
                         {% if enc.started_at %}
                             {{ enc.started_at|date:"d M H:i" }}

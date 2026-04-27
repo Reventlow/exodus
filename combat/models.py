@@ -64,6 +64,17 @@ class Encounter(models.Model):
         settings.AUTH_USER_MODEL, on_delete=models.SET_NULL,
         null=True, blank=True, related_name="combat_encounters",
     )
+    # v0.15.7 — optional story-arc link. SET_NULL on delete so removing
+    # a story idea does not blow up the encounters that reference it;
+    # the encounter just falls back to "no arc". null/blank both allowed
+    # so existing rows pre-v0.15.7 stay valid without a data migration.
+    story_idea = models.ForeignKey(
+        "gm_workspace.StoryIdea",
+        on_delete=models.SET_NULL,
+        null=True, blank=True,
+        related_name="encounters",
+        help_text="Optional link to the story arc this combat belongs to.",
+    )
     scene_description = models.TextField(blank=True, default="")
     location_text = models.CharField(max_length=200, blank=True, default="")
     metadata = models.JSONField(

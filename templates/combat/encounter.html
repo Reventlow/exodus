@@ -593,6 +593,16 @@ The END button also prompts for confirmation.
             {# v0.15.6: real-time WS connection indicator (populated by JS at the bottom of the page). #}
             <span id="combat-live-indicator" class="muted" style="font-size: 0.75rem; margin-left: 1rem;"></span>
         </div>
+        {% comment %}
+        v0.15.7 — read-only spectator banner. Players who are
+        participants land here without any GM action surfaces; the
+        kicker line below makes that explicit.
+        {% endcomment %}
+        {% if read_only %}
+            <div class="kicker muted" style="margin-bottom: 0.4rem; color: #5fd0d4;">
+                READ-ONLY · LIVE SPECTATOR VIEW
+            </div>
+        {% endif %}
         <h1 class="title" style="margin: 0 0 0.4rem 0;">{{ encounter.title|upper }}</h1>
         <div class="sub" style="margin-bottom: 0.4rem;">
             {% if encounter.location_text %}{{ encounter.location_text|upper }} //{% endif %}
@@ -601,20 +611,44 @@ The END button also prompts for confirmation.
             ROUND {{ encounter.round_number }}
         </div>
 
+        {% comment %}
+        v0.15.7 — story-arc deep-link. Visible to GM and spectator
+        alike; the link lands on the GM Workspace Story Ideas index
+        anchor for the linked idea (the GM Workspace gates access
+        for non-superusers, so players just see the title here as
+        information without a working follow-link).
+        {% endcomment %}
+        {% if encounter.story_idea %}
+            <div class="muted" style="margin-bottom: 0.4rem; font-family: var(--font-mono); font-size: 0.7rem; letter-spacing: 0.14em;">
+                STORY ARC:
+                {% if user.is_superuser %}
+                    <a href="/gm/story-ideas/#{{ encounter.story_idea.id }}"
+                       style="color: var(--c-primary); text-decoration: none;">
+                        {{ encounter.story_idea.title|upper }}
+                    </a>
+                {% else %}
+                    <span>{{ encounter.story_idea.title|upper }}</span>
+                {% endif %}
+            </div>
+        {% endif %}
+
         <div class="enc-actions">
             <a href="{% url 'combat:list' %}" class="enc-action-btn">&larr; BACK</a>
-            <button type="button" class="enc-action-btn"
-                    onclick="document.getElementById('enc-edit-form').classList.toggle('open');">
-                EDIT
-            </button>
-            <form method="post" action="{% url 'combat:delete' encounter.id %}"
-                  style="display:inline;"
-                  onsubmit="return confirm('Permanently delete this encounter and ALL its log entries? Players will not see this if shared.');">
-                {% csrf_token %}
-                <button type="submit" class="enc-action-btn danger">&times; DELETE</button>
-            </form>
+            {% if not read_only %}
+                <button type="button" class="enc-action-btn"
+                        onclick="document.getElementById('enc-edit-form').classList.toggle('open');">
+                    EDIT
+                </button>
+                <form method="post" action="{% url 'combat:delete' encounter.id %}"
+                      style="display:inline;"
+                      onsubmit="return confirm('Permanently delete this encounter and ALL its log entries? Players will not see this if shared.');">
+                    {% csrf_token %}
+                    <button type="submit" class="enc-action-btn danger">&times; DELETE</button>
+                </form>
+            {% endif %}
         </div>
 
+        {% if not read_only %}
         <div id="enc-edit-form" class="enc-edit-form">
             <form method="post" action="{% url 'combat:update' encounter.id %}">
                 {% csrf_token %}
@@ -629,11 +663,25 @@ The END button also prompts for confirmation.
                 <label class="field-label" for="edit-scene">SCENE</label>
                 <textarea class="ss-input" id="edit-scene" name="scene_description" rows="3">{{ encounter.scene_description }}</textarea>
 
+                {# v0.15.7 — optional story-arc link. Pre-selects
+                   whatever's currently set; empty option clears it. #}
+                <label class="field-label" for="edit-story">STORY ARC</label>
+                <select class="ss-input" id="edit-story" name="story_idea_id">
+                    <option value="">— NO STORY ARC —</option>
+                    {% for idea in story_ideas %}
+                        <option value="{{ idea.id }}"
+                                {% if encounter.story_idea_id == idea.id %}selected{% endif %}>
+                            {{ idea.title }}
+                        </option>
+                    {% endfor %}
+                </select>
+
                 <button type="submit" class="btn-primary" style="width: 100%; margin-top: 0.75rem;">
                     SAVE CHANGES
                 </button>
             </form>
         </div>
+        {% endif %}
     </div>
 
     {# ----- (b) INITIATIVE TRACKER ----- #}
@@ -655,47 +703,60 @@ The END button also prompts for confirmation.
         ACTIVE: NEXT TURN / END.
         CONCLUDED: no buttons; status renders as a static label.
         {% endcomment %}
+        {% comment %}
+        v0.15.7 — every lifecycle button is GM-only. The read-only
+        branch still surfaces the "ACTING: NAME" note so spectators
+        know who's up; status-only labels (CONCLUDED / waiting for
+        rolls) also survive. The button forms themselves are gated
+        behind ``not read_only``.
+        {% endcomment %}
         <div class="init-actions">
             {% if encounter.status == "setup" %}
-                {% if unrolled_count > 0 %}
-                    <form method="post" action="{% url 'combat:roll_initiative_all' encounter.id %}" style="display:inline;">
-                        {% csrf_token %}
-                        <button type="submit" class="init-action-btn primary">ROLL ALL INITIATIVE</button>
-                    </form>
-                {% endif %}
-
-                {# Show CLEAR whenever at least one participant has a score. #}
-                {% if participants|length > unrolled_count %}
-                    <form method="post" action="{% url 'combat:clear_initiative' encounter.id %}" style="display:inline;"
-                          onsubmit="return confirm('Clear all initiative rolls?');">
-                        {% csrf_token %}
-                        <button type="submit" class="init-action-btn">CLEAR INITIATIVE</button>
-                    </form>
-                {% endif %}
-
-                {% if unrolled_count == 0 and participants|length > 0 %}
-                    <form method="post" action="{% url 'combat:start' encounter.id %}" style="display:inline;">
-                        {% csrf_token %}
-                        <button type="submit" class="init-action-btn primary">START ENCOUNTER &rarr;</button>
-                    </form>
-                {% else %}
-                    {% if participants|length == 0 %}
-                        <span class="init-note">ADD PARTICIPANTS TO START</span>
-                    {% else %}
-                        <span class="init-note">{{ unrolled_count }} UNROLLED &mdash; ROLL TO START</span>
+                {% if not read_only %}
+                    {% if unrolled_count > 0 %}
+                        <form method="post" action="{% url 'combat:roll_initiative_all' encounter.id %}" style="display:inline;">
+                            {% csrf_token %}
+                            <button type="submit" class="init-action-btn primary">ROLL ALL INITIATIVE</button>
+                        </form>
                     {% endif %}
+
+                    {# Show CLEAR whenever at least one participant has a score. #}
+                    {% if participants|length > unrolled_count %}
+                        <form method="post" action="{% url 'combat:clear_initiative' encounter.id %}" style="display:inline;"
+                              onsubmit="return confirm('Clear all initiative rolls?');">
+                            {% csrf_token %}
+                            <button type="submit" class="init-action-btn">CLEAR INITIATIVE</button>
+                        </form>
+                    {% endif %}
+
+                    {% if unrolled_count == 0 and participants|length > 0 %}
+                        <form method="post" action="{% url 'combat:start' encounter.id %}" style="display:inline;">
+                            {% csrf_token %}
+                            <button type="submit" class="init-action-btn primary">START ENCOUNTER &rarr;</button>
+                        </form>
+                    {% else %}
+                        {% if participants|length == 0 %}
+                            <span class="init-note">ADD PARTICIPANTS TO START</span>
+                        {% else %}
+                            <span class="init-note">{{ unrolled_count }} UNROLLED &mdash; ROLL TO START</span>
+                        {% endif %}
+                    {% endif %}
+                {% else %}
+                    <span class="init-note">SETUP &mdash; AWAITING GM</span>
                 {% endif %}
 
             {% elif encounter.status == "active" %}
-                <form method="post" action="{% url 'combat:next_turn' encounter.id %}" style="display:inline;">
-                    {% csrf_token %}
-                    <button type="submit" class="init-action-btn primary">NEXT TURN &rarr;</button>
-                </form>
-                <form method="post" action="{% url 'combat:end' encounter.id %}" style="display:inline;"
-                      onsubmit="return confirm('End this encounter? Status moves to CONCLUDED.');">
-                    {% csrf_token %}
-                    <button type="submit" class="init-action-btn danger">END ENCOUNTER</button>
-                </form>
+                {% if not read_only %}
+                    <form method="post" action="{% url 'combat:next_turn' encounter.id %}" style="display:inline;">
+                        {% csrf_token %}
+                        <button type="submit" class="init-action-btn primary">NEXT TURN &rarr;</button>
+                    </form>
+                    <form method="post" action="{% url 'combat:end' encounter.id %}" style="display:inline;"
+                          onsubmit="return confirm('End this encounter? Status moves to CONCLUDED.');">
+                        {% csrf_token %}
+                        <button type="submit" class="init-action-btn danger">END ENCOUNTER</button>
+                    </form>
+                {% endif %}
                 {% if active_participant_obj %}
                     <span class="init-note">ACTING: {{ active_participant_obj.name|upper }}</span>
                 {% endif %}
@@ -733,7 +794,7 @@ The END button also prompts for confirmation.
                         <span class="init-score unrolled">&mdash;</span>
                     {% endif %}
 
-                    {% if encounter.status == "setup" %}
+                    {% if encounter.status == "setup" and not read_only %}
                         <form method="post" action="{% url 'combat:roll_initiative' encounter.id p.id %}" style="display:inline;">
                             {% csrf_token %}
                             <button type="submit" class="init-roll-btn">ROLL</button>
@@ -780,7 +841,7 @@ The END button also prompts for confirmation.
             <div class="enc-faction-col">
                 <h4>PLAYERS / ALLIES</h4>
                 {% for p in participants_by_faction.player_or_ally %}
-                    {% include "combat/_participant_row.html" with p=p encounter=encounter weapon_choices=weapon_choices armor_choices=armor_choices cover_by_tier=cover_by_tier participants=participants attack_eligible=attack_eligible %}
+                    {% include "combat/_participant_row.html" with p=p encounter=encounter weapon_choices=weapon_choices armor_choices=armor_choices cover_by_tier=cover_by_tier participants=participants attack_eligible=attack_eligible read_only=read_only %}
                 {% empty %}
                     <em class="muted" style="display: block; padding: 0.4rem 0.5rem;">none</em>
                 {% endfor %}
@@ -790,7 +851,7 @@ The END button also prompts for confirmation.
             <div class="enc-faction-col">
                 <h4>HOSTILES</h4>
                 {% for p in participants_by_faction.hostile %}
-                    {% include "combat/_participant_row.html" with p=p encounter=encounter weapon_choices=weapon_choices armor_choices=armor_choices cover_by_tier=cover_by_tier participants=participants attack_eligible=attack_eligible %}
+                    {% include "combat/_participant_row.html" with p=p encounter=encounter weapon_choices=weapon_choices armor_choices=armor_choices cover_by_tier=cover_by_tier participants=participants attack_eligible=attack_eligible read_only=read_only %}
                 {% empty %}
                     <em class="muted" style="display: block; padding: 0.4rem 0.5rem;">none</em>
                 {% endfor %}
@@ -800,7 +861,7 @@ The END button also prompts for confirmation.
             <div class="enc-faction-col">
                 <h4>NEUTRAL</h4>
                 {% for p in participants_by_faction.neutral %}
-                    {% include "combat/_participant_row.html" with p=p encounter=encounter weapon_choices=weapon_choices armor_choices=armor_choices cover_by_tier=cover_by_tier participants=participants attack_eligible=attack_eligible %}
+                    {% include "combat/_participant_row.html" with p=p encounter=encounter weapon_choices=weapon_choices armor_choices=armor_choices cover_by_tier=cover_by_tier participants=participants attack_eligible=attack_eligible read_only=read_only %}
                 {% empty %}
                     <em class="muted" style="display: block; padding: 0.4rem 0.5rem;">none</em>
                 {% endfor %}
@@ -809,6 +870,13 @@ The END button also prompts for confirmation.
     </div>
 
     {# ----- (e) ADD PARTICIPANT ----- #}
+    {% comment %}
+    v0.15.7 — entire ADD PARTICIPANT block is GM-only. Read-only
+    spectators see no spawn surface; the bracketed shell collapses
+    out of the page entirely so the layout doesn't carry empty
+    chrome.
+    {% endcomment %}
+    {% if not read_only %}
     <div class="brackets enc-block">
         <span class="bk tl"></span><span class="bk tr"></span>
         <span class="bk bl"></span><span class="bk br"></span>
@@ -905,6 +973,7 @@ The END button also prompts for confirmation.
             </div>
         </details>
     </div>
+    {% endif %}
 
     {# ----- (f) TIMELINE ----- #}
     <div class="brackets enc-block">

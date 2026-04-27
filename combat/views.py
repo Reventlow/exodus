@@ -81,18 +81,25 @@ CombatLog action types in use as of v0.15.5: ``initiative``,
 (WebSocket broadcast) lands in v0.15.6.
 """
 
+import json
 import secrets
 
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.db.models import F, Max
-from django.http import HttpResponseForbidden, HttpResponseNotAllowed
+from django.http import (
+    HttpResponseForbidden,
+    HttpResponseNotAllowed,
+    JsonResponse,
+)
 from django.shortcuts import get_object_or_404, redirect, render
 from django.utils import timezone
-from django.views.decorators.csrf import csrf_protect
+from django.views.decorators.csrf import csrf_exempt, csrf_protect
+from django.views.decorators.http import require_http_methods
 
 from characters.models import Character
 from exodus.models import SiteSettings
+from gm_workspace.models import StoryIdea
 from npcs.models import NPC
 
 from .consumers import broadcast_combat_event
@@ -671,37 +678,92 @@ def _gm_only(view):
 
 
 @login_required
-@_gm_only
 def encounter_list_page(request):
     """GET — render the encounter directory.
 
-    Each row exposes a participant count (computed at the queryset
-    level via ``prefetch_related``) and a status badge. Empty list
-    is allowed and rendered with a placeholder.
+    v0.15.7 — accessible to any authenticated user. GMs (superuser)
+    see every encounter; players see only encounters they have at
+    least one Character participating in. The "+ NEW ENCOUNTER" form
+    in the template is gated on superuser status, so the same view
+    can serve both audiences without leaking GM controls.
+
+    Each row exposes a participant count (cached on the object so the
+    template doesn't re-query) and a status badge. Empty list is
+    allowed and rendered with a placeholder.
+
+    The ``story_ideas`` queryset is passed through so the GM's NEW
+    ENCOUNTER form can offer story-arc selection. Players never see
+    the form (read_only branch) so the queryset is harmless to ship.
     """
-    encounters = Encounter.objects.all().prefetch_related("participants")
+    if request.user.is_superuser:
+        encounters = Encounter.objects.all().prefetch_related("participants")
+    else:
+        encounters = (
+            Encounter.objects.filter(
+                participants__character__owner=request.user
+            )
+            .distinct()
+            .prefetch_related("participants")
+        )
     enriched = []
     for enc in encounters:
-        # Cache the participant count on the object so the template
-        # can read it without retriggering the query.
         enc.participant_count = enc.participants.count()
         enriched.append(enc)
+
+    # Story ideas only relevant to the GM's NEW ENCOUNTER form, but
+    # the template guards on user.is_superuser so this is harmless to
+    # populate unconditionally.
+    story_ideas = StoryIdea.objects.all().only("id", "title").order_by(
+        "-pinned", "-updated_at"
+    )
+
     return render(
         request,
         "combat/list.html",
-        {"encounters": enriched},
+        {
+            "encounters": enriched,
+            "story_ideas": story_ideas,
+            "read_only": not request.user.is_superuser,
+        },
     )
 
 
 @login_required
-@_gm_only
 def encounter_page(request, pk):
     """GET — render a single encounter with its participants and log.
 
+    v0.15.7 — superusers retain full GM access; players are admitted
+    to a read-only spectator view iff they own at least one Character
+    that is currently a Participant of this encounter. Anyone else
+    gets HTTP 403 (we deliberately use 403 rather than 404 — the
+    information leak is intentional, since the WS-level rejection
+    uses the same boundary and being consistent across both surfaces
+    is simpler than performing 403/404 oblivious lookups).
+
     Spawn sources are passed in directly as querysets / lists; the
-    template iterates them inside the "+ ADD PARTICIPANT" panel.
+    template iterates them inside the "+ ADD PARTICIPANT" panel
+    (which itself is gated on ``not read_only``).
+
+    The template uses the ``read_only`` flag to suppress every GM
+    action (add / remove participant, equip, cover, attack, stance,
+    condition, willpower, lifecycle buttons, edit / delete header
+    buttons). Read-only viewers see participants, HP / WP / cover /
+    conditions, the initiative tracker, and the timeline — the same
+    state the GM sees, just without the action surface.
     """
     encounter = get_object_or_404(Encounter, pk=pk)
+
+    # Authorisation gate. Superusers always pass. Player participants
+    # land on the read-only branch; everybody else is rejected.
+    if request.user.is_superuser:
+        read_only = False
+    else:
+        is_player_participant = encounter.participants.filter(
+            character__owner=request.user
+        ).exists()
+        if not is_player_participant:
+            return HttpResponseForbidden("ACCESS DENIED.")
+        read_only = True
 
     # Participants split by faction so the three columns can each
     # iterate their own slice without re-filtering in the template.
@@ -816,6 +878,14 @@ def encounter_page(request, pk):
         and encounter.active_participant_id is not None
     )
 
+    # v0.15.7 — story-arc options for the EDIT form's <select>.
+    # Cheap unconditional fetch (titles only, ordered by pinned
+    # then recency) — the player branch hides the form entirely so
+    # this queryset costs us nothing in the read-only path.
+    story_ideas = StoryIdea.objects.all().only("id", "title").order_by(
+        "-pinned", "-updated_at"
+    )
+
     return render(
         request,
         "combat/encounter.html",
@@ -836,6 +906,8 @@ def encounter_page(request, pk):
             "cover_choices": cover_choices,
             "cover_by_tier": cover_by_tier,
             "attack_eligible": attack_eligible,
+            "story_ideas": story_ideas,
+            "read_only": read_only,
         },
     )
 
@@ -845,14 +917,35 @@ def encounter_page(request, pk):
 # ---------------------------------------------------------------------------
 
 
+def _resolve_story_idea(raw):
+    """Map a raw form value to a StoryIdea instance or None.
+
+    Accepts blank string / "0" / a missing entry — all of which mean
+    "no link". Any other value is looked up as a primary key; a miss
+    falls back to ``None`` rather than raising, so a stale form post
+    never 500s. Returns the StoryIdea instance or ``None``.
+    """
+    if not raw or str(raw).strip() in ("", "0"):
+        return None
+    try:
+        return StoryIdea.objects.filter(pk=int(raw)).first()
+    except (TypeError, ValueError):
+        return None
+
+
 @login_required
 @_gm_only
 @csrf_protect
 def encounter_create(request):
-    """POST — create a new encounter and seed its log with a system row."""
+    """POST — create a new encounter and seed its log with a system row.
+
+    v0.15.7: also reads optional ``story_idea_id`` from the form. Blank
+    or unknown values fall through to ``None`` (no story arc).
+    """
     if request.method != "POST":
         return HttpResponseNotAllowed(["POST"])
 
+    story_idea = _resolve_story_idea(request.POST.get("story_idea_id"))
     encounter = Encounter.objects.create(
         title=request.POST.get("title", "").strip() or "Untitled Encounter",
         scene_description=request.POST.get("scene_description", "").strip(),
@@ -860,6 +953,7 @@ def encounter_create(request):
         gm=request.user,
         status="setup",
         round_number=0,
+        story_idea=story_idea,
     )
     # First log row is always sequence=1; seed via the helper so the
     # invariant holds even if a future migration backfills history.
@@ -871,7 +965,13 @@ def encounter_create(request):
 @_gm_only
 @csrf_protect
 def encounter_update(request, pk):
-    """POST — update an encounter's metadata (title / scene / location)."""
+    """POST — update an encounter's metadata (title / scene / location).
+
+    v0.15.7: also accepts ``story_idea_id`` to (re)link or clear the
+    story-arc association. Only mutated when the field is actually
+    present in the POST body so unrelated update paths don't
+    accidentally drop the link.
+    """
     if request.method != "POST":
         return HttpResponseNotAllowed(["POST"])
 
@@ -883,7 +983,11 @@ def encounter_update(request, pk):
     encounter.location_text = request.POST.get(
         "location_text", encounter.location_text
     ).strip()
-    encounter.save(update_fields=["title", "scene_description", "location_text", "updated_at"])
+    update_fields = ["title", "scene_description", "location_text", "updated_at"]
+    if "story_idea_id" in request.POST:
+        encounter.story_idea = _resolve_story_idea(request.POST.get("story_idea_id"))
+        update_fields.append("story_idea")
+    encounter.save(update_fields=update_fields)
 
     _log(encounter, "system", "Encounter metadata updated.")
     return redirect("combat:detail", pk=encounter.pk)
@@ -2194,3 +2298,621 @@ def dodge(request, pk, participant_id):
         is_active_turn=is_active,
     )
     return redirect("combat:detail", pk=encounter.pk)
+
+
+# ---------------------------------------------------------------------------
+# v0.15.7 — REST/JSON API for the MCP server
+# ---------------------------------------------------------------------------
+#
+# These endpoints are reached via the MCP token middleware
+# (``exodus.mcp_auth.MCPTokenAuthMiddleware``): a request carrying a
+# valid ``Authorization: Bearer <token>`` header is authenticated as
+# the first active superuser and has CSRF disabled. Session-cookie
+# superusers can also reach these endpoints directly (admin debugging).
+#
+# Anyone else gets a JSON 403, NOT the HTML clearance-gate response —
+# clients are expected to be machines.
+#
+# Lifecycle / participants are exposed deliberately. **Attack, dodge,
+# stance, condition, and willpower mutations are intentionally NOT
+# exposed** — those stay behind the GM's keyboard in the web UI
+# where errors are visible and recoverable.
+
+
+def _api_gm_only(view):
+    """Decorator: 403 JSON unless the caller is a superuser.
+
+    Mirrors ``_gm_only`` but returns JSON so the MCP client can
+    surface the rejection cleanly. The MCPTokenAuthMiddleware swaps
+    in a superuser when the bearer token is valid, so the only
+    callers that hit the 403 branch are anonymous / non-superuser
+    sessions.
+    """
+    def wrapped(request, *args, **kwargs):
+        if not request.user.is_authenticated:
+            return JsonResponse({"error": "Authentication required."}, status=401)
+        if not request.user.is_superuser:
+            return JsonResponse({"error": "ACCESS DENIED."}, status=403)
+        return view(request, *args, **kwargs)
+    wrapped.__name__ = view.__name__
+    wrapped.__doc__ = view.__doc__
+    return wrapped
+
+
+def _serialize_log_entry(entry):
+    """Render a CombatLog row as a JSON-safe dict.
+
+    Used by the detail endpoint and log-fetch helpers. ``data`` is
+    already a JSONField so it round-trips cleanly. Timestamps are
+    ISO-formatted for portability.
+    """
+    return {
+        "id": entry.id,
+        "sequence": entry.sequence,
+        "round_number": entry.round_number,
+        "action_type": entry.action_type,
+        "message": entry.message,
+        "data": entry.data or {},
+        "actor_participant_id": entry.actor_participant_id,
+        "target_participant_id": entry.target_participant_id,
+        "is_reverted": entry.is_reverted,
+        "created_at": entry.created_at.isoformat() if entry.created_at else None,
+    }
+
+
+def _serialize_participant(p):
+    """Render a Participant as a JSON-safe dict — full snapshot.
+
+    Includes the denormalised actor name, FK ids, faction, kind,
+    health track, willpower, cover state, weapon / armor names,
+    conditions list, and initiative state. The MCP client uses this
+    directly so the GM-side LLM can reason about the live encounter
+    state without a second round-trip.
+    """
+    return {
+        "id": p.id,
+        "encounter_id": p.encounter_id,
+        "participant_kind": p.participant_kind,
+        "character_id": p.character_id,
+        "npc_id": p.npc_id,
+        "name": p.name,
+        "faction": p.faction,
+        "initiative_score": p.initiative_score,
+        "initiative_roll": p.initiative_roll,
+        "health": {
+            "bashing": p.health_bashing,
+            "lethal": p.health_lethal,
+            "aggravated": p.health_aggravated,
+            "max": p.health_max,
+        },
+        "willpower": {
+            "current": p.willpower_current,
+            "max": p.willpower_max,
+        },
+        "mental_load": p.mental_load,
+        "cover": {
+            "state": p.cover_state,
+            "entry_name": p.cover_entry_name,
+            "durability": p.cover_durability,
+            "health": p.cover_health,
+        },
+        "weapon": {
+            "name": p.weapon_name,
+            "data": p.weapon_data or {},
+        },
+        "armor": {
+            "name": p.armor_name,
+            "data": p.armor_data or {},
+        },
+        "conditions": list(p.conditions or []),
+        "position_label": p.position_label,
+        "position_order": p.position_order,
+        "mook_combat_pool": p.mook_combat_pool,
+        "mook_defense": p.mook_defense,
+        "mook_armor_rating": p.mook_armor_rating,
+        "surprise_immune": p.surprise_immune,
+        "acted_this_round": p.acted_this_round,
+        "defense_override": p.defense_override,
+        "notes": p.notes,
+    }
+
+
+def _serialize_encounter(enc, with_log=False, log_limit=50):
+    """Render an Encounter as a JSON-safe dict.
+
+    ``with_log=False`` keeps the payload list-friendly (just the
+    encounter shell). ``with_log=True`` includes the participant
+    list and the most-recent ``log_limit`` log entries (newest
+    first), which is what the detail endpoint serves.
+    """
+    out = {
+        "id": enc.id,
+        "title": enc.title,
+        "status": enc.status,
+        "round_number": enc.round_number,
+        "active_participant_id": enc.active_participant_id,
+        "initiative_order": list(enc.initiative_order or []),
+        "scene_description": enc.scene_description,
+        "location_text": enc.location_text,
+        "started_at": enc.started_at.isoformat() if enc.started_at else None,
+        "ended_at": enc.ended_at.isoformat() if enc.ended_at else None,
+        "created_at": enc.created_at.isoformat() if enc.created_at else None,
+        "updated_at": enc.updated_at.isoformat() if enc.updated_at else None,
+        "gm_username": enc.gm.username if enc.gm_id else None,
+        "story_idea_id": enc.story_idea_id,
+        "story_idea_title": enc.story_idea.title if enc.story_idea_id else None,
+        "participant_count": enc.participants.count(),
+    }
+    if with_log:
+        out["participants"] = [
+            _serialize_participant(p)
+            for p in enc.participants.all().order_by("position_order", "id")
+        ]
+        # Last N entries newest-first; the GM's LLM usually wants the
+        # most recent context, not the whole log of a 30-round fight.
+        recent = list(
+            enc.log_entries.order_by("-sequence")[:max(0, int(log_limit))]
+        )
+        out["log_entries"] = [_serialize_log_entry(e) for e in recent]
+        out["log_entries_returned"] = len(recent)
+    return out
+
+
+@csrf_exempt
+@require_http_methods(["GET", "POST"])
+@login_required
+@_api_gm_only
+def api_encounters(request):
+    """GET — list every encounter (newest first). POST — create one.
+
+    POST body (JSON or form): ``title``, ``scene_description``,
+    ``location_text``, ``story_idea_id`` (optional). Mirrors the form
+    surface in ``encounter_create`` so the MCP tool can hand off the
+    same payload the web form would.
+    """
+    if request.method == "GET":
+        encounters = Encounter.objects.all().order_by("-created_at")
+        return JsonResponse({
+            "count": encounters.count(),
+            "encounters": [_serialize_encounter(e) for e in encounters],
+        })
+
+    # POST — create
+    try:
+        body = json.loads(request.body) if request.body else {}
+    except json.JSONDecodeError:
+        return JsonResponse({"error": "Invalid JSON."}, status=400)
+
+    title = (body.get("title") or "").strip() or "Untitled Encounter"
+    encounter = Encounter.objects.create(
+        title=title[:200],
+        scene_description=(body.get("scene_description") or "").strip(),
+        location_text=(body.get("location_text") or "").strip()[:200],
+        gm=request.user,
+        status="setup",
+        round_number=0,
+        story_idea=_resolve_story_idea(body.get("story_idea_id")),
+    )
+    _log(encounter, "system", "Encounter created.")
+    return JsonResponse(_serialize_encounter(encounter, with_log=True), status=201)
+
+
+@csrf_exempt
+@require_http_methods(["GET"])
+@login_required
+@_api_gm_only
+def api_encounter_detail(request, pk):
+    """GET — single encounter with participants + recent log.
+
+    Querystring ``log_limit`` (default 50, max 500) bounds how many
+    of the most-recent log entries are inlined. Larger windows are
+    rejected so the MCP client can't accidentally pull a 50,000-row
+    timeline through the wire.
+    """
+    try:
+        log_limit = int(request.GET.get("log_limit", 50))
+    except (TypeError, ValueError):
+        log_limit = 50
+    log_limit = max(0, min(500, log_limit))
+
+    encounter = get_object_or_404(Encounter, pk=pk)
+    return JsonResponse(_serialize_encounter(
+        encounter, with_log=True, log_limit=log_limit,
+    ))
+
+
+@csrf_exempt
+@require_http_methods(["POST"])
+@login_required
+@_api_gm_only
+def api_encounter_lifecycle(request, pk):
+    """POST — drive setup → active → concluded transitions.
+
+    Body: ``{"action": "start" | "end"}``. ``start`` mirrors
+    ``start_encounter`` (gates on every participant having rolled,
+    rebuilds order, stamps ``started_at``); ``end`` mirrors
+    ``end_encounter``. Idempotent-ish: re-calling ``start`` on an
+    already-active encounter or ``end`` on an already-concluded one
+    returns 409 rather than silently no-op'ing, so the MCP caller
+    can detect state drift.
+    """
+    try:
+        body = json.loads(request.body) if request.body else {}
+    except json.JSONDecodeError:
+        return JsonResponse({"error": "Invalid JSON."}, status=400)
+
+    action = (body.get("action") or "").strip().lower()
+    encounter = get_object_or_404(Encounter, pk=pk)
+
+    if action == "start":
+        if encounter.status != "setup":
+            return JsonResponse({
+                "error": f"Cannot start: encounter is {encounter.status}.",
+            }, status=409)
+        unrolled = encounter.participants.filter(
+            initiative_score__isnull=True
+        ).count()
+        if unrolled > 0:
+            return JsonResponse({
+                "error": f"{unrolled} participants have not rolled initiative yet.",
+            }, status=409)
+        ordered = list(encounter.participants.order_by("-initiative_score", "id"))
+        if not ordered:
+            return JsonResponse({
+                "error": "Cannot start an encounter with no participants.",
+            }, status=409)
+        encounter.initiative_order = [p.id for p in ordered]
+        encounter.active_participant_id = ordered[0].id
+        encounter.status = "active"
+        encounter.round_number = 1
+        encounter.started_at = timezone.now()
+        encounter.save(update_fields=[
+            "initiative_order", "active_participant_id", "status",
+            "round_number", "started_at", "updated_at",
+        ])
+        encounter.participants.update(acted_this_round=False)
+        _log(
+            encounter, "system",
+            f"Encounter started — round 1, {ordered[0].name} acts first.",
+            first_participant_id=ordered[0].id,
+        )
+        return JsonResponse(_serialize_encounter(encounter, with_log=True))
+
+    if action == "end":
+        if encounter.status == "concluded":
+            return JsonResponse({
+                "error": "Encounter already concluded.",
+            }, status=409)
+        rounds = encounter.round_number
+        encounter.status = "concluded"
+        encounter.active_participant_id = None
+        encounter.ended_at = timezone.now()
+        encounter.save(update_fields=[
+            "status", "active_participant_id", "ended_at", "updated_at",
+        ])
+        _log(
+            encounter, "system",
+            f"Encounter concluded after {rounds} round(s).",
+            rounds=rounds,
+        )
+        return JsonResponse(_serialize_encounter(encounter, with_log=True))
+
+    return JsonResponse({
+        "error": "Unknown action. Use 'start' or 'end'.",
+    }, status=400)
+
+
+@csrf_exempt
+@require_http_methods(["POST"])
+@login_required
+@_api_gm_only
+def api_encounter_initiative(request, pk):
+    """POST — roll initiative for every unrolled participant.
+
+    Mirror of ``roll_initiative_all`` — same per-roll log row, same
+    rebuilt ``initiative_order``, same summary system row. No body.
+    Refuses to act on a concluded encounter (409).
+    """
+    encounter = get_object_or_404(Encounter, pk=pk)
+    if encounter.status == "concluded":
+        return JsonResponse({
+            "error": "Cannot roll initiative on a concluded encounter.",
+        }, status=409)
+
+    unrolled = list(
+        encounter.participants.filter(initiative_score__isnull=True).order_by("id")
+    )
+    rolled = []
+    for participant in unrolled:
+        modifier, d10, score = _compute_initiative(participant)
+        participant.initiative_roll = d10
+        participant.initiative_score = score
+        participant.save(update_fields=["initiative_roll", "initiative_score"])
+        _log(
+            encounter, "initiative",
+            f"{participant.name} rolled initiative: {modifier} + {d10} = {score}.",
+            participant_id=participant.pk,
+            modifier=modifier, d10=d10, score=score,
+        )
+        rolled.append({
+            "participant_id": participant.id,
+            "name": participant.name,
+            "modifier": modifier,
+            "d10": d10,
+            "score": score,
+        })
+
+    encounter.initiative_order = [
+        p.id
+        for p in encounter.participants.exclude(
+            initiative_score__isnull=True
+        ).order_by("-initiative_score", "id")
+    ]
+    encounter.save(update_fields=["initiative_order", "updated_at"])
+    _log(
+        encounter, "system",
+        f"Initiative rolled for {len(rolled)} participants.",
+        count=len(rolled),
+    )
+    return JsonResponse({
+        "rolled_count": len(rolled),
+        "rolls": rolled,
+        "encounter": _serialize_encounter(encounter, with_log=True),
+    })
+
+
+@csrf_exempt
+@require_http_methods(["POST"])
+@login_required
+@_api_gm_only
+def api_encounter_turn(request, pk):
+    """POST — advance to the next turn (or roll the round over).
+
+    Mirror of ``next_turn``. Rejects on non-active encounters with a
+    409 so the MCP client gets a structured error rather than a no-op
+    redirect.
+    """
+    encounter = get_object_or_404(Encounter, pk=pk)
+    if encounter.status != "active":
+        return JsonResponse({
+            "error": f"Cannot advance turn: encounter is {encounter.status}.",
+        }, status=409)
+
+    order = list(encounter.initiative_order or [])
+    if not order:
+        return JsonResponse({
+            "error": "Encounter has no initiative order.",
+        }, status=409)
+
+    current_id = encounter.active_participant_id
+    if current_id is not None:
+        Participant.objects.filter(pk=current_id, encounter=encounter).update(
+            acted_this_round=True
+        )
+
+    try:
+        idx = order.index(current_id)
+    except ValueError:
+        idx = -1
+
+    rolled_round = False
+    if idx >= len(order) - 1:
+        # End of round — roll over.
+        encounter.round_number += 1
+        encounter.participants.update(acted_this_round=False)
+        cleared_any = False
+        for p in encounter.participants.all():
+            new_conds = [
+                c for c in (p.conditions or [])
+                if c != "defense_full" and not c.startswith("dodging:")
+            ]
+            if new_conds != (p.conditions or []):
+                p.conditions = new_conds
+                p.save(update_fields=["conditions"])
+                cleared_any = True
+        next_id = order[0]
+        encounter.active_participant_id = next_id
+        encounter.save(update_fields=[
+            "round_number", "active_participant_id", "updated_at",
+        ])
+        _log(
+            encounter, "round_advance",
+            f"Round {encounter.round_number} begins.",
+            round_number=encounter.round_number,
+        )
+        if cleared_any:
+            _log(encounter, "system", "Defensive stances cleared at round boundary.")
+        rolled_round = True
+    else:
+        next_id = order[idx + 1]
+        encounter.active_participant_id = next_id
+        encounter.save(update_fields=["active_participant_id", "updated_at"])
+        next_p = encounter.participants.filter(pk=next_id).first()
+        next_name = next_p.name if next_p else f"#{next_id}"
+        _log(
+            encounter, "turn_advance",
+            f"Turn passes to {next_name}.",
+            participant_id=next_id,
+        )
+
+    # Out-of-turn dodge cost (matches next_turn).
+    new_active = encounter.participants.filter(
+        pk=encounter.active_participant_id
+    ).first()
+    if new_active is not None and "dodge_pending" in (new_active.conditions or []):
+        new_active.conditions = [
+            c for c in (new_active.conditions or []) if c != "dodge_pending"
+        ]
+        new_active.acted_this_round = True
+        new_active.save(update_fields=["conditions", "acted_this_round"])
+        _log(
+            encounter, "system",
+            f"{new_active.name}: dodge_pending consumed — turn skipped.",
+            target_participant_id=new_active.id,
+        )
+
+    return JsonResponse({
+        "rolled_round": rolled_round,
+        "encounter": _serialize_encounter(encounter, with_log=True),
+    })
+
+
+@csrf_exempt
+@require_http_methods(["POST"])
+@login_required
+@_api_gm_only
+def api_encounter_participants(request, pk):
+    """POST — add a participant to an encounter.
+
+    Body: ``{"kind": "character"|"npc"|"template", ...}`` plus the
+    matching id field (``character_id`` / ``npc_id`` / ``template_name``)
+    and an optional ``faction`` (defaults vary by kind, matching the
+    web form's defaults). Mirrors ``participant_add``'s spawn logic
+    so denormalisation stays consistent.
+    """
+    encounter = get_object_or_404(Encounter, pk=pk)
+
+    try:
+        body = json.loads(request.body) if request.body else {}
+    except json.JSONDecodeError:
+        return JsonResponse({"error": "Invalid JSON."}, status=400)
+
+    kind = (body.get("kind") or "").strip().lower()
+    if kind not in ("character", "npc", "template"):
+        return JsonResponse({
+            "error": "kind must be one of: character, npc, template.",
+        }, status=400)
+
+    next_pos = (
+        encounter.participants.aggregate(Max("position_order"))["position_order__max"] or 0
+    ) + 1
+
+    participant = None
+
+    if kind == "character":
+        character_id = body.get("character_id")
+        if not character_id:
+            return JsonResponse({"error": "character_id is required."}, status=400)
+        character = Character.objects.filter(pk=character_id).first()
+        if character is None:
+            return JsonResponse({"error": "Character not found."}, status=404)
+        try:
+            stamina = int(character.attributes["resistance"]["physical"])
+            health_max = int(character.size) + stamina
+        except (KeyError, TypeError, ValueError):
+            health_max = 7
+        try:
+            willpower_max = int(character.attributes["resistance"]["mental"]) + int(
+                character.attributes["resistance"]["social"]
+            )
+        except (KeyError, TypeError, ValueError):
+            willpower_max = 0
+        faction = (body.get("faction") or "player").strip().lower()
+        participant = Participant.objects.create(
+            encounter=encounter,
+            participant_kind="character",
+            character=character,
+            name=character.name,
+            faction=faction,
+            health_max=health_max,
+            willpower_max=willpower_max,
+            position_order=next_pos,
+        )
+
+    elif kind == "npc":
+        npc_id = body.get("npc_id")
+        if not npc_id:
+            return JsonResponse({"error": "npc_id is required."}, status=400)
+        npc_obj = NPC.objects.filter(pk=npc_id).first()
+        if npc_obj is None:
+            return JsonResponse({"error": "NPC not found."}, status=404)
+        try:
+            stamina = int(npc_obj.attributes["resistance"]["physical"])
+            health_max = int(npc_obj.size) + stamina
+        except (KeyError, TypeError, ValueError):
+            health_max = 7
+        try:
+            willpower_max = int(npc_obj.attributes["resistance"]["mental"]) + int(
+                npc_obj.attributes["resistance"]["social"]
+            )
+        except (KeyError, TypeError, ValueError):
+            willpower_max = 0
+        faction = (body.get("faction") or "hostile").strip().lower()
+        participant = Participant.objects.create(
+            encounter=encounter,
+            participant_kind="npc",
+            npc=npc_obj,
+            name=npc_obj.name,
+            faction=faction,
+            health_max=health_max,
+            willpower_max=willpower_max,
+            position_order=next_pos,
+        )
+
+    elif kind == "template":
+        template_name = (body.get("template_name") or "").strip()
+        if not template_name:
+            return JsonResponse({"error": "template_name is required."}, status=400)
+        templates = SiteSettings.load().get_combat_npcs()
+        entry = next((t for t in templates if t.get("name") == template_name), None)
+        if entry is None:
+            return JsonResponse({
+                "error": f"Combat NPC template '{template_name}' not found.",
+            }, status=404)
+        faction = (body.get("faction") or "hostile").strip().lower()
+        participant = Participant.objects.create(
+            encounter=encounter,
+            participant_kind="mook",
+            name=entry.get("name", "Mook"),
+            faction=faction,
+            mook_combat_pool=_safe_int(entry.get("combat_pool"), 0),
+            mook_defense=_safe_int(entry.get("defense"), 0),
+            health_max=_safe_int(entry.get("health_max"), 7),
+            mook_armor_rating=entry.get("armor_rating", "") or "",
+            weapon_name=entry.get("weapon", "") or "",
+            notes=entry.get("notes", "") or "",
+            position_order=next_pos,
+        )
+
+    if participant is not None:
+        _log(
+            encounter, "system",
+            f"Added {participant.name} ({participant.faction}) to encounter.",
+            participant_id=participant.pk,
+            participant_kind=participant.participant_kind,
+            faction=participant.faction,
+        )
+        return JsonResponse(_serialize_participant(participant), status=201)
+
+    return JsonResponse({"error": "Failed to add participant."}, status=400)
+
+
+@csrf_exempt
+@require_http_methods(["DELETE"])
+@login_required
+@_api_gm_only
+def api_encounter_participant_detail(request, pk, participant_id):
+    """DELETE — remove a participant from an encounter.
+
+    Returns the captured display name so the MCP client gets a
+    confirmation payload it can show back to the GM. CASCADE handles
+    log row repointing (target_participant / actor_participant are
+    SET_NULL on the FK).
+    """
+    encounter = get_object_or_404(Encounter, pk=pk)
+    participant = get_object_or_404(
+        Participant, pk=participant_id, encounter=encounter
+    )
+    name = participant.name
+    captured_id = participant.id
+    participant.delete()
+    _log(
+        encounter, "system",
+        f"Removed {name} from encounter.",
+        participant_id=captured_id,
+    )
+    return JsonResponse({
+        "deleted": True,
+        "participant_id": captured_id,
+        "name": name,
+    })
