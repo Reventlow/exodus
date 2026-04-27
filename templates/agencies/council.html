@@ -32,7 +32,10 @@
 <script type="text/babel">
     const { useState, useEffect, useRef, useCallback } = React;
 
-    const COUNCIL_ACCENT = '#a855f7';
+    // COUNCIL_ACCENT used to be hardcoded purple; now follows the palette
+    // so a palette flip in /settings/ → THEME cascades through the entire
+    // council surface (borders, badges, filter pills, vote tags).
+    const COUNCIL_ACCENT = 'var(--c-primary)';
     const CAN_ACT = IS_ADMIN || IS_FIXER;
     const CAN_REORDER = CAN_ACT && (IS_ADMIN || IS_CHAIRMAN);
     const CAN_CREATE = CAN_ACT && (IS_ADMIN || USER_AGENCY_ID > 0);
@@ -561,7 +564,10 @@
                     const predicted = item.predictedVotes || {};
                     const memberAgencies = ALL_AGENCIES.filter(a => a.id !== undefined);
                     const voteOptions = ['for', 'against', 'abstain', 'undecided'];
-                    const voteColors = { for: '#22c55e', against: '#ef4444', abstain: '#a855f7', undecided: 'var(--text-muted)' };
+                    // Vote colors: for/against keep conventional green/red; abstain
+                    // moves from old council-purple to a neutral so it doesn't clash
+                    // with whichever palette is active.
+                    const voteColors = { for: '#22c55e', against: '#ef4444', abstain: 'var(--ink-dim)', undecided: 'var(--text-muted)' };
                     return (
                         <div style={{
                             marginTop: '0.75rem', padding: '0.75rem',

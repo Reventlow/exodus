@@ -1,5 +1,8 @@
 # Changelog
 
+## v0.14.57
+- Fix: the council page (`/agencies/council/`) was keyed to a hardcoded purple accent (`#a855f7`) instead of the palette token, so it read as off-theme even after the clearance-gate rollout. Council borders, badges, filter pills, and vote tags now follow `var(--c-primary)` and respect palette flips in `/settings/ → THEME`. Abstain-vote color moved off purple to a neutral grey so it doesn't clash with whichever palette is active
+
 ## v0.14.56
 - Renamed `CLEARANCE GATE` to **`THEME`** in `/settings/` — both the sidebar group label and the section header. The settings now read more accurately, since palette + clock timezone propagate to the authenticated app, not just the login splash. Description copy updated to reflect the broader scope
 
