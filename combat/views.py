@@ -489,8 +489,42 @@ def _apply_damage(participant, amount, dtype):
     return applied, upgrades, overflow
 
 
+def _specialisations_for_skill(actor, skill_name):
+    """Return list of specialisation names that match the given skill on
+    the actor's underlying Character or NPC.
+
+    Returns ``[]`` for mooks (no character/npc FK), unknown actors, or
+    when the actor has no matching specialisations. Skill name match
+    is case-insensitive.
+
+    Specialisations are stored as a JSONField list of dicts with
+    ``'skill'`` and ``'name'`` keys (see ``Character.specialisations``
+    and ``NPC.specialisations``). Malformed rows (missing keys,
+    non-string values) are silently filtered so a hand-edited record
+    never raises here.
+    """
+    if actor.participant_kind == "mook" or not skill_name:
+        return []
+    source = actor.character or actor.npc
+    if source is None:
+        return []
+    raw = getattr(source, "specialisations", None) or []
+    needle = skill_name.strip().lower()
+    out = []
+    for entry in raw:
+        if not isinstance(entry, dict):
+            continue
+        s = entry.get("skill", "")
+        n = entry.get("name", "")
+        if not isinstance(s, str) or not isinstance(n, str):
+            continue
+        if s.strip().lower() == needle and n.strip():
+            out.append(n.strip())
+    return out
+
+
 def _actor_total_pool(actor, weapon_data, gm_modifier, weapon_skill_name="",
-                     spend_willpower=False):
+                     spend_willpower=False, applied_specialisations=None):
     """Compose the attacker's full pre-cover, pre-defense dice pool.
 
     Wraps ``_attack_dice_pool`` (the catalogue + skill base) and adds
@@ -501,12 +535,22 @@ def _actor_total_pool(actor, weapon_data, gm_modifier, weapon_skill_name="",
     * Willpower spend — ``+3`` flat when ``spend_willpower=True``
       (caller is responsible for actually decrementing
       ``willpower_current`` if the spend goes through).
+    * Specialisations (v0.15.10) — ``+1`` per validated specialisation
+      name in ``applied_specialisations``. The caller is responsible
+      for validating each entry against
+      ``_specialisations_for_skill(actor, weapon_skill_name)`` before
+      passing it through; this helper trusts what it gets.
     """
     base = _attack_dice_pool(actor, weapon_data, gm_modifier, weapon_skill_name)
     base += _wound_penalty(actor)
     base += _condition_attack_modifier(actor)
     if spend_willpower:
         base += 3
+    if applied_specialisations:
+        # Each validated specialisation grants +1 die. The caller has
+        # already filtered out unknown / non-matching names, so we
+        # simply count.
+        base += len(applied_specialisations)
     return base
 
 
@@ -600,16 +644,24 @@ def _attack_preview(actor, weapon_data, gm_modifier, weapon_skill_name=""):
         base + skill_value + weapon_dice + wound_pen + cond_mod + gm_mod,
     )
 
+    # v0.15.10 — surface the actor's specialisations relevant to the
+    # resolved skill so the row template can render checkboxes. The
+    # preview's ``total`` is the *base* pool — JS adds +1 per ticked
+    # box client-side, the server re-validates on submit.
+    specialisations = _specialisations_for_skill(actor, skill_name)
+
     return {
-        "base":            base,
-        "skill":           skill_value,
-        "skill_name":      skill_name,
-        "weapon_dice":     weapon_dice,
-        "wound_penalty":   wound_pen,
-        "condition_mod":   cond_mod,
-        "gm_modifier":     gm_mod,
-        "willpower_bonus": 0,   # preview only — WP is a submit-time toggle
-        "total":           total,
+        "base":             base,
+        "skill":            skill_value,
+        "skill_name":       skill_name,
+        "weapon_dice":      weapon_dice,
+        "wound_penalty":    wound_pen,
+        "condition_mod":    cond_mod,
+        "gm_modifier":      gm_mod,
+        "willpower_bonus":  0,   # preview only — WP is a submit-time toggle
+        "specialisations":  specialisations,
+        "spec_bonus":       0,   # preview is pre-tick; JS recomputes live
+        "total":            total,
     }
 
 
@@ -2089,12 +2141,36 @@ def attack(request, pk, attacker_id):
     if not weapon_skill:
         weapon_skill = _weapon_skill_for(weapon_data)
 
+    # v0.15.10 — validate player-picked specialisations. We rebuild
+    # the allowed set from the actor's current specialisations
+    # filtered by the resolved skill, then drop any submitted name
+    # that isn't on it. Silent filter — a tampered POST with a
+    # bogus spec name simply doesn't get the +1, no error to the
+    # user (the form-rendered checkboxes can never produce one).
+    submitted_specs = request.POST.getlist("applied_specs")
+    allowed_specs = _specialisations_for_skill(attacker, weapon_skill)
+    allowed_lower = {s.lower(): s for s in allowed_specs}
+    applied_specs = []
+    seen = set()
+    for raw_name in submitted_specs:
+        if not isinstance(raw_name, str):
+            continue
+        key = raw_name.strip().lower()
+        if not key or key in seen:
+            continue
+        if key in allowed_lower:
+            applied_specs.append(allowed_lower[key])
+            seen.add(key)
+    spec_bonus = len(applied_specs)
+
     # v0.15.5 — full pool composition (base + wound + conditions + WP).
+    # v0.15.10 — adds +1 per validated specialisation.
     wound_pen = _wound_penalty(attacker)
     cond_atk_mod = _condition_attack_modifier(attacker)
     attack_pool = _actor_total_pool(
         attacker, weapon_data, gm_modifier_int, weapon_skill,
         spend_willpower=spent_wp,
+        applied_specialisations=applied_specs,
     )
     defense = _compute_defense(target)
     cover_pen = _cover_penalty(target.cover_state)
@@ -2105,13 +2181,22 @@ def attack(request, pk, attacker_id):
         attacker.willpower_current = max(0, (attacker.willpower_current or 0) - 1)
         attacker.save(update_fields=["willpower_current"])
 
+    # v0.15.10 — pre-built log message tail (WP and SPEC suffixes).
+    # Centralised so blocked / miss / hit all read identically.
+    msg_tail_parts = []
+    if spent_wp:
+        msg_tail_parts.append("WP+3")
+    if applied_specs:
+        msg_tail_parts.append("+SPEC: " + ", ".join(applied_specs))
+    msg_tail = (" (" + " | ".join(msg_tail_parts) + ")") if msg_tail_parts else ""
+
     # ---- Full cover short-circuit -----------------------------------------
     if cover_pen == "BLOCKED":
         _log(
             encounter,
             "attack",
             f"{attacker.name} → {target.name}: BLOCKED BY FULL COVER."
-            + (" (WP+3)" if spent_wp else ""),
+            + msg_tail,
             actor_participant_id=attacker.id,
             target_participant_id=target.id,
             outcome="blocked_by_cover",
@@ -2126,6 +2211,8 @@ def attack(request, pk, attacker_id):
             condition_attack_modifier=cond_atk_mod,
             spent_willpower=spent_wp,
             willpower_after=attacker.willpower_current,
+            applied_specs=applied_specs,
+            spec_bonus=spec_bonus,
         )
         return redirect("combat:detail", pk=encounter.pk)
 
@@ -2138,7 +2225,7 @@ def attack(request, pk, attacker_id):
             encounter,
             "attack",
             f"{attacker.name} attacks {target.name}: missed."
-            + (" (WP+3)" if spent_wp else ""),
+            + msg_tail,
             actor_participant_id=attacker.id,
             target_participant_id=target.id,
             outcome="miss",
@@ -2155,6 +2242,8 @@ def attack(request, pk, attacker_id):
             condition_attack_modifier=cond_atk_mod,
             spent_willpower=spent_wp,
             willpower_after=attacker.willpower_current,
+            applied_specs=applied_specs,
+            spec_bonus=spec_bonus,
         )
         return redirect("combat:detail", pk=encounter.pk)
 
@@ -2219,13 +2308,15 @@ def attack(request, pk, attacker_id):
         condition_attack_modifier=cond_atk_mod,
         spent_willpower=spent_wp,
         willpower_after=attacker.willpower_current,
+        applied_specs=applied_specs,
+        spec_bonus=spec_bonus,
     )
 
     _log(
         encounter,
         "attack",
         f"{attacker.name} hits {target.name} for {final_damage} {type_label} damage."
-        + (" (WP+3)" if spent_wp else ""),
+        + msg_tail,
         **payload,
     )
     # Separate health_change row so the timeline can be filtered
