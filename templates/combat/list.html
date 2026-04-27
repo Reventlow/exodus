@@ -1,0 +1,18 @@
+{% extends 'base.html' %}
+
+{% block title %}Combat — Exodus{% endblock %}
+
+{% block content %}
+<div class="brackets" style="position: relative; padding: 32px 36px; max-width: 720px; margin: 0 auto;">
+    <span class="bk tl"></span><span class="bk tr"></span>
+    <span class="bk bl"></span><span class="bk br"></span>
+    <div class="kicker" style="margin-bottom: 0.4rem;">DIRECTORATE COMBAT // ENCOUNTERS</div>
+    <h1 class="title" style="margin: 0 0 0.4rem 0;">COMBAT</h1>
+    <div class="sub" style="margin-bottom: 1.6rem;">PERSONAL COMBAT MODULE — INITIALISING</div>
+
+    <p class="text-secondary" style="font-size: 0.9rem; line-height: 1.6;">
+        Combat module skeleton is online. Encounter list arrives in v0.15.1.
+        See <a href="{% url 'combat-page' %}" class="text-accent" style="text-decoration: none;">/rules/combat/</a> for the WoD 2.0 reference.
+    </p>
+</div>
+{% endblock %}

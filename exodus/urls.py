@@ -37,6 +37,7 @@ urlpatterns = [
     path("", include("starmap.urls")),
     path("", include("starships.urls")),
     path("", include("spacebattle.urls")),
+    path("", include("combat.urls")),
     path("", include("comms.urls")),
     path("", include("characters.urls")),
     path("", include("agencies.urls")),

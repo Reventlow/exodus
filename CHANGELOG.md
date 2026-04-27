@@ -1,5 +1,10 @@
 # Changelog
 
+## v0.15.0
+- **Combat module — Phase 0 skeleton.** New `combat/` Django app with `Encounter`, `Participant`, `CombatLog` models, migration `combat/0001_initial`, admin registration, placeholder `/combat/` and `/combat/<id>/` pages (GM-only), and the WebSocket consumer skeleton (`combat_<id>` group, `broadcast_combat_event` helper). The phase-0 release is internal — encounter CRUD ships in v0.15.1, real participants + initiative in v0.15.2, attacks + damage in v0.15.3, full attack loop in v0.15.4, real-time fan-out in v0.15.5, MCP + GM workspace integration in v0.15.6
+- Combat models reference the existing weapons / armor / cover catalogues (`SiteSettings`) and link to `Character` / `NPC` via `SET_NULL` so deleting an actor mid-encounter snapshots their `name` rather than corrupting the log
+- Adopted the spacebattle real-time pattern: per-encounter Channels group, broadcast helper that swallows Redis outages so REST still works
+
 ## v0.14.65
 - New **COVER & CONCEALMENT** rules section in the combat reference at `/rules/combat/`. Distinguishes cover (stops bullets) from concealment (stops sight). Tiered: LIGHT (−2), HEAVY (−4), FULL (cannot target). Sub-sections cover entering, pop-up fire, blind fire, moving between cover, autofire suppression, and rules for destroying cover (Durability + Health). Footnote on heavy ordnance / explosives bypassing cover
 - Cover destruction table is now **driven by the editable cover catalogue** instead of hardcoded

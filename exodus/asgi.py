@@ -19,12 +19,13 @@ django_asgi_app = get_asgi_application()
 from comms.routing import websocket_urlpatterns as comms_ws  # noqa: E402
 from agencies.routing import websocket_urlpatterns as council_ws  # noqa: E402
 from spacebattle.routing import websocket_urlpatterns as battle_ws  # noqa: E402
+from combat.routing import websocket_urlpatterns as combat_ws  # noqa: E402
 
 application = ProtocolTypeRouter(
     {
         "http": django_asgi_app,
         "websocket": AllowedHostsOriginValidator(
-            AuthMiddlewareStack(URLRouter(comms_ws + council_ws + battle_ws))
+            AuthMiddlewareStack(URLRouter(comms_ws + council_ws + battle_ws + combat_ws))
         ),
     }
 )

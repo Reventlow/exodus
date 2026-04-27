@@ -31,6 +31,7 @@ INSTALLED_APPS = [
     "starmap",
     "starships",
     "spacebattle",
+    "combat",
     "gm_workspace",
     "exodus",
 ]
