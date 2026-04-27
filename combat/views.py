@@ -510,6 +510,138 @@ def _strip_ammo(participant):
     ]
 
 
+# ---------------------------------------------------------------------------
+# v0.15.16 — off-hand ammo helpers (dual-wielding)
+# ---------------------------------------------------------------------------
+#
+# Off-hand ammo lives on a parallel ``offhand_ammo:N`` condition tag,
+# mirroring the main-hand ``ammo:N`` shape one-for-one. Two distinct
+# tags rather than a single shared one because main-hand and off-hand
+# magazines decrement independently — DUAL ATTACK fires one round of
+# main-hand and one round of off-hand from a single trigger pull.
+#
+# v0.15.16 does NOT implement an off-hand reload action — when an
+# off-hand firearm runs dry it stays empty until re-equipped (which
+# refills via ``equip_offhand``). v0.15.17+ may add a dedicated
+# off-hand reload.
+
+
+def _parse_offhand_ammo_tag(tag):
+    """Parse ``'offhand_ammo:7'`` into the integer ``7``.
+
+    Returns ``None`` for any non-string, non-prefix, or non-numeric
+    value — defensive against legacy / hand-edited conditions lists so
+    a malformed tag never crashes the row render. Mirrors the shape of
+    ``_parse_ammo_tag`` for the main hand.
+    """
+    if not isinstance(tag, str):
+        return None
+    if not tag.startswith("offhand_ammo:"):
+        return None
+    try:
+        return int(tag.split(":", 1)[1])
+    except (ValueError, IndexError):
+        return None
+
+
+def _offhand_ammo_state(participant):
+    """Return current rounds-in-magazine for the participant's off-hand.
+
+    Iterates the conditions list and returns the first
+    ``offhand_ammo:N`` tag's integer payload. Returns ``None`` when no
+    off-hand ammo tag is set (no off-hand equipped, off-hand is a
+    non-firearm, or this is a mook).
+    """
+    for c in (participant.conditions or []):
+        parsed = _parse_offhand_ammo_tag(c)
+        if parsed is not None:
+            return parsed
+    return None
+
+
+def _set_offhand_ammo(participant, rounds):
+    """Strip any prior ``offhand_ammo:*`` tag, then append a fresh
+    ``offhand_ammo:<rounds>`` tag in-place on
+    ``participant.conditions``.
+
+    Caller is responsible for ``participant.save(update_fields=
+    ['conditions'])``. Idempotent — calling twice with the same value
+    yields the same end state.
+    """
+    participant.conditions = [
+        c for c in (participant.conditions or [])
+        if not (isinstance(c, str) and c.startswith("offhand_ammo:"))
+    ]
+    participant.conditions.append(f"offhand_ammo:{int(rounds)}")
+
+
+def _strip_offhand_ammo(participant):
+    """Remove any ``offhand_ammo:*`` tag in-place. Caller saves.
+
+    Used when un-equipping the off-hand or swapping in a non-firearm
+    off-hand (the previous mag count is no longer meaningful).
+    """
+    participant.conditions = [
+        c for c in (participant.conditions or [])
+        if not (isinstance(c, str) and c.startswith("offhand_ammo:"))
+    ]
+
+
+def _has_ambidextrous_merit(actor):
+    """Return True if the actor's underlying Character or NPC has the
+    Ambidextrous merit attached.
+
+    Mooks have no character / NPC sheet → always False. Two storage
+    layers are checked, in priority order:
+
+    1. **Canonical M2M** — ``source.merit_entries`` is a
+       ``ManyToManyField`` to ``exodus.MeritDefinition`` (through
+       ``CharacterMerit`` / ``NpcMerit``). A case-insensitive name
+       match is the right shape: filtering on the M2M manager filters
+       ``MeritDefinition`` rows directly (``name__iexact=...``), and
+       the ORM JOINs through the through-table for us.
+    2. **Legacy JSONField** — ``merits_old`` on both Character and
+       NPC. Pre-M2M-migration sheets stored merits as a free-text
+       JSON list (each entry either a dict with ``name`` key or a
+       bare string). Checked second so a manually re-attached merit
+       on the canonical layer wins over a stale JSON entry.
+
+    A False result here means the off-hand attack pays the -2 dice
+    penalty. A typo would silently make players lose dice they
+    earned, so the M2M path is verified by a Django-shell check at
+    development time (see the v0.15.16 release notes for the exact
+    assertion).
+    """
+    if actor.participant_kind == "mook":
+        return False
+    source = actor.character or actor.npc
+    if source is None:
+        return False
+    # Canonical: M2M filter against MeritDefinition.name. The M2M
+    # field's related_model is MeritDefinition (verified at dev time),
+    # so .filter(name__iexact=...) hits the catalogue's name column.
+    try:
+        if source.merit_entries.filter(name__iexact="Ambidextrous").exists():
+            return True
+    except Exception:
+        # Defensive: if the M2M manager somehow raises (mock instance,
+        # unsaved object, partial migration state), fall through to
+        # the legacy JSON layer rather than 500-ing the attack form.
+        pass
+    # Legacy JSON list: free-text entries with optional 'name' key.
+    legacy = getattr(source, "merits_old", None) or []
+    for entry in legacy:
+        if isinstance(entry, dict):
+            n = entry.get("name", "")
+        elif isinstance(entry, str):
+            n = entry
+        else:
+            n = ""
+        if isinstance(n, str) and n.strip().lower() == "ambidextrous":
+            return True
+    return False
+
+
 # v0.15.15 — rounds-fired-per-burst-mode lookup. Mirrors the
 # ``BURST_BONUSES`` dice-bonus table but in the inverse direction
 # (cost rather than benefit). Keep these two tables aligned: any
@@ -1250,6 +1382,26 @@ def encounter_page(request, pk):
             p.ammo_max = 0
         if p.ammo_max < 0:
             p.ammo_max = 0
+
+        # v0.15.16 — off-hand annotations. ``has_offhand`` drives the
+        # DUAL ATTACK checkbox visibility on the attack form;
+        # ``offhand_ammo_state`` / ``offhand_ammo_max`` feed a
+        # parallel MAG indicator next to the off-hand weapon name.
+        # ``is_ambidextrous`` is computed from the actor's merit
+        # entries (canonical M2M + legacy JSON) and drives the
+        # checkbox label between "−2 dice off-hand" vs
+        # "AMBIDEXTROUS — no penalty".
+        p.has_offhand = bool(p.offhand_weapon_data)
+        p.offhand_ammo_state = _offhand_ammo_state(p)
+        try:
+            p.offhand_ammo_max = int(
+                (p.offhand_weapon_data or {}).get("magazine", 0) or 0
+            )
+        except (TypeError, ValueError):
+            p.offhand_ammo_max = 0
+        if p.offhand_ammo_max < 0:
+            p.offhand_ammo_max = 0
+        p.is_ambidextrous = _has_ambidextrous_merit(p)
         # ``ammo_pct`` drives the colour tier of the indicator —
         # green ≥50%, amber 25–50%, red <25% / 0. Pre-computed in
         # Python so the template stays declarative.
@@ -2524,6 +2676,119 @@ def equip_weapon(request, pk, participant_id):
 @login_required
 @_gm_or_owner()
 @csrf_protect
+def equip_offhand(request, pk, participant_id):
+    """POST — equip / unequip an off-hand weapon on a participant.
+
+    v0.15.16 — mirror of :func:`equip_weapon`, but writes to the
+    ``offhand_weapon_name`` / ``offhand_weapon_data`` fields and uses
+    the ``offhand_ammo:N`` parallel-tag helpers.
+
+    Form field ``weapon_name`` is matched against
+    ``SiteSettings.get_weapons()`` (first match wins). Empty / not
+    found clears the off-hand slot and strips any
+    ``offhand_ammo:*`` tag.
+
+    Off-hand ammo lifecycle in v0.15.16:
+      * SET on equip if catalogue entry is a firearm with ``magazine > 0``.
+      * STRIPPED on un-equip / non-firearm equip.
+      * NOT refillable mid-fight — there's no off-hand reload action
+        in v0.15.16. Run dry → empty until re-equipped. Re-equipping
+        the same weapon counts as "swap out / swap in" and refills.
+    """
+    if request.method != "POST":
+        return HttpResponseNotAllowed(["POST"])
+
+    encounter = get_object_or_404(Encounter, pk=pk)
+    participant = get_object_or_404(
+        Participant, pk=participant_id, encounter=encounter
+    )
+
+    name = request.POST.get("weapon_name", "").strip()
+
+    if not name:
+        # Empty submission = unequip. Strip any off-hand ammo tag so a
+        # later equip starts from a clean slate.
+        participant.offhand_weapon_name = ""
+        participant.offhand_weapon_data = {}
+        _strip_offhand_ammo(participant)
+        participant.save(update_fields=[
+            "offhand_weapon_name", "offhand_weapon_data", "conditions",
+        ])
+        _log(
+            encounter,
+            "weapon_change",
+            f"{participant.name} unequipped off-hand weapon.",
+            participant_id=participant.pk,
+            offhand=True,
+            weapon_name="",
+            magazine_full=False,
+        )
+        return redirect("combat:detail", pk=encounter.pk)
+
+    weapons = SiteSettings.load().get_weapons()
+    entry = next((w for w in weapons if w.get("name") == name), None)
+
+    if entry is None:
+        # Unknown weapon — also clears the slot.
+        participant.offhand_weapon_name = ""
+        participant.offhand_weapon_data = {}
+        _strip_offhand_ammo(participant)
+        participant.save(update_fields=[
+            "offhand_weapon_name", "offhand_weapon_data", "conditions",
+        ])
+        _log(
+            encounter,
+            "weapon_change",
+            f"{participant.name} unequipped off-hand weapon.",
+            participant_id=participant.pk,
+            offhand=True,
+            weapon_name="",
+            magazine_full=False,
+        )
+        return redirect("combat:detail", pk=encounter.pk)
+
+    # Snapshot the catalogue entry so a later edit doesn't retroactively
+    # mutate the in-flight encounter.
+    participant.offhand_weapon_name = entry.get("name", "")
+    participant.offhand_weapon_data = dict(entry)
+
+    # Fill the off-hand magazine on equip if the catalogue entry is a
+    # firearm with a positive magazine size. Otherwise strip any stale
+    # off-hand ammo tag (covers the swap-firearm-to-melee path).
+    mag = 0
+    if entry.get("category") == "firearm":
+        try:
+            mag = int(entry.get("magazine", 0) or 0)
+        except (TypeError, ValueError):
+            mag = 0
+    if mag > 0:
+        _set_offhand_ammo(participant, mag)
+        magazine_full = True
+    else:
+        _strip_offhand_ammo(participant)
+        magazine_full = False
+
+    participant.save(update_fields=[
+        "offhand_weapon_name", "offhand_weapon_data", "conditions",
+    ])
+
+    _log(
+        encounter,
+        "weapon_change",
+        f"{participant.name} equipped {participant.offhand_weapon_name} "
+        f"(off-hand).",
+        participant_id=participant.pk,
+        offhand=True,
+        weapon_name=participant.offhand_weapon_name,
+        magazine=mag,
+        magazine_full=magazine_full,
+    )
+    return redirect("combat:detail", pk=encounter.pk)
+
+
+@login_required
+@_gm_or_owner()
+@csrf_protect
 def equip_armor(request, pk, participant_id):
     """POST — equip / unequip armor on a participant.
 
@@ -3144,6 +3409,18 @@ def attack(request, pk, attacker_id):
     if ammo_tracked:
         ammo_after = max(0, ammo_before - rounds_fired)
 
+    # v0.15.16 — DUAL ATTACK gating. The flag is honoured only when the
+    # attacker actually has an off-hand weapon equipped; otherwise the
+    # request degrades silently to a single main-hand attack (no flash,
+    # no rejection — a tampered POST shouldn't dead-end legitimate
+    # gameplay). Logged on every off-hand row so the timeline reads
+    # straight without the GM having to puzzle out which slot fired.
+    dual_attack_requested = (request.POST.get("dual_attack") == "1")
+    has_offhand = bool(attacker.offhand_weapon_data)
+    dual_attack = dual_attack_requested and has_offhand
+    is_ambidextrous = _has_ambidextrous_merit(attacker) if dual_attack else False
+    offhand_penalty = 0 if is_ambidextrous else -2
+
     extra_payload = {
         "burst_mode": burst_mode,
         "burst_bonus": burst_bonus,
@@ -3161,6 +3438,14 @@ def attack(request, pk, attacker_id):
         "rounds_fired": rounds_fired,
         "mag_size": mag_size if ammo_tracked else 0,
         "burst_downgraded_due_to_ammo": burst_downgraded_due_to_ammo,
+        # v0.15.16 — dual-wield flags on the main-hand attack row so
+        # the timeline filter can paint the pair together. The
+        # off-hand row carries ``dual_wield_offhand: True`` plus its
+        # own penalty/ambidextrous values.
+        "dual_wield": dual_attack,
+        "dual_wield_offhand": False,
+        "dual_wield_penalty": 0,
+        "ambidextrous": is_ambidextrous if dual_attack else False,
     }
 
     # ---- Primary attack ----------------------------------------------------
@@ -3268,6 +3553,163 @@ def attack(request, pk, attacker_id):
             primary_target_id=target.id,
             extra_target_ids=[e.id for e in extras],
         )
+
+    # ------------------------------------------------------------------
+    # v0.15.16 — DUAL ATTACK off-hand resolution
+    # ------------------------------------------------------------------
+    # Off-hand fires *after* the main hand (and after any burst spread)
+    # against the **same primary target**. Distinct rules for the
+    # off-hand attack:
+    #
+    #   * Off-hand pool = base_pool_no_burst (NO burst bonus, NO aim
+    #     bonus, NO WP +3) + off-hand weapon dice + Ambidextrous swing.
+    #   * Pool composition is rebuilt from scratch via
+    #     ``_actor_total_pool`` against the off-hand ``weapon_data`` so
+    #     the off-hand weapon's dice modifier and the auto-picked
+    #     off-hand skill are honoured. Wound + condition modifiers
+    #     still apply (they're shooter-state, not weapon-state).
+    #   * spend_willpower=False: WP was already spent on main hand and
+    #     decremented from willpower_current. Re-using it would
+    #     double-dip.
+    #   * applied_specialisations=[]: spec bonus already counted on
+    #     main hand. (A future v0.15.17+ might re-validate specs
+    #     against the off-hand's auto-picked skill, but v0.15.16 keeps
+    #     it simple.)
+    #   * Burst is forced to single — even if the off-hand weapon is
+    #     auto-capable, dual-burst gets messy fast and v0.15.16 skips
+    #     it. Documented in the rules explainer.
+    #   * No autofire spread on off-hand (single-shot only against
+    #     primary).
+    #   * Defense / cover / armor are recomputed afresh against the
+    #     same target inside ``_resolve_single_attack`` — handled
+    #     identically to the main hand by the same helper.
+    #
+    # If the off-hand is a firearm with empty mag we skip the resolve
+    # step (logging a system warning) so the main-hand attack still
+    # lands cleanly. The ``dual_attack`` form flag is silently ignored
+    # when no off-hand is equipped (handled above when computing
+    # ``dual_attack`` from ``has_offhand``).
+    if dual_attack:
+        offhand_data = attacker.offhand_weapon_data or {}
+        offhand_name = attacker.offhand_weapon_name or "(off-hand)"
+        offhand_skill = _weapon_skill_for(offhand_data)
+
+        # Off-hand ammo gating mirrors main hand but on the parallel tag.
+        oh_is_firearm = offhand_data.get("category") == "firearm"
+        try:
+            oh_mag_size = int(offhand_data.get("magazine", 0) or 0)
+        except (TypeError, ValueError):
+            oh_mag_size = 0
+        oh_ammo_tracked = bool(oh_is_firearm and oh_mag_size > 0)
+
+        oh_ammo_before = None
+        oh_ammo_after = None
+        skip_offhand_due_to_ammo = False
+        if oh_ammo_tracked:
+            oh_ammo_before = _offhand_ammo_state(attacker)
+            if oh_ammo_before is None:
+                oh_ammo_before = 0
+            if oh_ammo_before == 0:
+                # Off-hand dry — main hand attack already landed; we
+                # can't reload mid-action in v0.15.16, so log and skip
+                # the off-hand resolution. The dual_wield flag on the
+                # main row already signals that an off-hand attack
+                # was attempted.
+                skip_offhand_due_to_ammo = True
+                _log(
+                    encounter,
+                    "system",
+                    f"{attacker.name} dual attack: off-hand out of ammo, "
+                    f"skipped.",
+                    actor_participant_id=attacker.id,
+                    offhand_weapon_name=offhand_name,
+                )
+            else:
+                # v0.15.16 always fires SINGLE off-hand → 1 round.
+                oh_ammo_after = max(0, oh_ammo_before - 1)
+
+        if not skip_offhand_due_to_ammo:
+            # Compose the off-hand pool. Same wound + condition
+            # modifiers as the main hand (shooter state), but rebuilt
+            # against the OFF-HAND weapon_data so the right weapon
+            # dice modifier lands. No WP +3, no aim bonus, no spec
+            # bonus, no burst bonus on the off-hand by design.
+            offhand_base_pool = _actor_total_pool(
+                attacker,
+                offhand_data,
+                gm_modifier_int,
+                offhand_skill,
+                spend_willpower=False,
+                applied_specialisations=None,
+            )
+            offhand_pool = max(0, offhand_base_pool + offhand_penalty)
+
+            # Per-target payload for the off-hand row. ``dual_wield``
+            # stays True and ``dual_wield_offhand`` flips so a
+            # timeline filter can paint the pair as a single dual
+            # action. Off-hand carries its own (independent) ammo
+            # accounting via the parallel tag — the main-hand keys
+            # already on the row's ``extra_payload`` are NOT re-used
+            # so the timeline doesn't get confused about which
+            # magazine drained.
+            offhand_extra_payload = {
+                "dual_wield": True,
+                "dual_wield_offhand": True,
+                "dual_wield_penalty": offhand_penalty,
+                "ambidextrous": is_ambidextrous,
+                "burst_mode": "single",
+                "burst_bonus": 0,
+                "aim_bonus": 0,
+                "aim_consumed": False,
+                "aim_broken": False,
+                "aim_only_on_primary": False,
+                "extras_total": 0,
+                "ammo_tracked": oh_ammo_tracked,
+                "ammo_before": oh_ammo_before,
+                "ammo_after": oh_ammo_after,
+                "rounds_fired": 1 if oh_ammo_tracked else 0,
+                "mag_size": oh_mag_size if oh_ammo_tracked else 0,
+                "burst_downgraded_due_to_ammo": False,
+                # Surface the off-hand weapon name in the payload so
+                # downstream consumers (timeline, WS replay) can read
+                # which slot fired without re-walking the participant.
+                "offhand_weapon_name": offhand_name,
+            }
+
+            offhand_msg_tail_parts = ["OFF-HAND"]
+            if is_ambidextrous:
+                offhand_msg_tail_parts.append("AMBIDEXTROUS")
+            offhand_msg_tail = (
+                " (" + ", ".join(offhand_msg_tail_parts) + ")"
+            )
+
+            _resolve_single_attack(
+                encounter, attacker, target,
+                weapon_data=offhand_data,
+                weapon_name=offhand_name,
+                weapon_skill=offhand_skill,
+                attack_pool=offhand_pool,
+                gm_modifier_int=gm_modifier_int,
+                wound_pen=wound_pen,
+                cond_atk_mod=cond_atk_mod,
+                spent_wp=False,            # WP already spent on main hand
+                applied_specs=[],          # spec bonus already counted
+                spec_bonus=0,
+                msg_tail=offhand_msg_tail,
+                msg_tail_parts=offhand_msg_tail_parts,
+                spread_index=0,
+                spread_penalty=0,
+                extra_payload=offhand_extra_payload,
+            )
+
+            # Decrement off-hand ammo after the resolve. Refresh
+            # defensively before saving — earlier housekeeping
+            # (willpower / main-hand ammo) may have already
+            # round-tripped the attacker through the DB.
+            if oh_ammo_tracked:
+                attacker.refresh_from_db()
+                _set_offhand_ammo(attacker, oh_ammo_after)
+                attacker.save(update_fields=["conditions"])
 
     return redirect("combat:detail", pk=encounter.pk)
 

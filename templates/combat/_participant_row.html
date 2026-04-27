@@ -151,7 +151,19 @@ dodge), ADD CONDITION, WILLPOWER.
             <span class="part-stats">
                 HP {{ p.health_bashing }}/{{ p.health_lethal }}/{{ p.health_aggravated }} of {{ p.health_max }}
                 &middot; WP {{ p.willpower_current }}/{{ p.willpower_max }}
-                {% if p.weapon_name %} &middot; {{ p.weapon_name }}{% endif %}
+                {% comment %}
+                v0.15.16 — surface main-hand vs off-hand explicitly
+                when an off-hand weapon is equipped, so the GM at a
+                glance sees both slots. Without an off-hand we keep
+                the leaner pre-v0.15.16 single-weapon prefix.
+                {% endcomment %}
+                {% if p.weapon_name and p.offhand_weapon_name %}
+                    &middot; MAIN: {{ p.weapon_name }} | OFF-HAND: {{ p.offhand_weapon_name }}
+                {% elif p.weapon_name %}
+                    &middot; {{ p.weapon_name }}
+                {% elif p.offhand_weapon_name %}
+                    &middot; OFF-HAND: {{ p.offhand_weapon_name }}
+                {% endif %}
                 {% if p.armor_name %} &middot; {{ p.armor_name }}{% endif %}
             </span>
 
@@ -173,6 +185,25 @@ dodge), ADD CONDITION, WILLPOWER.
                 {% if p.ammo_state == 0 %}
                 <span class="part-ammo-pill red" title="Mag empty — must reload before firing.">
                     EMPTY &mdash; RELOAD
+                </span>
+                {% endif %}
+            {% endif %}
+            {% comment %}
+            v0.15.16 — parallel OFF-MAG indicator for the off-hand
+            firearm. Only rendered when the equipped off-hand is a
+            firearm with a positive catalogue magazine. v0.15.16 has
+            no off-hand reload action — when it runs dry the player
+            must un-equip and re-equip to refill, or rely on the main
+            hand. The EMPTY pill makes that limitation visible.
+            {% endcomment %}
+            {% if p.offhand_ammo_max > 0 %}
+                <span class="part-ammo-pill {% if p.offhand_ammo_state == 0 %}red{% else %}green{% endif %}"
+                      title="OFF-HAND: {{ p.offhand_weapon_name }} — {{ p.offhand_ammo_state|default_if_none:0 }} of {{ p.offhand_ammo_max }} rounds.">
+                    OFF-MAG {{ p.offhand_ammo_state|default_if_none:0 }}/{{ p.offhand_ammo_max }}
+                </span>
+                {% if p.offhand_ammo_state == 0 %}
+                <span class="part-ammo-pill red" title="Off-hand magazine empty — re-equip to refill (no off-hand reload in v0.15.16).">
+                    OFF-HAND EMPTY
                 </span>
                 {% endif %}
             {% endif %}
@@ -214,6 +245,28 @@ dodge), ADD CONDITION, WILLPOWER.
                     <option value="">— UNEQUIPPED —</option>
                     {% for w in weapon_choices %}
                         <option value="{{ w.name }}" {% if p.weapon_name == w.name %}selected{% endif %}>
+                            {{ w.name }}{% if w.damage %} ({{ w.damage }}){% endif %}
+                        </option>
+                    {% endfor %}
+                </select>
+                <button type="submit">EQUIP</button>
+            </form>
+
+            {% comment %}
+            v0.15.16 — EQUIP OFF-HAND. Same shape as EQUIP WEAPON but
+            posts to combat:equip_offhand and writes to the off-hand
+            slot. Empty submission unequips. Off-hand firearm magazine
+            fills on equip; v0.15.16 has no off-hand reload action so
+            running dry requires re-equipping.
+            {% endcomment %}
+            <form method="post" action="{% url 'combat:equip_offhand' encounter.id p.id %}"
+                  class="part-mini-form">
+                {% csrf_token %}
+                <label for="offweap-{{ p.id }}">OFF-HAND</label>
+                <select id="offweap-{{ p.id }}" name="weapon_name">
+                    <option value="">— UNEQUIPPED —</option>
+                    {% for w in weapon_choices %}
+                        <option value="{{ w.name }}" {% if p.offhand_weapon_name == w.name %}selected{% endif %}>
                             {{ w.name }}{% if w.damage %} ({{ w.damage }}){% endif %}
                         </option>
                     {% endfor %}
@@ -435,6 +488,24 @@ dodge), ADD CONDITION, WILLPOWER.
                                {% if p.willpower_current == 0 %}disabled{% endif %}>
                         SPEND WP (+3 DICE, COSTS 1 WP)
                     </label>
+
+                    {% comment %}
+                    v0.15.16 — DUAL ATTACK. Visible only when an
+                    off-hand weapon is equipped. Fires both weapons
+                    against the primary target in one action. Off-hand
+                    pays −2 dice unless the actor has the Ambidextrous
+                    merit. The label adapts so the player sees the
+                    actual dice cost / reprieve at a glance. No aim,
+                    no WP +3, no burst, no autofire spread on the
+                    off-hand attack — single shot vs primary only.
+                    {% endcomment %}
+                    {% if p.has_offhand %}
+                    <label class="part-dual-attack" style="grid-column: 1 / -1; display: flex; align-items: center; gap: 6px; margin-top: 0.4rem; font-size: 0.85rem;">
+                        <input type="checkbox" name="dual_attack" value="1" id="dual-{{ p.id }}">
+                        DUAL ATTACK ({{ p.offhand_weapon_name|default:"off-hand" }},
+                        {% if p.is_ambidextrous %}AMBIDEXTROUS — no penalty{% else %}&minus;2 dice off-hand{% endif %})
+                    </label>
+                    {% endif %}
 
                     {% comment %}
                     v0.15.9 — server-rendered numeric breakdown.

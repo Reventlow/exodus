@@ -81,6 +81,15 @@ urlpatterns = [
         views.equip_weapon,
         name="equip_weapon",
     ),
+    # v0.15.16 — equip / unequip an off-hand weapon for dual-wielding.
+    # Same form shape as equip_weapon (one ``weapon_name`` field) but
+    # writes to ``offhand_weapon_name`` / ``offhand_weapon_data`` and
+    # uses the parallel ``offhand_ammo:N`` condition tag.
+    path(
+        "combat/<int:pk>/participants/<int:participant_id>/equip-offhand/",
+        views.equip_offhand,
+        name="equip_offhand",
+    ),
     path(
         "combat/<int:pk>/participants/<int:participant_id>/equip-armor/",
         views.equip_armor,

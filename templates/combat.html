@@ -176,14 +176,15 @@
         Talk briefly · drop prone · stand from prone (one turn, no penalty) · drop a held item · take cover from existing terrain · move up to <strong>Speed</strong> meters · activate a verbal merit · pull a trigger on a pre-aimed firearm.
     </div>
 
-    {# === ADVANCED ACTIONS — AIMING / BURST / AUTOFIRE / RELOAD (v0.15.15) === #}
+    {# === ADVANCED ACTIONS — AIMING / BURST / AUTOFIRE / RELOAD / DUAL-WIELD === #}
     {% comment %}
     v0.15.15 — explainer for AIM (v0.15.14), burst fire (v0.15.14),
     autofire spread (v0.15.14), and ammo / reload (v0.15.15).
+    v0.15.16 — adds the DUAL-WIELDING subsection at the tail.
     Mirrors the live combat module's enforcement so players reading
     /rules/combat/ get the same dice math the server applies.
     {% endcomment %}
-    <header class="block-head"><span class="block-bullet">■</span><h3>ADVANCED ACTIONS — AIMING, BURST, AUTOFIRE, RELOAD</h3><span class="block-line"></span></header>
+    <header class="block-head"><span class="block-bullet">■</span><h3>ADVANCED ACTIONS — AIMING, BURST, AUTOFIRE, RELOAD, DUAL-WIELD</h3><span class="block-line"></span></header>
     <p class="text-secondary" style="font-size: 0.78rem; line-height: 1.5; margin: 0.6rem 0 1rem 0;">
         These are the four trigger-discipline actions exposed in the live combat module. The server enforces every cap and breakage rule below; this section is the player-facing reference.
     </p>
@@ -255,6 +256,25 @@
         <p style="margin: 0 0 0.4rem 0;"><span class="mono-text text-accent">▸ EMPTY MAGAZINE</span> &nbsp;— attempting to fire with zero rounds is rejected with an <strong>OUT OF AMMO</strong> flash; you must reload first.</p>
         <p style="margin: 0 0 0.4rem 0;"><span class="mono-text text-accent">▸ RELOAD</span> &nbsp;— resets the magazine to capacity. <strong>Always available</strong> — players have unlimited magazines (no reserve tracking).</p>
         <p style="margin: 0;"><span class="mono-text text-accent">▸ RELOAD COST</span> &nbsp;— costs your full turn when called by the active participant. Off-turn reloads (GM bookkeeping) are free but flagged in the log as out-of-band.</p>
+    </div>
+
+    {% comment %}
+    v0.15.16 — DUAL-WIELDING subsection. Server enforces every rule
+    here: off-hand presence gates the dual flag, ambidextrous merit
+    waives the penalty, off-hand single-shot only, no aim / WP /
+    burst on the off-hand. Off-hand reload is an explicit deferred
+    item — flagged so players don't expect it.
+    {% endcomment %}
+    <h4 class="mono-text text-accent" style="font-size: 0.85rem; letter-spacing: 0.2em; margin: 1.2rem 0 0.4rem 0;">DUAL-WIELDING</h4>
+    <div class="text-secondary" style="font-size: 0.85rem; line-height: 1.7; margin: 0 0 1rem 0;">
+        <p style="margin: 0 0 0.4rem 0;"><span class="mono-text text-accent">▸ EQUIP OFF-HAND</span> &nbsp;— pick a second weapon via the <strong>EQUIP OFF-HAND</strong> sub-form on the participant action panel. The off-hand snapshot is independent of the main hand — catalogue edits don't retroactively mutate equipped off-hands.</p>
+        <p style="margin: 0 0 0.4rem 0;"><span class="mono-text text-accent">▸ DUAL ATTACK</span> &nbsp;— tick the <strong>DUAL ATTACK</strong> checkbox on the attack form (only visible when an off-hand is equipped) to fire both weapons in one action. Both attacks resolve against the same primary target.</p>
+        <p style="margin: 0 0 0.4rem 0;"><span class="mono-text text-accent">▸ MAIN HAND</span> &nbsp;— full pool with all bonuses: aim · burst · autofire spread · willpower +3 · specialisations · GM mod.</p>
+        <p style="margin: 0 0 0.4rem 0;"><span class="mono-text text-accent">▸ OFF-HAND</span> &nbsp;— <strong>−2 dice penalty</strong>. <em>No</em> aim bonus (consumed by main hand) · <em>no</em> WP +3 (already spent) · <em>no</em> burst (always single-shot) · <em>no</em> autofire spread. Same defense / cover / armor resolution applies. Off-hand uses its own weapon's dice modifier and auto-picked skill (firearm → Firearms, melee → Weaponry, etc.).</p>
+        <p style="margin: 0 0 0.4rem 0;"><span class="mono-text text-accent">▸ AMBIDEXTROUS MERIT</span> &nbsp;— Physical, 1 dot. <strong>Removes the −2 off-hand penalty.</strong> Detection looks at both the canonical merit list and any legacy free-text merit entry; the DUAL ATTACK label adapts to read <em>AMBIDEXTROUS — no penalty</em> when the merit is detected.</p>
+        <p style="margin: 0 0 0.4rem 0;"><span class="mono-text text-accent">▸ AMMO</span> &nbsp;— off-hand ammo is tracked separately as <code>offhand_ammo:N</code> (parallel tag). The OFF-MAG indicator on the row reads independently of the main MAG.</p>
+        <p style="margin: 0 0 0.4rem 0;"><span class="mono-text text-accent">▸ OFF-HAND OUT OF AMMO</span> &nbsp;— if the off-hand firearm is empty when DUAL ATTACK is requested, the main-hand attack still resolves and the off-hand resolution is skipped (logged as a system warning).</p>
+        <p style="margin: 0;"><span class="mono-text text-accent">▸ DEFERRED — OFF-HAND RELOAD</span> &nbsp;— <strong>not yet implemented in v0.15.16</strong>. When an off-hand firearm runs dry it stays empty until you re-equip it (which refills via the EQUIP OFF-HAND form). v0.15.17+ may add a dedicated off-hand reload action.</p>
     </div>
 
     {# === WEAPONS CATALOGUE (live from /settings/) ===================== #}

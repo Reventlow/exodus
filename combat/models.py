@@ -199,6 +199,19 @@ class Participant(models.Model):
         help_text="Snapshot of the weapon stat block at the time of equipping.",
     )
 
+    # v0.15.16 — Off-hand (dual-wielding). Mirrors weapon_name /
+    # weapon_data for the second equipped weapon. Off-hand attacks
+    # take a -2 dice penalty unless the actor has the Ambidextrous
+    # merit. Off-hand ammo lives on a parallel ``offhand_ammo:N``
+    # condition tag (no schema change for ammo state). Empty defaults
+    # mean the field-add migration is safe — pre-v0.15.16 rows simply
+    # have no off-hand equipped.
+    offhand_weapon_name = models.CharField(max_length=120, blank=True, default="")
+    offhand_weapon_data = models.JSONField(
+        default=dict, blank=True,
+        help_text="Snapshot of the off-hand weapon stat block at the time of equipping.",
+    )
+
     # Worn armor (snapshot from SiteSettings.armor)
     armor_name = models.CharField(max_length=120, blank=True, default="")
     armor_data = models.JSONField(
