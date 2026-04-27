@@ -1,5 +1,14 @@
 # Changelog
 
+## v0.14.63
+- Two new admin-only API endpoints for the weapons catalogue:
+  - `GET /api/admin/weapons/` — list all
+  - `POST /api/admin/weapons/` — create new (409 on duplicate name)
+  - `GET /api/admin/weapons/<name>/` — fetch one (case-insensitive name)
+  - `PUT /api/admin/weapons/<name>/` — partial update (rename, change stats)
+  - `DELETE /api/admin/weapons/<name>/` — remove
+- Five new MCP tools wrapping the endpoints (`list_weapons`, `get_weapon`, `create_weapon`, `update_weapon`, `delete_weapon`) so Claude can manage the catalogue without the admin UI. Names are URL-encoded so spaces and parentheses (e.g. `Taser (Contact)`) work transparently
+
 ## v0.14.62
 - **Weapons now carry stats.** Each entry in the catalogue gets `damage` (e.g. `1L`, `2B`, `4L close / 2L long`), `range` (`—` for melee, `S/M/L m` for ranged, `Str ×3/×6/×12 m` for thrown), `capacity` (`12+1`, `30`, `1 cartridge`, `—`), and free-text `notes`. Default seed updated with WoD 2.0–style stats for all 20 starter weapons
 - Settings editor at `/settings/ → COMBAT → Weapons` is now a structured **row-based table per category** instead of a flat textarea. Each row has columns NAME / DAMAGE / RANGE / CAPACITY / NOTES + a delete button. Each category card has a `＋ ADD WEAPON` button to append a new row

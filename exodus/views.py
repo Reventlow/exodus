@@ -361,6 +361,125 @@ def rules_page(request):
     })
 
 
+@require_http_methods(["GET", "POST"])
+def api_weapons(request):
+    """List or create weapons in the site catalogue.
+
+    GET   → ``{"count": N, "weapons": [...]}``
+    POST  → create a new weapon. Body: ``{name, category, damage?,
+            range?, capacity?, notes?}``. Returns the created entry
+            (201). 409 if a weapon with that name already exists.
+
+    Admin / MCP-superuser only.
+    """
+    if not request.user.is_superuser:
+        return JsonResponse({"error": "ACCESS DENIED."}, status=403)
+
+    settings_obj = SiteSettings.load()
+    weapons = list(settings_obj.get_weapons())
+
+    if request.method == "GET":
+        return JsonResponse({"count": len(weapons), "weapons": weapons})
+
+    try:
+        body = json.loads(request.body) if request.body else {}
+    except json.JSONDecodeError:
+        return JsonResponse({"error": "Invalid JSON."}, status=400)
+
+    name = (body.get("name") or "").strip()
+    if not name:
+        return JsonResponse({"error": "'name' is required."}, status=400)
+    cat = (body.get("category") or "").strip().lower()
+    if cat not in ("melee", "improvised", "firearm", "thrown"):
+        return JsonResponse({
+            "error": "'category' must be one of: melee, improvised, firearm, thrown.",
+        }, status=400)
+    if any((w.get("name") or "").lower() == name.lower() for w in weapons):
+        return JsonResponse({
+            "error": f"A weapon named '{name}' already exists. Use PUT on the detail URL to update.",
+        }, status=409)
+
+    new_w = {
+        "name": name[:80],
+        "category": cat,
+        "damage": (body.get("damage") or "").strip()[:48],
+        "range": (body.get("range") or "").strip()[:48],
+        "capacity": (body.get("capacity") or "").strip()[:48],
+        "notes": (body.get("notes") or "").strip()[:240],
+    }
+    weapons.append(new_w)
+    settings_obj.weapons = weapons
+    settings_obj.save(update_fields=["weapons"])
+    return JsonResponse(new_w, status=201)
+
+
+@require_http_methods(["GET", "PUT", "DELETE"])
+def api_weapon_detail(request, name):
+    """Get / update / delete a single weapon by its (case-insensitive) name.
+
+    PUT body is partial — only the fields you include are changed.
+    Allowed fields: ``name`` (rename), ``category``, ``damage``,
+    ``range``, ``capacity``, ``notes``.
+
+    Admin / MCP-superuser only.
+    """
+    if not request.user.is_superuser:
+        return JsonResponse({"error": "ACCESS DENIED."}, status=403)
+
+    settings_obj = SiteSettings.load()
+    weapons = list(settings_obj.get_weapons())
+
+    idx = next(
+        (i for i, w in enumerate(weapons)
+         if (w.get("name") or "").lower() == name.lower()),
+        None,
+    )
+    if idx is None:
+        return JsonResponse({"error": f"Weapon '{name}' not found."}, status=404)
+
+    if request.method == "GET":
+        return JsonResponse(weapons[idx])
+
+    if request.method == "DELETE":
+        removed = weapons.pop(idx)
+        settings_obj.weapons = weapons
+        settings_obj.save(update_fields=["weapons"])
+        return JsonResponse({"deleted": removed})
+
+    # PUT
+    try:
+        body = json.loads(request.body) if request.body else {}
+    except json.JSONDecodeError:
+        return JsonResponse({"error": "Invalid JSON."}, status=400)
+
+    w = dict(weapons[idx])
+    if "name" in body:
+        new_name = (body["name"] or "").strip()
+        if new_name:
+            # Block rename collision against another existing weapon.
+            if any(
+                i != idx and (other.get("name") or "").lower() == new_name.lower()
+                for i, other in enumerate(weapons)
+            ):
+                return JsonResponse({
+                    "error": f"A weapon named '{new_name}' already exists.",
+                }, status=409)
+            w["name"] = new_name[:80]
+    if "category" in body:
+        cat = (body["category"] or "").strip().lower()
+        if cat in ("melee", "improvised", "firearm", "thrown"):
+            w["category"] = cat
+    for field in ("damage", "range", "capacity"):
+        if field in body:
+            w[field] = (body[field] or "").strip()[:48]
+    if "notes" in body:
+        w["notes"] = (body["notes"] or "").strip()[:240]
+    weapons[idx] = w
+    settings_obj.weapons = weapons
+    settings_obj.save(update_fields=["weapons"])
+    return JsonResponse(w)
+
+
 @login_required
 def combat_page(request):
     """RULES → COMBAT — quick reference for WoD 2.0 personal combat,
