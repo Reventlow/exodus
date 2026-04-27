@@ -1,5 +1,8 @@
 # Changelog
 
+## v0.14.52
+- Top subsystem nav rail now aligns to the right (`justify-content: flex-end`) instead of the left
+
 ## v0.14.51
 - New **RULES** section consolidating the merit and pulling-strings catalogues. Hub at `/rules/` shows two cards (MERITS / PULLING STRINGS) inside a bracket-frame card. The standalone catalogues now live at `/rules/merits/` and `/rules/pulling-strings/`, with the old `/merits/` and `/pulling-strings/` URLs kept as silent aliases so existing bookmarks keep working
 - Top nav simplified: the two flat links (`PULL STRINGS` + `MERITS`) become a single `RULES` link
