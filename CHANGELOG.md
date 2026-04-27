@@ -1,5 +1,8 @@
 # Changelog
 
+## v0.14.56
+- Renamed `CLEARANCE GATE` to **`THEME`** in `/settings/` — both the sidebar group label and the section header. The settings now read more accurately, since palette + clock timezone propagate to the authenticated app, not just the login splash. Description copy updated to reflect the broader scope
+
 ## v0.14.55
 - New **CLOCK** section in `/settings/ → CLEARANCE GATE → TWEAKS` with a TIMEZONE selector that drives the header-strip clock. Defaults to UTC; choices include UTC + 13 common IANA zones (Copenhagen / Stockholm / Berlin / Paris / London / Helsinki / NY / Chicago / Denver / LA / Tokyo / Shanghai / Sydney). Clock label shows the live abbreviation (CET / CEST / EST / EDT / etc.) — switches automatically across DST boundaries
 - Stored as `tweaks.timezone` on `SiteSettings`. Server-side validation against `zoneinfo.available_timezones()` so a malformed POST can't break the JS clock
