@@ -339,6 +339,132 @@ The END button also prompts for confirmation.
         color: var(--ink-mute);
     }
 
+    /* v0.15.4 — collapsible subforms inside each participant row.
+       The .part-row is now a column-flex so the <details> panel can
+       sit beneath the name + remove header. */
+    .part-row {
+        display: block;            /* override the v0.15.3 flex layout */
+        padding: 0.5rem 0.5rem;
+    }
+    .part-row-head {
+        display: flex;
+        align-items: flex-start;
+        gap: 0.5rem;
+    }
+    .part-row-head .part-meta { flex: 1; min-width: 0; }
+    .part-cover-pill {
+        display: inline-block;
+        font-size: 0.55rem;
+        letter-spacing: 0.18em;
+        padding: 0 5px;
+        border: 1px solid var(--c-dim);
+        margin-left: 6px;
+        text-transform: uppercase;
+        vertical-align: middle;
+    }
+    .part-cover-pill.light { color: #5fd0d4; border-color: #5fd0d4; }
+    .part-cover-pill.heavy { color: #6791e0; border-color: #6791e0; }
+    .part-cover-pill.full  { color: #b08ad9; border-color: #b08ad9; }
+
+    /* The <details> shell for the four sub-forms. */
+    .part-actions {
+        margin: 0.4rem 0 0 0;
+        padding: 0;
+        border: none;
+        background: transparent;
+    }
+    .part-actions > summary {
+        cursor: pointer;
+        font-family: var(--font-mono);
+        font-size: 0.62rem;
+        letter-spacing: 0.18em;
+        text-transform: uppercase;
+        color: var(--ink-mute);
+        list-style: none;
+        outline: none;
+        padding: 0.15rem 0;
+    }
+    .part-actions > summary::-webkit-details-marker { display: none; }
+    .part-actions > summary::before {
+        content: "+ ACTIONS";
+        color: var(--ink-mute);
+    }
+    .part-actions[open] > summary::before {
+        content: "− ACTIONS";
+        color: var(--c-primary);
+    }
+    .part-actions > summary > * { display: none; }
+    .part-actions-grid {
+        display: grid;
+        grid-template-columns: 1fr;
+        gap: 0.5rem;
+        margin-top: 0.45rem;
+        padding: 0.5rem;
+        border: 1px dashed var(--c-dim);
+        background: rgba(0, 0, 0, 0.18);
+    }
+    .part-mini-form {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.35rem;
+        align-items: center;
+    }
+    .part-mini-form label {
+        font-family: var(--font-mono);
+        font-size: 0.58rem;
+        letter-spacing: 0.18em;
+        text-transform: uppercase;
+        color: var(--ink-mute);
+        min-width: 4.4rem;
+    }
+    .part-mini-form select,
+    .part-mini-form input[type="text"],
+    .part-mini-form input[type="number"] {
+        background: var(--bg-input);
+        border: 1px solid var(--c-dim);
+        color: var(--ink);
+        padding: 0.22rem 0.35rem;
+        font-family: var(--font-mono);
+        font-size: 0.7rem;
+        border-radius: 0;
+        flex: 1;
+        min-width: 6rem;
+        box-sizing: border-box;
+    }
+    .part-mini-form input[type="number"] {
+        flex: 0 0 4rem;
+        min-width: 4rem;
+    }
+    .part-mini-form button {
+        background: transparent;
+        border: 1px solid var(--c-dim);
+        color: var(--c-primary);
+        cursor: pointer;
+        padding: 0.22rem 0.65rem;
+        font-family: var(--font-mono);
+        font-size: 0.62rem;
+        letter-spacing: 0.16em;
+        text-transform: uppercase;
+    }
+    .part-mini-form button:hover {
+        background: var(--c-soft);
+        border-color: var(--c-primary);
+        text-shadow: 0 0 6px var(--c-glow);
+    }
+    .part-mini-form .btn-primary {
+        color: var(--c-primary);
+        border-color: var(--c-primary);
+    }
+    .part-attack-preview {
+        font-family: var(--font-mono);
+        font-size: 0.6rem;
+        letter-spacing: 0.14em;
+        text-transform: uppercase;
+        color: var(--ink-mute);
+        flex-basis: 100%;
+        margin-top: 0.1rem;
+    }
+
     /* TIMELINE — same look as the encounter table. */
     .log-table { width: 100%; border-collapse: collapse; font-family: var(--font-mono); font-size: 0.74rem; }
     .log-table th {
@@ -564,7 +690,7 @@ The END button also prompts for confirmation.
             <div class="enc-faction-col">
                 <h4>PLAYERS / ALLIES</h4>
                 {% for p in participants_by_faction.player_or_ally %}
-                    {% include "combat/_participant_row.html" with p=p encounter=encounter %}
+                    {% include "combat/_participant_row.html" with p=p encounter=encounter weapon_choices=weapon_choices armor_choices=armor_choices cover_by_tier=cover_by_tier participants=participants attack_eligible=attack_eligible %}
                 {% empty %}
                     <em class="muted" style="display: block; padding: 0.4rem 0.5rem;">none</em>
                 {% endfor %}
@@ -574,7 +700,7 @@ The END button also prompts for confirmation.
             <div class="enc-faction-col">
                 <h4>HOSTILES</h4>
                 {% for p in participants_by_faction.hostile %}
-                    {% include "combat/_participant_row.html" with p=p encounter=encounter %}
+                    {% include "combat/_participant_row.html" with p=p encounter=encounter weapon_choices=weapon_choices armor_choices=armor_choices cover_by_tier=cover_by_tier participants=participants attack_eligible=attack_eligible %}
                 {% empty %}
                     <em class="muted" style="display: block; padding: 0.4rem 0.5rem;">none</em>
                 {% endfor %}
@@ -584,7 +710,7 @@ The END button also prompts for confirmation.
             <div class="enc-faction-col">
                 <h4>NEUTRAL</h4>
                 {% for p in participants_by_faction.neutral %}
-                    {% include "combat/_participant_row.html" with p=p encounter=encounter %}
+                    {% include "combat/_participant_row.html" with p=p encounter=encounter weapon_choices=weapon_choices armor_choices=armor_choices cover_by_tier=cover_by_tier participants=participants attack_eligible=attack_eligible %}
                 {% empty %}
                     <em class="muted" style="display: block; padding: 0.4rem 0.5rem;">none</em>
                 {% endfor %}

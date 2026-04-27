@@ -2,31 +2,168 @@
 Single participant row inside the encounter PARTICIPANTS faction columns.
 
 Inputs:
-    p          — Participant instance
-    encounter  — parent Encounter (used to build the remove URL)
+    p                — Participant instance
+    encounter        — parent Encounter (used to build action URLs)
+    weapon_choices   — list of weapon dicts from SiteSettings.get_weapons()
+    armor_choices    — list of armor dicts from SiteSettings.get_armor()
+    cover_by_tier    — dict {tier: [entry, ...]} from SiteSettings.get_cover()
+    participants     — full list of participants in the encounter (for the
+                       attack target picker; PvP intentionally allowed —
+                       the picker offers every other row regardless of
+                       faction)
+    attack_eligible  — bool: encounter.status == "active" and there is an
+                       active_participant pointer (hides the ATTACK form
+                       on every row but the actor's)
 
-Renders the kind badge, name, weapon, HP triplet (B/L/A of Max), and
-a small "× REMOVE" form posting to combat:participant_remove.
+Renders the kind badge, name, current weapon / armor / cover pill, HP
+triplet (B/L/A of Max), a × REMOVE button, and a collapsible <details>
+panel with four mini-forms: EQUIP WEAPON, EQUIP ARMOR, SET COVER, and
+(only on the active participant when the encounter is active) ATTACK.
 {% endcomment %}
 <div class="part-row">
-    <div class="part-meta">
-        {% if p.participant_kind == "character" %}
-            <span class="part-kind-badge pc">PC</span>
-        {% elif p.participant_kind == "npc" %}
-            <span class="part-kind-badge npc">NPC</span>
-        {% else %}
-            <span class="part-kind-badge mook">MOOK</span>
-        {% endif %}
-        <span class="part-name">{{ p.name }}</span>
-        <span class="part-stats">
-            HP {{ p.health_bashing }}/{{ p.health_lethal }}/{{ p.health_aggravated }} of {{ p.health_max }}
-            {% if p.weapon_name %} &middot; {{ p.weapon_name }}{% endif %}
-        </span>
+    <div class="part-row-head">
+        <div class="part-meta">
+            {% if p.participant_kind == "character" %}
+                <span class="part-kind-badge pc">PC</span>
+            {% elif p.participant_kind == "npc" %}
+                <span class="part-kind-badge npc">NPC</span>
+            {% else %}
+                <span class="part-kind-badge mook">MOOK</span>
+            {% endif %}
+            <span class="part-name">{{ p.name }}</span>
+
+            {% if p.cover_state and p.cover_state != "none" %}
+                <span class="part-cover-pill {{ p.cover_state }}">
+                    COVER: {{ p.cover_state|upper }}{% if p.cover_entry_name %} · {{ p.cover_entry_name }}{% endif %}
+                </span>
+            {% endif %}
+
+            <span class="part-stats">
+                HP {{ p.health_bashing }}/{{ p.health_lethal }}/{{ p.health_aggravated }} of {{ p.health_max }}
+                {% if p.weapon_name %} &middot; {{ p.weapon_name }}{% endif %}
+                {% if p.armor_name %} &middot; {{ p.armor_name }}{% endif %}
+            </span>
+        </div>
+        <form method="post" action="{% url 'combat:participant_remove' encounter.id p.id %}"
+              style="display:inline;"
+              onsubmit="return confirm('Remove {{ p.name|escapejs }} from this encounter?');">
+            {% csrf_token %}
+            <button type="submit" class="part-remove">&times; REMOVE</button>
+        </form>
     </div>
-    <form method="post" action="{% url 'combat:participant_remove' encounter.id p.id %}"
-          style="display:inline;"
-          onsubmit="return confirm('Remove {{ p.name|escapejs }} from this encounter?');">
-        {% csrf_token %}
-        <button type="submit" class="part-remove">&times; REMOVE</button>
-    </form>
+
+    {% comment %}
+    Collapsible action panel. Holds the four sub-forms. Stays closed
+    by default so dense participant lists don't drown in form fields.
+    {% endcomment %}
+    <details class="part-actions">
+        <summary><span>actions</span></summary>
+        <div class="part-actions-grid">
+
+            {# --- EQUIP WEAPON --- #}
+            <form method="post" action="{% url 'combat:equip_weapon' encounter.id p.id %}"
+                  class="part-mini-form">
+                {% csrf_token %}
+                <label for="weap-{{ p.id }}">WEAPON</label>
+                <select id="weap-{{ p.id }}" name="weapon_name">
+                    <option value="">— UNEQUIPPED —</option>
+                    {% for w in weapon_choices %}
+                        <option value="{{ w.name }}" {% if p.weapon_name == w.name %}selected{% endif %}>
+                            {{ w.name }}{% if w.damage %} ({{ w.damage }}){% endif %}
+                        </option>
+                    {% endfor %}
+                </select>
+                <button type="submit">EQUIP</button>
+            </form>
+
+            {# --- EQUIP ARMOR --- #}
+            <form method="post" action="{% url 'combat:equip_armor' encounter.id p.id %}"
+                  class="part-mini-form">
+                {% csrf_token %}
+                <label for="armor-{{ p.id }}">ARMOR</label>
+                <select id="armor-{{ p.id }}" name="armor_name">
+                    <option value="">— NONE —</option>
+                    {% for a in armor_choices %}
+                        <option value="{{ a.name }}" {% if p.armor_name == a.name %}selected{% endif %}>
+                            {{ a.name }}{% if a.rating %} ({{ a.rating }}){% endif %}
+                        </option>
+                    {% endfor %}
+                </select>
+                <button type="submit">EQUIP</button>
+            </form>
+
+            {# --- SET COVER --- #}
+            <form method="post" action="{% url 'combat:set_cover' encounter.id p.id %}"
+                  class="part-mini-form">
+                {% csrf_token %}
+                <label for="covst-{{ p.id }}">COVER</label>
+                <select id="covst-{{ p.id }}" name="cover_state">
+                    <option value="none" {% if p.cover_state == "none" %}selected{% endif %}>NONE</option>
+                    <option value="light" {% if p.cover_state == "light" %}selected{% endif %}>LIGHT (−2)</option>
+                    <option value="heavy" {% if p.cover_state == "heavy" %}selected{% endif %}>HEAVY (−4)</option>
+                    <option value="full" {% if p.cover_state == "full" %}selected{% endif %}>FULL (block)</option>
+                </select>
+                <select name="cover_entry_name">
+                    <option value="">— FREEFORM —</option>
+                    {% for tier_label, items in cover_by_tier.items %}
+                        <optgroup label="{{ tier_label|upper }}">
+                            {% for entry in items %}
+                                <option value="{{ entry.name }}" {% if p.cover_entry_name == entry.name %}selected{% endif %}>
+                                    {{ entry.name }}
+                                </option>
+                            {% endfor %}
+                        </optgroup>
+                    {% endfor %}
+                </select>
+                <button type="submit">SET</button>
+            </form>
+
+            {% comment %}
+            ATTACK form — only rendered on the active participant's
+            row when the encounter is active. The target picker shows
+            *every other* participant in the encounter (PvP allowed —
+            faction is decorative, not enforced). The skill input has a
+            datalist of the three usual WoD 2.0 weapon skills so the GM
+            can tab-complete.
+            {% endcomment %}
+            {% if attack_eligible and encounter.active_participant_id == p.id %}
+                <form method="post" action="{% url 'combat:attack' encounter.id p.id %}"
+                      class="part-mini-form" style="margin-top: 0.4rem; padding-top: 0.4rem; border-top: 1px solid var(--c-dim);">
+                    {% csrf_token %}
+                    <label for="targ-{{ p.id }}">TARGET</label>
+                    <select id="targ-{{ p.id }}" name="target_id" required>
+                        <option value="">— PICK —</option>
+                        {% for other in participants %}
+                            {% if other.id != p.id %}
+                                <option value="{{ other.id }}">
+                                    {{ other.name }} ({{ other.faction|upper }} · {{ other.health_bashing }}/{{ other.health_lethal }}/{{ other.health_aggravated }} of {{ other.health_max }})
+                                </option>
+                            {% endif %}
+                        {% endfor %}
+                    </select>
+
+                    <label for="skill-{{ p.id }}">SKILL</label>
+                    <input id="skill-{{ p.id }}" name="weapon_skill" type="text"
+                           list="skill-options-{{ p.id }}"
+                           placeholder="Firearms / Brawl / Weaponry">
+                    <datalist id="skill-options-{{ p.id }}">
+                        <option value="Firearms">
+                        <option value="Brawl">
+                        <option value="Weaponry">
+                        <option value="Athletics">
+                    </datalist>
+
+                    <label for="mod-{{ p.id }}">MOD</label>
+                    <input id="mod-{{ p.id }}" name="gm_modifier" type="number" value="0" step="1">
+
+                    <button type="submit" class="btn-primary">ATTACK &rarr;</button>
+
+                    <span class="part-attack-preview">
+                        PREVIEW: BASE +{% if p.participant_kind == "mook" %}{{ p.mook_combat_pool|default:0 }}{% else %}DEX{% endif %} ± SKILL ± WEAPON ± MOD − DEFENSE − COVER
+                    </span>
+                </form>
+            {% endif %}
+
+        </div>
+    </details>
 </div>

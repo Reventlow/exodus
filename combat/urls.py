@@ -1,16 +1,20 @@
 """URL configuration for the personal combat app.
 
-v0.15.3 extends the v0.15.2 CRUD surface with the initiative + turn
-advance endpoints:
+v0.15.4 layers attack actions and equipment management on top of the
+v0.15.3 initiative + turn advance surface:
 
-* ``initiative/<participant>/`` — single-participant roll
-* ``initiative/all/``           — roll-all for unrolled participants
-* ``initiative/clear/``         — wipe rolls + reset to setup
-* ``start/``                    — setup → active, round 1
-* ``next-turn/``                — advance pointer or roll round
-* ``end/``                      — active → concluded
+* ``initiative/<participant>/``                — single-participant roll
+* ``initiative/all/``                          — roll-all for unrolled participants
+* ``initiative/clear/``                        — wipe rolls + reset to setup
+* ``start/``                                   — setup → active, round 1
+* ``next-turn/``                               — advance pointer or roll round
+* ``end/``                                     — active → concluded
+* ``participants/<id>/equip-weapon/``  (v0.15.4) — snapshot weapon catalogue entry
+* ``participants/<id>/equip-armor/``   (v0.15.4) — snapshot armor catalogue entry
+* ``participants/<id>/cover/``         (v0.15.4) — set cover state + entry
+* ``participants/<attacker>/attack/``  (v0.15.4) — resolve attack vs target_id
 
-REST JSON endpoints land in v0.15.4+.
+REST JSON endpoints land in v0.15.5+.
 """
 
 from django.urls import path
@@ -65,4 +69,26 @@ urlpatterns = [
     path("combat/<int:pk>/start/", views.start_encounter, name="start"),
     path("combat/<int:pk>/next-turn/", views.next_turn, name="next_turn"),
     path("combat/<int:pk>/end/", views.end_encounter, name="end"),
+
+    # POST — equip + cover + attack (v0.15.4)
+    path(
+        "combat/<int:pk>/participants/<int:participant_id>/equip-weapon/",
+        views.equip_weapon,
+        name="equip_weapon",
+    ),
+    path(
+        "combat/<int:pk>/participants/<int:participant_id>/equip-armor/",
+        views.equip_armor,
+        name="equip_armor",
+    ),
+    path(
+        "combat/<int:pk>/participants/<int:participant_id>/cover/",
+        views.set_cover,
+        name="set_cover",
+    ),
+    path(
+        "combat/<int:pk>/participants/<int:attacker_id>/attack/",
+        views.attack,
+        name="attack",
+    ),
 ]

@@ -1,12 +1,41 @@
 """Views for the personal combat app.
 
-v0.15.3 — initiative + turn advance. Builds on the encounter CRUD
-shipped in v0.15.2 with WoD 2.0 initiative rolls (per-participant,
-roll-all, clear) and the encounter lifecycle transitions
-``setup → active → concluded`` driven by START / NEXT TURN / END
-endpoints.
+v0.15.4 — attack actions + damage. Layers a server-rolled WoD 2.0
+attack pipeline on top of the v0.15.3 initiative + turn loop, plus
+**equip-weapon / equip-armor / set-cover** endpoints that snapshot
+catalogue entries onto the active participant.
 
-Initiative model:
+Attack pipeline:
+
+1. Compose the attacker's pool —
+   ``Dexterity + chosen weapon skill + weapon dice modifier + GM
+   modifier`` for character / NPC, or ``mook_combat_pool + GM
+   modifier`` for mooks.
+2. Compute the target's defense — ``min(Dex, Wits) + Athletics`` for
+   character / NPC, ``mook_defense`` for mooks. ``defense_override``
+   wins if set.
+3. Apply cover — ``light=-2``, ``heavy=-4``, ``full`` blocks the
+   shot entirely (logged ``outcome="blocked_by_cover"``).
+4. Floor the dice pool at ``0`` and roll — ``_roll_pool`` reuses the
+   ``secrets`` source from initiative; 8/9/10 are successes, 10s
+   "explode" and re-roll up to five recursion levels deep so the
+   pathological all-tens case can't run away.
+5. On any successes, compute damage — ``successes + weapon damage``,
+   minus armor (``B`` track or ``L`` track from ``"B/L"`` rating;
+   aggravated bypasses armor). Apply to the matching health track,
+   capped at ``health_max``; overflow is logged but no track-upgrade
+   (bashing→lethal→aggravated) is enforced yet — that lands in
+   v0.15.5.
+6. Append two log rows on a hit: ``attack`` (the resolution payload)
+   and ``health_change`` (so the timeline can be filtered down to
+   damage-only events). Misses write a single ``attack`` row.
+
+This release is **GM-only** — the player-facing surface lands in
+v0.15.6 with the WebSocket fan-out. Faction is decorative; the
+target picker offers every other participant in the encounter so
+PvP works out of the box.
+
+Initiative model (v0.15.3):
 
 * **Character / NPC** — ``modifier = Dexterity (attributes.finesse.physical)
   + Composure (attributes.resistance.social)``. Roll 1d10. Score is
@@ -28,9 +57,11 @@ Three participant kinds are supported (see v0.15.2 docs):
                   spawn so later catalogue edits do not mutate
                   in-flight encounters.
 
-The CombatLog timeline now distinguishes action types:
-``initiative``, ``turn_advance``, ``round_advance``, ``system``.
-Real-time fan-out (WebSocket broadcast) lands in v0.15.6.
+CombatLog action types in use as of v0.15.4: ``initiative``,
+``turn_advance``, ``round_advance``, ``system``, ``attack``,
+``health_change``, ``weapon_change``, ``armor_change``,
+``cover_change``. Real-time fan-out (WebSocket broadcast) lands in
+v0.15.6.
 """
 
 import secrets
@@ -103,6 +134,175 @@ def _roll_d10():
     an int in ``[1, 10]``.
     """
     return secrets.randbelow(10) + 1
+
+
+def _roll_pool(n):
+    """Roll ``n`` d10s and count WoD 2.0 successes with 10-again explode.
+
+    8/9/10 each count as one success; a rolled 10 also explodes and
+    is re-rolled, with the exploded die also counting on 8+. The
+    explosion chain is capped at five recursion levels per starting
+    die so a (vanishingly unlikely) infinite-tens streak cannot stall
+    the request loop.
+
+    Returns ``(successes, raw_dice_list)``. ``raw_dice_list`` is the
+    full sequence of faces rolled including any exploded dice — useful
+    for surfacing the actual roll in the timeline payload.
+    """
+    if n <= 0:
+        return 0, []
+    dice = []
+    successes = 0
+    for _ in range(n):
+        roll = _roll_d10()
+        dice.append(roll)
+        if roll >= 8:
+            successes += 1
+        # 10-again: keep rolling while we hit 10s, capped at 5 levels
+        # of recursion so a pathological all-10s streak can't loop
+        # indefinitely.
+        depth = 0
+        while roll == 10 and depth < 5:
+            roll = _roll_d10()
+            dice.append(roll)
+            if roll >= 8:
+                successes += 1
+            depth += 1
+    return successes, dice
+
+
+def _compute_defense(participant):
+    """Compute a target's defense pool.
+
+    Override pinned on the participant wins unconditionally. Mooks
+    return their ``mook_defense`` (``0`` if null). Character / NPC
+    uses ``min(Dex, Wits) + Athletics`` per WoD 2.0 — same defensive
+    ``try/except`` pattern as ``_compute_initiative`` so partial
+    sheets don't crash the resolver.
+    """
+    if participant.defense_override is not None:
+        return participant.defense_override
+    if participant.participant_kind == "mook":
+        return participant.mook_defense or 0
+    source = participant.character or participant.npc
+    if source is None:
+        return 0
+    try:
+        dex = int(source.attributes["finesse"]["physical"])
+        wits = int(source.attributes["finesse"]["mental"])
+        athletics = int(source.skills["physical"].get("Athletics", 0))
+        return min(dex, wits) + athletics
+    except (KeyError, TypeError, ValueError):
+        return 0
+
+
+def _cover_penalty(cover_state):
+    """Map cover state to attacker pool penalty.
+
+    Returns a non-negative integer to subtract from the attacker's
+    pool (the math is one-sided so we don't double-count by also
+    bumping defense). The sentinel string ``"BLOCKED"`` signals that
+    the shot is impossible — full cover should write a
+    ``blocked_by_cover`` log row and skip the roll entirely.
+    """
+    return {"none": 0, "light": 2, "heavy": 4, "full": "BLOCKED"}.get(
+        cover_state, 0
+    )
+
+
+def _parse_armor_rating(rating_str):
+    """Parse a ``"B/L"`` armor rating string into ``(B_armor, L_armor)``.
+
+    Robust against the catalogue's free-text quirks — ``"—"``,
+    ``"-"``, empty strings, malformed pairs all fall back to
+    ``(0, 0)``. Whitespace inside the pair is stripped. Aggravated
+    damage bypasses armor entirely so this helper is only consulted
+    for B / L hits.
+    """
+    if not rating_str or rating_str.strip() in ("—", "-", ""):
+        return 0, 0
+    parts = rating_str.replace(" ", "").split("/")
+    if len(parts) != 2:
+        return 0, 0
+    try:
+        return int(parts[0]), int(parts[1])
+    except ValueError:
+        return 0, 0
+
+
+def _parse_weapon_damage(damage_field):
+    """Parse a weapon catalogue ``damage`` value into ``(amount, type)``.
+
+    The catalogue stores damage as a free-text string like ``"2L"``,
+    ``"1B"``, ``"4L close / 2L long"``, or even ``"5L (both barrels)"``.
+    For v0.15.4 we only need the leading numeric magnitude and the
+    first ``B``/``L``/``A`` suffix character — the GM modifier is the
+    pressure-relief valve for everything more nuanced.
+
+    Falls back to ``(0, "L")`` for missing / unparseable input —
+    lethal is the WoD 2.0 default and zero damage is harmless.
+    """
+    if damage_field is None:
+        return 0, "L"
+    text = str(damage_field).strip()
+    if not text:
+        return 0, "L"
+    # Read leading digits as the damage magnitude.
+    digits = ""
+    for ch in text:
+        if ch.isdigit():
+            digits += ch
+        else:
+            break
+    amount = int(digits) if digits else 0
+    # First B / L / A character anywhere in the string is the type.
+    damage_type = "L"
+    for ch in text:
+        upper = ch.upper()
+        if upper in ("B", "L", "A"):
+            damage_type = upper
+            break
+    return amount, damage_type
+
+
+def _attack_dice_pool(actor, weapon_data, gm_modifier, weapon_skill_name=""):
+    """Compute the attacker's pre-cover, pre-defense dice pool.
+
+    Mooks short-circuit on ``mook_combat_pool`` (the catalogue
+    encodes their entire offensive pool already). Character / NPC
+    starts at Dexterity, then adds the named skill's value if found
+    (searching physical → mental → social so the GM can pick
+    Firearms / Brawl / Weaponry without specifying the tier). The
+    weapon's dice modifier (catalogue field, optional) and the GM's
+    free-form signed integer modifier are applied last.
+    """
+    base = 0
+    if actor.participant_kind == "mook":
+        base = (actor.mook_combat_pool or 0)
+    else:
+        source = actor.character or actor.npc
+        if source is not None:
+            try:
+                dex = int(source.attributes["finesse"]["physical"])
+                base = dex
+            except (KeyError, TypeError, ValueError):
+                base = 0
+            if weapon_skill_name:
+                # Try physical first (Firearms / Weaponry / Brawl all
+                # live there), then mental, then social — first
+                # non-zero wins. Defensive against partial sheets.
+                for tier in ("physical", "mental", "social"):
+                    try:
+                        skill_val = int(
+                            source.skills[tier].get(weapon_skill_name, 0)
+                        )
+                        if skill_val:
+                            base += skill_val
+                            break
+                    except (KeyError, TypeError, ValueError):
+                        continue
+    weapon_dice = _safe_int((weapon_data or {}).get("dice_modifier"), 0)
+    return base + weapon_dice + gm_modifier
 
 
 def _compute_initiative(participant):
@@ -230,13 +430,34 @@ def encounter_page(request, pk):
     # Spawn sources for the "+ ADD PARTICIPANT" form.
     available_characters = Character.objects.select_related("owner").order_by("name")
     available_npcs = NPC.objects.filter(is_npc_dossier=False).order_by("name")
-    combat_npc_templates = SiteSettings.load().get_combat_npcs()
+    settings_obj = SiteSettings.load()
+    combat_npc_templates = settings_obj.get_combat_npcs()
 
     # Group templates by category for the optgroup layout.
     combat_npcs_by_cat = {}
     for entry in combat_npc_templates:
         cat = entry.get("category", "other") or "other"
         combat_npcs_by_cat.setdefault(cat, []).append(entry)
+
+    # v0.15.4 catalogues for the equip-weapon / equip-armor /
+    # set-cover sub-forms on each participant row. Cover entries are
+    # also grouped by tier so the per-state <optgroup> layout stays
+    # readable.
+    weapon_choices = settings_obj.get_weapons()
+    armor_choices = settings_obj.get_armor()
+    cover_choices = settings_obj.get_cover()
+    cover_by_tier = {}
+    for entry in cover_choices:
+        tier = entry.get("tier", "other") or "other"
+        cover_by_tier.setdefault(tier, []).append(entry)
+
+    # Attack action gate — the per-row ATTACK form is only rendered
+    # when the encounter is active and we know which participant is
+    # currently up.
+    attack_eligible = (
+        encounter.status == "active"
+        and encounter.active_participant_id is not None
+    )
 
     return render(
         request,
@@ -253,6 +474,11 @@ def encounter_page(request, pk):
             "available_npcs": available_npcs,
             "combat_npc_templates": combat_npc_templates,
             "combat_npcs_by_cat": combat_npcs_by_cat,
+            "weapon_choices": weapon_choices,
+            "armor_choices": armor_choices,
+            "cover_choices": cover_choices,
+            "cover_by_tier": cover_by_tier,
+            "attack_eligible": attack_eligible,
         },
     )
 
@@ -811,3 +1037,439 @@ def end_encounter(request, pk):
         rounds=rounds,
     )
     return redirect("combat:list")
+
+
+# ---------------------------------------------------------------------------
+# Equip + cover (POST)  — v0.15.4
+# ---------------------------------------------------------------------------
+
+
+@login_required
+@_gm_only
+@csrf_protect
+def equip_weapon(request, pk, participant_id):
+    """POST — equip / unequip a weapon on a participant.
+
+    ``weapon_name`` form field is matched against
+    ``SiteSettings.get_weapons()`` (first match wins). Empty / not
+    found clears the slot. The matched catalogue entry is *snapshotted*
+    into ``participant.weapon_data`` so a later catalogue edit doesn't
+    retroactively rewrite the in-flight encounter.
+    """
+    if request.method != "POST":
+        return HttpResponseNotAllowed(["POST"])
+
+    encounter = get_object_or_404(Encounter, pk=pk)
+    participant = get_object_or_404(
+        Participant, pk=participant_id, encounter=encounter
+    )
+
+    name = request.POST.get("weapon_name", "").strip()
+
+    if not name:
+        # Empty submission = unequip.
+        participant.weapon_name = ""
+        participant.weapon_data = {}
+        participant.save(update_fields=["weapon_name", "weapon_data"])
+        _log(
+            encounter,
+            "weapon_change",
+            f"{participant.name} unequipped weapon.",
+            participant_id=participant.pk,
+            weapon_name="",
+        )
+        return redirect("combat:detail", pk=encounter.pk)
+
+    weapons = SiteSettings.load().get_weapons()
+    entry = next((w for w in weapons if w.get("name") == name), None)
+
+    if entry is None:
+        # Unknown weapon — also clears the slot, so a stale POST
+        # doesn't leave a half-equipped state behind.
+        participant.weapon_name = ""
+        participant.weapon_data = {}
+        participant.save(update_fields=["weapon_name", "weapon_data"])
+        _log(
+            encounter,
+            "weapon_change",
+            f"{participant.name} unequipped weapon.",
+            participant_id=participant.pk,
+            weapon_name="",
+        )
+        return redirect("combat:detail", pk=encounter.pk)
+
+    # Snapshot the full entry — defensive shallow copy so later
+    # mutations on the catalogue list don't bleed in.
+    participant.weapon_name = entry.get("name", "")
+    participant.weapon_data = dict(entry)
+    participant.save(update_fields=["weapon_name", "weapon_data"])
+
+    _log(
+        encounter,
+        "weapon_change",
+        f"{participant.name} equipped {participant.weapon_name}.",
+        participant_id=participant.pk,
+        weapon_name=participant.weapon_name,
+    )
+    return redirect("combat:detail", pk=encounter.pk)
+
+
+@login_required
+@_gm_only
+@csrf_protect
+def equip_armor(request, pk, participant_id):
+    """POST — equip / unequip armor on a participant.
+
+    Mirror of ``equip_weapon`` against ``SiteSettings.get_armor()``.
+    Snapshot semantics are the same — catalogue edits do not mutate
+    in-flight encounters.
+    """
+    if request.method != "POST":
+        return HttpResponseNotAllowed(["POST"])
+
+    encounter = get_object_or_404(Encounter, pk=pk)
+    participant = get_object_or_404(
+        Participant, pk=participant_id, encounter=encounter
+    )
+
+    name = request.POST.get("armor_name", "").strip()
+
+    if not name:
+        participant.armor_name = ""
+        participant.armor_data = {}
+        participant.save(update_fields=["armor_name", "armor_data"])
+        _log(
+            encounter,
+            "armor_change",
+            f"{participant.name} unequipped armor.",
+            participant_id=participant.pk,
+            armor_name="",
+        )
+        return redirect("combat:detail", pk=encounter.pk)
+
+    armors = SiteSettings.load().get_armor()
+    entry = next((a for a in armors if a.get("name") == name), None)
+
+    if entry is None:
+        participant.armor_name = ""
+        participant.armor_data = {}
+        participant.save(update_fields=["armor_name", "armor_data"])
+        _log(
+            encounter,
+            "armor_change",
+            f"{participant.name} unequipped armor.",
+            participant_id=participant.pk,
+            armor_name="",
+        )
+        return redirect("combat:detail", pk=encounter.pk)
+
+    participant.armor_name = entry.get("name", "")
+    participant.armor_data = dict(entry)
+    participant.save(update_fields=["armor_name", "armor_data"])
+
+    _log(
+        encounter,
+        "armor_change",
+        f"{participant.name} equipped {participant.armor_name}.",
+        participant_id=participant.pk,
+        armor_name=participant.armor_name,
+    )
+    return redirect("combat:detail", pk=encounter.pk)
+
+
+@login_required
+@_gm_only
+@csrf_protect
+def set_cover(request, pk, participant_id):
+    """POST — update a participant's cover state.
+
+    ``cover_state`` (none/light/heavy/full) drives the attacker
+    penalty in the resolver. ``cover_entry_name`` is an optional
+    catalogue lookup against ``SiteSettings.get_cover()`` — when it
+    matches, durability + health from the entry seed the cover's
+    breach track (see v0.14.65 cover-destruction rules).
+    """
+    if request.method != "POST":
+        return HttpResponseNotAllowed(["POST"])
+
+    encounter = get_object_or_404(Encounter, pk=pk)
+    participant = get_object_or_404(
+        Participant, pk=participant_id, encounter=encounter
+    )
+
+    valid_states = {"none", "light", "heavy", "full"}
+    state = request.POST.get("cover_state", "none").strip().lower()
+    if state not in valid_states:
+        state = "none"
+
+    entry_name = request.POST.get("cover_entry_name", "").strip()
+
+    if state == "none":
+        # Clearing cover wipes the catalogue link too.
+        participant.cover_state = "none"
+        participant.cover_entry_name = ""
+        participant.cover_durability = None
+        participant.cover_health = None
+        participant.save(update_fields=[
+            "cover_state",
+            "cover_entry_name",
+            "cover_durability",
+            "cover_health",
+        ])
+        _log(
+            encounter,
+            "cover_change",
+            f"{participant.name} cleared cover.",
+            participant_id=participant.pk,
+            cover_state="none",
+        )
+        return redirect("combat:detail", pk=encounter.pk)
+
+    # Optional catalogue lookup — populates durability + health when
+    # a match is found.
+    durability = None
+    health = None
+    if entry_name:
+        cover_catalogue = SiteSettings.load().get_cover()
+        entry = next(
+            (c for c in cover_catalogue if c.get("name") == entry_name),
+            None,
+        )
+        if entry is not None:
+            durability = _safe_int(entry.get("durability"), 0) or None
+            health = _safe_int(entry.get("health"), 0) or None
+        else:
+            # Entry name supplied but not found — keep the free-text
+            # name so the GM's intent isn't lost, but leave breach
+            # stats null.
+            pass
+
+    participant.cover_state = state
+    participant.cover_entry_name = entry_name
+    participant.cover_durability = durability
+    participant.cover_health = health
+    participant.save(update_fields=[
+        "cover_state",
+        "cover_entry_name",
+        "cover_durability",
+        "cover_health",
+    ])
+
+    label = (
+        f"{participant.name} entered {state} cover ({entry_name})."
+        if entry_name
+        else f"{participant.name} entered {state} cover."
+    )
+    _log(
+        encounter,
+        "cover_change",
+        label,
+        participant_id=participant.pk,
+        cover_state=state,
+        cover_entry_name=entry_name,
+    )
+    return redirect("combat:detail", pk=encounter.pk)
+
+
+# ---------------------------------------------------------------------------
+# Attack resolution (POST)  — v0.15.4
+# ---------------------------------------------------------------------------
+
+
+@login_required
+@_gm_only
+@csrf_protect
+def attack(request, pk, attacker_id):
+    """POST — resolve a single attack from active participant → target.
+
+    Guard rails:
+
+    * Encounter must be ``active``.
+    * Attacker must be the active participant per the initiative
+      tracker (so the GM driving the buttons can't accidentally roll
+      out of turn).
+    * Target must exist in the same encounter.
+    * Self-targeting is rejected (zero useful gameplay, easy to
+      misclick).
+    * Faction is **not** checked — PvP is intentional. The GM can
+      have a player target another player's character.
+
+    The resolver writes one or two log rows depending on the outcome:
+
+    * ``blocked_by_cover`` — full cover, no roll, no health change.
+      Single ``attack`` row.
+    * ``miss`` — pool rolled to zero successes. Single ``attack`` row.
+    * ``hit`` — both ``attack`` (resolution payload) and
+      ``health_change`` (so the timeline can be filtered to
+      damage-only). Health applied to the matching B / L / A track,
+      capped at ``health_max``; overflow is logged but no track
+      upgrade is performed (that's v0.15.5).
+    """
+    if request.method != "POST":
+        return HttpResponseNotAllowed(["POST"])
+
+    encounter = get_object_or_404(Encounter, pk=pk)
+    if encounter.status != "active":
+        messages.error(request, "Cannot attack outside an active encounter.")
+        return redirect("combat:detail", pk=encounter.pk)
+
+    attacker = get_object_or_404(
+        Participant, pk=attacker_id, encounter=encounter
+    )
+    if encounter.active_participant_id != attacker.id:
+        messages.error(
+            request,
+            "Only the active participant can attack.",
+        )
+        return redirect("combat:detail", pk=encounter.pk)
+
+    target_id = request.POST.get("target_id")
+    if not target_id:
+        messages.error(request, "Pick a target.")
+        return redirect("combat:detail", pk=encounter.pk)
+    target = get_object_or_404(
+        Participant, pk=target_id, encounter=encounter
+    )
+    if target.id == attacker.id:
+        messages.error(request, "Cannot attack self.")
+        return redirect("combat:detail", pk=encounter.pk)
+
+    gm_modifier_int = _safe_int(request.POST.get("gm_modifier"), 0)
+    weapon_skill = request.POST.get("weapon_skill", "").strip()
+
+    weapon_data = attacker.weapon_data or {}
+    weapon_name = attacker.weapon_name or "(unarmed)"
+
+    attack_pool = _attack_dice_pool(
+        attacker, weapon_data, gm_modifier_int, weapon_skill,
+    )
+    defense = _compute_defense(target)
+    cover_pen = _cover_penalty(target.cover_state)
+
+    # ---- Full cover short-circuit -----------------------------------------
+    if cover_pen == "BLOCKED":
+        _log(
+            encounter,
+            "attack",
+            f"{attacker.name} → {target.name}: BLOCKED BY FULL COVER.",
+            actor_participant_id=attacker.id,
+            target_participant_id=target.id,
+            outcome="blocked_by_cover",
+            attack_pool=attack_pool,
+            defense=defense,
+            cover_state=target.cover_state,
+            successes=0,
+            gm_modifier=gm_modifier_int,
+            weapon_name=weapon_name,
+            weapon_skill=weapon_skill,
+        )
+        return redirect("combat:detail", pk=encounter.pk)
+
+    final_pool = max(0, attack_pool - defense - cover_pen)
+    successes, dice = _roll_pool(final_pool)
+
+    # ---- Miss --------------------------------------------------------------
+    if successes == 0:
+        _log(
+            encounter,
+            "attack",
+            f"{attacker.name} attacks {target.name}: missed.",
+            actor_participant_id=attacker.id,
+            target_participant_id=target.id,
+            outcome="miss",
+            attack_pool=attack_pool,
+            defense=defense,
+            cover_pen=cover_pen,
+            final_pool=final_pool,
+            dice=dice,
+            successes=0,
+            gm_modifier=gm_modifier_int,
+            weapon_name=weapon_name,
+            weapon_skill=weapon_skill,
+        )
+        return redirect("combat:detail", pk=encounter.pk)
+
+    # ---- Hit ---------------------------------------------------------------
+    weapon_amount, damage_type_from_field = _parse_weapon_damage(
+        weapon_data.get("damage", "")
+    )
+    # Allow an explicit override on the snapshot (future-proof for
+    # weapons that diverge from the parsed string), else use the
+    # parsed type. Default lethal.
+    damage_type = (
+        weapon_data.get("damage_type")
+        or damage_type_from_field
+        or "L"
+    ).upper()
+    if damage_type not in ("B", "L", "A"):
+        damage_type = "L"
+
+    raw_damage = successes + weapon_amount
+
+    # Armor source depends on participant kind. Aggravated bypasses.
+    if target.participant_kind == "mook":
+        rating = target.mook_armor_rating or ""
+    else:
+        rating = (target.armor_data or {}).get("rating", "")
+    b_armor, l_armor = _parse_armor_rating(rating)
+    if damage_type == "B":
+        armor_reduction = b_armor
+    elif damage_type == "L":
+        armor_reduction = l_armor
+    else:
+        armor_reduction = 0  # aggravated bypasses armor
+
+    final_damage = max(0, raw_damage - armor_reduction)
+
+    # Apply to the matching health track, capped at health_max.
+    track_field = {
+        "B": "health_bashing",
+        "L": "health_lethal",
+        "A": "health_aggravated",
+    }[damage_type]
+    type_label = {"B": "bashing", "L": "lethal", "A": "aggravated"}[damage_type]
+
+    current = getattr(target, track_field) or 0
+    cap = target.health_max or 0
+    proposed = current + final_damage
+    overflow = max(0, proposed - cap) if cap else 0
+    new_value = min(proposed, cap) if cap else proposed
+    setattr(target, track_field, new_value)
+    target.save(update_fields=[track_field])
+
+    payload = dict(
+        actor_participant_id=attacker.id,
+        target_participant_id=target.id,
+        outcome="hit",
+        attack_pool=attack_pool,
+        defense=defense,
+        cover_pen=cover_pen,
+        final_pool=final_pool,
+        dice=dice,
+        successes=successes,
+        raw_damage=raw_damage,
+        weapon_damage=weapon_amount,
+        armor_reduction=armor_reduction,
+        final_damage=final_damage,
+        damage_type=damage_type,
+        gm_modifier=gm_modifier_int,
+        weapon_name=weapon_name,
+        weapon_skill=weapon_skill,
+        overflow=overflow,
+    )
+
+    _log(
+        encounter,
+        "attack",
+        f"{attacker.name} hits {target.name} for {final_damage} {type_label} damage.",
+        **payload,
+    )
+    # Separate health_change row so the timeline can be filtered
+    # down to damage-only events without re-parsing attack payloads.
+    _log(
+        encounter,
+        "health_change",
+        f"{target.name} takes {final_damage} {type_label} damage.",
+        **payload,
+    )
+    return redirect("combat:detail", pk=encounter.pk)
