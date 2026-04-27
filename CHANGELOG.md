@@ -1,5 +1,9 @@
 # Changelog
 
+## v0.14.53
+- New **OPERATIONS** dropdown in the top subsystem rail consolidates the admin links — `SETTINGS`, `ADMIN`, `GM` (the last only for superusers). Clicking the toggle reveals a square-cornered, accent-glow dropdown panel anchored to the right of the rail. Caret rotates 180° when open, click-outside or `Escape` closes it
+- Three flat staff/superuser links collapse into one menu item, leaving the rail visually leaner
+
 ## v0.14.52
 - Top subsystem nav rail now aligns to the right (`justify-content: flex-end`) instead of the left
 

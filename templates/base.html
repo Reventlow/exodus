@@ -194,11 +194,20 @@
             </form>
             {% if user.is_staff %}
                 <span class="sep">|</span>
-                <a href="{% url 'site-settings' %}">SETTINGS</a>
-                <a href="{% url 'admin:index' %}">ADMIN</a>
-            {% endif %}
-            {% if user.is_superuser %}
-                <a href="/gm/">GM</a>
+                <div class="nav-dropdown">
+                    <button type="button" class="nav-dropdown-toggle"
+                            aria-haspopup="true" aria-expanded="false"
+                            onclick="this.setAttribute('aria-expanded', this.getAttribute('aria-expanded') === 'true' ? 'false' : 'true');">
+                        OPERATIONS <span class="nav-dropdown-caret">▾</span>
+                    </button>
+                    <div class="nav-dropdown-menu" role="menu">
+                        <a href="{% url 'site-settings' %}" role="menuitem">SETTINGS</a>
+                        <a href="{% url 'admin:index' %}" role="menuitem">ADMIN</a>
+                        {% if user.is_superuser %}
+                            <a href="/gm/" role="menuitem">GM</a>
+                        {% endif %}
+                    </div>
+                </div>
             {% endif %}
         {% else %}
             <a href="{% url 'accounts:login' %}">LOGIN</a>
@@ -313,6 +322,26 @@
         }
         tick();
         setInterval(tick, 1000);
+    })();
+    </script>
+
+    <!-- Subsystem-rail dropdown: click-outside-to-close + Escape key -->
+    <script>
+    (function() {
+        document.addEventListener('click', function(e) {
+            document.querySelectorAll('.nav-dropdown-toggle[aria-expanded="true"]').forEach(function(btn) {
+                if (!btn.parentElement.contains(e.target)) {
+                    btn.setAttribute('aria-expanded', 'false');
+                }
+            });
+        });
+        document.addEventListener('keydown', function(e) {
+            if (e.key === 'Escape') {
+                document.querySelectorAll('.nav-dropdown-toggle[aria-expanded="true"]').forEach(function(btn) {
+                    btn.setAttribute('aria-expanded', 'false');
+                });
+            }
+        });
     })();
     </script>
 
