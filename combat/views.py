@@ -95,6 +95,7 @@ from characters.models import Character
 from exodus.models import SiteSettings
 from npcs.models import NPC
 
+from .consumers import broadcast_combat_event
 from .models import CombatLog, Encounter, Participant
 
 
@@ -114,13 +115,22 @@ def _next_sequence(encounter):
 
 
 def _log(encounter, action_type, message, **data):
-    """Append a single CombatLog row.
+    """Append a single CombatLog row and fan-out a real-time broadcast.
 
     Keyword arguments are stuffed into the ``data`` JSONField so callers
     can attach arbitrary structured payloads (e.g. a participant id or
     a faction tag) without touching the schema.
+
+    v0.15.6: after the row is committed, fire a Channels group broadcast
+    on ``combat_<encounter_id>`` so any browser subscribed to the
+    encounter's WebSocket sees the mutation in real time. The broadcast
+    is wrapped in a defensive ``try/except`` — the consumer helper
+    already swallows Redis-level exceptions, but the import / channel
+    layer lookup itself could fail in non-ASGI contexts (e.g. running
+    ``manage.py shell`` or migrations). A broadcast hiccup must NEVER
+    500 a REST mutation.
     """
-    return CombatLog.objects.create(
+    entry = CombatLog.objects.create(
         encounter=encounter,
         sequence=_next_sequence(encounter),
         round_number=encounter.round_number,
@@ -128,6 +138,26 @@ def _log(encounter, action_type, message, **data):
         message=message,
         data=data,
     )
+    # ---- Real-time fan-out (v0.15.6) -------------------------------------
+    try:
+        broadcast_combat_event(
+            encounter.id,
+            action_type,
+            {
+                "encounter_id": encounter.id,
+                "sequence": entry.sequence,
+                "round_number": encounter.round_number,
+                "action_type": action_type,
+                "message": message,
+                "data": data,
+                "timestamp": entry.created_at.isoformat(),
+            },
+        )
+    except Exception:
+        # Defence-in-depth: keep REST 200/302 even when the channel
+        # layer is unavailable. The UI will degrade to manual refresh.
+        pass
+    return entry
 
 
 def _safe_int(value, fallback=0):

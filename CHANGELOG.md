@@ -1,5 +1,16 @@
 # Changelog
 
+## v0.15.6
+- **Real-time fan-out via Channels.** Every `CombatLog` write now broadcasts a typed event to the `combat_<id>` Channels group. The hook lives in the `_log()` helper itself — every mutation already routes through it, so no per-endpoint plumbing is needed. Payload mirrors the log row: `encounter_id`, `sequence`, `round_number`, `action_type`, `message`, `data`, `timestamp`
+- **Encounter page subscribes via WebSocket.** New 60-line vanilla-JS block at the bottom of `templates/combat/encounter.html` opens `/ws/combat/<id>/`, debounces incoming events (a single attack logs both `attack` and `health_change` — they collapse into one reload via a 250ms timer), and triggers `location.reload()`
+- **LIVE / DISCONNECTED indicator** in the encounter header — green `● LIVE` on `onopen`, muted `○ DISCONNECTED` on `onclose`. Exponential-backoff auto-reconnect starting at 1s, capped at 30s — matches the comms WS pattern in `base.html`
+- **UPDATE PENDING guard.** If the GM is mid-typing in an `INPUT` / `TEXTAREA` / `SELECT` when an event arrives, the reload is deferred and the indicator switches to amber `● UPDATE PENDING — RELOAD WHEN READY`. A `focusout` listener flushes the pending reload as soon as focus leaves the form, so unsaved input is never silently wiped
+- **Defence-in-depth resilience.** The `broadcast_combat_event` helper in `combat/consumers.py` already swallows channel-layer exceptions; v0.15.6 wraps the call site in `_log()` with its own `try/except Exception: pass` so even a missing channel layer (e.g. running `manage.py shell` outside Daphne) cannot 500 a REST mutation
+- **List page intentionally not WS-wired.** The GM is on the encounter detail page when running combat; real-time on `/combat/` is out of scope and would only add noise
+- **All v0.15.5 action_types now broadcast** through the `_log()` chokepoint: `system`, `initiative`, `turn_advance`, `round_advance`, `attack`, `health_change`, `weapon_change`, `armor_change`, `cover_change`, `condition_set`, `condition_clear`, `willpower_change`, `full_defense`, `dodge`
+- **Consumer is loose-auth on purpose.** Any authenticated user can subscribe to any encounter group in v0.15.6 — REST endpoints stay GM-only, so only GMs can produce events. Tightening visibility against `Encounter.participants` lands with v0.15.7 player-facing surfaces
+- No schema changes, no new dependencies, no settings or ASGI touches — pure edits to `combat/views.py` and `templates/combat/encounter.html`
+
 ## v0.15.5
 - **Wound penalties.** Every dice pool (attack and dodge) is now reduced by the WoD 2.0 wound penalty for the rightmost three filled health boxes — `−1 / −2 / −3` left → right. New `_wound_penalty` helper, surfaced as a small red `WP −N` chip on every participant row when non-zero
 - **Damage track upgrade rule.** Refactored damage application into `_apply_damage(participant, amount, dtype)` honouring the WoD 2.0 ladder (B → L → A): empty boxes fill normally; once full, lethal overflow upgrades a bashing box per point, aggravated overflow upgrades a bashing then lethal box per point. Bashing overflow drops harmlessly. Log payload now carries `applied / upgrades / overflow` for the timeline

@@ -590,6 +590,8 @@ The END button also prompts for confirmation.
             {% else %}
                 <span style="color: #ffb454;">{{ encounter.status|upper }}</span>
             {% endif %}
+            {# v0.15.6: real-time WS connection indicator (populated by JS at the bottom of the page). #}
+            <span id="combat-live-indicator" class="muted" style="font-size: 0.75rem; margin-left: 1rem;"></span>
         </div>
         <h1 class="title" style="margin: 0 0 0.4rem 0;">{{ encounter.title|upper }}</h1>
         <div class="sub" style="margin-bottom: 0.4rem;">
@@ -945,4 +947,89 @@ The END button also prompts for confirmation.
     </div>
 
 </div>
+
+{% comment %}
+v0.15.6 — Real-time fan-out client.
+
+Subscribes to /ws/combat/<encounter.id>/ and reloads the page on any
+incoming event (every CombatLog write fans out via the EncounterConsumer
+group). Kept tiny + dependency-free:
+
+  * Debounced reload — a single attack writes both `attack` and
+    `health_change` rows; we collapse those into one reload via a
+    250ms timer.
+  * Form-input guard — if the GM is mid-typing in an INPUT/TEXTAREA/
+    SELECT, defer the reload entirely and surface a manual-reload
+    chip until focus is released, so we never wipe their unsaved input.
+  * Exponential-backoff reconnect (cap 30s), mirroring the comms WS
+    pattern in base.html.
+  * Connection chip in the header turns green for LIVE, muted for
+    DISCONNECTED, amber for UPDATE PENDING.
+{% endcomment %}
+<script>
+(function() {
+    var indicator = document.getElementById("combat-live-indicator");
+    if (!indicator) return;
+
+    var encounterId = {{ encounter.id }};
+    var proto = location.protocol === "https:" ? "wss:" : "ws:";
+    var url = proto + "//" + location.host + "/ws/combat/" + encounterId + "/";
+
+    var pendingReload = null;     // setTimeout id for the debounced reload
+    var pendingDirty = false;     // true while we're holding back due to focused input
+    var backoff = 1000;           // reconnect backoff in ms (capped at 30s)
+    var ws = null;
+
+    function setIndicator(text, color) {
+        indicator.textContent = text;
+        indicator.style.color = color;
+    }
+
+    function isEditing() {
+        var el = document.activeElement;
+        if (!el) return false;
+        var tag = (el.tagName || "").toUpperCase();
+        return tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT";
+    }
+
+    function scheduleReload() {
+        if (isEditing()) {
+            // GM is mid-input — defer until focus is released or they manually reload.
+            pendingDirty = true;
+            setIndicator("● UPDATE PENDING — RELOAD WHEN READY",
+                         "var(--c-warning, #ffb454)");
+            return;
+        }
+        if (pendingReload) clearTimeout(pendingReload);
+        pendingReload = setTimeout(function() { location.reload(); }, 250);
+    }
+
+    // When focus leaves the form, flush any pending update.
+    document.addEventListener("focusout", function() {
+        // Microtask delay so document.activeElement updates first.
+        setTimeout(function() {
+            if (pendingDirty && !isEditing()) { pendingDirty = false; scheduleReload(); }
+        }, 0);
+    }, true);
+
+    function connect() {
+        ws = new WebSocket(url);
+        ws.onopen = function() {
+            backoff = 1000;
+            setIndicator("● LIVE", "var(--c-success, #5fbf5f)");
+        };
+        ws.onmessage = function(e) {
+            try { console.debug("[combat ws]", JSON.parse(e.data)); } catch (err) {}
+            scheduleReload();
+        };
+        ws.onclose = function() {
+            setIndicator("○ DISCONNECTED", "var(--ink-mute, #888)");
+            setTimeout(connect, backoff);
+            backoff = Math.min(backoff * 2, 30000);
+        };
+        ws.onerror = function() { try { ws.close(); } catch (err) {} };
+    }
+    connect();
+})();
+</script>
 {% endblock %}
