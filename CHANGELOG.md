@@ -1,5 +1,10 @@
 # Changelog
 
+## v0.14.59
+- New **COMBAT** quick-reference page in the RULES section at `/rules/combat/`. Single-screen WoD 2.0 personal-combat cheat sheet covering: round structure (initiative + turn + end-of-round), attack pools (unarmed / melee / improvised / thrown / firearm / grapple), defense + dodge + armor + damage, health track + wound penalties + healing rates, common modifiers (cover / concealment / aiming / burst-fire / called-shots / movement / specialisations / willpower), and free-action examples
+- RULES hub at `/rules/` now shows three cards: MERITS · PULLING STRINGS · COMBAT
+- Footer notes that ship-to-ship combat lives under the STARSHIPS / BATTLES subsystems
+
 ## v0.14.58
 - New **SPECIALISATIONS** multi-select in the project dice-pool config — pick one or more of the assigned character's specialisations and each match adds **+1 die** to the project roll (standard WoD 2.0 specialisation bonus). Sits next to the existing MERITS and PULLING STRINGS pickers
 - Specialisation labels render as `<skill>: <name>` (e.g., `Investigation: Forensics`) so it's clear which sub-category applies. Multiple specialisations can stack

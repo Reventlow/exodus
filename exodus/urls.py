@@ -20,6 +20,7 @@ urlpatterns = [
     path("api/merits/", views.api_merits, name="api-merits"),
     path("api/merits/<int:pk>/", views.api_merit_detail, name="api-merit-detail"),
     path("rules/", views.rules_page, name="rules-page"),
+    path("rules/combat/", views.combat_page, name="combat-page"),
     path("rules/merits/", views.merits_page, name="merits-page"),
     path("rules/pulling-strings/", views.pulling_strings_page, name="pulling-strings-page"),
     # Legacy aliases — keep old URLs working for bookmarks / external links.

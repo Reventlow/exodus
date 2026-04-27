@@ -306,10 +306,16 @@ def api_transfer_player_to_agency(request):
 @login_required
 def rules_page(request):
     """RULES landing — clearance-gate hub that groups rule sub-systems
-    (merits, pulling strings, future: flaws, conditions, etc.)."""
+    (merits, pulling strings, combat, future: flaws, conditions, etc.)."""
     return render(request, "rules.html", {
         "is_admin": request.user.is_superuser,
     })
+
+
+@login_required
+def combat_page(request):
+    """RULES → COMBAT — quick reference for WoD 2.0 personal combat."""
+    return render(request, "combat.html", {})
 
 
 @login_required

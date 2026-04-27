@@ -1,0 +1,98 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}Combat — Rules — Exodus{% endblock %}
+
+{% block content %}
+<div class="brackets" style="position: relative; padding: 32px 36px; max-width: 960px; margin: 0 auto;">
+    <span class="bk tl"></span><span class="bk tr"></span>
+    <span class="bk bl"></span><span class="bk br"></span>
+
+    <div class="kicker" style="margin-bottom: 0.4rem;">
+        <a href="{% url 'rules-page' %}" class="crumb" style="margin-right: 0.6rem;">RULES</a>
+        // QUICK REFERENCE — COMBAT
+    </div>
+    <h1 class="title" style="margin: 0 0 0.4rem 0;">COMBAT</h1>
+    <div class="sub" style="margin-bottom: 2rem;">
+        WoD 2.0 — POOL = ATTRIBUTE + SKILL ± MODIFIERS · 8+ SUCCESS · 10-AGAIN · NET DAMAGE = SUCCESSES − ARMOR
+    </div>
+
+    {# === ROUND STRUCTURE ============================================== #}
+    <header class="block-head"><span class="block-bullet">■</span><h3>ROUND STRUCTURE</h3><span class="block-line"></span></header>
+    <div class="text-secondary" style="font-size: 0.9rem; line-height: 1.7; margin: 0.6rem 0 1.6rem 0;">
+        <p style="margin: 0 0 0.5rem 0;"><span class="mono-text text-accent">▸ INITIATIVE</span> &nbsp;— roll once at scene start. Pool = <strong>Dexterity + Composure</strong>. Highest acts first; ties resolve by Composure, then Dexterity. Surprise bypasses Defense for the entire first round if the target was unaware.</p>
+        <p style="margin: 0 0 0.5rem 0;"><span class="mono-text text-accent">▸ TURN</span> &nbsp;— on your initiative you may take <strong>one</strong> action (an attack, a discipline of magic, a complex maneuver) plus any number of free actions (drawing a weapon, talking, dropping prone). Reflexive defense and dodge do not consume the turn.</p>
+        <p style="margin: 0;"><span class="mono-text text-accent">▸ END OF ROUND</span> &nbsp;— resolve ongoing effects (bleeding, fire, poison), tick durations down, repeat from the top.</p>
+    </div>
+
+    {# === ATTACK POOLS ================================================= #}
+    <header class="block-head"><span class="block-bullet">■</span><h3>ATTACK POOLS</h3><span class="block-line"></span></header>
+    <table class="mono-text" style="width: 100%; border-collapse: collapse; font-size: 0.82rem; margin: 0.8rem 0 1.6rem 0;">
+        <thead style="color: var(--ink-dim);">
+            <tr style="border-bottom: 1px solid var(--c-dim);">
+                <th style="text-align: left; padding: 0.4rem 0.6rem;">ACTION</th>
+                <th style="text-align: left; padding: 0.4rem 0.6rem;">POOL</th>
+                <th style="text-align: left; padding: 0.4rem 0.6rem;">NOTES</th>
+            </tr>
+        </thead>
+        <tbody>
+            <tr style="border-bottom: 1px dotted var(--c-dim);"><td style="padding: 0.4rem 0.6rem;">Unarmed</td><td style="padding: 0.4rem 0.6rem;">Strength + Brawl</td><td style="padding: 0.4rem 0.6rem; color: var(--ink-dim);">Bashing damage, 0L weapon mod</td></tr>
+            <tr style="border-bottom: 1px dotted var(--c-dim);"><td style="padding: 0.4rem 0.6rem;">Melee weapon</td><td style="padding: 0.4rem 0.6rem;">Strength + Weaponry</td><td style="padding: 0.4rem 0.6rem; color: var(--ink-dim);">Add weapon damage modifier (+1L knife · +2L sword · +3L axe)</td></tr>
+            <tr style="border-bottom: 1px dotted var(--c-dim);"><td style="padding: 0.4rem 0.6rem;">Improvised weapon</td><td style="padding: 0.4rem 0.6rem;">Strength + Brawl/Weaponry</td><td style="padding: 0.4rem 0.6rem; color: var(--ink-dim);">−1 to weapon modifier · breaks on 2+ successes (Durability 1)</td></tr>
+            <tr style="border-bottom: 1px dotted var(--c-dim);"><td style="padding: 0.4rem 0.6rem;">Thrown weapon</td><td style="padding: 0.4rem 0.6rem;">Dexterity + Athletics</td><td style="padding: 0.4rem 0.6rem; color: var(--ink-dim);">Range = Strength × 5m short, ×10 medium, ×20 long</td></tr>
+            <tr style="border-bottom: 1px dotted var(--c-dim);"><td style="padding: 0.4rem 0.6rem;">Firearm</td><td style="padding: 0.4rem 0.6rem;">Dexterity + Firearms</td><td style="padding: 0.4rem 0.6rem; color: var(--ink-dim);">Range bands per weapon · short = no penalty, medium = −2, long = −4</td></tr>
+            <tr><td style="padding: 0.4rem 0.6rem;">Grapple</td><td style="padding: 0.4rem 0.6rem;">Strength + Brawl − Defense</td><td style="padding: 0.4rem 0.6rem; color: var(--ink-dim);">Each round of hold: Strength + Brawl contest to maintain or break</td></tr>
+        </tbody>
+    </table>
+
+    {# === DEFENSE & DAMAGE ============================================= #}
+    <header class="block-head"><span class="block-bullet">■</span><h3>DEFENSE &amp; DAMAGE</h3><span class="block-line"></span></header>
+    <div class="text-secondary" style="font-size: 0.9rem; line-height: 1.7; margin: 0.6rem 0 1.6rem 0;">
+        <p style="margin: 0 0 0.5rem 0;"><span class="mono-text text-accent">▸ DEFENSE</span> &nbsp;— passive. Subtract <strong>lower of Dexterity or Wits</strong> + <strong>Athletics</strong> from the attacker's pool. Applies to melee and thrown attacks. <em>Does not apply</em> to firearms or to the first round of a surprise attack.</p>
+        <p style="margin: 0 0 0.5rem 0;"><span class="mono-text text-accent">▸ DODGE</span> &nbsp;— active alternative to Defense. Roll Defense as a dice pool; each success cancels one of the attacker's. Burns the turn's action.</p>
+        <p style="margin: 0 0 0.5rem 0;"><span class="mono-text text-accent">▸ ARMOR</span> &nbsp;— subtracts directly from the attacker's net successes. Two values: <strong>bashing/lethal</strong> (e.g., kevlar 1/2 · plate 2/3 · powered armor 3/3 + Pain Tolerance).</p>
+        <p style="margin: 0;"><span class="mono-text text-accent">▸ DAMAGE</span> &nbsp;— net successes after Defense and armor are applied to the health track. Three types in order of severity: <strong class="text-secondary">bashing</strong> · <strong style="color: var(--accent-warning);">lethal</strong> · <strong style="color: var(--accent-danger);">aggravated</strong>. Bashing fills the track from the left; lethal and aggravated upgrade existing wounds and override.</p>
+    </div>
+
+    {# === HEALTH TRACK & CONSEQUENCES =================================== #}
+    <header class="block-head"><span class="block-bullet">■</span><h3>HEALTH &amp; CONSEQUENCES</h3><span class="block-line"></span></header>
+    <div class="text-secondary" style="font-size: 0.9rem; line-height: 1.7; margin: 0.6rem 0 1.6rem 0;">
+        <p style="margin: 0 0 0.5rem 0;">Total boxes = <strong>Stamina + Size</strong> (typically 7 for a Size 5 human with Stamina 2). Wound penalty: when only the last <strong>three</strong> boxes are unfilled, all dice pools take <strong>−1</strong>. When two remain, <strong>−2</strong>. One box, <strong>−3</strong>.</p>
+        <p style="margin: 0 0 0.5rem 0;"><span class="mono-text text-accent">▸ INCAPACITATED</span> &nbsp;— full track of bashing → unconscious for [Stamina] minutes. Full track of lethal → unconscious + bleeding 1L per minute until stabilized. Full track of aggravated → dead.</p>
+        <p style="margin: 0;"><span class="mono-text text-accent">▸ HEALING</span> &nbsp;— bashing heals 1 box per 15 minutes rest. Lethal heals 1 box per 2 days (less in field conditions). Aggravated heals 1 box per week. Medical care doubles bashing and lethal rates; cybernetic limbs heal as integrity damage on the limb itself.</p>
+    </div>
+
+    {# === COMMON MODIFIERS ============================================= #}
+    <header class="block-head"><span class="block-bullet">■</span><h3>COMMON MODIFIERS</h3><span class="block-line"></span></header>
+    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 0.4rem 1.6rem; margin: 0.6rem 0 1.6rem 0; font-size: 0.85rem;">
+        <div style="display: flex; justify-content: space-between; padding: 4px 0; border-bottom: 1px dotted var(--c-dim);"><span class="text-secondary">Surprise / unaware target</span> <span class="mono-text text-accent">no Defense</span></div>
+        <div style="display: flex; justify-content: space-between; padding: 4px 0; border-bottom: 1px dotted var(--c-dim);"><span class="text-secondary">Cover (light)</span> <span class="mono-text text-accent">−2</span></div>
+        <div style="display: flex; justify-content: space-between; padding: 4px 0; border-bottom: 1px dotted var(--c-dim);"><span class="text-secondary">Cover (heavy)</span> <span class="mono-text text-accent">−4</span></div>
+        <div style="display: flex; justify-content: space-between; padding: 4px 0; border-bottom: 1px dotted var(--c-dim);"><span class="text-secondary">Cover (full)</span> <span class="mono-text text-accent">cannot target</span></div>
+        <div style="display: flex; justify-content: space-between; padding: 4px 0; border-bottom: 1px dotted var(--c-dim);"><span class="text-secondary">Concealment (smoke / dark)</span> <span class="mono-text text-accent">−1 to −3</span></div>
+        <div style="display: flex; justify-content: space-between; padding: 4px 0; border-bottom: 1px dotted var(--c-dim);"><span class="text-secondary">Aiming (one full turn)</span> <span class="mono-text text-accent">+1 (max +3)</span></div>
+        <div style="display: flex; justify-content: space-between; padding: 4px 0; border-bottom: 1px dotted var(--c-dim);"><span class="text-secondary">Burst fire (3 shots)</span> <span class="mono-text text-accent">+1</span></div>
+        <div style="display: flex; justify-content: space-between; padding: 4px 0; border-bottom: 1px dotted var(--c-dim);"><span class="text-secondary">Autofire (medium / long)</span> <span class="mono-text text-accent">+2 / +3</span></div>
+        <div style="display: flex; justify-content: space-between; padding: 4px 0; border-bottom: 1px dotted var(--c-dim);"><span class="text-secondary">Called shot (limb)</span> <span class="mono-text text-accent">−2</span></div>
+        <div style="display: flex; justify-content: space-between; padding: 4px 0; border-bottom: 1px dotted var(--c-dim);"><span class="text-secondary">Called shot (head)</span> <span class="mono-text text-accent">−3 · +1 dmg severity</span></div>
+        <div style="display: flex; justify-content: space-between; padding: 4px 0; border-bottom: 1px dotted var(--c-dim);"><span class="text-secondary">Off-hand attack</span> <span class="mono-text text-accent">−2</span></div>
+        <div style="display: flex; justify-content: space-between; padding: 4px 0; border-bottom: 1px dotted var(--c-dim);"><span class="text-secondary">Movement (full sprint)</span> <span class="mono-text text-accent">−2</span></div>
+        <div style="display: flex; justify-content: space-between; padding: 4px 0; border-bottom: 1px dotted var(--c-dim);"><span class="text-secondary">Specialisation applies</span> <span class="mono-text text-accent">+1</span></div>
+        <div style="display: flex; justify-content: space-between; padding: 4px 0; border-bottom: 1px dotted var(--c-dim);"><span class="text-secondary">Willpower spent</span> <span class="mono-text text-accent">+3</span></div>
+    </div>
+
+    {# === ACTION ECONOMY (free / quick reference) ====================== #}
+    <header class="block-head"><span class="block-bullet">■</span><h3>FREE ACTIONS</h3><span class="block-line"></span></header>
+    <div class="text-secondary" style="font-size: 0.85rem; line-height: 1.6; margin: 0.6rem 0 1.6rem 0;">
+        Talk briefly · drop prone · stand from prone (one turn, no penalty) · drop a held item · take cover from existing terrain · move up to <strong>Speed</strong> meters · activate a verbal merit · pull a trigger on a pre-aimed firearm.
+    </div>
+
+    {# === GLOSSARY / FOOTER =========================================== #}
+    <p class="text-muted" style="margin-top: 1rem; font-size: 0.7rem; letter-spacing: 0.16em;
+                                  border-top: 1px dashed var(--c-dim); padding-top: 1rem;">
+        OPERATIVE QUICK-REF · ALL FIGURES SUBJECT TO GM ADJUDICATION · CONSULT THE FULL CHARTER FOR EDGE CASES.
+        <br>
+        FOR SHIP-TO-SHIP COMBAT SEE THE STARSHIPS / BATTLES SUBSYSTEMS.
+    </p>
+</div>
+{% endblock %}
