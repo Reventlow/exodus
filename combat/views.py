@@ -1342,6 +1342,11 @@ def participant_add(request, pk):
             willpower_max = 0
 
         faction = request.POST.get("faction", "player")
+        # v0.15.12 — copy the canonical sheet's CURRENT damage / willpower /
+        # mental load into the snapshot. A wounded character entering combat
+        # arrives with their wounds already on the row; wound penalties apply
+        # from join. ``health_max`` is recomputed above (Size + Stamina) so a
+        # Stamina change since the last fight is reflected on join.
         participant = Participant.objects.create(
             encounter=encounter,
             participant_kind="character",
@@ -1349,7 +1354,12 @@ def participant_add(request, pk):
             name=character.name,
             faction=faction,
             health_max=health_max,
+            health_bashing=character.health_bashing,
+            health_lethal=character.health_lethal,
+            health_aggravated=character.health_aggravated,
             willpower_max=willpower_max,
+            willpower_current=character.willpower_current,
+            mental_load=getattr(character, "mental_load", 0),
             position_order=next_pos,
         )
 
@@ -1373,6 +1383,9 @@ def participant_add(request, pk):
             willpower_max = 0
 
         faction = request.POST.get("faction", "hostile")
+        # v0.15.12 — same join-time canonical-state copy for NPCs. NPCs share
+        # the health_bashing/lethal/aggravated/willpower_current/mental_load
+        # field shape with Character, so the snapshot fills identically.
         participant = Participant.objects.create(
             encounter=encounter,
             participant_kind="npc",
@@ -1380,7 +1393,12 @@ def participant_add(request, pk):
             name=npc_obj.name,
             faction=faction,
             health_max=health_max,
+            health_bashing=npc_obj.health_bashing,
+            health_lethal=npc_obj.health_lethal,
+            health_aggravated=npc_obj.health_aggravated,
             willpower_max=willpower_max,
+            willpower_current=npc_obj.willpower_current,
+            mental_load=getattr(npc_obj, "mental_load", 0),
             position_order=next_pos,
         )
 
@@ -1413,6 +1431,16 @@ def participant_add(request, pk):
         )
 
     if participant is not None:
+        # v0.15.12 — surface the joining row's current health / willpower so
+        # the timeline shows pre-existing wounds (mooks always join at full
+        # since the catalogue carries no damage state).
+        health_at_join = {
+            "bashing": participant.health_bashing,
+            "lethal": participant.health_lethal,
+            "aggravated": participant.health_aggravated,
+            "willpower_current": participant.willpower_current,
+            "willpower_max": participant.willpower_max,
+        }
         _log(
             encounter,
             "system",
@@ -1420,6 +1448,7 @@ def participant_add(request, pk):
             participant_id=participant.pk,
             participant_kind=participant.participant_kind,
             faction=participant.faction,
+            health_at_join=health_at_join,
         )
 
     return redirect("combat:detail", pk=encounter.pk)
@@ -1805,6 +1834,18 @@ def end_encounter(request, pk):
     is acting anymore), and stamps ``ended_at``. Redirects to the
     encounter list so the GM lands on a clean surface — the detail
     page is still reachable for post-mortem review.
+
+    v0.15.12 — when ending, the snapshot health / willpower / mental_load
+    of every Character / NPC participant is committed back to the
+    canonical sheet so damage taken in combat is visible elsewhere in
+    the app afterwards. Mooks have no sheet and are skipped. The GM
+    can opt out of the commit by ticking the ``skip_commit`` checkbox
+    on the END form (test fights, dream sequences, "what if" scenarios).
+
+    Snapshot wins on commit. If the GM manually edited the canonical
+    sheet during combat (e.g. healed 1 lethal via the character page),
+    that edit will be overwritten when end_encounter runs. Use the
+    skip_commit checkbox to preserve the canonical state.
     """
     if request.method != "POST":
         return HttpResponseNotAllowed(["POST"])
@@ -1822,6 +1863,102 @@ def end_encounter(request, pk):
             "updated_at",
         ]
     )
+
+    # ---- v0.15.12 — bidirectional sheet commit -------------------------------
+    skip_commit = request.POST.get("skip_commit") == "1"
+
+    if skip_commit:
+        # Single system row, no per-participant work. The encounter is
+        # concluded as normal but canonical sheets are untouched.
+        _log(
+            encounter,
+            "system",
+            "End-of-combat sheet commit SKIPPED by GM. "
+            "Damage stays in encounter snapshot only.",
+            skipped=True,
+        )
+    else:
+        commit_count = 0
+        for participant in encounter.participants.all():
+            # Mooks have no canonical sheet to commit to.
+            if participant.participant_kind == "mook":
+                continue
+
+            # FK can be None when the underlying sheet was deleted mid-fight
+            # (FK has on_delete=SET_NULL). Nothing to write back to.
+            target = None
+            if participant.participant_kind == "character":
+                target = participant.character
+            elif participant.participant_kind == "npc":
+                target = participant.npc
+            if target is None:
+                continue
+
+            # Read the canonical pre-commit state for the audit-trail
+            # ``before`` payload BEFORE we overwrite anything.
+            before = {
+                "bashing": target.health_bashing,
+                "lethal": target.health_lethal,
+                "aggravated": target.health_aggravated,
+                "willpower_current": target.willpower_current,
+                "mental_load": getattr(target, "mental_load", 0),
+            }
+            after = {
+                "bashing": participant.health_bashing,
+                "lethal": participant.health_lethal,
+                "aggravated": participant.health_aggravated,
+                "willpower_current": participant.willpower_current,
+                "mental_load": participant.mental_load,
+            }
+
+            # Write the snapshot fields back to the canonical row. Use
+            # update_fields= for an efficient narrow UPDATE — we don't want
+            # to round-trip every column on every commit.
+            target.health_bashing = participant.health_bashing
+            target.health_lethal = participant.health_lethal
+            target.health_aggravated = participant.health_aggravated
+            target.willpower_current = participant.willpower_current
+            target.mental_load = participant.mental_load
+            target.save(
+                update_fields=[
+                    "health_bashing",
+                    "health_lethal",
+                    "health_aggravated",
+                    "willpower_current",
+                    "mental_load",
+                ]
+            )
+
+            # Per-participant audit row. Goes through _log() so the WS
+            # broadcast hook fires and any open clients see it live.
+            _log(
+                encounter,
+                "health_commit",
+                (
+                    f"{participant.name}: "
+                    f"HP {participant.health_bashing}/"
+                    f"{participant.health_lethal}/"
+                    f"{participant.health_aggravated} · "
+                    f"WP {participant.willpower_current}/"
+                    f"{participant.willpower_max} · "
+                    f"ML {participant.mental_load} → committed to sheet."
+                ),
+                participant_id=participant.pk,
+                participant_kind=participant.participant_kind,
+                before=before,
+                after=after,
+            )
+            commit_count += 1
+
+        # Final summary row so the timeline has a single clean marker for
+        # "this is when the sheets were synced".
+        _log(
+            encounter,
+            "system",
+            f"Sheet commits: {commit_count} participants updated.",
+            count=commit_count,
+            skipped=False,
+        )
 
     _log(
         encounter,
@@ -3205,6 +3342,8 @@ def api_encounter_participants(request, pk):
         except (KeyError, TypeError, ValueError):
             willpower_max = 0
         faction = (body.get("faction") or "player").strip().lower()
+        # v0.15.12 — API path mirrors the web form's join-time copy so MCP /
+        # external callers also snapshot the canonical sheet's current state.
         participant = Participant.objects.create(
             encounter=encounter,
             participant_kind="character",
@@ -3212,7 +3351,12 @@ def api_encounter_participants(request, pk):
             name=character.name,
             faction=faction,
             health_max=health_max,
+            health_bashing=character.health_bashing,
+            health_lethal=character.health_lethal,
+            health_aggravated=character.health_aggravated,
             willpower_max=willpower_max,
+            willpower_current=character.willpower_current,
+            mental_load=getattr(character, "mental_load", 0),
             position_order=next_pos,
         )
 
@@ -3235,6 +3379,7 @@ def api_encounter_participants(request, pk):
         except (KeyError, TypeError, ValueError):
             willpower_max = 0
         faction = (body.get("faction") or "hostile").strip().lower()
+        # v0.15.12 — same canonical-state copy on the NPC API branch.
         participant = Participant.objects.create(
             encounter=encounter,
             participant_kind="npc",
@@ -3242,7 +3387,12 @@ def api_encounter_participants(request, pk):
             name=npc_obj.name,
             faction=faction,
             health_max=health_max,
+            health_bashing=npc_obj.health_bashing,
+            health_lethal=npc_obj.health_lethal,
+            health_aggravated=npc_obj.health_aggravated,
             willpower_max=willpower_max,
+            willpower_current=npc_obj.willpower_current,
+            mental_load=getattr(npc_obj, "mental_load", 0),
             position_order=next_pos,
         )
 
@@ -3272,12 +3422,21 @@ def api_encounter_participants(request, pk):
         )
 
     if participant is not None:
+        # v0.15.12 — same join-time health surfacing as the web form.
+        health_at_join = {
+            "bashing": participant.health_bashing,
+            "lethal": participant.health_lethal,
+            "aggravated": participant.health_aggravated,
+            "willpower_current": participant.willpower_current,
+            "willpower_max": participant.willpower_max,
+        }
         _log(
             encounter, "system",
             f"Added {participant.name} ({participant.faction}) to encounter.",
             participant_id=participant.pk,
             participant_kind=participant.participant_kind,
             faction=participant.faction,
+            health_at_join=health_at_join,
         )
         return JsonResponse(_serialize_participant(participant), status=201)
 

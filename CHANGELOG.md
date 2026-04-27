@@ -1,5 +1,17 @@
 # Changelog
 
+## v0.15.12
+- **Bidirectional damage sync.** Adding a Character or NPC to an encounter now snapshots their current `health_bashing/lethal/aggravated`, `willpower_current`, and `mental_load` from the canonical sheet (was: 0/0/0/0/0). Wounded characters enter combat with their wounds already on the participant row, and wound penalties apply from join. `health_max` is recomputed at join (Size + Stamina) so a Stamina change since the last fight is reflected immediately
+- **End-of-combat commit.** When the GM clicks END, every Character / NPC participant's snapshot is written back to their canonical sheet (`health_bashing/lethal/aggravated`, `willpower_current`, `mental_load`). Mooks are skipped (no sheet). FK `SET_NULL` (sheet deleted mid-combat) is also skipped. Each commit writes a `health_commit` CombatLog row with `before` / `after` payloads; a final `system` row summarises `count` of participants updated
+- **Skip-commit checkbox** on the END form for test fights, dream sequences, or "what if" scenarios. The button is now wrapped in a `<details>` reveal — the GM can tick `Skip sheet commit (test fight / dream sequence)` before confirming. When ticked, the encounter ends with a single `system` row "End-of-combat sheet commit SKIPPED by GM…" and canonical sheets are untouched
+- **Confirm dialog wording reflects the chosen mode.** Without skip: "End encounter and commit damage to character sheets?". With skip ticked: "End encounter WITHOUT committing damage to sheets?"
+- **Real-time WS fan-out** automatically picks up the new `health_commit` events via the existing `_log()` broadcast chokepoint — any open browser subscribed to the encounter's WebSocket sees commits live, no extra plumbing required
+- **Edge case — snapshot wins on commit.** If the GM manually edited the canonical sheet during combat (e.g. healed 1 lethal via the character page), that edit is overwritten when the encounter ends. Use the `skip_commit` checkbox to opt out and preserve the canonical state
+- **Join-time `health_at_join` payload** added to the participant-add `_log()` data so the timeline shows pre-existing wounds (`{bashing, lethal, aggravated, willpower_current, willpower_max}`). Mooks always join at full since the catalogue carries no damage state
+- Both the web form (`participant_add`) and the JSON API (`api_encounter_participants`) get the join-time copy, so MCP / external callers also benefit
+- No schema changes, no migrations, no new dependencies — only `combat/views.py` and `templates/combat/encounter.html` change
+- GM-only mutation paths unchanged: players cannot trigger the commit, but they will see their character's sheet updated when the GM ends the encounter
+
 ## v0.15.11
 - **Fix:** `+ ADD PARTICIPANT → FROM NPCS` no longer hides agency dossiers. The previous `is_npc_dossier=False` filter masked every NPC dossier (the GM's antagonist roster), so the dropdown only listed the player-assigned NPCs — which in this campaign all happen to be Bifrost crew. Now any NPC can be spawned into combat
 - **NPC dropdown grouped by source via `<optgroup>`:** `PLAYER NPCS` first (the player-assigned roster), then `DOSSIER · <AGENCY>` blocks alphabetically (one per NPC agency), then `DOSSIER · UNASSIGNED` for any dossiers without an agency FK

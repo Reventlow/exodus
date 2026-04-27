@@ -778,11 +778,30 @@ The END button also prompts for confirmation.
                         {% csrf_token %}
                         <button type="submit" class="init-action-btn primary">NEXT TURN &rarr;</button>
                     </form>
-                    <form method="post" action="{% url 'combat:end' encounter.id %}" style="display:inline;"
-                          onsubmit="return confirm('End this encounter? Status moves to CONCLUDED.');">
-                        {% csrf_token %}
-                        <button type="submit" class="init-action-btn danger">END ENCOUNTER</button>
-                    </form>
+                    {# v0.15.12 — END form wrapped in a <details> so the GM #}
+                    {# can opt out of the end-of-combat sheet commit (test  #}
+                    {# fights, dream sequences). Default behaviour commits  #}
+                    {# damage to the canonical Character / NPC sheets.      #}
+                    <details class="end-encounter-details" style="display:inline-block; vertical-align:middle;">
+                        <summary class="init-action-btn danger" style="cursor:pointer; list-style:none;">END ENCOUNTER</summary>
+                        <form method="post" action="{% url 'combat:end' encounter.id %}"
+                              class="end-encounter-form"
+                              style="display:flex; flex-direction:column; gap:6px; margin-top:6px; padding:8px; border:1px solid var(--border-strong, #444); background:rgba(0,0,0,0.4);"
+                              onsubmit="return (function(f){
+                                  var s = f.querySelector('input[name=skip_commit]');
+                                  var msg = (s && s.checked)
+                                      ? 'End encounter WITHOUT committing damage to sheets?'
+                                      : 'End encounter and commit damage to character sheets?';
+                                  return confirm(msg);
+                              })(this);">
+                            {% csrf_token %}
+                            <label style="font-size:0.85em; display:flex; gap:6px; align-items:center;">
+                                <input type="checkbox" name="skip_commit" value="1">
+                                <span>Skip sheet commit (test fight / dream sequence)</span>
+                            </label>
+                            <button type="submit" class="init-action-btn danger">CONFIRM END</button>
+                        </form>
+                    </details>
                 {% endif %}
                 {% if active_participant_obj %}
                     <span class="init-note">ACTING: {{ active_participant_obj.name|upper }}</span>
