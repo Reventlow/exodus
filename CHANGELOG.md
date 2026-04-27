@@ -1,5 +1,9 @@
 # Changelog
 
+## v0.14.51
+- New **RULES** section consolidating the merit and pulling-strings catalogues. Hub at `/rules/` shows two cards (MERITS / PULLING STRINGS) inside a bracket-frame card. The standalone catalogues now live at `/rules/merits/` and `/rules/pulling-strings/`, with the old `/merits/` and `/pulling-strings/` URLs kept as silent aliases so existing bookmarks keep working
+- Top nav simplified: the two flat links (`PULL STRINGS` + `MERITS`) become a single `RULES` link
+
 ## v0.14.50
 - Fix: the login roster was showing `__SYSTEM__` twice when a real Django user account named `__system__` (or `system`) existed in the database — the real burned user and the always-on synthetic row collided. The roster now defensively excludes any real user whose username matches the synthetic sentinel, so only the always-on `CRAWLING` row appears
 

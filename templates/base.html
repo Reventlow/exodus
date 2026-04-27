@@ -178,8 +178,7 @@
                 <a href="{% url 'starmap:citymap' cm.id %}">{{ cm.name|upper }}</a>
             {% endfor %}
             <span class="sep">|</span>
-            <a href="{% url 'pulling-strings-page' %}">PULL STRINGS</a>
-            <a href="{% url 'merits-page' %}">MERITS</a>
+            <a href="{% url 'rules-page' %}">RULES</a>
             {% if GM_BRIEFS_COUNT > 0 %}
                 <span class="sep">|</span>
                 <a href="/my-briefs/" style="position: relative;">

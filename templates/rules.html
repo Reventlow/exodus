@@ -1,0 +1,62 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}Rules — Exodus{% endblock %}
+
+{% block content %}
+<div class="brackets" style="position: relative; padding: 32px 36px; max-width: 960px; margin: 0 auto;">
+    <span class="bk tl"></span><span class="bk tr"></span>
+    <span class="bk bl"></span><span class="bk br"></span>
+
+    <div class="kicker" style="margin-bottom: 0.4rem;">DIRECTORATE BLACKLOG.NET // RULES INDEX</div>
+    <h1 class="title" style="margin: 0 0 0.4rem 0;">RULES</h1>
+    <div class="sub" style="margin-bottom: 2.2rem;">
+        OPERATIONAL CATALOGUE — REGULATIONS, MERITS, AND PULLING STRINGS
+    </div>
+
+    <header class="block-head">
+        <span class="block-bullet">■</span>
+        <h3>CATALOGUES</h3>
+        <span class="block-line"></span>
+    </header>
+
+    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+                gap: 1rem; margin-top: 1rem;">
+
+        <a href="{% url 'merits-page' %}" class="glass-panel"
+           style="padding: 1.5rem 1.5rem 1.4rem; text-decoration: none; color: var(--ink);
+                  display: flex; flex-direction: column; gap: 0.55rem;
+                  transition: border-color 0.15s, box-shadow 0.15s, color 0.15s;">
+            <div class="kicker" style="color: var(--c-primary);">CATALOGUE // MERITS</div>
+            <h2 class="mono-text" style="margin: 0; font-size: 1.4rem; letter-spacing: 0.06em;">MERITS</h2>
+            <div class="text-secondary" style="font-size: 0.85rem; line-height: 1.55;">
+                Innate advantages, training, and acquired traits. Each costs build dots and shapes how an operative behaves under pressure.
+            </div>
+            <div class="muted" style="margin-top: auto; font-size: 0.7rem; letter-spacing: 0.18em;">
+                ► OPEN CATALOGUE
+            </div>
+        </a>
+
+        <a href="{% url 'pulling-strings-page' %}" class="glass-panel"
+           style="padding: 1.5rem 1.5rem 1.4rem; text-decoration: none; color: var(--ink);
+                  display: flex; flex-direction: column; gap: 0.55rem;
+                  transition: border-color 0.15s, box-shadow 0.15s, color 0.15s;">
+            <div class="kicker" style="color: var(--c-primary);">CATALOGUE // PULLING STRINGS</div>
+            <h2 class="mono-text" style="margin: 0; font-size: 1.4rem; letter-spacing: 0.06em;">PULLING STRINGS</h2>
+            <div class="text-secondary" style="font-size: 0.85rem; line-height: 1.55;">
+                Off-record assets, leverage, and contacts an operative can call on. Spent as a downtime resource between sessions.
+            </div>
+            <div class="muted" style="margin-top: auto; font-size: 0.7rem; letter-spacing: 0.18em;">
+                ► OPEN CATALOGUE
+            </div>
+        </a>
+
+    </div>
+
+    <p class="text-muted" style="margin-top: 2rem; font-size: 0.75rem; letter-spacing: 0.16em;
+                                  border-top: 1px dashed var(--c-dim); padding-top: 1rem;">
+        ENTRIES IN EACH CATALOGUE ARE MAINTAINED BY THE DIRECTORATE.
+        {% if is_admin %}OPERATIVES MAY VIEW; ADMINISTRATORS MAY EDIT.{% else %}OPERATIVES MAY VIEW.{% endif %}
+    </p>
+</div>
+{% endblock %}
