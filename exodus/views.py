@@ -108,6 +108,29 @@ def site_settings(request):
             if val:
                 setattr(settings_obj, f"label_{lbl}", val)
 
+        # COVER catalogue. Same shape as weapons/armor — parallel arrays
+        # per tier. Empty-name rows are dropped.
+        if "cover_submitted" in request.POST:
+            tiers = ("light", "heavy", "full")
+            new_cover = []
+            for tier in tiers:
+                names = request.POST.getlist(f"cover_{tier}_name")
+                durabilities = request.POST.getlist(f"cover_{tier}_durability")
+                healths = request.POST.getlist(f"cover_{tier}_health")
+                notes_list = request.POST.getlist(f"cover_{tier}_notes")
+                for i, raw_name in enumerate(names):
+                    name = (raw_name or "").strip()[:80]
+                    if not name:
+                        continue
+                    new_cover.append({
+                        "name": name,
+                        "tier": tier,
+                        "durability": (durabilities[i] if i < len(durabilities) else "").strip()[:8],
+                        "health": (healths[i] if i < len(healths) else "").strip()[:8],
+                        "notes": (notes_list[i] if i < len(notes_list) else "").strip()[:240],
+                    })
+            settings_obj.cover = new_cover
+
         # ARMOR catalogue. Same shape as weapons — parallel arrays per
         # category. Empty-name rows are dropped.
         if "armor_submitted" in request.POST:
@@ -210,6 +233,23 @@ def site_settings(request):
          "rows": armor_by_cat["vacuum"]},
     ]
 
+    # Pre-grouped cover sections for the structured editor.
+    cover_by_tier = {"light": [], "heavy": [], "full": []}
+    for c in settings_obj.get_cover():
+        if isinstance(c, dict) and c.get("tier") in cover_by_tier:
+            cover_by_tier[c["tier"]].append(c)
+    cover_sections = [
+        {"tier": "light", "label": "LIGHT COVER",
+         "hint": "−2 to attacker · ≤ 50% body shielded",
+         "rows": cover_by_tier["light"]},
+        {"tier": "heavy", "label": "HEAVY COVER",
+         "hint": "−4 to attacker · ≥ 75% body shielded",
+         "rows": cover_by_tier["heavy"]},
+        {"tier": "full", "label": "FULL COVER",
+         "hint": "Cannot target directly · target must expose to be attacked",
+         "rows": cover_by_tier["full"]},
+    ]
+
     return render(request, "site_settings.html", {
         "settings_obj": settings_obj,
         "users": users,
@@ -219,6 +259,7 @@ def site_settings(request):
         "tweaks": settings_obj.get_tweaks(),
         "weapons_sections": weapons_sections,
         "armor_sections": armor_sections,
+        "cover_sections": cover_sections,
     })
 
 
@@ -405,6 +446,109 @@ def rules_page(request):
     return render(request, "rules.html", {
         "is_admin": request.user.is_superuser,
     })
+
+
+@require_http_methods(["GET", "POST"])
+def api_cover(request):
+    """List or create cover entries.
+
+    GET → ``{"count", "cover": [...]}``. POST creates a new entry.
+    Body: ``{name, tier, durability?, health?, notes?}``. 409 on duplicate name.
+    Admin / MCP-superuser only.
+    """
+    if not request.user.is_superuser:
+        return JsonResponse({"error": "ACCESS DENIED."}, status=403)
+    settings_obj = SiteSettings.load()
+    cover_list = list(settings_obj.get_cover())
+
+    if request.method == "GET":
+        return JsonResponse({"count": len(cover_list), "cover": cover_list})
+
+    try:
+        body = json.loads(request.body) if request.body else {}
+    except json.JSONDecodeError:
+        return JsonResponse({"error": "Invalid JSON."}, status=400)
+
+    name = (body.get("name") or "").strip()
+    if not name:
+        return JsonResponse({"error": "'name' is required."}, status=400)
+    tier = (body.get("tier") or "").strip().lower()
+    if tier not in ("light", "heavy", "full"):
+        return JsonResponse({
+            "error": "'tier' must be one of: light, heavy, full.",
+        }, status=400)
+    if any((c.get("name") or "").lower() == name.lower() for c in cover_list):
+        return JsonResponse({
+            "error": f"Cover named '{name}' already exists. Use PUT on the detail URL to update.",
+        }, status=409)
+
+    new_c = {
+        "name": name[:80],
+        "tier": tier,
+        "durability": (body.get("durability") or "").strip()[:8],
+        "health": (body.get("health") or "").strip()[:8],
+        "notes": (body.get("notes") or "").strip()[:240],
+    }
+    cover_list.append(new_c)
+    settings_obj.cover = cover_list
+    settings_obj.save(update_fields=["cover"])
+    return JsonResponse(new_c, status=201)
+
+
+@require_http_methods(["GET", "PUT", "DELETE"])
+def api_cover_detail(request, name):
+    """Get / update / delete a single cover entry by (case-insensitive) name."""
+    if not request.user.is_superuser:
+        return JsonResponse({"error": "ACCESS DENIED."}, status=403)
+    settings_obj = SiteSettings.load()
+    cover_list = list(settings_obj.get_cover())
+
+    idx = next(
+        (i for i, c in enumerate(cover_list)
+         if (c.get("name") or "").lower() == name.lower()),
+        None,
+    )
+    if idx is None:
+        return JsonResponse({"error": f"Cover '{name}' not found."}, status=404)
+
+    if request.method == "GET":
+        return JsonResponse(cover_list[idx])
+
+    if request.method == "DELETE":
+        removed = cover_list.pop(idx)
+        settings_obj.cover = cover_list
+        settings_obj.save(update_fields=["cover"])
+        return JsonResponse({"deleted": removed})
+
+    try:
+        body = json.loads(request.body) if request.body else {}
+    except json.JSONDecodeError:
+        return JsonResponse({"error": "Invalid JSON."}, status=400)
+
+    c = dict(cover_list[idx])
+    if "name" in body:
+        new_name = (body["name"] or "").strip()
+        if new_name:
+            if any(
+                i != idx and (other.get("name") or "").lower() == new_name.lower()
+                for i, other in enumerate(cover_list)
+            ):
+                return JsonResponse({
+                    "error": f"Cover named '{new_name}' already exists.",
+                }, status=409)
+            c["name"] = new_name[:80]
+    if "tier" in body:
+        tier = (body["tier"] or "").strip().lower()
+        if tier in ("light", "heavy", "full"):
+            c["tier"] = tier
+    for field, limit in (("durability", 8), ("health", 8),
+                         ("notes", 240)):
+        if field in body:
+            c[field] = (body[field] or "").strip()[:limit]
+    cover_list[idx] = c
+    settings_obj.cover = cover_list
+    settings_obj.save(update_fields=["cover"])
+    return JsonResponse(c)
 
 
 @require_http_methods(["GET", "POST"])
@@ -678,11 +822,26 @@ def combat_page(request):
          "rows": armor_by_cat["vacuum"]},
     ]
 
+    cover_by_tier = {"light": [], "heavy": [], "full": []}
+    for c in settings_obj.get_cover():
+        if isinstance(c, dict) and c.get("tier") in cover_by_tier:
+            cover_by_tier[c["tier"]].append(c)
+    combat_cover_sections = [
+        {"tier": "light", "label": "LIGHT", "penalty": "−2",
+         "rows": cover_by_tier["light"]},
+        {"tier": "heavy", "label": "HEAVY", "penalty": "−4",
+         "rows": cover_by_tier["heavy"]},
+        {"tier": "full", "label": "FULL", "penalty": "cannot target",
+         "rows": cover_by_tier["full"]},
+    ]
+
     return render(request, "combat.html", {
         "weapons_by_cat": weapons_by_cat,
         "combat_weapon_sections": sections,
         "armor_by_cat": armor_by_cat,
         "combat_armor_sections": armor_sections,
+        "cover_by_tier": cover_by_tier,
+        "combat_cover_sections": combat_cover_sections,
     })
 
 

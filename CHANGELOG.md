@@ -1,5 +1,13 @@
 # Changelog
 
+## v0.14.65
+- New **COVER & CONCEALMENT** rules section in the combat reference at `/rules/combat/`. Distinguishes cover (stops bullets) from concealment (stops sight). Tiered: LIGHT (−2), HEAVY (−4), FULL (cannot target). Sub-sections cover entering, pop-up fire, blind fire, moving between cover, autofire suppression, and rules for destroying cover (Durability + Health). Footnote on heavy ordnance / explosives bypassing cover
+- Cover destruction table is now **driven by the editable cover catalogue** instead of hardcoded
+- New `SiteSettings.cover` JSONField with seeded defaults across the three tiers: wooden chair / drywall / vehicle door (light); engine block / sandbag / brick wall (heavy); concrete wall / reinforced bulkhead (full)
+- New **`/settings/ → COMBAT → Cover`** structured editor matching the weapons/armor pattern (rows per tier with NAME / DURABILITY / HEALTH / NOTES + delete-per-row + ＋ ADD COVER per tier)
+- Two new admin-only API endpoints (`/api/admin/cover/` list+create, `/api/admin/cover/<name>/` get+put+delete) and five MCP tools (`list_cover`, `get_cover`, `create_cover`, `update_cover`, `delete_cover`)
+- Migration `exodus/0020_sitesettings_cover` adds the field and seeds the default catalogue
+
 ## v0.14.64
 - New **ARMOR** catalogue mirroring the weapons setup. Stored on `SiteSettings.armor` with seeded defaults across four categories: **LIGHT** (Reinforced Coat, Kevlar Vest, Tactical Vest), **MEDIUM** (Riot Gear, Plate Carrier, EOD Suit), **HEAVY** (Full Ballistic, Combat Plate, Powered Exo-Frame), **VACUUM** (EVA Suit, Hardsuit, Industrial Hardsuit)
 - Each armor entry: `name`, `category`, `rating` (B/L subtraction, e.g. `1/2`), `str_min` (Strength minimum, `—` if none), `penalty` (combined Defense/Speed/Init negatives), and free-text `notes`

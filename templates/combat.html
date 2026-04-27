@@ -54,6 +54,95 @@
         <p style="margin: 0;"><span class="mono-text text-accent">▸ DAMAGE</span> &nbsp;— net successes after Defense and armor are applied to the health track. Three types in order of severity: <strong class="text-secondary">bashing</strong> · <strong style="color: var(--accent-warning);">lethal</strong> · <strong style="color: var(--accent-danger);">aggravated</strong>. Bashing fills the track from the left; lethal and aggravated upgrade existing wounds and override.</p>
     </div>
 
+    {# === COVER & CONCEALMENT ========================================== #}
+    <header class="block-head"><span class="block-bullet">■</span><h3>COVER &amp; CONCEALMENT</h3><span class="block-line"></span></header>
+    <p class="text-secondary" style="font-size: 0.85rem; line-height: 1.55; margin: 0.6rem 0 1rem 0;">
+        <strong>Cover</strong> stops bullets; <strong>concealment</strong> stops sight. They stack — a target in dense smoke <em>behind</em> a wall benefits from both.
+    </p>
+
+    <h4 class="mono-text text-accent" style="font-size: 0.85rem; letter-spacing: 0.2em; margin: 1rem 0 0.4rem 0;">COVER TIERS</h4>
+    <table class="mono-text" style="width: 100%; border-collapse: collapse; font-size: 0.82rem; margin: 0 0 1.2rem 0;">
+        <thead style="color: var(--ink-dim);">
+            <tr style="border-bottom: 1px solid var(--c-dim);">
+                <th style="text-align: left; padding: 0.4rem 0.6rem;">TIER</th>
+                <th style="text-align: left; padding: 0.4rem 0.6rem; width: 13%;">PENALTY</th>
+                <th style="text-align: left; padding: 0.4rem 0.6rem;">EXAMPLES</th>
+                <th style="text-align: left; padding: 0.4rem 0.6rem;">NOTES</th>
+            </tr>
+        </thead>
+        <tbody>
+            <tr style="border-bottom: 1px dotted var(--c-dim);">
+                <td style="padding: 0.4rem 0.6rem; color: var(--ink);">LIGHT</td>
+                <td style="padding: 0.4rem 0.6rem; color: var(--c-primary);">−2</td>
+                <td style="padding: 0.4rem 0.6rem; color: var(--ink-dim);">Door frame, chair, low fence, parked car (side)</td>
+                <td style="padding: 0.4rem 0.6rem; color: var(--ink-dim);">≤ 50% body shielded</td>
+            </tr>
+            <tr style="border-bottom: 1px dotted var(--c-dim);">
+                <td style="padding: 0.4rem 0.6rem; color: var(--ink);">HEAVY</td>
+                <td style="padding: 0.4rem 0.6rem; color: var(--c-primary);">−4</td>
+                <td style="padding: 0.4rem 0.6rem; color: var(--ink-dim);">Sandbag, vehicle hood, brick wall corner, dumpster</td>
+                <td style="padding: 0.4rem 0.6rem; color: var(--ink-dim);">≥ 75% body shielded</td>
+            </tr>
+            <tr style="border-bottom: 1px dotted var(--c-dim);">
+                <td style="padding: 0.4rem 0.6rem; color: var(--ink);">FULL</td>
+                <td style="padding: 0.4rem 0.6rem; color: var(--accent-warning);">cannot target</td>
+                <td style="padding: 0.4rem 0.6rem; color: var(--ink-dim);">Behind solid wall, sealed bulkhead, building corner</td>
+                <td style="padding: 0.4rem 0.6rem; color: var(--ink-dim);">Target must expose to be attacked. AOE / explosives bypass.</td>
+            </tr>
+            <tr>
+                <td style="padding: 0.4rem 0.6rem; color: var(--ink);">CONCEAL.</td>
+                <td style="padding: 0.4rem 0.6rem; color: var(--c-primary);">−1 / −2 / −3</td>
+                <td style="padding: 0.4rem 0.6rem; color: var(--ink-dim);">Smoke, dim light, fog, rain, thermal drape</td>
+                <td style="padding: 0.4rem 0.6rem; color: var(--ink-dim);">Affects sight only. Bullets pass cleanly.</td>
+            </tr>
+        </tbody>
+    </table>
+
+    <h4 class="mono-text text-accent" style="font-size: 0.85rem; letter-spacing: 0.2em; margin: 1.2rem 0 0.4rem 0;">USING COVER</h4>
+    <div class="text-secondary" style="font-size: 0.85rem; line-height: 1.7; margin: 0 0 1rem 0;">
+        <p style="margin: 0 0 0.5rem 0;"><span class="mono-text text-accent">▸ ENTERING</span> &nbsp;— moving up to <strong>Speed</strong> metres into cover is part of your turn's action; once behind it, the cover penalty applies to incoming fire from the next attacker forward.</p>
+        <p style="margin: 0 0 0.5rem 0;"><span class="mono-text text-accent">▸ POP-UP FIRE</span> &nbsp;— popping out to attack is standard, but you become attackable that turn at <strong>half cover bonus</strong> (light → −1, heavy → −2) until your next initiative.</p>
+        <p style="margin: 0 0 0.5rem 0;"><span class="mono-text text-accent">▸ BLIND FIRE</span> &nbsp;— firing without exposing yourself: keep <strong>full cover bonus</strong>, but your <em>own</em> attack pool takes <strong>−2</strong> (no aim, no sight).</p>
+        <p style="margin: 0 0 0.5rem 0;"><span class="mono-text text-accent">▸ MOVING BETWEEN COVER</span> &nbsp;— a 2 m+ dash exposes you for the run. Defenders at <strong>half Defense</strong> until your next initiative; suppressing fire denies the move.</p>
+        <p style="margin: 0;"><span class="mono-text text-accent">▸ AUTOFIRE / SUPPRESSION</span> &nbsp;— sustained fire on a cover position forces anyone behind it to <strong>stay down</strong> (no pop-up actions) for the duration. Ammo cost: full burst (10+ rounds) per turn suppressed.</p>
+    </div>
+
+    <h4 class="mono-text text-accent" style="font-size: 0.85rem; letter-spacing: 0.2em; margin: 1.2rem 0 0.4rem 0;">DESTROYING COVER</h4>
+    <p class="text-secondary" style="font-size: 0.85rem; line-height: 1.55; margin: 0 0 0.6rem 0;">
+        Cover has <strong>Durability</strong> and <strong>Health</strong>. Damage that <em>exceeds</em> Durability eats Health; when Health hits 0 the cover collapses and the bonus is gone. Live from <a href="{% url 'site-settings' %}#cover" class="text-accent" style="text-decoration: none;">/settings/ → COMBAT → Cover</a>.
+    </p>
+    {% for entry in combat_cover_sections %}
+        {% if entry.rows %}
+        <h5 class="mono-text" style="font-size: 0.78rem; letter-spacing: 0.18em; margin: 0.8rem 0 0.3rem 0; color: var(--ink-dim);">
+            {{ entry.label }} <span class="text-accent" style="font-weight: 400;">// {{ entry.penalty }}</span>
+        </h5>
+        <table class="mono-text" style="width: 100%; border-collapse: collapse; font-size: 0.82rem; margin: 0 0 0.6rem 0;">
+            <thead style="color: var(--ink-dim);">
+                <tr style="border-bottom: 1px solid var(--c-dim);">
+                    <th style="text-align: left; padding: 0.35rem 0.5rem;">COVER</th>
+                    <th style="text-align: left; padding: 0.35rem 0.5rem; width: 12%;">DURABILITY</th>
+                    <th style="text-align: left; padding: 0.35rem 0.5rem; width: 12%;">HEALTH</th>
+                    <th style="text-align: left; padding: 0.35rem 0.5rem;">NOTES</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for c in entry.rows %}
+                <tr style="border-bottom: 1px dotted var(--c-dim);">
+                    <td style="padding: 0.35rem 0.5rem; color: var(--ink);">{{ c.name }}</td>
+                    <td style="padding: 0.35rem 0.5rem; color: var(--c-primary);">{{ c.durability|default:"—" }}</td>
+                    <td style="padding: 0.35rem 0.5rem; color: var(--c-primary);">{{ c.health|default:"—" }}</td>
+                    <td style="padding: 0.35rem 0.5rem; color: var(--ink-dim);">{{ c.notes }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+        {% endif %}
+    {% endfor %}
+
+    <p class="text-muted" style="font-size: 0.7rem; line-height: 1.6; margin: 0 0 1.6rem 0;">
+        <span class="mono-text text-accent">RULE OF THUMB:</span> heavy ordnance (RPG, .50 cal, AT rifle) bypasses light cover entirely and counts heavy cover as light. Explosives ignore cover within their blast radius. AOE attacks (grenade, fragmentation) hit everyone in radius regardless of cover.
+    </p>
+
     {# === HEALTH TRACK & CONSEQUENCES =================================== #}
     <header class="block-head"><span class="block-bullet">■</span><h3>HEALTH &amp; CONSEQUENCES</h3><span class="block-line"></span></header>
     <div class="text-secondary" style="font-size: 0.9rem; line-height: 1.7; margin: 0.6rem 0 1.6rem 0;">

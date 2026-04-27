@@ -201,6 +201,16 @@ class SiteSettings(models.Model):
         ),
     )
 
+    # Cover catalogue. Each entry has a tier (light / heavy / full),
+    # durability + health stats, and free-text notes.
+    cover = models.JSONField(
+        default=list, blank=True,
+        help_text=(
+            "List of cover entries. See SiteSettings.default_cover() for "
+            "the seed catalogue and field reference."
+        ),
+    )
+
     class Meta:
         verbose_name = "Site Settings"
         verbose_name_plural = "Site Settings"
@@ -397,6 +407,62 @@ class SiteSettings(models.Model):
                 "str_min": a.get("str_min", "") or "",
                 "penalty": a.get("penalty", "") or "",
                 "notes": a.get("notes", "") or "",
+            })
+        return hydrated
+
+    @staticmethod
+    def default_cover():
+        """Seed catalogue of cover types with WoD 2.0 stats.
+
+        Each entry: ``name``, ``tier`` (``light`` / ``heavy`` / ``full``;
+        light = −2, heavy = −4, full = cannot target), ``durability``
+        (numeric string), ``health`` (numeric string), free-text ``notes``.
+        Damage exceeding Durability eats Health; cover collapses at Health 0.
+        """
+        return [
+            # Light cover (−2 to attacker)
+            {"name": "Wooden chair / door", "tier": "light",
+             "durability": "1", "health": "4",
+             "notes": "Splinters within 2 turns of sustained fire."},
+            {"name": "Drywall partition", "tier": "light",
+             "durability": "1", "health": "3",
+             "notes": "Bullets pass through cleanly at heavy calibre."},
+            {"name": "Vehicle door", "tier": "light",
+             "durability": "2", "health": "5",
+             "notes": "Light cover. Engine block separately = heavy cover."},
+            # Heavy cover (−4 to attacker)
+            {"name": "Vehicle engine block", "tier": "heavy",
+             "durability": "3", "health": "8",
+             "notes": "Heavy cover front-on. Other angles = light cover."},
+            {"name": "Sandbag stack", "tier": "heavy",
+             "durability": "3", "health": "6",
+             "notes": "Field-expedient. Stops most small-arms fire."},
+            {"name": "Brick wall", "tier": "heavy",
+             "durability": "4", "health": "8",
+             "notes": "Crumbles under sustained .50-cal."},
+            # Full cover (cannot target directly)
+            {"name": "Concrete wall", "tier": "full",
+             "durability": "5", "health": "10",
+             "notes": "Demolition-grade ordnance to breach."},
+            {"name": "Reinforced bulkhead", "tier": "full",
+             "durability": "7", "health": "15",
+             "notes": "Ship-grade armor. AT weapons required."},
+        ]
+
+    def get_cover(self):
+        """Return the cover list, hydrated with empty strings for any
+        missing fields so the UI handles legacy entries uniformly."""
+        cover = self.cover if isinstance(self.cover, list) and self.cover else self.default_cover()
+        hydrated = []
+        for c in cover:
+            if not isinstance(c, dict):
+                continue
+            hydrated.append({
+                "name": c.get("name", ""),
+                "tier": c.get("tier", ""),
+                "durability": c.get("durability", "") or "",
+                "health": c.get("health", "") or "",
+                "notes": c.get("notes", "") or "",
             })
         return hydrated
 

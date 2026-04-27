@@ -174,6 +174,7 @@
             <div class="sidebar-group-label">COMBAT</div>
             <button class="sidebar-item" onclick="showSection('weapons', this)">Weapons</button>
             <button class="sidebar-item" onclick="showSection('armor', this)">Armor</button>
+            <button class="sidebar-item" onclick="showSection('cover', this)">Cover</button>
         </div>
         <div class="sidebar-group">
             <div class="sidebar-group-label">THEME</div>
@@ -555,6 +556,78 @@
                             '<td><input type="text" name="armor_' + cat + '_str_min" maxlength="16" placeholder="—"></td>' +
                             '<td><input type="text" name="armor_' + cat + '_penalty" maxlength="48" placeholder="—"></td>' +
                             '<td><input type="text" name="armor_' + cat + '_notes" maxlength="240" placeholder=""></td>' +
+                            '<td><button type="button" class="weap-del" onclick="this.closest(\'tr\').remove()">×</button></td>';
+                        tbody.appendChild(tr);
+                        var firstInput = tr.querySelector('input');
+                        if (firstInput) firstInput.focus();
+                    });
+                });
+            })();
+            </script>
+        </div>
+
+        <!-- Cover catalogue -->
+        <div id="sec-cover" class="settings-section">
+            <div class="block-head">
+                <span class="block-bullet">&#9679;</span>
+                <h3>COVER</h3>
+                <span class="block-line"></span>
+                <span class="block-badge">CATALOGUE</span>
+            </div>
+            <span class="text-muted mono-text" style="font-size: 0.7rem; display: block; margin-bottom: 1rem;">
+                Reference list of cover types. Damage exceeding <strong>Durability</strong> eats <strong>Health</strong>; cover collapses at Health 0. Tiers drive the attacker's penalty: <strong>LIGHT</strong> = −2, <strong>HEAVY</strong> = −4, <strong>FULL</strong> = cannot target. Renders live in the combat reference at <a href="{% url 'combat-page' %}" class="text-accent" style="text-decoration: none;">/rules/combat/</a>.
+            </span>
+            <form method="post">
+                {% csrf_token %}
+                <input type="hidden" name="cover_submitted" value="1">
+
+                {% for sec in cover_sections %}
+                <div class="ss-card" style="margin-bottom: 1rem; padding: 1rem;">
+                    <div style="display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 0.4rem;">
+                        <div class="ss-label" style="margin: 0;">{{ sec.label }}</div>
+                        <span class="text-muted mono-text" style="font-size: 0.65rem;">{{ sec.hint }}</span>
+                    </div>
+                    <table class="weap-table" data-tier="{{ sec.tier }}">
+                        <thead>
+                            <tr>
+                                <th style="width: 28%;">NAME</th>
+                                <th style="width: 12%;">DURABILITY</th>
+                                <th style="width: 10%;">HEALTH</th>
+                                <th>NOTES</th>
+                                <th style="width: 1%;"></th>
+                            </tr>
+                        </thead>
+                        <tbody data-rows>
+                            {% for c in sec.rows %}
+                            <tr>
+                                <td><input type="text" name="cover_{{ sec.tier }}_name" value="{{ c.name }}" maxlength="80"></td>
+                                <td><input type="text" name="cover_{{ sec.tier }}_durability" value="{{ c.durability }}" maxlength="8"></td>
+                                <td><input type="text" name="cover_{{ sec.tier }}_health" value="{{ c.health }}" maxlength="8"></td>
+                                <td><input type="text" name="cover_{{ sec.tier }}_notes" value="{{ c.notes }}" maxlength="240"></td>
+                                <td><button type="button" class="weap-del" onclick="this.closest('tr').remove()">×</button></td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                    <button type="button" class="weap-add" data-add-cover-tier="{{ sec.tier }}">＋ ADD COVER</button>
+                </div>
+                {% endfor %}
+
+                <button type="submit" class="btn-primary" style="width: 100%; margin-top: 1rem;">SAVE COVER</button>
+            </form>
+
+            <script>
+            (function () {
+                document.querySelectorAll('[data-add-cover-tier]').forEach(function (btn) {
+                    btn.addEventListener('click', function () {
+                        var tier = btn.getAttribute('data-add-cover-tier');
+                        var tbody = btn.parentElement.querySelector('tbody[data-rows]');
+                        var tr = document.createElement('tr');
+                        tr.innerHTML =
+                            '<td><input type="text" name="cover_' + tier + '_name" maxlength="80" placeholder="NAME"></td>' +
+                            '<td><input type="text" name="cover_' + tier + '_durability" maxlength="8" placeholder="3"></td>' +
+                            '<td><input type="text" name="cover_' + tier + '_health" maxlength="8" placeholder="6"></td>' +
+                            '<td><input type="text" name="cover_' + tier + '_notes" maxlength="240" placeholder=""></td>' +
                             '<td><button type="button" class="weap-del" onclick="this.closest(\'tr\').remove()">×</button></td>';
                         tbody.appendChild(tr);
                         var firstInput = tr.querySelector('input');
