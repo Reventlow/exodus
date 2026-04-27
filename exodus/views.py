@@ -108,18 +108,31 @@ def site_settings(request):
             if val:
                 setattr(settings_obj, f"label_{lbl}", val)
 
-        # WEAPONS catalogue. Submitted as four textareas (one per category),
-        # each line a weapon name. Saved as a flat list of {name, category}
-        # dicts so projects / character sheets can reference the catalogue.
+        # WEAPONS catalogue. Submitted as parallel arrays per category
+        # (name / damage / range / capacity / notes). Empty-name rows
+        # are dropped so the editor's add-row button can leave blank
+        # rows without saving them.
         if "weapons_submitted" in request.POST:
             categories = ("melee", "improvised", "firearm", "thrown")
             new_weapons = []
             for cat in categories:
-                raw = request.POST.get(f"weapons_{cat}", "")
-                for line in raw.splitlines():
-                    name = line.strip()[:80]
-                    if name:
-                        new_weapons.append({"name": name, "category": cat})
+                names = request.POST.getlist(f"weapons_{cat}_name")
+                damages = request.POST.getlist(f"weapons_{cat}_damage")
+                ranges = request.POST.getlist(f"weapons_{cat}_range")
+                capacities = request.POST.getlist(f"weapons_{cat}_capacity")
+                notes_list = request.POST.getlist(f"weapons_{cat}_notes")
+                for i, raw_name in enumerate(names):
+                    name = (raw_name or "").strip()[:80]
+                    if not name:
+                        continue
+                    new_weapons.append({
+                        "name": name,
+                        "category": cat,
+                        "damage": (damages[i] if i < len(damages) else "").strip()[:48],
+                        "range": (ranges[i] if i < len(ranges) else "").strip()[:48],
+                        "capacity": (capacities[i] if i < len(capacities) else "").strip()[:48],
+                        "notes": (notes_list[i] if i < len(notes_list) else "").strip()[:240],
+                    })
             settings_obj.weapons = new_weapons
 
         settings_obj.save()
@@ -132,12 +145,25 @@ def site_settings(request):
     all_agencies = Agency.objects.order_by("name")
     player_agencies = all_agencies.filter(is_player_agency=True)
     npc_agencies = all_agencies.filter(is_player_agency=False)
-    # Group weapons by category for the settings textareas.
+    # Pre-grouped weapons sections for the structured editor.
     weapons_by_cat = {"melee": [], "improvised": [], "firearm": [], "thrown": []}
     for w in settings_obj.get_weapons():
         if isinstance(w, dict) and w.get("category") in weapons_by_cat:
-            weapons_by_cat[w["category"]].append(w.get("name", ""))
-    weapons_text = {cat: "\n".join(names) for cat, names in weapons_by_cat.items()}
+            weapons_by_cat[w["category"]].append(w)
+    weapons_sections = [
+        {"cat": "melee", "label": "MELEE",
+         "hint": "Strength + Brawl / Weaponry · close-combat tools",
+         "rows": weapons_by_cat["melee"]},
+        {"cat": "improvised", "label": "IMPROVISED",
+         "hint": "Strength + Brawl · −1 weapon mod · breaks on 2+ successes",
+         "rows": weapons_by_cat["improvised"]},
+        {"cat": "firearm", "label": "FIREARM",
+         "hint": "Dexterity + Firearms · range bands per weapon",
+         "rows": weapons_by_cat["firearm"]},
+        {"cat": "thrown", "label": "THROWN",
+         "hint": "Dexterity + Athletics · Strength × range",
+         "rows": weapons_by_cat["thrown"]},
+    ]
 
     return render(request, "site_settings.html", {
         "settings_obj": settings_obj,
@@ -146,7 +172,7 @@ def site_settings(request):
         "player_agencies": player_agencies,
         "npc_agencies": npc_agencies,
         "tweaks": settings_obj.get_tweaks(),
-        "weapons_text": weapons_text,
+        "weapons_sections": weapons_sections,
     })
 
 
@@ -337,8 +363,31 @@ def rules_page(request):
 
 @login_required
 def combat_page(request):
-    """RULES → COMBAT — quick reference for WoD 2.0 personal combat."""
-    return render(request, "combat.html", {})
+    """RULES → COMBAT — quick reference for WoD 2.0 personal combat,
+    plus the live weapons catalogue (rendered as a per-category table)."""
+    settings_obj = SiteSettings.load()
+    weapons_by_cat = {"melee": [], "improvised": [], "firearm": [], "thrown": []}
+    for w in settings_obj.get_weapons():
+        if isinstance(w, dict) and w.get("category") in weapons_by_cat:
+            weapons_by_cat[w["category"]].append(w)
+    sections = [
+        {"cat": "melee", "label": "MELEE",
+         "hint": "Strength + Brawl / Weaponry",
+         "rows": weapons_by_cat["melee"]},
+        {"cat": "improvised", "label": "IMPROVISED",
+         "hint": "Strength + Brawl · −1 weapon mod · breaks on hit",
+         "rows": weapons_by_cat["improvised"]},
+        {"cat": "firearm", "label": "FIREARM",
+         "hint": "Dexterity + Firearms · range bands per weapon",
+         "rows": weapons_by_cat["firearm"]},
+        {"cat": "thrown", "label": "THROWN",
+         "hint": "Dexterity + Athletics · Strength × range",
+         "rows": weapons_by_cat["thrown"]},
+    ]
+    return render(request, "combat.html", {
+        "weapons_by_cat": weapons_by_cat,
+        "combat_weapon_sections": sections,
+    })
 
 
 @login_required

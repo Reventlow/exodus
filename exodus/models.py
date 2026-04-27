@@ -231,41 +231,92 @@ class SiteSettings(models.Model):
 
     @staticmethod
     def default_weapons():
-        """Seed catalogue of personal handheld weapons. Edited via the
-        WEAPONS section of /settings/."""
+        """Seed catalogue of personal handheld weapons with WoD 2.0 stats.
+
+        Each entry: ``name``, ``category``, ``damage`` (e.g. "1L", "2B"),
+        ``range`` ("—" for melee; ``S/M/L`` metres for ranged or
+        ``Str ×3/×6/×12`` for thrown), ``capacity`` ("—" for melee/thrown
+        or e.g. "12+1" for firearms), and free-text ``notes``.
+        """
         return [
-            # Melee — close-combat tools
-            {"name": "Knuckle Buster", "category": "melee"},
-            {"name": "Knife", "category": "melee"},
-            {"name": "Baton", "category": "melee"},
-            {"name": "Taser (Contact)", "category": "melee"},
-            # Improvised — anything-goes pickup weapons
-            {"name": "Chair", "category": "improvised"},
-            {"name": "Bottle", "category": "improvised"},
-            {"name": "Phone Book", "category": "improvised"},
-            {"name": "Hammer", "category": "improvised"},
-            # Firearms
-            {"name": "Hand Gun", "category": "firearm"},
-            {"name": "Large Hand Gun", "category": "firearm"},
-            {"name": "Sub Machine Gun", "category": "firearm"},
-            {"name": "Assault Rifle", "category": "firearm"},
-            {"name": "DMR", "category": "firearm"},
-            {"name": "Shotgun", "category": "firearm"},
-            {"name": "Twin-Barrel Shotgun", "category": "firearm"},
-            {"name": "Auto Shotgun", "category": "firearm"},
-            {"name": "Scoped Rifle", "category": "firearm"},
-            {"name": "Taser (Cartridge)", "category": "firearm"},
-            # Thrown
-            {"name": "Throwing Knife", "category": "thrown"},
-            {"name": "Throwing Axe", "category": "thrown"},
+            # ----- Melee --------------------------------------------------
+            {"name": "Knuckle Buster", "category": "melee", "damage": "1B",
+             "range": "—", "capacity": "—", "notes": "Concealed under glove. Subdual-friendly."},
+            {"name": "Knife", "category": "melee", "damage": "1L",
+             "range": "—", "capacity": "—", "notes": "Concealable. Throwable in a pinch."},
+            {"name": "Baton", "category": "melee", "damage": "2B",
+             "range": "—", "capacity": "—", "notes": "Police standard. Telescopic variants extend +1 reach."},
+            {"name": "Taser (Contact)", "category": "melee", "damage": "1B",
+             "range": "—", "capacity": "1 charge",
+             "notes": "On hit: target rolls Stamina + Resolve or loses next action."},
+            # ----- Improvised --------------------------------------------
+            {"name": "Chair", "category": "improvised", "damage": "1B",
+             "range": "—", "capacity": "—", "notes": "−1 weapon mod. Breaks on 2+ successes."},
+            {"name": "Bottle", "category": "improvised", "damage": "0B",
+             "range": "—", "capacity": "—",
+             "notes": "Breaks on hit → broken neck = 1L improvised follow-up."},
+            {"name": "Phone Book", "category": "improvised", "damage": "0B",
+             "range": "—", "capacity": "—", "notes": "Subdual-only. Spreads bashing across track without bruising."},
+            {"name": "Hammer", "category": "improvised", "damage": "2B",
+             "range": "—", "capacity": "—", "notes": "Workshop tool. +1 dmg to construction-grade armour."},
+            # ----- Firearm ------------------------------------------------
+            {"name": "Hand Gun", "category": "firearm", "damage": "2L",
+             "range": "20/40/80 m", "capacity": "12+1",
+             "notes": "Concealable. 9 mm or .40 standard."},
+            {"name": "Large Hand Gun", "category": "firearm", "damage": "3L",
+             "range": "25/50/100 m", "capacity": "8+1",
+             "notes": "Magnum / .44 / .50 AE. Heavy recoil — −1 to follow-up shots."},
+            {"name": "Sub Machine Gun", "category": "firearm", "damage": "2L",
+             "range": "20/40/80 m", "capacity": "30",
+             "notes": "Burst-fire +1 dice; autofire +2 in close range."},
+            {"name": "Assault Rifle", "category": "firearm", "damage": "3L",
+             "range": "100/200/400 m", "capacity": "30",
+             "notes": "Burst-fire +1; autofire +2/+3."},
+            {"name": "DMR", "category": "firearm", "damage": "4L",
+             "range": "200/400/800 m", "capacity": "20",
+             "notes": "Semi-auto designated marksman rifle. Pairs well with optics."},
+            {"name": "Shotgun", "category": "firearm", "damage": "4L close / 2L long",
+             "range": "5/10/40 m", "capacity": "5+1",
+             "notes": "Pump-action. Damage drops with range as shot spreads."},
+            {"name": "Twin-Barrel Shotgun", "category": "firearm", "damage": "5L (both barrels)",
+             "range": "5/10/40 m", "capacity": "2",
+             "notes": "Fire one or both. Both = +1 damage, then full reload."},
+            {"name": "Auto Shotgun", "category": "firearm", "damage": "4L",
+             "range": "5/10/40 m", "capacity": "8",
+             "notes": "Box-fed. Burst-fire +1 dice at close range."},
+            {"name": "Scoped Rifle", "category": "firearm", "damage": "4L",
+             "range": "250/500/1000 m", "capacity": "5+1",
+             "notes": "−2 initiative; +1 aim per turn (max +3) with proper scope."},
+            {"name": "Taser (Cartridge)", "category": "firearm", "damage": "1L + stun",
+             "range": "4/8/15 m", "capacity": "1 cartridge",
+             "notes": "On hit: Stamina + Resolve or stunned for [successes] turns."},
+            # ----- Thrown -------------------------------------------------
+            {"name": "Throwing Knife", "category": "thrown", "damage": "1L",
+             "range": "Str ×3 / ×6 / ×12 m", "capacity": "—",
+             "notes": "Recoverable on retrieval. Concealable."},
+            {"name": "Throwing Axe", "category": "thrown", "damage": "2L",
+             "range": "Str ×3 / ×6 / ×12 m", "capacity": "—",
+             "notes": "Heavy — Str 2 minimum. Devastating at close range."},
         ]
 
     def get_weapons(self):
-        """Return the weapons list. Empty list seeds with the default
-        catalogue so a fresh deploy ships with a useful starter set."""
-        if isinstance(self.weapons, list) and self.weapons:
-            return self.weapons
-        return self.default_weapons()
+        """Return the weapons list, hydrating any legacy entries that
+        only have ``name`` + ``category`` with empty stat strings so the
+        UI handles them uniformly."""
+        weapons = self.weapons if isinstance(self.weapons, list) and self.weapons else self.default_weapons()
+        hydrated = []
+        for w in weapons:
+            if not isinstance(w, dict):
+                continue
+            hydrated.append({
+                "name": w.get("name", ""),
+                "category": w.get("category", ""),
+                "damage": w.get("damage", "") or "",
+                "range": w.get("range", "") or "",
+                "capacity": w.get("capacity", "") or "",
+                "notes": w.get("notes", "") or "",
+            })
+        return hydrated
 
     def save(self, *args, **kwargs):
         """Enforce singleton: always use pk=1. Also normalise tweaks so the

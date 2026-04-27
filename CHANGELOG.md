@@ -1,5 +1,11 @@
 # Changelog
 
+## v0.14.62
+- **Weapons now carry stats.** Each entry in the catalogue gets `damage` (e.g. `1L`, `2B`, `4L close / 2L long`), `range` (`—` for melee, `S/M/L m` for ranged, `Str ×3/×6/×12 m` for thrown), `capacity` (`12+1`, `30`, `1 cartridge`, `—`), and free-text `notes`. Default seed updated with WoD 2.0–style stats for all 20 starter weapons
+- Settings editor at `/settings/ → COMBAT → Weapons` is now a structured **row-based table per category** instead of a flat textarea. Each row has columns NAME / DAMAGE / RANGE / CAPACITY / NOTES + a delete button. Each category card has a `＋ ADD WEAPON` button to append a new row
+- The combat reference at `/rules/combat/` now renders the **live weapons catalogue** as four tables (one per category) at the bottom of the page. Edits saved in `/settings/` reflect on next page load. Empty categories are hidden
+- Migration `exodus/0018_weapons_with_stats` upgrades any legacy name-only entries (from v0.14.61) to the new enriched schema. Custom user-edited weapons with stats already populated are preserved untouched
+
 ## v0.14.61
 - New **WEAPONS** catalogue under `/settings/ → COMBAT → Weapons`. Four textareas, one per category (MELEE / IMPROVISED / FIREARM / THROWN); one weapon name per line. Saved as a flat list of `{name, category}` dicts on `SiteSettings.weapons`
 - Migration `exodus/0017_sitesettings_weapons` adds the field with a default catalogue seeded on first apply: knuckle buster, knife, baton, taser (contact); chair, bottle, phone book, hammer; hand gun, large hand gun, sub machine gun, assault rifle, DMR, shotgun, twin-barrel shotgun, auto shotgun, scoped rifle, taser (cartridge); throwing knife, throwing axe. The two "taser" entries are disambiguated as melee (contact) vs firearm (cartridge)

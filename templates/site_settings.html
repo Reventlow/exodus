@@ -411,50 +411,82 @@
                 <span class="block-badge">CATALOGUE</span>
             </div>
             <span class="text-muted mono-text" style="font-size: 0.7rem; display: block; margin-bottom: 1rem;">
-                Reference list of personal handheld weapons. One name per line; blank lines ignored. Categories drive the WoD 2.0 attack pool: melee → Strength + Brawl/Weaponry, improvised → Strength + Brawl (−1 weapon mod, breaks on hit), firearm → Dexterity + Firearms, thrown → Dexterity + Athletics. See `/rules/combat/` for the full reference.
+                Reference list of personal handheld weapons with WoD 2.0 stats. Categories drive the attack pool: melee → Strength + Brawl/Weaponry, improvised → Strength + Brawl (−1 weapon mod, breaks on hit), firearm → Dexterity + Firearms, thrown → Dexterity + Athletics. The catalogue renders live in the combat reference at <a href="{% url 'combat-page' %}" class="text-accent" style="text-decoration: none;">/rules/combat/</a>.
             </span>
             <form method="post">
                 {% csrf_token %}
                 <input type="hidden" name="weapons_submitted" value="1">
 
-                <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 1rem;">
+                <style>
+                    .weap-table { width: 100%; border-collapse: collapse; font-size: 0.78rem; font-family: var(--font-mono); }
+                    .weap-table th { text-align: left; padding: 0.3rem 0.4rem; color: var(--ink-dim); font-weight: 500; border-bottom: 1px solid var(--c-dim); font-size: 0.65rem; letter-spacing: 0.14em; }
+                    .weap-table td { padding: 0.25rem 0.3rem; vertical-align: top; }
+                    .weap-table input { width: 100%; background: var(--bg-input); color: var(--ink); border: 1px solid var(--c-dim); padding: 0.3rem 0.4rem; font-family: var(--font-mono); font-size: 0.78rem; box-sizing: border-box; border-radius: 0; }
+                    .weap-table input:focus { border-color: var(--c-primary); box-shadow: 0 0 6px var(--c-glow); outline: none; }
+                    .weap-del { background: transparent; border: 1px solid var(--c-dim); color: var(--accent-danger); cursor: pointer; padding: 0.25rem 0.5rem; font-family: var(--font-mono); font-size: 0.7rem; letter-spacing: 0.12em; }
+                    .weap-del:hover { background: var(--c-soft); border-color: var(--accent-danger); }
+                    .weap-add { background: transparent; border: 1px solid var(--c-dim); color: var(--c-primary); cursor: pointer; padding: 0.4rem 0.8rem; font-family: var(--font-mono); font-size: 0.72rem; letter-spacing: 0.16em; margin-top: 0.5rem; }
+                    .weap-add:hover { background: var(--c-soft); border-color: var(--c-primary); text-shadow: 0 0 6px var(--c-glow); }
+                </style>
 
-                    <div class="ss-card" style="display: grid; gap: 0.5rem;">
-                        <div class="ss-label" style="margin-bottom: 0.2rem;">MELEE</div>
-                        <span class="text-muted mono-text" style="font-size: 0.65rem;">Strength + Brawl / Weaponry · close-combat tools</span>
-                        <textarea name="weapons_melee" rows="6" class="ss-input"
-                                  style="font-size: 0.85rem; resize: vertical; font-family: var(--font-mono);"
-                                  placeholder="One weapon name per line.">{{ weapons_text.melee }}</textarea>
+                {% for sec in weapons_sections %}
+                <div class="ss-card" style="margin-bottom: 1rem; padding: 1rem;">
+                    <div style="display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 0.4rem;">
+                        <div class="ss-label" style="margin: 0;">{{ sec.label }}</div>
+                        <span class="text-muted mono-text" style="font-size: 0.65rem;">{{ sec.hint }}</span>
                     </div>
-
-                    <div class="ss-card" style="display: grid; gap: 0.5rem;">
-                        <div class="ss-label" style="margin-bottom: 0.2rem;">IMPROVISED</div>
-                        <span class="text-muted mono-text" style="font-size: 0.65rem;">−1 weapon mod · breaks on 2+ successes</span>
-                        <textarea name="weapons_improvised" rows="6" class="ss-input"
-                                  style="font-size: 0.85rem; resize: vertical; font-family: var(--font-mono);"
-                                  placeholder="One weapon name per line.">{{ weapons_text.improvised }}</textarea>
-                    </div>
-
-                    <div class="ss-card" style="display: grid; gap: 0.5rem;">
-                        <div class="ss-label" style="margin-bottom: 0.2rem;">FIREARM</div>
-                        <span class="text-muted mono-text" style="font-size: 0.65rem;">Dexterity + Firearms · range bands per weapon</span>
-                        <textarea name="weapons_firearm" rows="10" class="ss-input"
-                                  style="font-size: 0.85rem; resize: vertical; font-family: var(--font-mono);"
-                                  placeholder="One weapon name per line.">{{ weapons_text.firearm }}</textarea>
-                    </div>
-
-                    <div class="ss-card" style="display: grid; gap: 0.5rem;">
-                        <div class="ss-label" style="margin-bottom: 0.2rem;">THROWN</div>
-                        <span class="text-muted mono-text" style="font-size: 0.65rem;">Dexterity + Athletics · Strength × range</span>
-                        <textarea name="weapons_thrown" rows="6" class="ss-input"
-                                  style="font-size: 0.85rem; resize: vertical; font-family: var(--font-mono);"
-                                  placeholder="One weapon name per line.">{{ weapons_text.thrown }}</textarea>
-                    </div>
-
+                    <table class="weap-table" data-cat="{{ sec.cat }}">
+                        <thead>
+                            <tr>
+                                <th style="width: 22%;">NAME</th>
+                                <th style="width: 13%;">DAMAGE</th>
+                                <th style="width: 19%;">RANGE</th>
+                                <th style="width: 12%;">CAPACITY</th>
+                                <th>NOTES</th>
+                                <th style="width: 1%;"></th>
+                            </tr>
+                        </thead>
+                        <tbody data-rows>
+                            {% for w in sec.rows %}
+                            <tr>
+                                <td><input type="text" name="weapons_{{ sec.cat }}_name" value="{{ w.name }}" maxlength="80"></td>
+                                <td><input type="text" name="weapons_{{ sec.cat }}_damage" value="{{ w.damage }}" maxlength="48"></td>
+                                <td><input type="text" name="weapons_{{ sec.cat }}_range" value="{{ w.range }}" maxlength="48"></td>
+                                <td><input type="text" name="weapons_{{ sec.cat }}_capacity" value="{{ w.capacity }}" maxlength="48"></td>
+                                <td><input type="text" name="weapons_{{ sec.cat }}_notes" value="{{ w.notes }}" maxlength="240"></td>
+                                <td><button type="button" class="weap-del" onclick="this.closest('tr').remove()">×</button></td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                    <button type="button" class="weap-add" data-add-cat="{{ sec.cat }}">＋ ADD WEAPON</button>
                 </div>
+                {% endfor %}
 
                 <button type="submit" class="btn-primary" style="width: 100%; margin-top: 1rem;">SAVE WEAPONS</button>
             </form>
+
+            <script>
+            (function () {
+                document.querySelectorAll('.weap-add').forEach(function (btn) {
+                    btn.addEventListener('click', function () {
+                        var cat = btn.getAttribute('data-add-cat');
+                        var tbody = btn.parentElement.querySelector('tbody[data-rows]');
+                        var tr = document.createElement('tr');
+                        tr.innerHTML =
+                            '<td><input type="text" name="weapons_' + cat + '_name" maxlength="80" placeholder="NAME"></td>' +
+                            '<td><input type="text" name="weapons_' + cat + '_damage" maxlength="48" placeholder="2L"></td>' +
+                            '<td><input type="text" name="weapons_' + cat + '_range" maxlength="48" placeholder="—"></td>' +
+                            '<td><input type="text" name="weapons_' + cat + '_capacity" maxlength="48" placeholder="—"></td>' +
+                            '<td><input type="text" name="weapons_' + cat + '_notes" maxlength="240" placeholder=""></td>' +
+                            '<td><button type="button" class="weap-del" onclick="this.closest(\'tr\').remove()">×</button></td>';
+                        tbody.appendChild(tr);
+                        var firstInput = tr.querySelector('input');
+                        if (firstInput) firstInput.focus();
+                    });
+                });
+            })();
+            </script>
         </div>
 
         <!-- Clearance Gate Tweaks -->

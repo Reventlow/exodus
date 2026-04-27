@@ -87,8 +87,46 @@
         Talk briefly · drop prone · stand from prone (one turn, no penalty) · drop a held item · take cover from existing terrain · move up to <strong>Speed</strong> meters · activate a verbal merit · pull a trigger on a pre-aimed firearm.
     </div>
 
+    {# === WEAPONS CATALOGUE (live from /settings/) ===================== #}
+    {% if weapons_by_cat.melee or weapons_by_cat.improvised or weapons_by_cat.firearm or weapons_by_cat.thrown %}
+    <header class="block-head"><span class="block-bullet">■</span><h3>WEAPONS CATALOGUE</h3><span class="block-line"></span></header>
+    <p class="text-secondary" style="font-size: 0.78rem; line-height: 1.5; margin: 0.6rem 0 1rem 0;">
+        Live from <a href="{% url 'site-settings' %}#weapons" class="text-accent" style="text-decoration: none;">/settings/ → COMBAT → Weapons</a>. Add, remove, or edit entries there; this page reflects them on next load.
+    </p>
+
+    {% for entry in combat_weapon_sections %}
+        {% if entry.rows %}
+        <h4 class="mono-text text-accent" style="font-size: 0.85rem; letter-spacing: 0.2em; margin: 1.2rem 0 0.4rem 0;">
+            {{ entry.label }} <span class="text-muted" style="font-weight: 400;">// {{ entry.hint }}</span>
+        </h4>
+        <table class="mono-text" style="width: 100%; border-collapse: collapse; font-size: 0.78rem; margin-bottom: 0.8rem;">
+            <thead style="color: var(--ink-dim);">
+                <tr style="border-bottom: 1px solid var(--c-dim);">
+                    <th style="text-align: left; padding: 0.35rem 0.5rem; width: 22%;">NAME</th>
+                    <th style="text-align: left; padding: 0.35rem 0.5rem; width: 13%;">DAMAGE</th>
+                    <th style="text-align: left; padding: 0.35rem 0.5rem; width: 18%;">RANGE</th>
+                    <th style="text-align: left; padding: 0.35rem 0.5rem; width: 12%;">CAPACITY</th>
+                    <th style="text-align: left; padding: 0.35rem 0.5rem;">NOTES</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for w in entry.rows %}
+                <tr style="border-bottom: 1px dotted var(--c-dim);">
+                    <td style="padding: 0.35rem 0.5rem; color: var(--ink);">{{ w.name }}</td>
+                    <td style="padding: 0.35rem 0.5rem; color: var(--c-primary);">{{ w.damage|default:"—" }}</td>
+                    <td style="padding: 0.35rem 0.5rem;">{{ w.range|default:"—" }}</td>
+                    <td style="padding: 0.35rem 0.5rem;">{{ w.capacity|default:"—" }}</td>
+                    <td style="padding: 0.35rem 0.5rem; color: var(--ink-dim);">{{ w.notes }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+        {% endif %}
+    {% endfor %}
+    {% endif %}
+
     {# === GLOSSARY / FOOTER =========================================== #}
-    <p class="text-muted" style="margin-top: 1rem; font-size: 0.7rem; letter-spacing: 0.16em;
+    <p class="text-muted" style="margin-top: 1.5rem; font-size: 0.7rem; letter-spacing: 0.16em;
                                   border-top: 1px dashed var(--c-dim); padding-top: 1rem;">
         OPERATIVE QUICK-REF · ALL FIGURES SUBJECT TO GM ADJUDICATION · CONSULT THE FULL CHARTER FOR EDGE CASES.
         <br>
