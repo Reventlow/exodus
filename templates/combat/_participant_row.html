@@ -1,13 +1,16 @@
 {% comment %}
 Single participant row inside the encounter PARTICIPANTS faction columns.
 
-Inputs (v0.15.5 + v0.15.7):
+Inputs (v0.15.5 + v0.15.7 + v0.15.8):
     p                — Participant instance, annotated by encounter_page with:
                          p.wound_penalty           (int, <= 0)
                          p.attack_modifier_total   (wound + condition atk_mod)
                          p.defense_modifier_total  (condition def_mod, no stances)
                          p.condition_pills         (list of (tag, label, color))
                          p.condition_options       (list of (value, label) for select)
+                         p.can_control             (v0.15.8 — bool: True if
+                                                    superuser OR the user
+                                                    owns this row's character)
     encounter        — parent Encounter (used to build action URLs)
     weapon_choices   — list of weapon dicts from SiteSettings.get_weapons()
     armor_choices    — list of armor dicts from SiteSettings.get_armor()
@@ -19,19 +22,28 @@ Inputs (v0.15.5 + v0.15.7):
     attack_eligible  — bool: encounter.status == "active" and there is an
                        active_participant pointer (hides the ATTACK form
                        on every row but the actor's)
-    read_only        — v0.15.7: True for player spectator view. When True
-                       the row renders all read-only state (kind, name,
-                       conditions, cover, MOD/wound chips, HP/WP counters)
-                       but suppresses every action surface — × REMOVE
-                       button, inline condition × clear buttons, and the
-                       entire collapsible <details> panel of mini-forms.
+    is_gm            — v0.15.8: True when request.user.is_superuser. Drives
+                       the GM-only × REMOVE button and the [YOU] tag's
+                       inverse (GM doesn't see [YOU] — they control
+                       everyone, the highlight would be noise).
 
-Renders: kind badge, name, condition pills, MOD chip, wound
-chip, current weapon / armor / cover pill, HP triplet (B/L/A of Max), WP
-counter, × REMOVE button (GM only), and a collapsible <details> panel
-with seven mini-forms (GM only): EQUIP WEAPON, EQUIP ARMOR, SET COVER,
-ATTACK (active only), STANCE (full defense / dodge), ADD CONDITION,
-WILLPOWER.
+Gating model (v0.15.8):
+  * × REMOVE button                      → is_gm
+  * Inline × clear-condition buttons     → p.can_control (server-side
+    enforces the per-tag allow-list for non-GM clears)
+  * Entire <details class="part-actions"> panel of mini-forms → p.can_control
+  * Per-row [YOU] accent tag             → p.can_control AND not is_gm
+
+NPCs and mooks have no character FK, so for any non-superuser
+``p.can_control`` is False — players never see action chrome on a
+non-character row even if they're in the encounter.
+
+Renders: optional [YOU] tag, kind badge, name, condition pills, MOD chip,
+wound chip, current weapon / armor / cover pill, HP triplet (B/L/A of
+Max), WP counter, × REMOVE button (GM only), and a collapsible <details>
+panel with seven mini-forms (GM or character-owner): EQUIP WEAPON, EQUIP
+ARMOR, SET COVER, ATTACK (active turn only), STANCE (full defense /
+dodge), ADD CONDITION, WILLPOWER.
 {% endcomment %}
 <div class="part-row">
     <div class="part-row-head">
@@ -42,6 +54,15 @@ WILLPOWER.
                 <span class="part-kind-badge npc">NPC</span>
             {% else %}
                 <span class="part-kind-badge mook">MOOK</span>
+            {% endif %}
+            {% comment %}
+            v0.15.8 — [YOU] accent tag. Visible only to a non-GM player
+            on a row they control. Helps players locate their own
+            character in dense multi-participant encounters. GMs
+            control everyone, so the tag would be noise for them.
+            {% endcomment %}
+            {% if p.can_control and not is_gm %}
+                <span class="part-you-tag" title="Your character">[YOU]</span>
             {% endif %}
             <span class="part-name">{{ p.name }}</span>
 
@@ -55,10 +76,16 @@ WILLPOWER.
                 <span class="part-cond-pill {{ color }}">
                     {{ label }}
                     {% comment %}
-                    v0.15.7 — inline × clear is GM-only. Spectators
-                    see the pill but no clear button.
+                    v0.15.8 — inline × clear visible to anyone who can
+                    control this row (GM, or the player who owns the
+                    character). The server-side ``clear_condition``
+                    view enforces the per-tag allow-list for non-GM
+                    posts (only ``prone`` / ``defense_full`` /
+                    ``dodge_pending`` / ``dodging``), so a player
+                    clicking × on a GM-imposed condition gets a
+                    flash-message redirect rather than a silent clear.
                     {% endcomment %}
-                    {% if not read_only %}
+                    {% if p.can_control %}
                     <form method="post"
                           action="{% url 'combat:clear_condition' encounter.id p.id %}"
                           style="display:inline; margin-left: 0.25rem;">
@@ -103,11 +130,12 @@ WILLPOWER.
             </span>
         </div>
         {% comment %}
-        v0.15.7 — × REMOVE is GM-only. The header still keeps its
-        flex layout when the button is suppressed (the .part-meta
-        slot just consumes the full width).
+        v0.15.8 — × REMOVE is GM-only. Players never remove
+        participants (would let a player evict an NPC mid-fight).
+        The header still keeps its flex layout when the button is
+        suppressed (the .part-meta slot just consumes the full width).
         {% endcomment %}
-        {% if not read_only %}
+        {% if is_gm %}
         <form method="post" action="{% url 'combat:participant_remove' encounter.id p.id %}"
               style="display:inline;"
               onsubmit="return confirm('Remove {{ p.name|escapejs }} from this encounter?');">
@@ -120,10 +148,11 @@ WILLPOWER.
     {% comment %}
     Collapsible action panel. Holds the sub-forms. Stays closed by
     default so dense participant lists don't drown in form fields.
-    v0.15.7 — entire panel is GM-only; spectators don't see the
-    + ACTIONS twirldown at all.
+    v0.15.8 — visible to anyone who can control this row (GM or the
+    player owner of the character). Players see the panel only on
+    their own row(s); spectator rows for them stay action-free.
     {% endcomment %}
-    {% if not read_only %}
+    {% if p.can_control %}
     <details class="part-actions">
         <summary><span>actions</span></summary>
         <div class="part-actions-grid">

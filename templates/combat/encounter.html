@@ -139,6 +139,20 @@ The END button also prompts for confirmation.
     .part-kind-badge.pc { color: var(--c-primary); border-color: var(--c-primary); }
     .part-kind-badge.npc { color: #ffb454; border-color: #ffb454; }
     .part-kind-badge.mook { color: #6c8aa0; border-color: #6c8aa0; }
+    /* v0.15.8 — [YOU] accent tag flags the row a player is driving. */
+    .part-you-tag {
+        display: inline-block;
+        font-family: var(--font-mono);
+        font-size: 0.6rem;
+        letter-spacing: 0.18em;
+        padding: 0 5px;
+        margin-right: 6px;
+        border: 1px solid var(--c-primary);
+        color: var(--c-primary);
+        text-shadow: 0 0 6px var(--c-glow);
+        background: rgba(0, 0, 0, 0.35);
+        vertical-align: middle;
+    }
     .part-stats {
         display: block;
         font-size: 0.65rem;
@@ -594,14 +608,25 @@ The END button also prompts for confirmation.
             <span id="combat-live-indicator" class="muted" style="font-size: 0.75rem; margin-left: 1rem;"></span>
         </div>
         {% comment %}
-        v0.15.7 — read-only spectator banner. Players who are
-        participants land here without any GM action surfaces; the
-        kicker line below makes that explicit.
+        v0.15.8 — role-aware kicker banner. The GM gets no banner
+        (they always have full control). A player who has at least
+        one controllable participant on this encounter sees
+        "PLAYER VIEW · CONTROL YOUR CHARACTER" so the action surfaces
+        on their row don't surprise them. The defensive
+        "READ-ONLY · LIVE SPECTATOR VIEW" branch shouldn't trigger in
+        practice (the page-level gate rejects players with no
+        characters here) but lands cleanly if it does.
         {% endcomment %}
-        {% if read_only %}
-            <div class="kicker muted" style="margin-bottom: 0.4rem; color: #5fd0d4;">
-                READ-ONLY · LIVE SPECTATOR VIEW
-            </div>
+        {% if not is_gm %}
+            {% if has_any_control %}
+                <div class="kicker muted" style="margin-bottom: 0.4rem; color: var(--c-primary);">
+                    PLAYER VIEW · CONTROL YOUR CHARACTER
+                </div>
+            {% else %}
+                <div class="kicker muted" style="margin-bottom: 0.4rem; color: #5fd0d4;">
+                    READ-ONLY · LIVE SPECTATOR VIEW
+                </div>
+            {% endif %}
         {% endif %}
         <h1 class="title" style="margin: 0 0 0.4rem 0;">{{ encounter.title|upper }}</h1>
         <div class="sub" style="margin-bottom: 0.4rem;">
@@ -634,7 +659,8 @@ The END button also prompts for confirmation.
 
         <div class="enc-actions">
             <a href="{% url 'combat:list' %}" class="enc-action-btn">&larr; BACK</a>
-            {% if not read_only %}
+            {# v0.15.8 — EDIT / DELETE remain GM-only; players never mutate the encounter shell. #}
+            {% if is_gm %}
                 <button type="button" class="enc-action-btn"
                         onclick="document.getElementById('enc-edit-form').classList.toggle('open');">
                     EDIT
@@ -648,7 +674,7 @@ The END button also prompts for confirmation.
             {% endif %}
         </div>
 
-        {% if not read_only %}
+        {% if is_gm %}
         <div id="enc-edit-form" class="enc-edit-form">
             <form method="post" action="{% url 'combat:update' encounter.id %}">
                 {% csrf_token %}
@@ -704,15 +730,16 @@ The END button also prompts for confirmation.
         CONCLUDED: no buttons; status renders as a static label.
         {% endcomment %}
         {% comment %}
-        v0.15.7 — every lifecycle button is GM-only. The read-only
-        branch still surfaces the "ACTING: NAME" note so spectators
-        know who's up; status-only labels (CONCLUDED / waiting for
-        rolls) also survive. The button forms themselves are gated
-        behind ``not read_only``.
+        v0.15.8 — every lifecycle button stays GM-only. The player
+        branch still surfaces the "ACTING: NAME" note so the player
+        knows who's up; status-only labels (CONCLUDED / waiting for
+        rolls) also survive. ROLL ALL / CLEAR INITIATIVE / START /
+        NEXT TURN / END are GM-only because they advance the shared
+        timeline; players drive only their own row's actions.
         {% endcomment %}
         <div class="init-actions">
             {% if encounter.status == "setup" %}
-                {% if not read_only %}
+                {% if is_gm %}
                     {% if unrolled_count > 0 %}
                         <form method="post" action="{% url 'combat:roll_initiative_all' encounter.id %}" style="display:inline;">
                             {% csrf_token %}
@@ -746,7 +773,7 @@ The END button also prompts for confirmation.
                 {% endif %}
 
             {% elif encounter.status == "active" %}
-                {% if not read_only %}
+                {% if is_gm %}
                     <form method="post" action="{% url 'combat:next_turn' encounter.id %}" style="display:inline;">
                         {% csrf_token %}
                         <button type="submit" class="init-action-btn primary">NEXT TURN &rarr;</button>
@@ -794,7 +821,8 @@ The END button also prompts for confirmation.
                         <span class="init-score unrolled">&mdash;</span>
                     {% endif %}
 
-                    {% if encounter.status == "setup" and not read_only %}
+                    {# v0.15.8 — per-row ROLL is visible to whoever can drive the row (GM or character owner). #}
+                    {% if encounter.status == "setup" and p.can_control %}
                         <form method="post" action="{% url 'combat:roll_initiative' encounter.id p.id %}" style="display:inline;">
                             {% csrf_token %}
                             <button type="submit" class="init-roll-btn">ROLL</button>
@@ -841,7 +869,7 @@ The END button also prompts for confirmation.
             <div class="enc-faction-col">
                 <h4>PLAYERS / ALLIES</h4>
                 {% for p in participants_by_faction.player_or_ally %}
-                    {% include "combat/_participant_row.html" with p=p encounter=encounter weapon_choices=weapon_choices armor_choices=armor_choices cover_by_tier=cover_by_tier participants=participants attack_eligible=attack_eligible read_only=read_only %}
+                    {% include "combat/_participant_row.html" with p=p encounter=encounter weapon_choices=weapon_choices armor_choices=armor_choices cover_by_tier=cover_by_tier participants=participants attack_eligible=attack_eligible is_gm=is_gm %}
                 {% empty %}
                     <em class="muted" style="display: block; padding: 0.4rem 0.5rem;">none</em>
                 {% endfor %}
@@ -851,7 +879,7 @@ The END button also prompts for confirmation.
             <div class="enc-faction-col">
                 <h4>HOSTILES</h4>
                 {% for p in participants_by_faction.hostile %}
-                    {% include "combat/_participant_row.html" with p=p encounter=encounter weapon_choices=weapon_choices armor_choices=armor_choices cover_by_tier=cover_by_tier participants=participants attack_eligible=attack_eligible read_only=read_only %}
+                    {% include "combat/_participant_row.html" with p=p encounter=encounter weapon_choices=weapon_choices armor_choices=armor_choices cover_by_tier=cover_by_tier participants=participants attack_eligible=attack_eligible is_gm=is_gm %}
                 {% empty %}
                     <em class="muted" style="display: block; padding: 0.4rem 0.5rem;">none</em>
                 {% endfor %}
@@ -861,7 +889,7 @@ The END button also prompts for confirmation.
             <div class="enc-faction-col">
                 <h4>NEUTRAL</h4>
                 {% for p in participants_by_faction.neutral %}
-                    {% include "combat/_participant_row.html" with p=p encounter=encounter weapon_choices=weapon_choices armor_choices=armor_choices cover_by_tier=cover_by_tier participants=participants attack_eligible=attack_eligible read_only=read_only %}
+                    {% include "combat/_participant_row.html" with p=p encounter=encounter weapon_choices=weapon_choices armor_choices=armor_choices cover_by_tier=cover_by_tier participants=participants attack_eligible=attack_eligible is_gm=is_gm %}
                 {% empty %}
                     <em class="muted" style="display: block; padding: 0.4rem 0.5rem;">none</em>
                 {% endfor %}
@@ -871,12 +899,12 @@ The END button also prompts for confirmation.
 
     {# ----- (e) ADD PARTICIPANT ----- #}
     {% comment %}
-    v0.15.7 — entire ADD PARTICIPANT block is GM-only. Read-only
-    spectators see no spawn surface; the bracketed shell collapses
-    out of the page entirely so the layout doesn't carry empty
-    chrome.
+    v0.15.8 — entire ADD PARTICIPANT block stays GM-only. Players
+    never spawn participants (spawning a hostile mid-fight is a GM
+    pacing call). The bracketed shell collapses out of the page
+    entirely for non-GMs so the layout doesn't carry empty chrome.
     {% endcomment %}
-    {% if not read_only %}
+    {% if is_gm %}
     <div class="brackets enc-block">
         <span class="bk tl"></span><span class="bk tr"></span>
         <span class="bk bl"></span><span class="bk br"></span>

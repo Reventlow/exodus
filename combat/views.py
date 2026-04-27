@@ -672,6 +672,62 @@ def _gm_only(view):
     return wrapped
 
 
+def _can_control_participant(user, participant):
+    """A user can control a Participant iff:
+       * they are a superuser (GM), OR
+       * the participant.character is owned by them.
+
+    NPCs and mooks are always GM-only — players cannot drive them.
+    """
+    if user.is_superuser:
+        return True
+    if participant.character_id is None:
+        return False
+    return participant.character.owner_id == user.id
+
+
+def _gm_or_owner(participant_arg="participant_id"):
+    """Decorator factory: superuser passes; otherwise the user must
+    own the Character on the Participant identified by URL kwarg
+    ``participant_arg``. 403 otherwise.
+
+    Use this on every action view that mutates a single participant
+    where players are allowed to drive their own character.
+
+    Note: this enforces the *ownership* gate (the hard 403). View
+    bodies remain responsible for action-specific soft checks
+    (active-turn, condition allow-lists, willpower direction) — those
+    surface as flash-message redirects rather than 403s, so a player
+    who fat-fingers an illegal action gets a meaningful explanation
+    rather than the bare clearance-gate response.
+    """
+
+    def decorator(view):
+        def wrapped(request, *args, **kwargs):
+            if not request.user.is_authenticated:
+                return HttpResponseForbidden("ACCESS DENIED.")
+            if request.user.is_superuser:
+                return view(request, *args, **kwargs)
+            participant_id = kwargs.get(participant_arg)
+            if participant_id is None:
+                return HttpResponseForbidden("ACCESS DENIED.")
+            try:
+                p = Participant.objects.select_related("character").get(
+                    pk=participant_id
+                )
+            except Participant.DoesNotExist:
+                return HttpResponseForbidden("ACCESS DENIED.")
+            if not _can_control_participant(request.user, p):
+                return HttpResponseForbidden("ACCESS DENIED.")
+            return view(request, *args, **kwargs)
+
+        wrapped.__name__ = view.__name__
+        wrapped.__doc__ = view.__doc__
+        return wrapped
+
+    return decorator
+
+
 # ---------------------------------------------------------------------------
 # Page views
 # ---------------------------------------------------------------------------
@@ -723,7 +779,12 @@ def encounter_list_page(request):
         {
             "encounters": enriched,
             "story_ideas": story_ideas,
-            "read_only": not request.user.is_superuser,
+            # v0.15.8 — list page now distinguishes "GM ONLY" vs the
+            # player view via the same ``is_gm`` flag the encounter
+            # detail uses, for consistency. The sub-strip text shifts
+            # to acknowledge that v0.15.8 players can take turns,
+            # not just spectate.
+            "is_gm": request.user.is_superuser,
         },
     )
 
@@ -740,34 +801,41 @@ def encounter_page(request, pk):
     uses the same boundary and being consistent across both surfaces
     is simpler than performing 403/404 oblivious lookups).
 
+    v0.15.8 — the binary ``read_only`` flag is replaced with a more
+    nuanced model: every participant is annotated with
+    ``p.can_control`` (the user owns this row's character, OR is a
+    superuser). Templates gate per-row controls on that flag and
+    page-level controls on ``is_gm``. Players reaching the page
+    therefore see their *own* character's full action panel
+    (equip / cover / attack / dodge / full-defense / willpower /
+    self-conditions) while every other row stays spectator-only.
+
     Spawn sources are passed in directly as querysets / lists; the
     template iterates them inside the "+ ADD PARTICIPANT" panel
-    (which itself is gated on ``not read_only``).
-
-    The template uses the ``read_only`` flag to suppress every GM
-    action (add / remove participant, equip, cover, attack, stance,
-    condition, willpower, lifecycle buttons, edit / delete header
-    buttons). Read-only viewers see participants, HP / WP / cover /
-    conditions, the initiative tracker, and the timeline — the same
-    state the GM sees, just without the action surface.
+    (which itself is gated on ``is_gm``).
     """
     encounter = get_object_or_404(Encounter, pk=pk)
 
     # Authorisation gate. Superusers always pass. Player participants
-    # land on the read-only branch; everybody else is rejected.
-    if request.user.is_superuser:
-        read_only = False
-    else:
+    # are admitted to drive their own row(s); everybody else is
+    # rejected.
+    is_gm = request.user.is_superuser
+    if not is_gm:
         is_player_participant = encounter.participants.filter(
             character__owner=request.user
         ).exists()
         if not is_player_participant:
             return HttpResponseForbidden("ACCESS DENIED.")
-        read_only = True
 
     # Participants split by faction so the three columns can each
     # iterate their own slice without re-filtering in the template.
-    participants = list(encounter.participants.all().order_by("position_order", "id"))
+    # ``select_related("character")`` so the per-row ``can_control``
+    # check below doesn't fan out to N+1 owner lookups.
+    participants = list(
+        encounter.participants.select_related("character")
+        .all()
+        .order_by("position_order", "id")
+    )
 
     # v0.15.5 — annotate each participant with derived chips for the
     # row template. Done in Python (rather than a template tag) so
@@ -780,6 +848,12 @@ def encounter_page(request, pk):
         p.wound_penalty = wp
         p.attack_modifier_total = wp + cond_atk
         p.defense_modifier_total = cond_def
+
+        # v0.15.8 — controllability flag. Superusers control every
+        # row; players control only rows whose character they own.
+        # NPCs and mooks have no character FK, so players can never
+        # control them — only the GM.
+        p.can_control = _can_control_participant(request.user, p)
 
         # Pills for the header — color-coded (red for incapacitated,
         # cyan for stances, amber for ordinary status conditions).
@@ -823,10 +897,15 @@ def encounter_page(request, pk):
     # deterministic tiebreak, nulls last so unrolled participants sink
     # to the bottom of the tracker.
     ordered_participants = list(
-        encounter.participants.order_by(
+        encounter.participants.select_related("character").order_by(
             F("initiative_score").desc(nulls_last=True), "id"
         )
     )
+    # v0.15.8 — propagate the per-row controllability flag to the
+    # initiative tracker too, so the per-row ROLL button can gate on
+    # it without reaching back into the participants list.
+    for p in ordered_participants:
+        p.can_control = _can_control_participant(request.user, p)
 
     # Active participant pointer (denormalised on the encounter; may be
     # None during setup or after a clear).
@@ -886,6 +965,12 @@ def encounter_page(request, pk):
         "-pinned", "-updated_at"
     )
 
+    # v0.15.8 — does the current user have at least one controllable
+    # participant in this encounter? Drives the role-aware kicker
+    # banner (PLAYER VIEW vs READ-ONLY SPECTATOR). For the GM this is
+    # always True; the kicker is suppressed for the GM regardless.
+    has_any_control = any(p.can_control for p in ordered_participants)
+
     return render(
         request,
         "combat/encounter.html",
@@ -907,7 +992,14 @@ def encounter_page(request, pk):
             "cover_by_tier": cover_by_tier,
             "attack_eligible": attack_eligible,
             "story_ideas": story_ideas,
-            "read_only": read_only,
+            # v0.15.8 — replace the binary ``read_only`` flag with a
+            # role-aware pair: ``is_gm`` gates page-level GM controls
+            # (encounter CRUD, lifecycle, ADD PARTICIPANT). Per-row
+            # action gating is handled by ``p.can_control`` on each
+            # participant. ``has_any_control`` drives the
+            # PLAYER-VIEW vs SPECTATOR kicker.
+            "is_gm": is_gm,
+            "has_any_control": has_any_control,
         },
     )
 
@@ -1176,7 +1268,7 @@ def participant_remove(request, pk, participant_id):
 
 
 @login_required
-@_gm_only
+@_gm_or_owner()
 @csrf_protect
 def roll_initiative(request, pk, participant_id):
     """POST — roll initiative for a single participant.
@@ -1184,6 +1276,10 @@ def roll_initiative(request, pk, participant_id):
     Rejected as a no-op redirect when the encounter is already
     concluded (rolls into a closed encounter make no game sense and
     would corrupt the timeline).
+
+    v0.15.8 — players can roll initiative for their own character.
+    The decorator enforces ownership; NPCs and mooks remain GM-only
+    by virtue of having no ``character`` FK.
     """
     if request.method != "POST":
         return HttpResponseNotAllowed(["POST"])
@@ -1554,7 +1650,7 @@ def end_encounter(request, pk):
 
 
 @login_required
-@_gm_only
+@_gm_or_owner()
 @csrf_protect
 def equip_weapon(request, pk, participant_id):
     """POST — equip / unequip a weapon on a participant.
@@ -1564,6 +1660,8 @@ def equip_weapon(request, pk, participant_id):
     found clears the slot. The matched catalogue entry is *snapshotted*
     into ``participant.weapon_data`` so a later catalogue edit doesn't
     retroactively rewrite the in-flight encounter.
+
+    v0.15.8 — players may equip on their own character row.
     """
     if request.method != "POST":
         return HttpResponseNotAllowed(["POST"])
@@ -1624,7 +1722,7 @@ def equip_weapon(request, pk, participant_id):
 
 
 @login_required
-@_gm_only
+@_gm_or_owner()
 @csrf_protect
 def equip_armor(request, pk, participant_id):
     """POST — equip / unequip armor on a participant.
@@ -1632,6 +1730,8 @@ def equip_armor(request, pk, participant_id):
     Mirror of ``equip_weapon`` against ``SiteSettings.get_armor()``.
     Snapshot semantics are the same — catalogue edits do not mutate
     in-flight encounters.
+
+    v0.15.8 — players may equip on their own character row.
     """
     if request.method != "POST":
         return HttpResponseNotAllowed(["POST"])
@@ -1687,7 +1787,7 @@ def equip_armor(request, pk, participant_id):
 
 
 @login_required
-@_gm_only
+@_gm_or_owner()
 @csrf_protect
 def set_cover(request, pk, participant_id):
     """POST — update a participant's cover state.
@@ -1697,6 +1797,8 @@ def set_cover(request, pk, participant_id):
     catalogue lookup against ``SiteSettings.get_cover()`` — when it
     matches, durability + health from the entry seed the cover's
     breach track (see v0.14.65 cover-destruction rules).
+
+    v0.15.8 — players may set cover on their own character row.
     """
     if request.method != "POST":
         return HttpResponseNotAllowed(["POST"])
@@ -1786,7 +1888,7 @@ def set_cover(request, pk, participant_id):
 
 
 @login_required
-@_gm_only
+@_gm_or_owner("attacker_id")
 @csrf_protect
 def attack(request, pk, attacker_id):
     """POST — resolve a single attack from active participant → target.
@@ -1801,6 +1903,13 @@ def attack(request, pk, attacker_id):
     * Self-targeting is rejected (zero useful gameplay, easy to
       misclick).
     * Faction is **not** checked — PvP is intentional.
+
+    v0.15.8 — players may attack as their own character when it's
+    their turn. The decorator gates ownership of the *attacker*; the
+    active-turn check below is what lets PvP through (any character
+    can target any other participant once their initiative slot is
+    up). The target side is unconstrained beyond "not self" so a
+    player firing on another player goes through cleanly.
 
     v0.15.5 layers wound penalties, condition modifiers, willpower
     spend, full damage track upgrade, and auto-incapacitation onto the
@@ -2035,7 +2144,7 @@ def attack(request, pk, attacker_id):
 
 
 @login_required
-@_gm_only
+@_gm_or_owner()
 @csrf_protect
 def set_condition(request, pk, participant_id):
     """POST — append a non-stance condition tag to a participant.
@@ -2046,6 +2155,13 @@ def set_condition(request, pk, participant_id):
     (``full_defense`` / ``dodge``) which require a roll or auto-math.
     Idempotent: re-submitting an already-set tag is a silent no-op
     (no second log row).
+
+    v0.15.8 — players can self-apply a narrow allow-list of
+    conditions on their own character: ``prone`` only. The hard
+    incap conditions (``stunned`` / ``blinded`` / ``grappled`` /
+    ``incapacitated``) remain GM-imposed; a player POSTing one of
+    those gets a flash-message redirect rather than a hard 403 so
+    the UI can surface the rejection cleanly.
     """
     if request.method != "POST":
         return HttpResponseNotAllowed(["POST"])
@@ -2058,6 +2174,15 @@ def set_condition(request, pk, participant_id):
     tag = (request.POST.get("condition", "") or "").strip().lower()
     if tag not in CONDITION_DEFS or tag in _STANCE_TAGS:
         messages.error(request, "Unknown or stance-only condition.")
+        return redirect("combat:detail", pk=encounter.pk)
+
+    # v0.15.8 — player self-apply allow-list. Superusers (GM) bypass.
+    PLAYER_SELF_APPLY = {"prone"}
+    if not request.user.is_superuser and tag not in PLAYER_SELF_APPLY:
+        messages.error(
+            request,
+            f"Players cannot self-apply '{tag}'. Ask the GM.",
+        )
         return redirect("combat:detail", pk=encounter.pk)
 
     conds = list(participant.conditions or [])
@@ -2081,7 +2206,7 @@ def set_condition(request, pk, participant_id):
 
 
 @login_required
-@_gm_only
+@_gm_or_owner()
 @csrf_protect
 def clear_condition(request, pk, participant_id):
     """POST — strip a condition tag (and any ``tag:N`` variants).
@@ -2090,6 +2215,13 @@ def clear_condition(request, pk, participant_id):
     ``prone``) or a prefix family (``dodging`` clears
     ``dodging:N`` for any N). Defensive against unknown tags — they
     just no-op rather than 4xx.
+
+    v0.15.8 — players can self-clear a narrow set of tags on their
+    own character: ``prone`` (player-applied stance), ``defense_full``
+    (their own full-defense), ``dodge_pending`` (their own out-of-turn
+    dodge cost), and the ``dodging`` family (their own dodge result).
+    GM-imposed conditions (``stunned`` / ``blinded`` / ``grappled``
+    / ``incapacitated``) can only be cleared by the GM.
     """
     if request.method != "POST":
         return HttpResponseNotAllowed(["POST"])
@@ -2101,6 +2233,15 @@ def clear_condition(request, pk, participant_id):
 
     tag = (request.POST.get("condition", "") or "").strip().lower()
     if not tag:
+        return redirect("combat:detail", pk=encounter.pk)
+
+    # v0.15.8 — player self-clear allow-list. Superusers (GM) bypass.
+    PLAYER_SELF_CLEAR = {"prone", "defense_full", "dodge_pending", "dodging"}
+    if not request.user.is_superuser and tag not in PLAYER_SELF_CLEAR:
+        messages.error(
+            request,
+            f"Players cannot self-clear '{tag}'. Ask the GM.",
+        )
         return redirect("combat:detail", pk=encounter.pk)
 
     conds = list(participant.conditions or [])
@@ -2128,7 +2269,7 @@ def clear_condition(request, pk, participant_id):
 
 
 @login_required
-@_gm_only
+@_gm_or_owner()
 @csrf_protect
 def adjust_willpower(request, pk, participant_id):
     """POST — manually set ``willpower_current`` (clamped 0..max).
@@ -2136,6 +2277,10 @@ def adjust_willpower(request, pk, participant_id):
     Lets the GM edit willpower outside of the attack flow (rest,
     derangements, GM fiat, etc.). The submitted value is clamped to
     ``[0, willpower_max]`` defensively.
+
+    v0.15.8 — players can lower their own willpower (spend it for
+    out-of-band purposes) but cannot raise it. Willpower gain is the
+    GM's call.
     """
     if request.method != "POST":
         return HttpResponseNotAllowed(["POST"])
@@ -2150,6 +2295,16 @@ def adjust_willpower(request, pk, participant_id):
 
     old_value = participant.willpower_current
     if new_value == old_value:
+        return redirect("combat:detail", pk=encounter.pk)
+
+    # v0.15.8 — players can only set willpower DOWN. Restoration is
+    # GM-only. Soft reject with a flash message rather than a hard 403
+    # so the UI surfaces the rule explicitly.
+    if not request.user.is_superuser and new_value > old_value:
+        messages.error(
+            request,
+            "Players can only spend willpower, not restore it. Ask the GM.",
+        )
         return redirect("combat:detail", pk=encounter.pk)
 
     participant.willpower_current = new_value
@@ -2167,7 +2322,7 @@ def adjust_willpower(request, pk, participant_id):
 
 
 @login_required
-@_gm_only
+@_gm_or_owner()
 @csrf_protect
 def full_defense(request, pk, participant_id):
     """POST — active participant burns their turn for FULL DEFENSE.
@@ -2177,6 +2332,10 @@ def full_defense(request, pk, participant_id):
     participant ``acted_this_round=True`` (eats the turn) but does
     NOT advance the active-participant pointer — the GM clicks NEXT
     TURN to actually pass the turn, same as after an ATTACK.
+
+    v0.15.8 — players may take full defense as their own character
+    when it's their turn. The active-turn check below stays in
+    place; out-of-turn POSTs are flash-rejected, not 403'd.
     """
     if request.method != "POST":
         return HttpResponseNotAllowed(["POST"])
@@ -2211,7 +2370,7 @@ def full_defense(request, pk, participant_id):
 
 
 @login_required
-@_gm_only
+@_gm_or_owner()
 @csrf_protect
 def dodge(request, pk, participant_id):
     """POST — roll a dodge pool and store it as a ``dodging:N`` tag.
@@ -2230,6 +2389,9 @@ def dodge(request, pk, participant_id):
 
     Strips any prior ``dodging:*`` tags before appending so re-rolls
     don't leave dead state behind.
+
+    v0.15.8 — players may dodge on their own character row at any
+    time (in or out of turn) per WoD 2.0 rules.
     """
     if request.method != "POST":
         return HttpResponseNotAllowed(["POST"])

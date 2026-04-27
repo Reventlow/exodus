@@ -130,20 +130,21 @@ self-contained.
     <div class="kicker" style="margin-bottom: 0.4rem;">DIRECTORATE COMBAT // ENCOUNTERS</div>
     <h1 class="title" style="margin: 0 0 0.4rem 0;">ENCOUNTERS</h1>
     <div class="sub" style="margin-bottom: 1.6rem;">
-        {% if read_only %}
-            PERSONAL COMBAT — LIVE SPECTATOR VIEW
-        {% else %}
+        {% if is_gm %}
             PERSONAL COMBAT — GM ONLY
+        {% else %}
+            PERSONAL COMBAT — PLAYER VIEW · TAKE TURNS / SPECTATE OTHERS
         {% endif %}
     </div>
 
     {% comment %}
-    v0.15.7 — NEW ENCOUNTER form is GM-only. Players reach this page
-    when they have at least one character participating in any
-    encounter; for them the directory is read-only and only shows
-    encounters they're in (filtered server-side in encounter_list_page).
+    v0.15.8 — NEW ENCOUNTER form remains GM-only. Players reach this
+    page when they have at least one character participating in any
+    encounter; for them the directory is filtered server-side to
+    just those encounters and the create form is suppressed. Players
+    drive their own characters once *inside* an encounter.
     {% endcomment %}
-    {% if not read_only %}
+    {% if is_gm %}
     {# New-encounter form: collapsed by default. #}
     <details class="enc-create-form">
         <summary>NEW ENCOUNTER</summary>
