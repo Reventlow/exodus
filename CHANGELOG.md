@@ -1,5 +1,11 @@
 # Changelog
 
+## v0.15.13
+- **PASS TURN action** — active participant (player or GM-driven) can voluntarily end their turn without acting. New button appears on the active row's STANCE strip, only on the active participant's own turn. Auto-advances the pointer (same logic as NEXT TURN), unlike attack/dodge/full-defense which only mark `acted_this_round` and let the GM advance manually
+- Logged as `pass_turn` action_type with the participant's name; followed by the standard `turn_advance` (or `round_advance` on wrap) row from the shared advance helper
+- Refactored: extracted `_advance_turn_pointer(encounter)` from `next_turn` so `pass_turn` reuses the same round-rollover, stance-clear, and dodge_pending carry-over logic without duplication
+- Permission model: `_gm_or_owner()` decorator + active-participant check, so a player cannot pass for someone else's character
+
 ## v0.15.12
 - **Bidirectional damage sync.** Adding a Character or NPC to an encounter now snapshots their current `health_bashing/lethal/aggravated`, `willpower_current`, and `mental_load` from the canonical sheet (was: 0/0/0/0/0). Wounded characters enter combat with their wounds already on the participant row, and wound penalties apply from join. `health_max` is recomputed at join (Size + Stamina) so a Stamina change since the last fight is reflected immediately
 - **End-of-combat commit.** When the GM clicks END, every Character / NPC participant's snapshot is written back to their canonical sheet (`health_bashing/lethal/aggravated`, `willpower_current`, `mental_load`). Mooks are skipped (no sheet). FK `SET_NULL` (sheet deleted mid-combat) is also skipped. Each commit writes a `health_commit` CombatLog row with `before` / `after` payloads; a final `system` row summarises `count` of participants updated

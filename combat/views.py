@@ -1699,6 +1699,88 @@ def start_encounter(request, pk):
     return redirect("combat:detail", pk=encounter.pk)
 
 
+def _advance_turn_pointer(encounter):
+    """Step the active pointer forward one slot, rolling the round
+    over if we're at the end of initiative_order. Writes the
+    appropriate log rows (turn_advance / round_advance / stance-clear
+    system row / dodge_pending carry-over). Idempotent for malformed
+    states — returns early on missing order.
+
+    Pulled out of next_turn so pass_turn can reuse it after recording
+    its own log message. Called only from inside an active encounter.
+    """
+    order = list(encounter.initiative_order or [])
+    if not order:
+        return
+
+    current_id = encounter.active_participant_id
+    if current_id is not None:
+        Participant.objects.filter(pk=current_id, encounter=encounter).update(
+            acted_this_round=True
+        )
+
+    try:
+        idx = order.index(current_id)
+    except ValueError:
+        idx = -1
+
+    if idx >= len(order) - 1:
+        encounter.round_number += 1
+        encounter.participants.update(acted_this_round=False)
+        cleared_any = False
+        for p in encounter.participants.all():
+            new_conds = [
+                c for c in (p.conditions or [])
+                if c != "defense_full" and not c.startswith("dodging:")
+            ]
+            if new_conds != (p.conditions or []):
+                p.conditions = new_conds
+                p.save(update_fields=["conditions"])
+                cleared_any = True
+        next_id = order[0]
+        encounter.active_participant_id = next_id
+        encounter.save(
+            update_fields=["round_number", "active_participant_id", "updated_at"]
+        )
+        _log(
+            encounter,
+            "round_advance",
+            f"Round {encounter.round_number} begins.",
+            round_number=encounter.round_number,
+        )
+        if cleared_any:
+            _log(encounter, "system", "Defensive stances cleared at round boundary.")
+    else:
+        next_id = order[idx + 1]
+        encounter.active_participant_id = next_id
+        encounter.save(update_fields=["active_participant_id", "updated_at"])
+        next_p = encounter.participants.filter(pk=next_id).first()
+        next_name = next_p.name if next_p else f"#{next_id}"
+        _log(
+            encounter,
+            "turn_advance",
+            f"Turn passes to {next_name}.",
+            participant_id=next_id,
+        )
+
+    # Out-of-turn dodge carry-over.
+    new_active = encounter.participants.filter(
+        pk=encounter.active_participant_id
+    ).first()
+    if new_active is not None and "dodge_pending" in (new_active.conditions or []):
+        new_active.conditions = [
+            c for c in (new_active.conditions or []) if c != "dodge_pending"
+        ]
+        new_active.acted_this_round = True
+        new_active.save(update_fields=["conditions", "acted_this_round"])
+        _log(
+            encounter,
+            "system",
+            f"{new_active.name}: dodge_pending consumed — turn skipped.",
+            target_participant_id=new_active.id,
+        )
+
+
 @login_required
 @_gm_only
 @csrf_protect
@@ -1727,100 +1809,43 @@ def next_turn(request, pk):
     if encounter.status != "active":
         return redirect("combat:detail", pk=encounter.pk)
 
-    order = list(encounter.initiative_order or [])
-    if not order:
-        # Defensive: an active encounter with no order is malformed,
-        # but bail rather than crash so the GM can recover with CLEAR.
+    _advance_turn_pointer(encounter)
+    return redirect("combat:detail", pk=encounter.pk)
+
+
+@login_required
+@_gm_or_owner()
+@csrf_protect
+def pass_turn(request, pk, participant_id):
+    """POST — active participant voluntarily ends their turn.
+
+    Player or GM-driven. Logs a ``pass_turn`` row with the participant's
+    name, then auto-advances the pointer (same logic as ``next_turn``).
+    Rejects if the encounter isn't active or if the calling participant
+    isn't the current active actor — players cannot pass for someone
+    else.
+    """
+    if request.method != "POST":
+        return HttpResponseNotAllowed(["POST"])
+
+    encounter = get_object_or_404(Encounter, pk=pk)
+    if encounter.status != "active":
         return redirect("combat:detail", pk=encounter.pk)
 
-    # Mark the current actor as acted, then look up the next slot.
-    current_id = encounter.active_participant_id
-    if current_id is not None:
-        Participant.objects.filter(pk=current_id, encounter=encounter).update(
-            acted_this_round=True
-        )
+    participant = get_object_or_404(
+        Participant, pk=participant_id, encounter=encounter
+    )
+    if participant.id != encounter.active_participant_id:
+        messages.error(request, "It is not this participant's turn.")
+        return redirect("combat:detail", pk=encounter.pk)
 
-    try:
-        idx = order.index(current_id)
-    except ValueError:
-        # Active pointer not in order (e.g. the active participant was
-        # removed). Fall back to slot 0.
-        idx = -1
-
-    if idx >= len(order) - 1:
-        # End of round — roll over.
-        encounter.round_number += 1
-        encounter.participants.update(acted_this_round=False)
-
-        # v0.15.5 — clear defensive stances at the round boundary. We
-        # iterate (rather than .update) because the conditions list
-        # has to be filtered per row.
-        cleared_any = False
-        for p in encounter.participants.all():
-            new_conds = [
-                c for c in (p.conditions or [])
-                if c != "defense_full" and not c.startswith("dodging:")
-            ]
-            if new_conds != (p.conditions or []):
-                p.conditions = new_conds
-                p.save(update_fields=["conditions"])
-                cleared_any = True
-
-        next_id = order[0]
-        encounter.active_participant_id = next_id
-        encounter.save(
-            update_fields=[
-                "round_number",
-                "active_participant_id",
-                "updated_at",
-            ]
-        )
-        _log(
-            encounter,
-            "round_advance",
-            f"Round {encounter.round_number} begins.",
-            round_number=encounter.round_number,
-        )
-        if cleared_any:
-            _log(
-                encounter,
-                "system",
-                "Defensive stances cleared at round boundary.",
-            )
-    else:
-        next_id = order[idx + 1]
-        encounter.active_participant_id = next_id
-        encounter.save(update_fields=["active_participant_id", "updated_at"])
-        # Resolve the next participant's name for the log message —
-        # may be missing if a delete just SET_NULL'd them.
-        next_p = encounter.participants.filter(pk=next_id).first()
-        next_name = next_p.name if next_p else f"#{next_id}"
-        _log(
-            encounter,
-            "turn_advance",
-            f"Turn passes to {next_name}.",
-            participant_id=next_id,
-        )
-
-    # Out-of-turn dodge cost — if the now-active participant is
-    # carrying ``dodge_pending``, pay the cost immediately by marking
-    # them acted_this_round and stripping the pending tag.
-    new_active = encounter.participants.filter(
-        pk=encounter.active_participant_id
-    ).first()
-    if new_active is not None and "dodge_pending" in (new_active.conditions or []):
-        new_active.conditions = [
-            c for c in (new_active.conditions or []) if c != "dodge_pending"
-        ]
-        new_active.acted_this_round = True
-        new_active.save(update_fields=["conditions", "acted_this_round"])
-        _log(
-            encounter,
-            "system",
-            f"{new_active.name}: dodge_pending consumed — turn skipped.",
-            target_participant_id=new_active.id,
-        )
-
+    _log(
+        encounter,
+        "pass_turn",
+        f"{participant.name} passes their turn.",
+        participant_id=participant.pk,
+    )
+    _advance_turn_pointer(encounter)
     return redirect("combat:detail", pk=encounter.pk)
 
 

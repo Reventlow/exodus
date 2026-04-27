@@ -123,6 +123,11 @@ urlpatterns = [
         views.dodge,
         name="dodge",
     ),
+    path(
+        "combat/<int:pk>/participants/<int:participant_id>/pass-turn/",
+        views.pass_turn,
+        name="pass_turn",
+    ),
 
     # ---------------------------------------------------------------
     # v0.15.7 — JSON API for the MCP server

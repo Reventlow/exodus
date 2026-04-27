@@ -407,6 +407,15 @@ dodge), ADD CONDITION, WILLPOWER.
                         {% csrf_token %}
                         <button type="submit" title="Roll dodge pool — eats this turn if active, next turn otherwise.">DODGE</button>
                     </form>
+                    {% if encounter.active_participant_id == p.id %}
+                        <form method="post"
+                              action="{% url 'combat:pass_turn' encounter.id p.id %}"
+                              style="display:inline;"
+                              onsubmit="return confirm('Pass your turn? The pointer will advance to the next participant.');">
+                            {% csrf_token %}
+                            <button type="submit" title="End your turn without acting. Auto-advances the pointer.">PASS TURN</button>
+                        </form>
+                    {% endif %}
                 </div>
             {% endif %}
 
