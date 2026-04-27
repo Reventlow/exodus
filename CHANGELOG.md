@@ -1,5 +1,18 @@
 # Changelog
 
+## v0.15.3
+- **Initiative + turn advance.** Per-participant **ROLL** button, **ROLL ALL INITIATIVE** for unrolled participants in one pass, and **CLEAR INITIATIVE** to wipe rolls and revert an active encounter back to setup. Server-rolled via the `secrets` module — same crypto-quality randomness as the rest of the project's roll endpoints
+- **WoD 2.0 model:** Character / NPC initiative is `Dexterity (finesse.physical) + Composure (resistance.social) + 1d10`; mooks roll `combat_pool / 2 + 1d10` (integer division). Partial / legacy sheets fall back to modifier `0` via defensive `try/except` rather than crashing
+- **Tiebreak by participant id (lower first).** Deterministic and reproducible; `initiative_order` is rebuilt from scratch on every START so newly-added participants slot in cleanly
+- **Encounter lifecycle endpoints.** `START ENCOUNTER` (gated on every participant having rolled — flashes the unrolled count via Django messages otherwise) transitions `setup → active`, sets `round_number=1`, points `active_participant_id` at the top of the order, stamps `started_at`. `NEXT TURN` advances the pointer; at end-of-order the round increments, `acted_this_round` resets across the board, and a `round_advance` row is logged. `END ENCOUNTER` transitions `active → concluded`, clears the active pointer, stamps `ended_at`, and redirects to the list
+- **INITIATIVE TRACKER UI** on the encounter page — a new `.brackets` block above SCENE. Renders the round / status header, the action strip (state-dependent buttons), and an ordered roster (score desc, id asc, nulls last) with kind badges, score pills, per-row ROLL buttons (setup only), `ACTING NOW` pill on the current actor, and a muted `ACTED` indicator on participants who have already taken their turn this round
+- Encounter list adds a **STARTED** column (`d M H:i` once kicked off, `—` while in setup) and downgrades the ROUND column to `—` outside of `active` status
+- Stricter DELETE confirm wording on the encounter detail header
+- All transitions logged with explicit action types: `initiative` (per-roll), `turn_advance`, `round_advance`, `system` (start / clear / end / batch summary)
+- All POST endpoints CSRF-protected, GM-only, and reject non-POST with `HttpResponseNotAllowed(["POST"])`
+- **No real-time fan-out yet** — WebSocket broadcast lands in v0.15.6
+- No schema or migration changes; all the relevant fields landed in v0.15.0 (`status`, `round_number`, `active_participant_id`, `initiative_order`, `started_at`, `ended_at`, `initiative_score`, `initiative_roll`, `acted_this_round`, `surprise_immune`)
+
 ## v0.15.2
 - **GM-only Encounter CRUD at `/combat/`.** New encounter list page (with collapsible "+ NEW ENCOUNTER" form) and per-encounter detail page covering header / scene / participants / add-participant / timeline. Status pills map `setup → s-standby`, `active → s-active`, `concluded → s-dormant`. EDIT toggles an inline metadata form; DELETE is `confirm()`-guarded
 - Three participant spawn sources: **CHARACTER** (player sheet — `health_max = size + Stamina`, `willpower_max = Resolve + Composure`, with KeyError fallbacks `7` / `0`); **NPC** (full NPC dossiers, `is_npc_dossier=False`); **TEMPLATE** (Combat NPC catalogue entry snapshotted as a mook). Templates are grouped by category in `<optgroup>`s in the spawn form

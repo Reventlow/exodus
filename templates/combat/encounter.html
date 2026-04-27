@@ -4,18 +4,23 @@
 
 {% block content %}
 {% comment %}
-v0.15.2 encounter detail page.
+v0.15.3 encounter detail page.
 
-Five vertically stacked .brackets sections:
-    a) HEADER          — kicker / title / sub + EDIT (toggles inline form) + DELETE
-    b) SCENE           — encounter.scene_description rendered as a quote
-    c) PARTICIPANTS    — three sub-sections (PLAYERS+ALLIES / HOSTILES / NEUTRAL)
-    d) ADD PARTICIPANT — collapsible <details> with three labelled forms
-                         (FROM CHARACTERS / FROM NPCS / FROM TEMPLATES)
-    e) TIMELINE        — read-only CombatLog table
+Six vertically stacked .brackets sections:
+    a) HEADER             — kicker / title / sub + EDIT + DELETE
+    b) INITIATIVE TRACKER — round/status header + ROLL ALL / CLEAR /
+                            START (setup) or NEXT TURN / END (active);
+                            ordered participant list with per-row
+                            ROLL button and ACTING-NOW pill
+    c) SCENE              — encounter.scene_description rendered as a quote
+    d) PARTICIPANTS       — three sub-sections (PLAYERS+ALLIES / HOSTILES / NEUTRAL)
+    e) ADD PARTICIPANT    — collapsible <details> with three labelled forms
+                            (FROM CHARACTERS / FROM NPCS / FROM TEMPLATES)
+    f) TIMELINE           — read-only CombatLog table
 
 All POST forms carry a CSRF token. The EDIT form is a hidden block
 toggled by JS; the DELETE button calls confirm() before submitting.
+The END button also prompts for confirmation.
 {% endcomment %}
 
 <style>
@@ -219,6 +224,121 @@ toggled by JS; the DELETE button calls confirm() before submitting.
     }
     .add-pt-card .btn-primary { width: 100%; margin-top: 0.75rem; padding: 0.45rem; font-size: 0.72rem; }
 
+    /* INITIATIVE TRACKER — sub-block under the header. */
+    .init-actions {
+        display: flex;
+        gap: 0.5rem;
+        flex-wrap: wrap;
+        margin: 0.6rem 0 1rem 0;
+        align-items: center;
+    }
+    .init-action-btn {
+        background: transparent;
+        border: 1px solid var(--c-dim);
+        color: var(--c-primary);
+        cursor: pointer;
+        padding: 0.4rem 0.9rem;
+        font-family: var(--font-mono);
+        font-size: 0.72rem;
+        letter-spacing: 0.16em;
+        text-transform: uppercase;
+    }
+    .init-action-btn:hover {
+        background: var(--c-soft);
+        border-color: var(--c-primary);
+        text-shadow: 0 0 6px var(--c-glow);
+    }
+    .init-action-btn.danger {
+        color: var(--accent-danger);
+    }
+    .init-action-btn.danger:hover {
+        background: rgba(239, 68, 68, 0.08);
+        border-color: var(--accent-danger);
+        text-shadow: 0 0 6px rgba(239, 68, 68, 0.45);
+    }
+    .init-action-btn.primary {
+        color: var(--c-primary);
+        border-color: var(--c-primary);
+    }
+    .init-action-btn.primary:hover {
+        background: var(--c-soft);
+        text-shadow: 0 0 6px var(--c-glow);
+    }
+    .init-note {
+        font-family: var(--font-mono);
+        font-size: 0.65rem;
+        letter-spacing: 0.18em;
+        text-transform: uppercase;
+        color: var(--ink-mute);
+        margin-left: 0.4rem;
+    }
+
+    /* Initiative tracker rows — like .part-row but with order index
+       and score badge. */
+    .init-list { margin-top: 0.4rem; }
+    .init-row {
+        display: flex;
+        align-items: center;
+        gap: 0.6rem;
+        padding: 0.45rem 0.5rem;
+        border-bottom: 1px dashed var(--c-dim);
+        font-family: var(--font-mono);
+        font-size: 0.78rem;
+    }
+    .init-row:last-child { border-bottom: none; }
+    .init-row.is-active {
+        background: rgba(0, 200, 100, 0.04);
+        border-left: 2px solid var(--c-primary);
+        padding-left: calc(0.5rem - 2px);
+    }
+    .init-idx {
+        color: var(--ink-mute);
+        font-size: 0.7rem;
+        min-width: 1.6rem;
+        text-align: right;
+    }
+    .init-name {
+        flex: 1;
+        min-width: 0;
+        color: var(--ink);
+    }
+    .init-score {
+        font-family: var(--font-mono);
+        font-size: 0.78rem;
+        padding: 0.1rem 0.45rem;
+        border: 1px solid var(--c-dim);
+        color: var(--c-primary);
+        min-width: 2.4rem;
+        text-align: center;
+    }
+    .init-score.unrolled {
+        color: var(--ink-mute);
+        border-color: var(--c-dim);
+    }
+    .init-roll-btn {
+        background: transparent;
+        border: 1px solid var(--c-dim);
+        color: var(--c-primary);
+        cursor: pointer;
+        padding: 0.18rem 0.6rem;
+        font-family: var(--font-mono);
+        font-size: 0.65rem;
+        letter-spacing: 0.16em;
+        text-transform: uppercase;
+    }
+    .init-roll-btn:hover {
+        background: var(--c-soft);
+        border-color: var(--c-primary);
+        text-shadow: 0 0 6px var(--c-glow);
+    }
+    .init-acted {
+        font-family: var(--font-mono);
+        font-size: 0.6rem;
+        letter-spacing: 0.18em;
+        text-transform: uppercase;
+        color: var(--ink-mute);
+    }
+
     /* TIMELINE — same look as the encounter table. */
     .log-table { width: 100%; border-collapse: collapse; font-family: var(--font-mono); font-size: 0.74rem; }
     .log-table th {
@@ -273,7 +393,7 @@ toggled by JS; the DELETE button calls confirm() before submitting.
             </button>
             <form method="post" action="{% url 'combat:delete' encounter.id %}"
                   style="display:inline;"
-                  onsubmit="return confirm('Delete this encounter? This cannot be undone.');">
+                  onsubmit="return confirm('Permanently delete this encounter and ALL its log entries? Players will not see this if shared.');">
                 {% csrf_token %}
                 <button type="submit" class="enc-action-btn danger">&times; DELETE</button>
             </form>
@@ -300,7 +420,117 @@ toggled by JS; the DELETE button calls confirm() before submitting.
         </div>
     </div>
 
-    {# ----- (b) SCENE ----- #}
+    {# ----- (b) INITIATIVE TRACKER ----- #}
+    <div class="brackets enc-block">
+        <span class="bk tl"></span><span class="bk tr"></span>
+        <span class="bk bl"></span><span class="bk br"></span>
+
+        <div class="kicker" style="margin-bottom: 0.4rem;">INITIATIVE TRACKER</div>
+        <h3 class="title" style="margin: 0 0 0.4rem 0; font-size: 1.05rem;">
+            ROUND {{ encounter.round_number }} &middot; {{ encounter.status|upper }}
+        </h3>
+        <div class="sub muted" style="margin-bottom: 0.5rem;">
+            TIES BREAK BY ID (LOWER FIRST)
+        </div>
+
+        {% comment %}
+        Action strip — buttons surface depends on encounter status.
+        SETUP: ROLL ALL (if any unrolled) / CLEAR (if any rolled) / START (gated on unrolled_count == 0).
+        ACTIVE: NEXT TURN / END.
+        CONCLUDED: no buttons; status renders as a static label.
+        {% endcomment %}
+        <div class="init-actions">
+            {% if encounter.status == "setup" %}
+                {% if unrolled_count > 0 %}
+                    <form method="post" action="{% url 'combat:roll_initiative_all' encounter.id %}" style="display:inline;">
+                        {% csrf_token %}
+                        <button type="submit" class="init-action-btn primary">ROLL ALL INITIATIVE</button>
+                    </form>
+                {% endif %}
+
+                {# Show CLEAR whenever at least one participant has a score. #}
+                {% if participants|length > unrolled_count %}
+                    <form method="post" action="{% url 'combat:clear_initiative' encounter.id %}" style="display:inline;"
+                          onsubmit="return confirm('Clear all initiative rolls?');">
+                        {% csrf_token %}
+                        <button type="submit" class="init-action-btn">CLEAR INITIATIVE</button>
+                    </form>
+                {% endif %}
+
+                {% if unrolled_count == 0 and participants|length > 0 %}
+                    <form method="post" action="{% url 'combat:start' encounter.id %}" style="display:inline;">
+                        {% csrf_token %}
+                        <button type="submit" class="init-action-btn primary">START ENCOUNTER &rarr;</button>
+                    </form>
+                {% else %}
+                    {% if participants|length == 0 %}
+                        <span class="init-note">ADD PARTICIPANTS TO START</span>
+                    {% else %}
+                        <span class="init-note">{{ unrolled_count }} UNROLLED &mdash; ROLL TO START</span>
+                    {% endif %}
+                {% endif %}
+
+            {% elif encounter.status == "active" %}
+                <form method="post" action="{% url 'combat:next_turn' encounter.id %}" style="display:inline;">
+                    {% csrf_token %}
+                    <button type="submit" class="init-action-btn primary">NEXT TURN &rarr;</button>
+                </form>
+                <form method="post" action="{% url 'combat:end' encounter.id %}" style="display:inline;"
+                      onsubmit="return confirm('End this encounter? Status moves to CONCLUDED.');">
+                    {% csrf_token %}
+                    <button type="submit" class="init-action-btn danger">END ENCOUNTER</button>
+                </form>
+                {% if active_participant_obj %}
+                    <span class="init-note">ACTING: {{ active_participant_obj.name|upper }}</span>
+                {% endif %}
+
+            {% else %}
+                <span class="init-note">ENCOUNTER CONCLUDED</span>
+            {% endif %}
+        </div>
+
+        {# Initiative roster — sorted by score desc, id asc, nulls last. #}
+        <div class="init-list">
+            {% for p in ordered_participants %}
+                <div class="init-row {% if p.id == encounter.active_participant_id %}is-active{% endif %}">
+                    <span class="init-idx">{{ forloop.counter }}.</span>
+
+                    {% if p.participant_kind == "character" %}
+                        <span class="part-kind-badge pc">PC</span>
+                    {% elif p.participant_kind == "npc" %}
+                        <span class="part-kind-badge npc">NPC</span>
+                    {% else %}
+                        <span class="part-kind-badge mook">MOOK</span>
+                    {% endif %}
+
+                    <span class="init-name">{{ p.name }}</span>
+
+                    {% if p.id == encounter.active_participant_id %}
+                        <span class="status-pill s-active">ACTING NOW</span>
+                    {% elif p.acted_this_round %}
+                        <span class="init-acted">ACTED</span>
+                    {% endif %}
+
+                    {% if p.initiative_score is not None %}
+                        <span class="init-score" title="Roll: {{ p.initiative_roll }}">{{ p.initiative_score }}</span>
+                    {% else %}
+                        <span class="init-score unrolled">&mdash;</span>
+                    {% endif %}
+
+                    {% if encounter.status == "setup" %}
+                        <form method="post" action="{% url 'combat:roll_initiative' encounter.id p.id %}" style="display:inline;">
+                            {% csrf_token %}
+                            <button type="submit" class="init-roll-btn">ROLL</button>
+                        </form>
+                    {% endif %}
+                </div>
+            {% empty %}
+                <em class="muted" style="display: block; padding: 0.5rem 0;">No participants yet.</em>
+            {% endfor %}
+        </div>
+    </div>
+
+    {# ----- (c) SCENE ----- #}
     <div class="brackets enc-block">
         <span class="bk tl"></span><span class="bk tr"></span>
         <span class="bk bl"></span><span class="bk br"></span>
@@ -317,7 +547,7 @@ toggled by JS; the DELETE button calls confirm() before submitting.
         {% endif %}
     </div>
 
-    {# ----- (c) PARTICIPANTS ----- #}
+    {# ----- (d) PARTICIPANTS ----- #}
     <div class="brackets enc-block">
         <span class="bk tl"></span><span class="bk tr"></span>
         <span class="bk bl"></span><span class="bk br"></span>
@@ -362,7 +592,7 @@ toggled by JS; the DELETE button calls confirm() before submitting.
         </div>
     </div>
 
-    {# ----- (d) ADD PARTICIPANT ----- #}
+    {# ----- (e) ADD PARTICIPANT ----- #}
     <div class="brackets enc-block">
         <span class="bk tl"></span><span class="bk tr"></span>
         <span class="bk bl"></span><span class="bk br"></span>
@@ -460,7 +690,7 @@ toggled by JS; the DELETE button calls confirm() before submitting.
         </details>
     </div>
 
-    {# ----- (e) TIMELINE ----- #}
+    {# ----- (f) TIMELINE ----- #}
     <div class="brackets enc-block">
         <span class="bk tl"></span><span class="bk tr"></span>
         <span class="bk bl"></span><span class="bk br"></span>

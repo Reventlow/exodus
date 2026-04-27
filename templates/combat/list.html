@@ -4,7 +4,7 @@
 
 {% block content %}
 {% comment %}
-v0.15.2 encounter directory.
+v0.15.3 encounter directory.
 
 Outer .brackets authority frame contains a "+ NEW ENCOUNTER"
 collapsible form (<details>) and an ACTIVE ENCOUNTERS table.
@@ -13,6 +13,10 @@ Status pill mapping:
     setup     -> .s-standby (amber, "in prep")
     active    -> .s-active  (primary glow, "live")
     concluded -> .s-dormant (muted blue-grey, "archived")
+
+Round column: ``R{{ enc.round_number }}`` only when active, ``—``
+otherwise. STARTED column shows the ``started_at`` timestamp once
+the encounter has been kicked off (or ``—`` while in setup).
 
 Aesthetic tokens are pulled from foundation.css; any per-page style
 lives in the inline <style> block below to keep the catalogue
@@ -161,11 +165,12 @@ self-contained.
         <table class="enc-table">
             <thead>
                 <tr>
-                    <th style="width: 32%;">TITLE</th>
-                    <th style="width: 14%;">STATUS</th>
-                    <th style="width: 10%;">ROUND</th>
-                    <th style="width: 14%;">PARTICIPANTS</th>
-                    <th style="width: 16%;">CREATED</th>
+                    <th style="width: 28%;">TITLE</th>
+                    <th style="width: 12%;">STATUS</th>
+                    <th style="width: 8%;">ROUND</th>
+                    <th style="width: 12%;">PARTICIPANTS</th>
+                    <th style="width: 13%;">STARTED</th>
+                    <th style="width: 13%;">CREATED</th>
                     <th style="width: 14%; text-align: right;">&nbsp;</th>
                 </tr>
             </thead>
@@ -191,8 +196,23 @@ self-contained.
                             <span class="status-pill s-standby">SETUP</span>
                         {% endif %}
                     </td>
-                    <td>R{{ enc.round_number }}</td>
+                    {# Round number only meaningful while the encounter
+                       is live; show a dash in setup / concluded. #}
+                    <td>
+                        {% if enc.status == "active" %}
+                            R{{ enc.round_number }}
+                        {% else %}
+                            <span class="muted">&mdash;</span>
+                        {% endif %}
+                    </td>
                     <td>{{ enc.participant_count }}</td>
+                    <td>
+                        {% if enc.started_at %}
+                            {{ enc.started_at|date:"d M H:i" }}
+                        {% else %}
+                            <span class="muted">&mdash;</span>
+                        {% endif %}
+                    </td>
                     <td>{{ enc.created_at|date:"Y-m-d H:i" }}</td>
                     <td style="text-align: right;">
                         <a class="enc-enter-btn" href="{% url 'combat:detail' enc.id %}">ENTER &rarr;</a>

@@ -1,10 +1,23 @@
 """Views for the personal combat app.
 
-v0.15.2 — encounter CRUD. GM-only list and detail pages plus six
-POST endpoints for creating / updating / deleting encounters and
-adding / removing participants.
+v0.15.3 — initiative + turn advance. Builds on the encounter CRUD
+shipped in v0.15.2 with WoD 2.0 initiative rolls (per-participant,
+roll-all, clear) and the encounter lifecycle transitions
+``setup → active → concluded`` driven by START / NEXT TURN / END
+endpoints.
 
-Three participant kinds are supported:
+Initiative model:
+
+* **Character / NPC** — ``modifier = Dexterity (attributes.finesse.physical)
+  + Composure (attributes.resistance.social)``. Roll 1d10. Score is
+  ``modifier + d10``. KeyError / TypeError / ValueError on partial
+  sheets fall back to modifier ``0``.
+* **Mook** — ``modifier = mook_combat_pool // 2``. Roll 1d10. Same
+  score math.
+
+Tiebreak is deterministic by participant id (lower id first).
+
+Three participant kinds are supported (see v0.15.2 docs):
 
 * ``character`` — links to a player :class:`characters.Character`.
 * ``npc``       — links to an :class:`npcs.NPC` dossier (filtered to
@@ -15,15 +28,19 @@ Three participant kinds are supported:
                   spawn so later catalogue edits do not mutate
                   in-flight encounters.
 
-No rolls, no initiative, no real-time fan-out yet — those land in
-v0.15.3+. The CombatLog timeline is read-only here and uses
-``action_type='system'`` for every entry written by these views.
+The CombatLog timeline now distinguishes action types:
+``initiative``, ``turn_advance``, ``round_advance``, ``system``.
+Real-time fan-out (WebSocket broadcast) lands in v0.15.6.
 """
 
+import secrets
+
+from django.contrib import messages
 from django.contrib.auth.decorators import login_required
-from django.db.models import Max
+from django.db.models import F, Max
 from django.http import HttpResponseForbidden, HttpResponseNotAllowed
 from django.shortcuts import get_object_or_404, redirect, render
+from django.utils import timezone
 from django.views.decorators.csrf import csrf_protect
 
 from characters.models import Character
@@ -76,6 +93,47 @@ def _safe_int(value, fallback=0):
         return int(value)
     except (TypeError, ValueError):
         return fallback
+
+
+def _roll_d10():
+    """Single d10 face for WoD 2.0 initiative tiebreak.
+
+    Uses ``secrets.randbelow`` for cryptographic-quality randomness —
+    same source as the rest of the project's roll endpoints. Returns
+    an int in ``[1, 10]``.
+    """
+    return secrets.randbelow(10) + 1
+
+
+def _compute_initiative(participant):
+    """Compute ``(modifier, d10, score)`` for a Participant.
+
+    * Character / NPC: ``Dexterity (finesse.physical) + Composure
+      (resistance.social) + 1d10``. Missing keys / non-int values fall
+      back to modifier ``0`` so partial sheets never crash the roll.
+    * Mook: ``combat_pool // 2 + 1d10``. ``None`` combat pool falls
+      back to ``0``.
+
+    The tuple shape is consistent across kinds so the caller can log a
+    single uniform message.
+    """
+    if participant.participant_kind == "mook":
+        modifier = (participant.mook_combat_pool or 0) // 2
+    else:
+        # Prefer character FK, fall back to npc FK; either may be
+        # SET_NULL'd by a delete on the underlying actor.
+        source = participant.character or participant.npc
+        if source is None:
+            modifier = 0
+        else:
+            try:
+                dex = int(source.attributes["finesse"]["physical"])
+                composure = int(source.attributes["resistance"]["social"])
+                modifier = dex + composure
+            except (KeyError, TypeError, ValueError):
+                modifier = 0
+    d10 = _roll_d10()
+    return modifier, d10, modifier + d10
 
 
 def _gm_only(view):
@@ -142,6 +200,31 @@ def encounter_page(request, pk):
         "neutral": [p for p in participants if p.faction == "neutral"],
     }
 
+    # Initiative tracker: ordered by score descending with id as the
+    # deterministic tiebreak, nulls last so unrolled participants sink
+    # to the bottom of the tracker.
+    ordered_participants = list(
+        encounter.participants.order_by(
+            F("initiative_score").desc(nulls_last=True), "id"
+        )
+    )
+
+    # Active participant pointer (denormalised on the encounter; may be
+    # None during setup or after a clear).
+    active_participant_obj = None
+    if encounter.active_participant_id:
+        for p in participants:
+            if p.id == encounter.active_participant_id:
+                active_participant_obj = p
+                break
+
+    # How many participants still need to roll initiative — the START
+    # button gates on this being zero, and the template surfaces it as
+    # a muted note while non-zero.
+    unrolled_count = encounter.participants.filter(
+        initiative_score__isnull=True
+    ).count()
+
     log_entries = encounter.log_entries.order_by("sequence")
 
     # Spawn sources for the "+ ADD PARTICIPANT" form.
@@ -162,6 +245,9 @@ def encounter_page(request, pk):
             "encounter": encounter,
             "participants": participants,
             "participants_by_faction": by_faction,
+            "ordered_participants": ordered_participants,
+            "active_participant_obj": active_participant_obj,
+            "unrolled_count": unrolled_count,
             "log_entries": log_entries,
             "available_characters": available_characters,
             "available_npcs": available_npcs,
@@ -395,3 +481,333 @@ def participant_remove(request, pk, participant_id):
         participant_id=participant_id,
     )
     return redirect("combat:detail", pk=encounter.pk)
+
+
+# ---------------------------------------------------------------------------
+# Initiative + turn advance (POST)  — v0.15.3
+# ---------------------------------------------------------------------------
+
+
+@login_required
+@_gm_only
+@csrf_protect
+def roll_initiative(request, pk, participant_id):
+    """POST — roll initiative for a single participant.
+
+    Rejected as a no-op redirect when the encounter is already
+    concluded (rolls into a closed encounter make no game sense and
+    would corrupt the timeline).
+    """
+    if request.method != "POST":
+        return HttpResponseNotAllowed(["POST"])
+
+    encounter = get_object_or_404(Encounter, pk=pk)
+    if encounter.status == "concluded":
+        # Silent no-op; the UI hides the button in this state but
+        # defensive against direct POSTs from a stale tab.
+        return redirect("combat:detail", pk=encounter.pk)
+
+    participant = get_object_or_404(Participant, pk=participant_id, encounter=encounter)
+
+    modifier, d10, score = _compute_initiative(participant)
+    participant.initiative_roll = d10
+    participant.initiative_score = score
+    participant.save(update_fields=["initiative_roll", "initiative_score"])
+
+    _log(
+        encounter,
+        "initiative",
+        f"{participant.name} rolled initiative: {modifier} + {d10} = {score}.",
+        participant_id=participant.pk,
+        modifier=modifier,
+        d10=d10,
+        score=score,
+    )
+    return redirect("combat:detail", pk=encounter.pk)
+
+
+@login_required
+@_gm_only
+@csrf_protect
+def roll_initiative_all(request, pk):
+    """POST — roll initiative for every unrolled participant in one pass.
+
+    Each participant gets its own ``initiative`` log row so the
+    timeline shows the whole party's individual results, then a
+    single ``system`` row summarises the batch. The encounter's
+    ``initiative_order`` is rebuilt from the resulting scores
+    (descending, id ascending) so START can pick the first actor
+    deterministically.
+    """
+    if request.method != "POST":
+        return HttpResponseNotAllowed(["POST"])
+
+    encounter = get_object_or_404(Encounter, pk=pk)
+    if encounter.status == "concluded":
+        return redirect("combat:detail", pk=encounter.pk)
+
+    unrolled = list(
+        encounter.participants.filter(initiative_score__isnull=True).order_by("id")
+    )
+    count = 0
+    for participant in unrolled:
+        modifier, d10, score = _compute_initiative(participant)
+        participant.initiative_roll = d10
+        participant.initiative_score = score
+        participant.save(update_fields=["initiative_roll", "initiative_score"])
+        _log(
+            encounter,
+            "initiative",
+            f"{participant.name} rolled initiative: {modifier} + {d10} = {score}.",
+            participant_id=participant.pk,
+            modifier=modifier,
+            d10=d10,
+            score=score,
+        )
+        count += 1
+
+    # Rebuild the order pointer over every rolled participant —
+    # safer than appending to whatever was there before, since
+    # participants may have been added since the last sort.
+    encounter.initiative_order = [
+        p.id
+        for p in encounter.participants.exclude(initiative_score__isnull=True).order_by(
+            "-initiative_score", "id"
+        )
+    ]
+    encounter.save(update_fields=["initiative_order", "updated_at"])
+
+    _log(
+        encounter,
+        "system",
+        f"Initiative rolled for {count} participants.",
+        count=count,
+    )
+    return redirect("combat:detail", pk=encounter.pk)
+
+
+@login_required
+@_gm_only
+@csrf_protect
+def clear_initiative(request, pk):
+    """POST — wipe initiative rolls and reset the encounter to setup.
+
+    Bulk-clears scores / rolls on every participant, drops the order
+    pointer and active participant, and (if the encounter was active)
+    rolls back to ``status='setup'`` with ``round_number=0`` and the
+    timing fields nulled out. ``acted_this_round`` is also reset so a
+    fresh roll-all + start cycle starts cleanly.
+    """
+    if request.method != "POST":
+        return HttpResponseNotAllowed(["POST"])
+
+    encounter = get_object_or_404(Encounter, pk=pk)
+
+    # Bulk update all participants in one query.
+    encounter.participants.update(
+        initiative_score=None,
+        initiative_roll=None,
+        acted_this_round=False,
+    )
+
+    encounter.initiative_order = []
+    encounter.active_participant_id = None
+    if encounter.status == "active":
+        # Revert lifecycle to setup so the GM can re-roll cleanly.
+        encounter.status = "setup"
+        encounter.round_number = 0
+        encounter.started_at = None
+        encounter.ended_at = None
+    encounter.save(
+        update_fields=[
+            "initiative_order",
+            "active_participant_id",
+            "status",
+            "round_number",
+            "started_at",
+            "ended_at",
+            "updated_at",
+        ]
+    )
+
+    _log(encounter, "system", "Initiative cleared. Encounter reset to setup.")
+    return redirect("combat:detail", pk=encounter.pk)
+
+
+@login_required
+@_gm_only
+@csrf_protect
+def start_encounter(request, pk):
+    """POST — transition the encounter from setup to active.
+
+    Refuses to start unless every participant has rolled initiative
+    (a flash message names the count). Rebuilds ``initiative_order``
+    from the live scores, sets ``active_participant_id`` to the top of
+    the order, marks ``round_number=1`` and stamps ``started_at``.
+    """
+    if request.method != "POST":
+        return HttpResponseNotAllowed(["POST"])
+
+    encounter = get_object_or_404(Encounter, pk=pk)
+    if encounter.status != "setup":
+        return redirect("combat:detail", pk=encounter.pk)
+
+    unrolled_count = encounter.participants.filter(
+        initiative_score__isnull=True
+    ).count()
+    if unrolled_count > 0:
+        messages.error(
+            request,
+            f"{unrolled_count} participants have not rolled initiative yet.",
+        )
+        return redirect("combat:detail", pk=encounter.pk)
+
+    ordered = list(
+        encounter.participants.order_by("-initiative_score", "id")
+    )
+    if not ordered:
+        # Edge case: empty encounter. Refuse silently — there is no
+        # valid "first actor" to point at.
+        messages.error(request, "Cannot start an encounter with no participants.")
+        return redirect("combat:detail", pk=encounter.pk)
+
+    encounter.initiative_order = [p.id for p in ordered]
+    encounter.active_participant_id = ordered[0].id
+    encounter.status = "active"
+    encounter.round_number = 1
+    encounter.started_at = timezone.now()
+    encounter.save(
+        update_fields=[
+            "initiative_order",
+            "active_participant_id",
+            "status",
+            "round_number",
+            "started_at",
+            "updated_at",
+        ]
+    )
+
+    # Reset acted_this_round on every participant for the fresh round.
+    encounter.participants.update(acted_this_round=False)
+
+    _log(
+        encounter,
+        "system",
+        f"Encounter started — round 1, {ordered[0].name} acts first.",
+        first_participant_id=ordered[0].id,
+    )
+    return redirect("combat:detail", pk=encounter.pk)
+
+
+@login_required
+@_gm_only
+@csrf_protect
+def next_turn(request, pk):
+    """POST — advance the active participant pointer.
+
+    If the current participant is the last in ``initiative_order`` the
+    round rolls over: ``round_number`` increments, every participant's
+    ``acted_this_round`` flag is reset, and the pointer wraps to the
+    top of the order (logged as ``round_advance``). Otherwise the
+    pointer steps forward one slot and a ``turn_advance`` row is
+    written.
+    """
+    if request.method != "POST":
+        return HttpResponseNotAllowed(["POST"])
+
+    encounter = get_object_or_404(Encounter, pk=pk)
+    if encounter.status != "active":
+        return redirect("combat:detail", pk=encounter.pk)
+
+    order = list(encounter.initiative_order or [])
+    if not order:
+        # Defensive: an active encounter with no order is malformed,
+        # but bail rather than crash so the GM can recover with CLEAR.
+        return redirect("combat:detail", pk=encounter.pk)
+
+    # Mark the current actor as acted, then look up the next slot.
+    current_id = encounter.active_participant_id
+    if current_id is not None:
+        Participant.objects.filter(pk=current_id, encounter=encounter).update(
+            acted_this_round=True
+        )
+
+    try:
+        idx = order.index(current_id)
+    except ValueError:
+        # Active pointer not in order (e.g. the active participant was
+        # removed). Fall back to slot 0.
+        idx = -1
+
+    if idx >= len(order) - 1:
+        # End of round — roll over.
+        encounter.round_number += 1
+        encounter.participants.update(acted_this_round=False)
+        next_id = order[0]
+        encounter.active_participant_id = next_id
+        encounter.save(
+            update_fields=[
+                "round_number",
+                "active_participant_id",
+                "updated_at",
+            ]
+        )
+        _log(
+            encounter,
+            "round_advance",
+            f"Round {encounter.round_number} begins.",
+            round_number=encounter.round_number,
+        )
+    else:
+        next_id = order[idx + 1]
+        encounter.active_participant_id = next_id
+        encounter.save(update_fields=["active_participant_id", "updated_at"])
+        # Resolve the next participant's name for the log message —
+        # may be missing if a delete just SET_NULL'd them.
+        next_p = encounter.participants.filter(pk=next_id).first()
+        next_name = next_p.name if next_p else f"#{next_id}"
+        _log(
+            encounter,
+            "turn_advance",
+            f"Turn passes to {next_name}.",
+            participant_id=next_id,
+        )
+
+    return redirect("combat:detail", pk=encounter.pk)
+
+
+@login_required
+@_gm_only
+@csrf_protect
+def end_encounter(request, pk):
+    """POST — conclude the encounter.
+
+    Sets status to ``concluded``, clears the active pointer (no one
+    is acting anymore), and stamps ``ended_at``. Redirects to the
+    encounter list so the GM lands on a clean surface — the detail
+    page is still reachable for post-mortem review.
+    """
+    if request.method != "POST":
+        return HttpResponseNotAllowed(["POST"])
+
+    encounter = get_object_or_404(Encounter, pk=pk)
+    rounds = encounter.round_number
+    encounter.status = "concluded"
+    encounter.active_participant_id = None
+    encounter.ended_at = timezone.now()
+    encounter.save(
+        update_fields=[
+            "status",
+            "active_participant_id",
+            "ended_at",
+            "updated_at",
+        ]
+    )
+
+    _log(
+        encounter,
+        "system",
+        f"Encounter concluded after {rounds} round(s).",
+        rounds=rounds,
+    )
+    return redirect("combat:list")
