@@ -553,8 +553,10 @@
 
             <button type="submit" class="btn-primary" style="width: 100%;">SAVE</button>
 
-            {# Initialise slider readouts to current % values on load.
-               Stored values are 0..1; the slider runs 0..100. #}
+            {% comment %}
+            Initialise slider readouts to current % values on load.
+            Stored values are 0..1; the slider runs 0..100.
+            {% endcomment %}
             <script>
             (function () {
               var section = document.getElementById('sec-tweaks');

@@ -1,5 +1,9 @@
 # Changelog
 
+## v0.14.54
+- Fix: multi-line Django `{# ... #}` comments were leaking through to the page in five templates (profile, login, register, briefs, site settings) — Django comment syntax `{# #}` is **single-line only**, multi-line blocks are passed through to the renderer as raw text. This was the unrendered ASCII-divider blocks visible at the top of `/accounts/profile/` (and similar). All five templates converted to `{% comment %}{% endcomment %}` blocks
+- Per the existing project memory `feedback_django_template_comments.md`: this is a known footgun for agent-authored templates — do not use multi-line `{# #}` in this codebase
+
 ## v0.14.53
 - New **OPERATIONS** dropdown in the top subsystem rail consolidates the admin links — `SETTINGS`, `ADMIN`, `GM` (the last only for superusers). Clicking the toggle reveals a square-cornered, accent-glow dropdown panel anchored to the right of the rail. Caret rotates 180° when open, click-outside or `Escape` closes it
 - Three flat staff/superuser links collapse into one menu item, leaving the rail visually leaner

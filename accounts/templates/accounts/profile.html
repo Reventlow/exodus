@@ -5,11 +5,11 @@
 {% block content %}
 <div style="max-width: 560px; margin: 2rem auto;">
 
-    {# ============================================================
-       Authority card — operative profile summary.
-       Wave 2A clearance-gate chrome: brackets frame + corner cuts.
-       Replaces the old glass-panel/tech-border combo.
-       ============================================================ #}
+    {% comment %}
+    Authority card — operative profile summary.
+    Wave 2A clearance-gate chrome: brackets frame + corner cuts.
+    Replaces the old glass-panel/tech-border combo.
+    {% endcomment %}
     <div class="brackets" style="position: relative; padding: 28px 32px; margin-bottom: 1.5rem;">
         <span class="bk tl"></span><span class="bk tr"></span>
         <span class="bk bl"></span><span class="bk br"></span>
@@ -42,9 +42,9 @@
         </div>
     </div>
 
-    {# ============================================================
-       Avatar card. Round avatar preserved (border-radius: 50%).
-       ============================================================ #}
+    {% comment %}
+    Avatar card. Round avatar preserved (border-radius: 50%).
+    {% endcomment %}
     <div class="brackets" style="position: relative; padding: 28px 32px; margin-bottom: 1.5rem;">
         <span class="bk tl"></span><span class="bk tr"></span>
         <span class="bk bl"></span><span class="bk br"></span>
@@ -87,10 +87,10 @@
         </div>
     </div>
 
-    {# ============================================================
-       Passphrase update card — uses the .field primitive recipe
-       so each input gets the > prompt glyph and accent focus state.
-       ============================================================ #}
+    {% comment %}
+    Passphrase update card — uses the .field primitive recipe
+    so each input gets the > prompt glyph and accent focus state.
+    {% endcomment %}
     <div class="brackets" style="position: relative; padding: 28px 32px;">
         <span class="bk tl"></span><span class="bk tr"></span>
         <span class="bk bl"></span><span class="bk br"></span>

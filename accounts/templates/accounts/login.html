@@ -1,7 +1,9 @@
 {% load static %}<!DOCTYPE html>
-{# Clearance Gate (login). Does NOT extend base.html — this is a
-   stand-alone surface. Graceful degradation: a plain <form> works
-   without JS thanks to the .nojs-only / html.no-js fallback. #}
+{% comment %}
+Clearance Gate (login). Does NOT extend base.html — this is a
+stand-alone surface. Graceful degradation: a plain <form> works
+without JS thanks to the .nojs-only / html.no-js fallback.
+{% endcomment %}
 <html lang="en" class="no-js">
 <head>
   <meta charset="UTF-8">
