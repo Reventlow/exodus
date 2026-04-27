@@ -203,6 +203,10 @@ class SiteSettings(models.Model):
             "show_rails": True,
             "agency_name": "BLACKLOG.NET",
             "op_codename": "OMEGA-7",
+            # IANA timezone shown in the header strip clock. UTC default
+            # so the strip never shifts unless an admin explicitly picks
+            # a regional zone.
+            "timezone": "UTC",
         }
 
     def get_tweaks(self):

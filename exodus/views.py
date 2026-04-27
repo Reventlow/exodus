@@ -90,6 +90,18 @@ def site_settings(request):
                                  or "BLACKLOG.NET")[:50]
             tw["op_codename"] = (request.POST.get("tweaks_op_codename", "").strip()
                                  or "OMEGA-7")[:50]
+            # Timezone for the header-strip clock. Validated against the
+            # zoneinfo database so a malformed POST can't break the JS
+            # clock with an invalid IANA name.
+            tz_raw = request.POST.get("tweaks_timezone", "").strip()
+            if tz_raw:
+                try:
+                    from zoneinfo import ZoneInfo, available_timezones
+                    if tz_raw == "UTC" or tz_raw in available_timezones():
+                        ZoneInfo(tz_raw)  # final sanity check
+                        tw["timezone"] = tz_raw
+                except Exception:
+                    pass
             settings_obj.tweaks = tw
         for lbl in ["dispatch", "players", "agencies", "council", "npcs", "comms"]:
             val = request.POST.get(f"label_{lbl}", "").strip()

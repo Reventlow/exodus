@@ -115,8 +115,8 @@
                 <span>{{ STRIP_OPS_ONLINE|default:0 }}</span>
                 <span class="muted">·</span>
             {% endif %}
-            <span class="muted">UTC</span>
-            <span id="strip-clock">--:--:--</span>
+            <span class="muted" id="strip-clock-label">UTC</span>
+            <span id="strip-clock" data-timezone="{{ TWEAKS.timezone|default:'UTC' }}">--:--:--</span>
             <span class="muted">·</span>
             <span class="muted">BUILD</span>
             <span>v{{ APP_VERSION }}</span>
@@ -316,9 +316,33 @@
     <script>
     (function() {
         var el = document.getElementById('strip-clock');
+        var labelEl = document.getElementById('strip-clock-label');
         if (!el) return;
+        var tz = el.getAttribute('data-timezone') || 'UTC';
+
+        // Compute a short timezone label once on load (CET / CEST / EST etc.).
+        function shortTzLabel() {
+            try {
+                var parts = new Intl.DateTimeFormat('en-GB', {
+                    timeZone: tz, timeZoneName: 'short',
+                }).formatToParts(new Date());
+                var p = parts.find(function (x) { return x.type === 'timeZoneName'; });
+                return (p && p.value) || tz;
+            } catch (e) {
+                return tz;
+            }
+        }
+        if (labelEl) labelEl.textContent = shortTzLabel();
+
         function tick() {
-            el.textContent = new Date().toISOString().slice(11, 19);
+            try {
+                el.textContent = new Intl.DateTimeFormat('en-GB', {
+                    timeZone: tz, hour12: false,
+                    hour: '2-digit', minute: '2-digit', second: '2-digit',
+                }).format(new Date());
+            } catch (e) {
+                el.textContent = new Date().toISOString().slice(11, 19);
+            }
         }
         tick();
         setInterval(tick, 1000);

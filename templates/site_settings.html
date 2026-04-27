@@ -551,6 +551,35 @@
                 </label>
             </div>
 
+            {# CLOCK / TIMEZONE — applies to the header strip clock site-wide #}
+            <div class="ss-card" style="margin-bottom: 1.25rem; display: grid; gap: 0.6rem;">
+                <div class="ss-label" style="margin-bottom: 0.2rem;">CLOCK</div>
+                <label style="display: flex; flex-direction: column; gap: 0.25rem;">
+                    <span class="ss-label" style="font-size: 0.7rem; margin-bottom: 0;">TIMEZONE</span>
+                    {% with current_tz=tweaks.timezone|default:'UTC' %}
+                    <select name="tweaks_timezone" class="ss-input" style="font-size: 0.9rem;">
+                        <option value="UTC" {% if current_tz == 'UTC' %}selected{% endif %}>UTC — Coordinated Universal Time</option>
+                        <option value="Europe/Copenhagen" {% if current_tz == 'Europe/Copenhagen' %}selected{% endif %}>Europe/Copenhagen — CET / CEST</option>
+                        <option value="Europe/Stockholm" {% if current_tz == 'Europe/Stockholm' %}selected{% endif %}>Europe/Stockholm — CET / CEST</option>
+                        <option value="Europe/Berlin" {% if current_tz == 'Europe/Berlin' %}selected{% endif %}>Europe/Berlin — CET / CEST</option>
+                        <option value="Europe/Paris" {% if current_tz == 'Europe/Paris' %}selected{% endif %}>Europe/Paris — CET / CEST</option>
+                        <option value="Europe/London" {% if current_tz == 'Europe/London' %}selected{% endif %}>Europe/London — GMT / BST</option>
+                        <option value="Europe/Helsinki" {% if current_tz == 'Europe/Helsinki' %}selected{% endif %}>Europe/Helsinki — EET / EEST</option>
+                        <option value="America/New_York" {% if current_tz == 'America/New_York' %}selected{% endif %}>America/New_York — EST / EDT</option>
+                        <option value="America/Chicago" {% if current_tz == 'America/Chicago' %}selected{% endif %}>America/Chicago — CST / CDT</option>
+                        <option value="America/Denver" {% if current_tz == 'America/Denver' %}selected{% endif %}>America/Denver — MST / MDT</option>
+                        <option value="America/Los_Angeles" {% if current_tz == 'America/Los_Angeles' %}selected{% endif %}>America/Los_Angeles — PST / PDT</option>
+                        <option value="Asia/Tokyo" {% if current_tz == 'Asia/Tokyo' %}selected{% endif %}>Asia/Tokyo — JST</option>
+                        <option value="Asia/Shanghai" {% if current_tz == 'Asia/Shanghai' %}selected{% endif %}>Asia/Shanghai — CST</option>
+                        <option value="Australia/Sydney" {% if current_tz == 'Australia/Sydney' %}selected{% endif %}>Australia/Sydney — AEST / AEDT</option>
+                    </select>
+                    {% endwith %}
+                    <span class="text-muted mono-text" style="font-size: 0.7rem; letter-spacing: 0.16em;">
+                        Drives the header-strip clock for every authenticated page. Login splash always shows UTC.
+                    </span>
+                </label>
+            </div>
+
             <button type="submit" class="btn-primary" style="width: 100%;">SAVE</button>
 
             {% comment %}

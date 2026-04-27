@@ -1,5 +1,10 @@
 # Changelog
 
+## v0.14.55
+- New **CLOCK** section in `/settings/ → CLEARANCE GATE → TWEAKS` with a TIMEZONE selector that drives the header-strip clock. Defaults to UTC; choices include UTC + 13 common IANA zones (Copenhagen / Stockholm / Berlin / Paris / London / Helsinki / NY / Chicago / Denver / LA / Tokyo / Shanghai / Sydney). Clock label shows the live abbreviation (CET / CEST / EST / EDT / etc.) — switches automatically across DST boundaries
+- Stored as `tweaks.timezone` on `SiteSettings`. Server-side validation against `zoneinfo.available_timezones()` so a malformed POST can't break the JS clock
+- Login splash always shows UTC regardless of the setting (the splash is its own surface and stays consistent across sessions)
+
 ## v0.14.54
 - Fix: multi-line Django `{# ... #}` comments were leaking through to the page in five templates (profile, login, register, briefs, site settings) — Django comment syntax `{# #}` is **single-line only**, multi-line blocks are passed through to the renderer as raw text. This was the unrendered ASCII-divider blocks visible at the top of `/accounts/profile/` (and similar). All five templates converted to `{% comment %}{% endcomment %}` blocks
 - Per the existing project memory `feedback_django_template_comments.md`: this is a known footgun for agent-authored templates — do not use multi-line `{# #}` in this codebase
