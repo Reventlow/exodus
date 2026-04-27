@@ -1,5 +1,8 @@
 # Changelog
 
+## v0.14.60
+- Combat reference subtitle drops the `WoD 2.0 — ` prefix; reads cleanly as `POOL = ATTRIBUTE + SKILL ± MODIFIERS · 8+ SUCCESS · 10-AGAIN · NET DAMAGE = SUCCESSES − ARMOR`
+
 ## v0.14.59
 - New **COMBAT** quick-reference page in the RULES section at `/rules/combat/`. Single-screen WoD 2.0 personal-combat cheat sheet covering: round structure (initiative + turn + end-of-round), attack pools (unarmed / melee / improvised / thrown / firearm / grapple), defense + dodge + armor + damage, health track + wound penalties + healing rates, common modifiers (cover / concealment / aiming / burst-fire / called-shots / movement / specialisations / willpower), and free-action examples
 - RULES hub at `/rules/` now shows three cards: MERITS · PULLING STRINGS · COMBAT
