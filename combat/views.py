@@ -339,6 +339,96 @@ def _dodge_successes(participant):
     return 0
 
 
+# ---------------------------------------------------------------------------
+# v0.15.14 — AIM, burst fire, autofire spread
+# ---------------------------------------------------------------------------
+#
+# AIM is a full-turn action that grants +1 cumulative dice on the next
+# attack against a specified target, stackable up to +3 over consecutive
+# aim turns. State lives in the participant's conditions list as a tag
+# of shape ``aiming_at:<target_id>:<turns>`` — no schema change needed.
+# Burst fire piggy-backs on the attack form (single / short / medium /
+# long) and adds +0/+1/+2/+3 dice. Autofire spread (medium/long only)
+# resolves separate attack rolls against extra targets at -1 cumulative
+# per spread index.
+
+# Burst-mode dice bonus table. Single fire is the default and the only
+# option for non-auto-capable weapons. Short burst is a 3-round burst
+# (+1), medium is a ~10-round burst (+2), long is full-auto (+3).
+BURST_BONUSES = {"single": 0, "short": 1, "medium": 2, "long": 3}
+
+# Per burst mode caps on the number of EXTRA targets engaged via spread.
+# Single / short bursts cannot spread (spread is autofire-only). Medium
+# burst engages up to 2 extras (3 targets total); long burst up to 5
+# extras (6 targets total — ample for any realistic skirmish, and the
+# cumulative -1 per index makes any further extras essentially zero
+# pool anyway).
+BURST_MAX_EXTRAS = {"single": 0, "short": 0, "medium": 2, "long": 5}
+
+
+def _weapon_is_auto_capable(weapon_data):
+    """True iff the equipped weapon's catalogue entry has
+    ``auto_capable: True``. Empty / missing weapon → False.
+
+    Used by the attack form to gate the FIRE MODE selector and by the
+    server-side resolver to fall back to single-fire on tampered POSTs
+    that try to spend burst dice without the supporting weapon.
+    """
+    if not weapon_data:
+        return False
+    return bool(weapon_data.get("auto_capable", False))
+
+
+def _parse_aim_tag(condition_tag):
+    """Parse 'aiming_at:42:2' → (target_id=42, turns=2). Returns None
+    on malformed input.
+
+    Defensive against any non-string / non-aim-prefix value so the
+    caller can iterate over the full conditions list and pull the
+    aim state without pre-filtering.
+    """
+    if not isinstance(condition_tag, str):
+        return None
+    if not condition_tag.startswith("aiming_at:"):
+        return None
+    parts = condition_tag.split(":")
+    if len(parts) != 3:
+        return None
+    try:
+        return int(parts[1]), int(parts[2])
+    except ValueError:
+        return None
+
+
+def _aim_state(participant):
+    """Return ``(target_id, turns)`` for the participant's current aim,
+    or ``None`` if no aim tag is set.
+
+    Only the first matching tag is returned — by construction the aim
+    helpers strip any old tag before appending a new one, so at most
+    one aim tag should ever be present on a participant.
+    """
+    for c in (participant.conditions or []):
+        parsed = _parse_aim_tag(c)
+        if parsed:
+            return parsed
+    return None
+
+
+def _strip_aim(participant):
+    """Remove any ``aiming_at:*`` tag from ``participant.conditions``
+    in-place. Caller is responsible for ``participant.save(...)``.
+
+    No-op when no aim tag is present. Used by every action that
+    should break aim — taking damage, defending, dodging, attacking
+    a different target, and the round-boundary clear in next_turn.
+    """
+    participant.conditions = [
+        c for c in (participant.conditions or [])
+        if not (isinstance(c, str) and c.startswith("aiming_at:"))
+    ]
+
+
 def _condition_attack_modifier(participant):
     """Sum ``atk_mod`` across active conditions, floored at -10.
 
@@ -483,9 +573,15 @@ def _apply_damage(participant, amount, dtype):
     participant.health_bashing = b
     participant.health_lethal = l
     participant.health_aggravated = a
-    participant.save(update_fields=[
-        "health_bashing", "health_lethal", "health_aggravated",
-    ])
+    # v0.15.14 — taking damage breaks aim. We strip any aiming_at:*
+    # tag here and add ``conditions`` to the update_fields list when
+    # the strip actually changed something. Done inline so every
+    # caller of _apply_damage benefits without separate plumbing.
+    update_fields = ["health_bashing", "health_lethal", "health_aggravated"]
+    if applied + upgrades + overflow > 0 and _aim_state(participant) is not None:
+        _strip_aim(participant)
+        update_fields.append("conditions")
+    participant.save(update_fields=update_fields)
     return applied, upgrades, overflow
 
 
@@ -650,6 +746,22 @@ def _attack_preview(actor, weapon_data, gm_modifier, weapon_skill_name=""):
     # box client-side, the server re-validates on submit.
     specialisations = _specialisations_for_skill(actor, skill_name)
 
+    # v0.15.14 — burst-fire options. ``available`` is True only when
+    # the equipped weapon is auto-capable (and even then the SINGLE
+    # mode is always available). The template can render a select
+    # with disabled non-available options, or omit them entirely.
+    auto_capable = _weapon_is_auto_capable(weapon_data)
+    burst_options = [
+        {"value": "single", "label": "SINGLE",
+         "bonus": 0, "available": True},
+        {"value": "short", "label": "SHORT BURST (3rd, +1)",
+         "bonus": 1, "available": auto_capable},
+        {"value": "medium", "label": "MEDIUM BURST (10rd, +2)",
+         "bonus": 2, "available": auto_capable},
+        {"value": "long", "label": "LONG BURST / FULL AUTO (+3)",
+         "bonus": 3, "available": auto_capable},
+    ]
+
     return {
         "base":             base,
         "skill":            skill_value,
@@ -661,6 +773,13 @@ def _attack_preview(actor, weapon_data, gm_modifier, weapon_skill_name=""):
         "willpower_bonus":  0,   # preview only — WP is a submit-time toggle
         "specialisations":  specialisations,
         "spec_bonus":       0,   # preview is pre-tick; JS recomputes live
+        # v0.15.14 — burst-fire options surfaced for the FIRE MODE
+        # select. ``auto_capable`` mirrors the equipped weapon's flag
+        # so the template can disable the select entirely (rather
+        # than hiding it) when the weapon is single-shot only.
+        "burst_options":    burst_options,
+        "auto_capable":     auto_capable,
+        "burst_bonus":      0,   # preview is single-fire; JS recomputes live
         "total":            total,
     }
 
@@ -1021,6 +1140,24 @@ def encounter_page(request, pk):
         # control them — only the GM.
         p.can_control = _can_control_participant(request.user, p)
 
+        # v0.15.14 — burst-fire eligibility (firearm has auto_capable).
+        # Drives the FIRE MODE select on the attack form: when False,
+        # the select stays disabled and only the SINGLE option is
+        # rendered. Server re-validates on submit so a tampered POST
+        # that smuggles burst_mode=long onto a Hand Gun simply
+        # downgrades to single (and a system row notes the attempt).
+        p.weapon_auto_capable = _weapon_is_auto_capable(p.weapon_data)
+
+        # v0.15.14 — aim state for the row banner. ``aim_state`` is
+        # ``(target_id, turns)`` or ``None``; resolve target_name in a
+        # second pass below so the banner can display
+        # ``AIMING: <target_name> (+<turns>/3)``. The banner has its
+        # own × CANCEL AIM button posting to clear_condition with
+        # condition=aiming_at, which the existing prefix-aware clear
+        # handler already strips.
+        p.aim_state = _aim_state(p)
+        p.aim_target_name = None  # filled in on a second pass below
+
         # Pills for the header — color-coded (red for incapacitated,
         # cyan for stances, amber for ordinary status conditions).
         pills = []
@@ -1052,6 +1189,16 @@ def encounter_page(request, pk):
             for key, defn in CONDITION_DEFS.items()
             if key not in _STANCE_TAGS
         ]
+
+    # v0.15.14 — second pass to resolve aim target names. Done after
+    # the main loop so we can do a O(N) lookup against the same
+    # participants list (rather than another DB round-trip per row).
+    pid_to_name = {p.id: p.name for p in participants}
+    for p in participants:
+        if p.aim_state is None:
+            continue
+        target_id, _turns = p.aim_state
+        p.aim_target_name = pid_to_name.get(target_id)
 
     by_faction = {
         "player_or_ally": [p for p in participants if p.faction in ("player", "ally")],
@@ -1728,10 +1875,18 @@ def _advance_turn_pointer(encounter):
         encounter.round_number += 1
         encounter.participants.update(acted_this_round=False)
         cleared_any = False
+        # v0.15.14 — also strip aiming_at:* tags at the round
+        # boundary. Aim does not survive a round roll (the WoD 2.0
+        # action economy treats each round as a clean reset for
+        # turn-cost actions). The strip is folded into the same
+        # save() that nukes defense_full and dodging:N so we don't
+        # double-write per row.
         for p in encounter.participants.all():
             new_conds = [
                 c for c in (p.conditions or [])
-                if c != "defense_full" and not c.startswith("dodging:")
+                if c != "defense_full"
+                and not c.startswith("dodging:")
+                and not c.startswith("aiming_at:")
             ]
             if new_conds != (p.conditions or []):
                 p.conditions = new_conds
@@ -1749,7 +1904,9 @@ def _advance_turn_pointer(encounter):
             round_number=encounter.round_number,
         )
         if cleared_any:
-            _log(encounter, "system", "Defensive stances cleared at round boundary.")
+            # Phrasing covers both stance and aim clears — the
+            # template reader doesn't need to know which fired.
+            _log(encounter, "system", "Defensive stances and aim cleared at round boundary.")
     else:
         next_id = order[idx + 1]
         encounter.active_participant_id = next_id
@@ -1846,6 +2003,109 @@ def pass_turn(request, pk, participant_id):
         participant_id=participant.pk,
     )
     _advance_turn_pointer(encounter)
+    return redirect("combat:detail", pk=encounter.pk)
+
+
+@login_required
+@_gm_or_owner()
+@csrf_protect
+def aim(request, pk, participant_id):
+    """POST — active participant spends the turn aiming at a target.
+
+    Aim grants ``+1`` cumulative dice on the next attack against the
+    aimed target, stackable up to ``+3`` over consecutive aim turns
+    (re-aiming the same target). State lives as a single condition
+    tag of shape ``aiming_at:<target_id>:<turns>`` so no schema change
+    is needed.
+
+    Lifecycle (consumed / cleared by):
+
+    * ``attack`` → consumed when target matches; silently broken when
+      target differs.
+    * ``full_defense`` / ``dodge`` → strip aim (defending breaks aim).
+    * ``_apply_damage`` → strip aim when the aimer takes damage.
+    * ``next_turn`` round-roll → strip every aim tag across the
+      encounter (aim does not survive a round boundary).
+
+    Mirrors the ``full_defense`` / ``dodge`` pattern: aim eats the
+    actor's turn (sets ``acted_this_round=True``) but does NOT
+    auto-advance the pointer — the GM clicks NEXT TURN to actually
+    pass the turn. Only ``pass_turn`` auto-advances.
+    """
+    if request.method != "POST":
+        return HttpResponseNotAllowed(["POST"])
+
+    encounter = get_object_or_404(Encounter, pk=pk)
+    if encounter.status != "active":
+        messages.error(request, "Cannot aim outside an active encounter.")
+        return redirect("combat:detail", pk=encounter.pk)
+
+    participant = get_object_or_404(
+        Participant, pk=participant_id, encounter=encounter
+    )
+
+    # Aim costs the turn — must be the active actor. Out-of-turn aim
+    # would let a participant re-aim someone else's turn, which has
+    # no game-mechanical meaning.
+    if encounter.active_participant_id != participant.id:
+        messages.error(request, "Aim must be taken on your own turn.")
+        return redirect("combat:detail", pk=encounter.pk)
+
+    target_id_raw = request.POST.get("target_id")
+    if not target_id_raw:
+        messages.error(request, "Pick a target to aim at.")
+        return redirect("combat:detail", pk=encounter.pk)
+    try:
+        target_id = int(target_id_raw)
+    except (TypeError, ValueError):
+        messages.error(request, "Invalid target.")
+        return redirect("combat:detail", pk=encounter.pk)
+
+    # Reject self-aim (no game meaning, easy to misclick).
+    if target_id == participant.id:
+        messages.error(request, "Cannot aim at self.")
+        return redirect("combat:detail", pk=encounter.pk)
+
+    target = Participant.objects.filter(
+        pk=target_id, encounter=encounter
+    ).first()
+    if target is None:
+        messages.error(request, "Target not found in this encounter.")
+        return redirect("combat:detail", pk=encounter.pk)
+
+    # Compute the next aim state. Re-aiming the same target stacks
+    # turns up to a hard cap of 3; switching targets resets to 1.
+    prev_state = _aim_state(participant)
+    if prev_state is not None and prev_state[0] == target_id:
+        new_turns_uncapped = prev_state[1] + 1
+    else:
+        new_turns_uncapped = 1
+    turns_clamped = (new_turns_uncapped > 3)
+    new_turns = min(3, new_turns_uncapped)
+
+    # Strip any old aim tag, then append the fresh one. Calling
+    # _strip_aim mutates participant.conditions in place; we then
+    # append the new tag and persist.
+    _strip_aim(participant)
+    new_conds = list(participant.conditions or [])
+    new_conds.append(f"aiming_at:{target_id}:{new_turns}")
+    participant.conditions = new_conds
+    participant.acted_this_round = True
+    participant.save(update_fields=["conditions", "acted_this_round"])
+
+    _log(
+        encounter,
+        "aim",
+        (
+            f"{participant.name} aims at {target.name} "
+            f"(turn {new_turns}/3, +{new_turns} dice on next attack)."
+        ),
+        actor_participant_id=participant.id,
+        target_participant_id=target_id,
+        turns=new_turns,
+        bonus=new_turns,
+        turns_clamped=turns_clamped,
+    )
     return redirect("combat:detail", pk=encounter.pk)
 
 
@@ -2237,6 +2497,181 @@ def set_cover(request, pk, participant_id):
 # ---------------------------------------------------------------------------
 
 
+def _resolve_single_attack(
+    encounter, attacker, target, *,
+    weapon_data, weapon_name, weapon_skill,
+    attack_pool, gm_modifier_int, wound_pen, cond_atk_mod,
+    spent_wp, applied_specs, spec_bonus,
+    msg_tail, msg_tail_parts,
+    spread_index=0, spread_penalty=0,
+    extra_payload=None,
+):
+    """Resolve one attack roll against one target, write log rows.
+
+    Extracted from ``attack`` so v0.15.14 burst spread can call this
+    helper once for the primary target and once per extra spread
+    target. ``attack_pool`` is the *pre-defense, pre-cover* pool for
+    this specific target — the burst-spread orchestrator computes a
+    different pool per extra (primary gets aim + burst, extras get
+    burst minus the spread penalty index).
+
+    ``spread_index`` is 0 for the primary attack, 1+ for extras (used
+    for log-message phrasing and a ``data.spread_index`` payload key).
+    ``extra_payload`` lets the caller stuff additional structured data
+    into the row (e.g. burst_mode, burst_bonus, aim_bonus).
+
+    Returns nothing — log rows are the side effect. The caller is
+    responsible for the encounter-level redirect and any cross-target
+    summary row.
+    """
+    extra_payload = dict(extra_payload or {})
+    spread_tail = (
+        f" (BURST SPREAD #{spread_index})" if spread_index > 0 else ""
+    )
+
+    defense = _compute_defense(target)
+    cover_pen = _cover_penalty(target.cover_state)
+
+    base_payload = dict(
+        actor_participant_id=attacker.id,
+        target_participant_id=target.id,
+        attack_pool=attack_pool,
+        defense=defense,
+        gm_modifier=gm_modifier_int,
+        weapon_name=weapon_name,
+        weapon_skill=weapon_skill,
+        wound_penalty=wound_pen,
+        condition_attack_modifier=cond_atk_mod,
+        spent_willpower=spent_wp,
+        willpower_after=attacker.willpower_current,
+        applied_specs=applied_specs,
+        spec_bonus=spec_bonus,
+        spread_index=spread_index,
+        spread_penalty=spread_penalty,
+    )
+    base_payload.update(extra_payload)
+
+    # ---- Full cover short-circuit -----------------------------------------
+    if cover_pen == "BLOCKED":
+        payload = dict(base_payload)
+        payload.update(
+            outcome="blocked_by_cover",
+            cover_state=target.cover_state,
+            successes=0,
+        )
+        _log(
+            encounter,
+            "attack",
+            f"{attacker.name} → {target.name}: BLOCKED BY FULL COVER."
+            + msg_tail + spread_tail,
+            **payload,
+        )
+        return
+
+    final_pool = max(0, attack_pool - defense - cover_pen)
+    successes, dice = _roll_pool(final_pool)
+
+    # ---- Miss --------------------------------------------------------------
+    if successes == 0:
+        payload = dict(base_payload)
+        payload.update(
+            outcome="miss",
+            cover_pen=cover_pen,
+            final_pool=final_pool,
+            dice=dice,
+            successes=0,
+        )
+        _log(
+            encounter,
+            "attack",
+            f"{attacker.name} attacks {target.name}: missed."
+            + msg_tail + spread_tail,
+            **payload,
+        )
+        return
+
+    # ---- Hit ---------------------------------------------------------------
+    weapon_amount, damage_type_from_field = _parse_weapon_damage(
+        weapon_data.get("damage", "")
+    )
+    damage_type = (
+        weapon_data.get("damage_type")
+        or damage_type_from_field
+        or "L"
+    ).upper()
+    if damage_type not in ("B", "L", "A"):
+        damage_type = "L"
+
+    raw_damage = successes + weapon_amount
+
+    if target.participant_kind == "mook":
+        rating = target.mook_armor_rating or ""
+    else:
+        rating = (target.armor_data or {}).get("rating", "")
+    b_armor, l_armor = _parse_armor_rating(rating)
+    if damage_type == "B":
+        armor_reduction = b_armor
+    elif damage_type == "L":
+        armor_reduction = l_armor
+    else:
+        armor_reduction = 0  # aggravated bypasses armor
+
+    final_damage = max(0, raw_damage - armor_reduction)
+    type_label = {"B": "bashing", "L": "lethal", "A": "aggravated"}[damage_type]
+
+    applied, upgraded, overflow = _apply_damage(target, final_damage, damage_type)
+
+    payload = dict(base_payload)
+    payload.update(
+        outcome="hit",
+        cover_pen=cover_pen,
+        final_pool=final_pool,
+        dice=dice,
+        successes=successes,
+        raw_damage=raw_damage,
+        weapon_damage=weapon_amount,
+        armor_reduction=armor_reduction,
+        final_damage=final_damage,
+        damage_type=damage_type,
+        applied=applied,
+        upgrades=upgraded,
+        overflow=overflow,
+    )
+
+    _log(
+        encounter,
+        "attack",
+        f"{attacker.name} hits {target.name} for {final_damage} {type_label} damage."
+        + msg_tail + spread_tail,
+        **payload,
+    )
+    _log(
+        encounter,
+        "health_change",
+        f"{target.name} takes {final_damage} {type_label} damage."
+        + spread_tail,
+        **payload,
+    )
+
+    # Auto-incapacitation: if the total damage now fills the track,
+    # tag the target and emit a condition_set row. Idempotent.
+    total_dmg = (
+        target.health_bashing + target.health_lethal + target.health_aggravated
+    )
+    if total_dmg >= target.health_max and not _has_condition(target, "incapacitated"):
+        new_conds = list(target.conditions or [])
+        new_conds.append("incapacitated")
+        target.conditions = new_conds
+        target.save(update_fields=["conditions"])
+        _log(
+            encounter,
+            "condition_set",
+            f"{target.name} is INCAPACITATED.",
+            target_participant_id=target.id,
+            condition="incapacitated",
+        )
+
+
 @login_required
 @_gm_or_owner("attacker_id")
 @csrf_protect
@@ -2265,16 +2700,23 @@ def attack(request, pk, attacker_id):
     spend, full damage track upgrade, and auto-incapacitation onto the
     v0.15.4 pipeline. The resolver writes one or two log rows
     depending on the outcome (plus an optional ``condition_set`` row
-    when the target gets KO'd):
+    when the target gets KO'd).
 
-    * ``blocked_by_cover`` — full cover, no roll, no health change.
-      Single ``attack`` row.
-    * ``miss`` — pool rolled to zero successes. Single ``attack`` row.
-    * ``hit`` — both ``attack`` (resolution payload) and
-      ``health_change``. Damage applied via ``_apply_damage`` honours
-      the WoD 2.0 track upgrade rules (B/L/A ladder). If the target's
-      total damage now equals or exceeds ``health_max``, an extra
-      ``condition_set`` row is appended for the auto-incapacitation.
+    v0.15.14 — three new mechanics layered on top:
+
+    * **AIM** — if the attacker has an ``aiming_at:<target_id>:<turns>``
+      tag and the chosen primary target matches, ``+turns`` dice are
+      added to the primary pool and the aim is consumed. If the chosen
+      primary target differs, the aim is silently broken (no bonus).
+    * **Burst fire** — ``burst_mode`` form field (single / short /
+      medium / long) adds 0 / +1 / +2 / +3 dice. Server falls back to
+      single-fire (with a ``system`` log row) when the equipped weapon
+      is not auto-capable.
+    * **Autofire spread** — medium / long bursts can engage extra
+      targets via ``extra_target_ids``. Each extra resolves a separate
+      attack roll at ``-1 * spread_index`` cumulative dice penalty.
+      Aim only applies to the primary target — extras don't get the
+      aim bonus.
     """
     if request.method != "POST":
         return HttpResponseNotAllowed(["POST"])
@@ -2294,12 +2736,12 @@ def attack(request, pk, attacker_id):
         )
         return redirect("combat:detail", pk=encounter.pk)
 
-    target_id = request.POST.get("target_id")
-    if not target_id:
+    target_id_raw = request.POST.get("target_id")
+    if not target_id_raw:
         messages.error(request, "Pick a target.")
         return redirect("combat:detail", pk=encounter.pk)
     target = get_object_or_404(
-        Participant, pk=target_id, encounter=encounter
+        Participant, pk=target_id_raw, encounter=encounter
     )
     if target.id == attacker.id:
         messages.error(request, "Cannot attack self.")
@@ -2317,20 +2759,12 @@ def attack(request, pk, attacker_id):
     weapon_data = attacker.weapon_data or {}
     weapon_name = attacker.weapon_name or "(unarmed)"
 
-    # v0.15.9 — when the form omits the weapon skill (the field is
-    # empty), auto-pick it from the equipped weapon's category. An
-    # explicit non-empty value passes through unchanged so the GM /
-    # player can override the default for narrative reasons (e.g.
-    # using Brawl with a rifle butt as an improvised club).
+    # v0.15.9 — auto-pick weapon skill when omitted.
     if not weapon_skill:
         weapon_skill = _weapon_skill_for(weapon_data)
 
-    # v0.15.10 — validate player-picked specialisations. We rebuild
-    # the allowed set from the actor's current specialisations
-    # filtered by the resolved skill, then drop any submitted name
-    # that isn't on it. Silent filter — a tampered POST with a
-    # bogus spec name simply doesn't get the +1, no error to the
-    # user (the form-rendered checkboxes can never produce one).
+    # v0.15.10 — validate player-picked specialisations against
+    # the actor's actual sheet.
     submitted_specs = request.POST.getlist("applied_specs")
     allowed_specs = _specialisations_for_skill(attacker, weapon_skill)
     allowed_lower = {s.lower(): s for s in allowed_specs}
@@ -2347,189 +2781,211 @@ def attack(request, pk, attacker_id):
             seen.add(key)
     spec_bonus = len(applied_specs)
 
-    # v0.15.5 — full pool composition (base + wound + conditions + WP).
-    # v0.15.10 — adds +1 per validated specialisation.
+    # v0.15.14 — burst-fire mode resolution. Reject anything outside
+    # the four canonical values and, when the equipped weapon isn't
+    # auto-capable, silently downgrade non-single modes to single
+    # (with a system log row noting the attempt). Keeps a tampered
+    # POST from sneaking +3 dice onto a Hand Gun.
+    burst_mode_raw = request.POST.get("burst_mode", "single")
+    burst_mode = burst_mode_raw if burst_mode_raw in BURST_BONUSES else "single"
+    auto_capable = _weapon_is_auto_capable(weapon_data)
+    if burst_mode != "single" and not auto_capable:
+        _log(
+            encounter,
+            "system",
+            f"{attacker.name} attempted {burst_mode} burst but weapon "
+            f"is not auto-capable — fired single.",
+            actor_participant_id=attacker.id,
+            attempted_burst_mode=burst_mode,
+            weapon_name=weapon_name,
+        )
+        burst_mode = "single"
+    burst_bonus = BURST_BONUSES[burst_mode]
+
+    # v0.15.14 — aim consumption. We always strip the aim tag at the
+    # end of an attack (whether consumed or broken), but the bonus
+    # only applies when the primary target matches the aimed target.
+    aim_state = _aim_state(attacker)
+    aim_bonus = 0
+    aim_consumed = False
+    aim_broken = False
+    aim_target_id_for_log = None
+    if aim_state is not None:
+        aim_target_id_for_log, aim_turns = aim_state
+        if aim_target_id_for_log == target.id:
+            aim_bonus = aim_turns
+            aim_consumed = True
+        else:
+            aim_broken = True
+
+    # v0.15.5 + v0.15.10 — full pool composition (base + wound + cond +
+    # WP + spec). v0.15.14 — adds burst bonus + aim bonus on the
+    # PRIMARY target. Extras don't get aim; extras do get burst bonus.
     wound_pen = _wound_penalty(attacker)
     cond_atk_mod = _condition_attack_modifier(attacker)
-    attack_pool = _actor_total_pool(
+    base_pool_no_burst = _actor_total_pool(
         attacker, weapon_data, gm_modifier_int, weapon_skill,
         spend_willpower=spent_wp,
         applied_specialisations=applied_specs,
     )
-    defense = _compute_defense(target)
-    cover_pen = _cover_penalty(target.cover_state)
+    primary_pool = base_pool_no_burst + burst_bonus + aim_bonus
 
-    # Decrement willpower and persist if the spend went through. Done
-    # *before* logging so the payload's ``willpower_after`` is accurate.
+    # Decrement willpower and persist if the spend went through.
+    # Done *before* any roll so payload's willpower_after is accurate.
     if spent_wp:
         attacker.willpower_current = max(0, (attacker.willpower_current or 0) - 1)
         attacker.save(update_fields=["willpower_current"])
 
-    # v0.15.10 — pre-built log message tail (WP and SPEC suffixes).
-    # Centralised so blocked / miss / hit all read identically.
+    # v0.15.10/v0.15.14 — pre-built log message tail (WP / SPEC / AIM /
+    # BURST suffixes). Centralised so blocked / miss / hit all read
+    # identically. Spread tail is added inside _resolve_single_attack.
     msg_tail_parts = []
     if spent_wp:
         msg_tail_parts.append("WP+3")
     if applied_specs:
         msg_tail_parts.append("+SPEC: " + ", ".join(applied_specs))
+    if aim_bonus:
+        msg_tail_parts.append(f"+{aim_bonus} AIM")
+    if burst_bonus:
+        msg_tail_parts.append(f"+{burst_bonus} BURST")
     msg_tail = (" (" + " | ".join(msg_tail_parts) + ")") if msg_tail_parts else ""
 
-    # ---- Full cover short-circuit -----------------------------------------
-    if cover_pen == "BLOCKED":
-        _log(
-            encounter,
-            "attack",
-            f"{attacker.name} → {target.name}: BLOCKED BY FULL COVER."
-            + msg_tail,
-            actor_participant_id=attacker.id,
-            target_participant_id=target.id,
-            outcome="blocked_by_cover",
-            attack_pool=attack_pool,
-            defense=defense,
-            cover_state=target.cover_state,
-            successes=0,
-            gm_modifier=gm_modifier_int,
-            weapon_name=weapon_name,
-            weapon_skill=weapon_skill,
-            wound_penalty=wound_pen,
-            condition_attack_modifier=cond_atk_mod,
-            spent_willpower=spent_wp,
-            willpower_after=attacker.willpower_current,
-            applied_specs=applied_specs,
-            spec_bonus=spec_bonus,
-        )
-        return redirect("combat:detail", pk=encounter.pk)
+    # v0.15.14 — extra targets for autofire spread. Cap by burst mode,
+    # filter against this encounter's participants, drop self / primary
+    # / duplicates, order deterministically by (position_order, id).
+    extras = []
+    extras_total = 0
+    spread_max = BURST_MAX_EXTRAS.get(burst_mode, 0)
+    if spread_max > 0:
+        raw_extras = request.POST.getlist("extra_target_ids")
+        # Deduplicate raw input, preserving order of first appearance.
+        seen_extra_ids = set()
+        candidate_ids = []
+        for raw in raw_extras:
+            try:
+                eid = int(raw)
+            except (TypeError, ValueError):
+                continue
+            if eid in seen_extra_ids:
+                continue
+            if eid == attacker.id or eid == target.id:
+                continue
+            seen_extra_ids.add(eid)
+            candidate_ids.append(eid)
+        if candidate_ids:
+            extras = list(
+                Participant.objects.filter(
+                    pk__in=candidate_ids,
+                    encounter=encounter,
+                ).order_by("position_order", "id")
+            )
+            # Cap at the burst mode's max — drop excess silently rather
+            # than reject the whole shot.
+            if len(extras) > spread_max:
+                extras = extras[:spread_max]
+            extras_total = len(extras)
 
-    final_pool = max(0, attack_pool - defense - cover_pen)
-    successes, dice = _roll_pool(final_pool)
+    aim_only_on_primary = (extras_total > 0 and aim_bonus > 0)
 
-    # ---- Miss --------------------------------------------------------------
-    if successes == 0:
-        _log(
-            encounter,
-            "attack",
-            f"{attacker.name} attacks {target.name}: missed."
-            + msg_tail,
-            actor_participant_id=attacker.id,
-            target_participant_id=target.id,
-            outcome="miss",
-            attack_pool=attack_pool,
-            defense=defense,
-            cover_pen=cover_pen,
-            final_pool=final_pool,
-            dice=dice,
-            successes=0,
-            gm_modifier=gm_modifier_int,
-            weapon_name=weapon_name,
-            weapon_skill=weapon_skill,
-            wound_penalty=wound_pen,
-            condition_attack_modifier=cond_atk_mod,
-            spent_willpower=spent_wp,
-            willpower_after=attacker.willpower_current,
-            applied_specs=applied_specs,
-            spec_bonus=spec_bonus,
-        )
-        return redirect("combat:detail", pk=encounter.pk)
+    extra_payload = {
+        "burst_mode": burst_mode,
+        "burst_bonus": burst_bonus,
+        "aim_bonus": aim_bonus,
+        "aim_consumed": aim_consumed,
+        "aim_broken": aim_broken,
+        "aim_only_on_primary": aim_only_on_primary,
+        "extras_total": extras_total,
+    }
 
-    # ---- Hit ---------------------------------------------------------------
-    weapon_amount, damage_type_from_field = _parse_weapon_damage(
-        weapon_data.get("damage", "")
-    )
-    # Allow an explicit override on the snapshot (future-proof for
-    # weapons that diverge from the parsed string), else use the
-    # parsed type. Default lethal.
-    damage_type = (
-        weapon_data.get("damage_type")
-        or damage_type_from_field
-        or "L"
-    ).upper()
-    if damage_type not in ("B", "L", "A"):
-        damage_type = "L"
-
-    raw_damage = successes + weapon_amount
-
-    # Armor source depends on participant kind. Aggravated bypasses.
-    if target.participant_kind == "mook":
-        rating = target.mook_armor_rating or ""
-    else:
-        rating = (target.armor_data or {}).get("rating", "")
-    b_armor, l_armor = _parse_armor_rating(rating)
-    if damage_type == "B":
-        armor_reduction = b_armor
-    elif damage_type == "L":
-        armor_reduction = l_armor
-    else:
-        armor_reduction = 0  # aggravated bypasses armor
-
-    final_damage = max(0, raw_damage - armor_reduction)
-    type_label = {"B": "bashing", "L": "lethal", "A": "aggravated"}[damage_type]
-
-    # Apply via the v0.15.5 helper — handles track upgrades and saves.
-    applied, upgraded, overflow = _apply_damage(target, final_damage, damage_type)
-
-    payload = dict(
-        actor_participant_id=attacker.id,
-        target_participant_id=target.id,
-        outcome="hit",
-        attack_pool=attack_pool,
-        defense=defense,
-        cover_pen=cover_pen,
-        final_pool=final_pool,
-        dice=dice,
-        successes=successes,
-        raw_damage=raw_damage,
-        weapon_damage=weapon_amount,
-        armor_reduction=armor_reduction,
-        final_damage=final_damage,
-        damage_type=damage_type,
-        gm_modifier=gm_modifier_int,
+    # ---- Primary attack ----------------------------------------------------
+    _resolve_single_attack(
+        encounter, attacker, target,
+        weapon_data=weapon_data,
         weapon_name=weapon_name,
         weapon_skill=weapon_skill,
-        applied=applied,
-        upgrades=upgraded,
-        overflow=overflow,
-        wound_penalty=wound_pen,
-        condition_attack_modifier=cond_atk_mod,
-        spent_willpower=spent_wp,
-        willpower_after=attacker.willpower_current,
+        attack_pool=primary_pool,
+        gm_modifier_int=gm_modifier_int,
+        wound_pen=wound_pen,
+        cond_atk_mod=cond_atk_mod,
+        spent_wp=spent_wp,
         applied_specs=applied_specs,
         spec_bonus=spec_bonus,
+        msg_tail=msg_tail,
+        msg_tail_parts=msg_tail_parts,
+        spread_index=0,
+        spread_penalty=0,
+        extra_payload=extra_payload,
     )
 
-    _log(
-        encounter,
-        "attack",
-        f"{attacker.name} hits {target.name} for {final_damage} {type_label} damage."
-        + msg_tail,
-        **payload,
-    )
-    # Separate health_change row so the timeline can be filtered
-    # down to damage-only events without re-parsing attack payloads.
-    _log(
-        encounter,
-        "health_change",
-        f"{target.name} takes {final_damage} {type_label} damage.",
-        **payload,
-    )
+    # ---- Aim tag housekeeping ---------------------------------------------
+    # Strip aim now (whether consumed or broken). Refresh attacker
+    # from the DB first because _resolve_single_attack may have run
+    # _apply_damage on the target — but _apply_damage operates on
+    # the target, not the attacker, so the attacker's conditions
+    # are still in-memory clean. We can safely use _strip_aim
+    # against our existing instance.
+    if aim_consumed or aim_broken:
+        if aim_broken:
+            _log(
+                encounter,
+                "system",
+                f"{attacker.name}'s aim broken — engaged different target.",
+                actor_participant_id=attacker.id,
+                aimed_target_id=aim_target_id_for_log,
+                actual_target_id=target.id,
+            )
+        # Re-read the attacker so we don't clobber a willpower
+        # decrement that already persisted above.
+        attacker.refresh_from_db()
+        _strip_aim(attacker)
+        attacker.save(update_fields=["conditions"])
 
-    # Auto-incapacitation: if the total damage now fills the track,
-    # tag the target and emit a condition_set row. Idempotent — if
-    # the tag is already present we skip the second log row so a
-    # finishing-blow doesn't double-fire.
-    total_dmg = (
-        target.health_bashing + target.health_lethal + target.health_aggravated
-    )
-    if total_dmg >= target.health_max and not _has_condition(target, "incapacitated"):
-        new_conds = list(target.conditions or [])
-        new_conds.append("incapacitated")
-        target.conditions = new_conds
-        target.save(update_fields=["conditions"])
+    # ---- Spread extras -----------------------------------------------------
+    for i, extra_target in enumerate(extras, start=1):
+        spread_penalty = i  # cumulative -1, -2, ... per index
+        # Extras get the burst bonus but NOT the aim bonus. Spread
+        # penalty is subtracted from the pool before defense/cover.
+        extra_pool = max(0, base_pool_no_burst + burst_bonus - spread_penalty)
+        _resolve_single_attack(
+            encounter, attacker, extra_target,
+            weapon_data=weapon_data,
+            weapon_name=weapon_name,
+            weapon_skill=weapon_skill,
+            attack_pool=extra_pool,
+            gm_modifier_int=gm_modifier_int,
+            wound_pen=wound_pen,
+            cond_atk_mod=cond_atk_mod,
+            spent_wp=spent_wp,
+            applied_specs=applied_specs,
+            spec_bonus=spec_bonus,
+            msg_tail=msg_tail,
+            msg_tail_parts=msg_tail_parts,
+            spread_index=i,
+            spread_penalty=spread_penalty,
+            extra_payload=extra_payload,
+        )
+
+    # ---- Burst summary row -------------------------------------------------
+    if burst_mode != "single" or extras_total > 0:
+        if extras_total > 0:
+            summary = (
+                f"{attacker.name} unleashed {burst_mode} burst — "
+                f"primary: {target.name}, spread: {extras_total} additional "
+                f"target(s)."
+            )
+        else:
+            summary = (
+                f"{attacker.name} fired {burst_mode} burst at {target.name}."
+            )
         _log(
             encounter,
-            "condition_set",
-            f"{target.name} is INCAPACITATED.",
-            target_participant_id=target.id,
-            condition="incapacitated",
+            "system",
+            summary,
+            actor_participant_id=attacker.id,
+            burst_mode=burst_mode,
+            extras_total=extras_total,
+            primary_target_id=target.id,
+            extra_target_ids=[e.id for e in extras],
         )
 
     return redirect("combat:detail", pk=encounter.pk)
@@ -2633,7 +3089,13 @@ def clear_condition(request, pk, participant_id):
         return redirect("combat:detail", pk=encounter.pk)
 
     # v0.15.8 — player self-clear allow-list. Superusers (GM) bypass.
-    PLAYER_SELF_CLEAR = {"prone", "defense_full", "dodge_pending", "dodging"}
+    # v0.15.14 — adds ``aiming_at`` so a player can × CANCEL AIM on
+    # their own row's banner. The prefix family clause below
+    # (``startswith(tag + ":")``) already matches ``aiming_at:<id>:<n>``
+    # so a single tag value clears the whole family.
+    PLAYER_SELF_CLEAR = {
+        "prone", "defense_full", "dodge_pending", "dodging", "aiming_at",
+    }
     if not request.user.is_superuser and tag not in PLAYER_SELF_CLEAR:
         messages.error(
             request,
@@ -2750,10 +3212,16 @@ def full_defense(request, pk, participant_id):
         messages.error(request, "Full defense must be taken on your own turn.")
         return redirect("combat:detail", pk=encounter.pk)
 
+    # v0.15.14 — defending breaks aim. Compute whether we had aim
+    # before the strip so we can log a clarifying message.
+    had_aim = _aim_state(participant) is not None
+
     conds = list(participant.conditions or [])
     if "defense_full" not in conds:
         conds.append("defense_full")
-        participant.conditions = conds
+    participant.conditions = conds
+    if had_aim:
+        _strip_aim(participant)
     participant.acted_this_round = True
     participant.save(update_fields=["conditions", "acted_this_round"])
 
@@ -2763,6 +3231,13 @@ def full_defense(request, pk, participant_id):
         f"{participant.name} takes full defense — defense doubled until next round.",
         actor_participant_id=participant.id,
     )
+    if had_aim:
+        _log(
+            encounter,
+            "system",
+            f"{participant.name}'s aim broken — took full defense.",
+            actor_participant_id=participant.id,
+        )
     return redirect("combat:detail", pk=encounter.pk)
 
 
@@ -2825,8 +3300,16 @@ def dodge(request, pk, participant_id):
 
     successes, dice = _roll_pool(pool)
 
+    # v0.15.14 — dodging breaks aim. Detect before we rebuild the
+    # conditions list so we can log a clarifying system row when the
+    # dodger had been aiming.
+    had_aim = _aim_state(participant) is not None
+
     # Strip any prior dodge tag, then append the fresh one.
     conds = _strip_prefix_conditions(list(participant.conditions or []), "dodging")
+    # v0.15.14 — also strip any aiming_at:* tag from this fresh
+    # conditions list before persisting (mirrors the dodge-tag strip).
+    conds = [c for c in conds if not c.startswith("aiming_at:")]
 
     is_active = (encounter.active_participant_id == participant.id)
     update_fields = ["conditions"]
@@ -2856,6 +3339,13 @@ def dodge(request, pk, participant_id):
         successes=successes,
         is_active_turn=is_active,
     )
+    if had_aim:
+        _log(
+            encounter,
+            "system",
+            f"{participant.name}'s aim broken — dodged.",
+            actor_participant_id=participant.id,
+        )
     return redirect("combat:detail", pk=encounter.pk)
 
 

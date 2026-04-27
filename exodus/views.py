@@ -190,8 +190,21 @@ def site_settings(request):
         # (name / damage / range / capacity / notes). Empty-name rows
         # are dropped so the editor's add-row button can leave blank
         # rows without saving them.
+        #
+        # v0.15.14 — firearms additionally carry an ``auto_capable``
+        # column. Each firearm row submits a parallel hidden input
+        # ``weapons_firearm_auto_capable_flag`` carrying "1" / "0";
+        # the visible checkbox toggles the hidden input via a small
+        # change handler in the template so both stay in lock-step.
+        # Using a parallel array (rather than checkbox-by-index) makes
+        # the field robust against row deletions — the i-th flag
+        # always pairs with the i-th name regardless of how the rows
+        # have been re-ordered or pruned in the editor.
         if "weapons_submitted" in request.POST:
             categories = ("melee", "improvised", "firearm", "thrown")
+            firearm_auto_flags = request.POST.getlist(
+                "weapons_firearm_auto_capable_flag"
+            )
             new_weapons = []
             for cat in categories:
                 names = request.POST.getlist(f"weapons_{cat}_name")
@@ -203,14 +216,27 @@ def site_settings(request):
                     name = (raw_name or "").strip()[:80]
                     if not name:
                         continue
-                    new_weapons.append({
+                    entry = {
                         "name": name,
                         "category": cat,
                         "damage": (damages[i] if i < len(damages) else "").strip()[:48],
                         "range": (ranges[i] if i < len(ranges) else "").strip()[:48],
                         "capacity": (capacities[i] if i < len(capacities) else "").strip()[:48],
                         "notes": (notes_list[i] if i < len(notes_list) else "").strip()[:240],
-                    })
+                    }
+                    if cat == "firearm":
+                        # v0.15.14 — read the parallel auto_capable
+                        # flag for this row. Defensive against length
+                        # mismatch (legacy rows submitted before the
+                        # field was added would only carry the visible
+                        # columns, in which case the missing flag
+                        # collapses to False).
+                        flag_raw = (
+                            firearm_auto_flags[i]
+                            if i < len(firearm_auto_flags) else "0"
+                        )
+                        entry["auto_capable"] = (flag_raw == "1")
+                    new_weapons.append(entry)
             settings_obj.weapons = new_weapons
 
         settings_obj.save()
@@ -883,6 +909,11 @@ def api_weapons(request):
         "capacity": (body.get("capacity") or "").strip()[:48],
         "notes": (body.get("notes") or "").strip()[:240],
     }
+    # v0.15.14 — only firearms persist the auto_capable flag. The MCP
+    # client may send the field for non-firearms; we silently ignore
+    # it there to keep the schema clean.
+    if cat == "firearm":
+        new_w["auto_capable"] = bool(body.get("auto_capable", False))
     weapons.append(new_w)
     settings_obj.weapons = weapons
     settings_obj.save(update_fields=["weapons"])
@@ -950,6 +981,10 @@ def api_weapon_detail(request, name):
             w[field] = (body[field] or "").strip()[:48]
     if "notes" in body:
         w["notes"] = (body["notes"] or "").strip()[:240]
+    # v0.15.14 — auto_capable flag (firearms only). Sent as a bool;
+    # non-firearm rows silently drop the field on PUT.
+    if "auto_capable" in body and w.get("category") == "firearm":
+        w["auto_capable"] = bool(body["auto_capable"])
     weapons[idx] = w
     settings_obj.weapons = weapons
     settings_obj.save(update_fields=["weapons"])

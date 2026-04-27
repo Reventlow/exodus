@@ -445,6 +445,18 @@
                                 <th style="width: 13%;">DAMAGE</th>
                                 <th style="width: 19%;">RANGE</th>
                                 <th style="width: 12%;">CAPACITY</th>
+                                {% comment %}
+                                v0.15.14 — AUTO column appears only for
+                                firearms. The header cell is conditional;
+                                the row cells below are also conditional
+                                (and an empty cell is rendered for non-
+                                firearm rows so column alignment stays
+                                consistent if the editor is ever shown
+                                across categories side-by-side).
+                                {% endcomment %}
+                                {% if sec.cat == "firearm" %}
+                                <th style="width: 6%; text-align: center;" title="Auto-capable: shows burst-fire and autofire-spread modes on the attack form.">AUTO</th>
+                                {% endif %}
                                 <th>NOTES</th>
                                 <th style="width: 1%;"></th>
                             </tr>
@@ -456,6 +468,32 @@
                                 <td><input type="text" name="weapons_{{ sec.cat }}_damage" value="{{ w.damage }}" maxlength="48"></td>
                                 <td><input type="text" name="weapons_{{ sec.cat }}_range" value="{{ w.range }}" maxlength="48"></td>
                                 <td><input type="text" name="weapons_{{ sec.cat }}_capacity" value="{{ w.capacity }}" maxlength="48"></td>
+                                {% if sec.cat == "firearm" %}
+                                {% comment %}
+                                v0.15.14 — auto_capable is persisted
+                                via a parallel hidden input
+                                ``weapons_firearm_auto_capable_flag``
+                                ("1" / "0") that pairs row-for-row with
+                                the other firearm columns. The visible
+                                checkbox is a UI-only proxy: a small
+                                change handler (see the script block
+                                further down the editor) toggles the
+                                hidden flag whenever the box is
+                                clicked. This keeps the parallel-array
+                                shape regardless of row deletions or
+                                add-after-delete sequences.
+                                {% endcomment %}
+                                <td style="text-align: center;">
+                                    <input type="hidden"
+                                           name="weapons_firearm_auto_capable_flag"
+                                           value="{% if w.auto_capable %}1{% else %}0{% endif %}"
+                                           class="weap-auto-flag">
+                                    <input type="checkbox"
+                                           class="weap-auto-cb"
+                                           {% if w.auto_capable %}checked{% endif %}
+                                           title="Auto-capable: shows burst-fire and autofire-spread modes on the attack form.">
+                                </td>
+                                {% endif %}
                                 <td><input type="text" name="weapons_{{ sec.cat }}_notes" value="{{ w.notes }}" maxlength="240"></td>
                                 <td><button type="button" class="weap-del" onclick="this.closest('tr').remove()">×</button></td>
                             </tr>
@@ -471,20 +509,56 @@
 
             <script>
             (function () {
+                // v0.15.14 — wire each visible auto-capable checkbox
+                // to its sibling hidden flag input. Delegated to the
+                // table so dynamically added rows are picked up too
+                // (the click bubbles to the table-level listener).
+                function bindAutoFlag(cb) {
+                    if (!cb || cb.dataset.bound === '1') return;
+                    cb.dataset.bound = '1';
+                    cb.addEventListener('change', function () {
+                        // The hidden flag lives in the same <td> as
+                        // the checkbox. Take the previousElementSibling
+                        // — that's the hidden input we render first.
+                        var hidden = cb.parentElement.querySelector('.weap-auto-flag');
+                        if (hidden) hidden.value = cb.checked ? '1' : '0';
+                    });
+                }
+                document.querySelectorAll('.weap-auto-cb').forEach(bindAutoFlag);
+
                 document.querySelectorAll('.weap-add').forEach(function (btn) {
                     btn.addEventListener('click', function () {
                         var cat = btn.getAttribute('data-add-cat');
                         var tbody = btn.parentElement.querySelector('tbody[data-rows]');
+                        // v0.15.14 — for firearms, render an AUTO cell
+                        // with a hidden flag input + a UI checkbox.
+                        // The flag's name matches the server-side
+                        // parallel array; the checkbox toggles it.
+                        var autoCell = '';
+                        if (cat === 'firearm') {
+                            autoCell =
+                                '<td style="text-align: center;">' +
+                                  '<input type="hidden" ' +
+                                         'name="weapons_firearm_auto_capable_flag" ' +
+                                         'value="0" class="weap-auto-flag">' +
+                                  '<input type="checkbox" class="weap-auto-cb" ' +
+                                         'title="Auto-capable: shows burst-fire and autofire-spread modes on the attack form.">' +
+                                '</td>';
+                        }
                         var tr = document.createElement('tr');
                         tr.innerHTML =
                             '<td><input type="text" name="weapons_' + cat + '_name" maxlength="80" placeholder="NAME"></td>' +
                             '<td><input type="text" name="weapons_' + cat + '_damage" maxlength="48" placeholder="2L"></td>' +
                             '<td><input type="text" name="weapons_' + cat + '_range" maxlength="48" placeholder="—"></td>' +
                             '<td><input type="text" name="weapons_' + cat + '_capacity" maxlength="48" placeholder="—"></td>' +
+                            autoCell +
                             '<td><input type="text" name="weapons_' + cat + '_notes" maxlength="240" placeholder=""></td>' +
                             '<td><button type="button" class="weap-del" onclick="this.closest(\'tr\').remove()">×</button></td>';
                         tbody.appendChild(tr);
-                        var firstInput = tr.querySelector('input');
+                        // Bind the new row's checkbox if present.
+                        var newCb = tr.querySelector('.weap-auto-cb');
+                        if (newCb) bindAutoFlag(newCb);
+                        var firstInput = tr.querySelector('input[type="text"]');
                         if (firstInput) firstInput.focus();
                     });
                 });

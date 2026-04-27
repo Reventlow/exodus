@@ -185,9 +185,14 @@ class SiteSettings(models.Model):
     weapons = models.JSONField(
         default=list, blank=True,
         help_text=(
-            "List of {name, category} dicts. Categories: melee, improvised, "
-            "firearm, thrown. See SiteSettings.default_weapons() for the "
-            "seed catalogue."
+            "List of weapon-entry dicts. Per-entry keys: name (str), "
+            "category (str: melee | improvised | firearm | thrown), "
+            "damage (str: e.g. '2L'), range (str), capacity (str), "
+            "notes (str). For firearms, an optional auto_capable (bool) "
+            "flag controls whether burst-fire / autofire-spread modes "
+            "are offered on the attack form (legacy entries without "
+            "the flag default to False at read time). See "
+            "SiteSettings.default_weapons() for the seed catalogue."
         ),
     )
 
@@ -270,6 +275,12 @@ class SiteSettings(models.Model):
         ``range`` ("—" for melee; ``S/M/L`` metres for ranged or
         ``Str ×3/×6/×12`` for thrown), ``capacity`` ("—" for melee/thrown
         or e.g. "12+1" for firearms), and free-text ``notes``.
+
+        Firearms additionally carry ``auto_capable: bool`` — True iff
+        the weapon supports sustained automatic fire (burst / autofire
+        spread). Legacy entries without the flag default to False at
+        read time via ``get_weapons``. Non-firearm entries omit the
+        flag entirely (the burst-fire UI is firearm-only).
         """
         return [
             # ----- Melee --------------------------------------------------
@@ -293,35 +304,50 @@ class SiteSettings(models.Model):
             {"name": "Hammer", "category": "improvised", "damage": "2B",
              "range": "—", "capacity": "—", "notes": "Workshop tool. +1 dmg to construction-grade armour."},
             # ----- Firearm ------------------------------------------------
+            # ``auto_capable`` controls whether the attack form offers
+            # burst-fire / autofire-spread modes for this weapon. Only
+            # weapons that physically support sustained automatic fire
+            # carry True — semi-auto pistols, DMRs, pump shotguns and
+            # bolt-action rifles stay single-shot.
             {"name": "Hand Gun", "category": "firearm", "damage": "2L",
              "range": "20/40/80 m", "capacity": "12+1",
+             "auto_capable": False,
              "notes": "Concealable. 9 mm or .40 standard."},
             {"name": "Large Hand Gun", "category": "firearm", "damage": "3L",
              "range": "25/50/100 m", "capacity": "8+1",
+             "auto_capable": False,
              "notes": "Magnum / .44 / .50 AE. Heavy recoil — −1 to follow-up shots."},
             {"name": "Sub Machine Gun", "category": "firearm", "damage": "2L",
              "range": "20/40/80 m", "capacity": "30",
+             "auto_capable": True,
              "notes": "Burst-fire +1 dice; autofire +2 in close range."},
             {"name": "Assault Rifle", "category": "firearm", "damage": "3L",
              "range": "100/200/400 m", "capacity": "30",
+             "auto_capable": True,
              "notes": "Burst-fire +1; autofire +2/+3."},
             {"name": "DMR", "category": "firearm", "damage": "4L",
              "range": "200/400/800 m", "capacity": "20",
+             "auto_capable": False,
              "notes": "Semi-auto designated marksman rifle. Pairs well with optics."},
             {"name": "Shotgun", "category": "firearm", "damage": "4L close / 2L long",
              "range": "5/10/40 m", "capacity": "5+1",
+             "auto_capable": False,
              "notes": "Pump-action. Damage drops with range as shot spreads."},
             {"name": "Twin-Barrel Shotgun", "category": "firearm", "damage": "5L (both barrels)",
              "range": "5/10/40 m", "capacity": "2",
+             "auto_capable": False,
              "notes": "Fire one or both. Both = +1 damage, then full reload."},
             {"name": "Auto Shotgun", "category": "firearm", "damage": "4L",
              "range": "5/10/40 m", "capacity": "8",
+             "auto_capable": True,
              "notes": "Box-fed. Burst-fire +1 dice at close range."},
             {"name": "Scoped Rifle", "category": "firearm", "damage": "4L",
              "range": "250/500/1000 m", "capacity": "5+1",
+             "auto_capable": False,
              "notes": "−2 initiative; +1 aim per turn (max +3) with proper scope."},
             {"name": "Taser (Cartridge)", "category": "firearm", "damage": "1L + stun",
              "range": "4/8/15 m", "capacity": "1 cartridge",
+             "auto_capable": False,
              "notes": "On hit: Stamina + Resolve or stunned for [successes] turns."},
             # ----- Thrown -------------------------------------------------
             {"name": "Throwing Knife", "category": "thrown", "damage": "1L",
@@ -335,7 +361,13 @@ class SiteSettings(models.Model):
     def get_weapons(self):
         """Return the weapons list, hydrating any legacy entries that
         only have ``name`` + ``category`` with empty stat strings so the
-        UI handles them uniformly."""
+        UI handles them uniformly.
+
+        ``auto_capable`` (v0.15.14) defaults to False at read time for
+        any entry that doesn't carry the flag — legacy rows from before
+        the field was introduced therefore behave as semi-auto / single-
+        shot and the burst-fire UI is suppressed for them.
+        """
         weapons = self.weapons if isinstance(self.weapons, list) and self.weapons else self.default_weapons()
         hydrated = []
         for w in weapons:
@@ -348,6 +380,10 @@ class SiteSettings(models.Model):
                 "range": w.get("range", "") or "",
                 "capacity": w.get("capacity", "") or "",
                 "notes": w.get("notes", "") or "",
+                # Read-time default — legacy entries (and every non-
+                # firearm entry) collapse to False so the burst-fire UI
+                # stays disabled unless explicitly opted in.
+                "auto_capable": bool(w.get("auto_capable", False)),
             })
         return hydrated
 

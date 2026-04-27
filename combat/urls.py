@@ -128,6 +128,13 @@ urlpatterns = [
         views.pass_turn,
         name="pass_turn",
     ),
+    # v0.15.14 — AIM action. Costs the active turn; grants stackable
+    # +N dice on the next attack against the aimed target (cap at +3).
+    path(
+        "combat/<int:pk>/participants/<int:participant_id>/aim/",
+        views.aim,
+        name="aim",
+    ),
 
     # ---------------------------------------------------------------
     # v0.15.7 — JSON API for the MCP server
