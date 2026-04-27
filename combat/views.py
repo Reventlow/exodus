@@ -511,6 +511,109 @@ def _actor_total_pool(actor, weapon_data, gm_modifier, weapon_skill_name="",
 
 
 # ---------------------------------------------------------------------------
+# v0.15.9 — weapon-skill auto-pick + numeric attack-pool preview
+# ---------------------------------------------------------------------------
+
+# Map of weapon catalogue ``category`` → WoD 2.0 skill name. Anything
+# not listed (or a participant with no equipped weapon) falls back to
+# Brawl, since unarmed strikes use Brawl in WoD 2.0. The mapping is
+# intentionally small — extend here when new categories land in the
+# weapon catalogue, not in the calling sites.
+WEAPON_CATEGORY_SKILL = {
+    "firearm":     "Firearms",
+    "thrown":      "Athletics",
+    "melee":       "Weaponry",
+    "improvised":  "Weaponry",
+}
+
+
+def _weapon_skill_for(weapon_data):
+    """Map weapon catalogue 'category' to WoD 2.0 skill name.
+
+    Returns ``"Brawl"`` when there's no equipped weapon (unarmed).
+    Unknown / missing category strings fall back to ``"Weaponry"``
+    so a malformed catalogue row still resolves to *something*
+    sensible rather than zero pool.
+    """
+    if not weapon_data:
+        return "Brawl"
+    category = (weapon_data or {}).get("category", "")
+    return WEAPON_CATEGORY_SKILL.get(category, "Weaponry")
+
+
+def _attack_preview(actor, weapon_data, gm_modifier, weapon_skill_name=""):
+    """Return a dict breaking down the attacker's pool for UI preview.
+
+    Pure server-side computation. Mirrors the same arithmetic as
+    ``_attack_dice_pool`` + ``_actor_total_pool``, but split into the
+    component fields the row template renders so the player sees
+    *where* their dice come from before pulling the trigger.
+
+    Note: defense and cover penalty are NOT subtracted — those are
+    target-dependent and resolved at attack time. Same for willpower
+    (the +3 is decided by a checkbox at submit time, not a preview
+    field). The preview is therefore the actor's pre-target pool
+    ceiling against an unmodified target with no cover and no WP.
+
+    Auto-picks the skill via ``_weapon_skill_for(weapon_data)`` when
+    ``weapon_skill_name`` is empty (or whitespace) — the same
+    fallback the resolver applies in the attack view.
+    """
+    # Resolve the skill once. Empty / whitespace → auto-pick.
+    skill_name = (weapon_skill_name or "").strip()
+    if not skill_name:
+        skill_name = _weapon_skill_for(weapon_data)
+
+    base = 0
+    skill_value = 0
+    if actor.participant_kind == "mook":
+        # Mooks have no skill axis — the catalogue's combat_pool is
+        # already the entire offensive pool, so we surface it under
+        # ``base`` and leave skill at zero.
+        base = (actor.mook_combat_pool or 0)
+    else:
+        source = actor.character or actor.npc
+        if source is not None:
+            try:
+                base = int(source.attributes["finesse"]["physical"])
+            except (KeyError, TypeError, ValueError):
+                base = 0
+            # Mirror the resolver's tier-cascade: physical first, then
+            # mental, then social — first non-zero wins. Defensive
+            # against partial sheets so a missing tier never raises.
+            for tier in ("physical", "mental", "social"):
+                try:
+                    val = int(source.skills[tier].get(skill_name, 0))
+                    if val:
+                        skill_value = val
+                        break
+                except (KeyError, TypeError, ValueError):
+                    continue
+
+    weapon_dice = _safe_int((weapon_data or {}).get("dice_modifier"), 0)
+    wound_pen = _wound_penalty(actor)
+    cond_mod = _condition_attack_modifier(actor)
+    gm_mod = _safe_int(gm_modifier, 0)
+
+    total = max(
+        0,
+        base + skill_value + weapon_dice + wound_pen + cond_mod + gm_mod,
+    )
+
+    return {
+        "base":            base,
+        "skill":           skill_value,
+        "skill_name":      skill_name,
+        "weapon_dice":     weapon_dice,
+        "wound_penalty":   wound_pen,
+        "condition_mod":   cond_mod,
+        "gm_modifier":     gm_mod,
+        "willpower_bonus": 0,   # preview only — WP is a submit-time toggle
+        "total":           total,
+    }
+
+
+# ---------------------------------------------------------------------------
 # Defense + cover (v0.15.4, defense extended in v0.15.5)
 # ---------------------------------------------------------------------------
 
@@ -848,6 +951,17 @@ def encounter_page(request, pk):
         p.wound_penalty = wp
         p.attack_modifier_total = wp + cond_atk
         p.defense_modifier_total = cond_def
+
+        # v0.15.9 — pre-computed numeric attack-pool breakdown for
+        # the row template. The skill is auto-picked from the
+        # equipped weapon's category (empty ``weapon_skill_name``
+        # triggers the fallback inside ``_attack_preview``). GM
+        # modifier is zero in the preview — the row's <input>
+        # ``mod-{id}`` updates the live total client-side without
+        # a re-render.
+        p.attack_preview = _attack_preview(
+            p, p.weapon_data, gm_modifier=0, weapon_skill_name=""
+        )
 
         # v0.15.8 — controllability flag. Superusers control every
         # row; players control only rows whose character they own.
@@ -1966,6 +2080,14 @@ def attack(request, pk, attacker_id):
 
     weapon_data = attacker.weapon_data or {}
     weapon_name = attacker.weapon_name or "(unarmed)"
+
+    # v0.15.9 — when the form omits the weapon skill (the field is
+    # empty), auto-pick it from the equipped weapon's category. An
+    # explicit non-empty value passes through unchanged so the GM /
+    # player can override the default for narrative reasons (e.g.
+    # using Brawl with a rifle butt as an improvised club).
+    if not weapon_skill:
+        weapon_skill = _weapon_skill_for(weapon_data)
 
     # v0.15.5 — full pool composition (base + wound + conditions + WP).
     wound_pen = _wound_penalty(attacker)

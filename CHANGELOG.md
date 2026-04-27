@@ -1,5 +1,13 @@
 # Changelog
 
+## v0.15.9
+- **Live numeric attack pool preview** on every participant's attack form. The PREVIEW row now renders a server-side numeric breakdown — DEX/POOL + SKILL + WEAPON + WOUND + COND, with a separate LIVE TOTAL line that re-computes client-side as the GM modifier `<input>` changes. Mook breakdown collapses to MOOK POOL + WOUND + COND (no skill/weapon axis). The total is floored at zero so a heavily-debuffed attacker can't display a negative pool. New `_attack_preview` helper on `combat/views.py` and a per-attacker `p.attack_preview` annotation on `encounter_page`
+- **Weapon skill auto-picked from weapon category.** New `WEAPON_CATEGORY_SKILL` map and `_weapon_skill_for(weapon_data)` helper: `firearm → Firearms`, `thrown → Athletics`, `melee → Weaponry`, `improvised → Weaponry`, unknown → `Weaponry`, unarmed (no equipped weapon) → `Brawl`. The SKILL `<input>` on the attack form now defaults to and placeholds the auto-picked value, with a "SKILL AUTO-PICKED FROM WEAPON CATEGORY (…). EDIT TO OVERRIDE." hint underneath. Field stays editable for narrative overrides (e.g. rifle butt as a club via Brawl)
+- **Empty `weapon_skill` form value resolves server-side** to the auto-picked default before reaching `_actor_total_pool`. Explicit non-empty values pass through unchanged so a player typing "Brawl" with a rifle equipped gets the Brawl pool, not Firearms. The server is the source of truth — even a tampered POST with an empty `weapon_skill` rolls the right pool now
+- **Willpower availability surfaced** above the attack form: `WP n/max — SPEND FOR +3 DICE` (or `— NONE TO SPEND` at zero). The spend-WP checkbox is now disabled when `willpower_current == 0` so a player can't tick it uselessly
+- **No behavioral change to the actual attack roll** — the resolver math is bit-identical to v0.15.8. Purely UI/UX polish: players see the dice math before they pull the trigger, and don't have to remember which skill applies to which weapon category
+- No schema changes, no migrations, no new dependencies
+
 ## v0.15.8
 - **Players can now control their own characters in combat** — equip / cover / attack / dodge / full-defense / spend willpower / clear self-conditions / roll initiative for own character. The collapsible action panel on a player's own row, the inline × clear-condition buttons on its pills, and the per-row ROLL initiative button are all visible to a player on rows whose `Character.owner` matches the request user
 - **PvP fully enabled at the player layer:** any character can attack any other participant when it's their turn. The `attack` view's existing self-target reject and active-participant check stay in place; faction is decorative (unchanged from v0.15.4)

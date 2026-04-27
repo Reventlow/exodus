@@ -240,39 +240,104 @@ dodge), ADD CONDITION, WILLPOWER.
                         {% endfor %}
                     </select>
 
+                    {% comment %}
+                    v0.15.9 — SKILL field auto-picks the WoD 2.0 skill
+                    from the equipped weapon's category (firearm →
+                    Firearms, thrown → Athletics, melee/improvised →
+                    Weaponry, unarmed → Brawl). The field stays
+                    editable so the GM / player can override for
+                    narrative reasons (e.g. rifle butt as a club).
+                    {% endcomment %}
                     <label for="skill-{{ p.id }}">SKILL</label>
                     <input id="skill-{{ p.id }}" name="weapon_skill" type="text"
-                           list="skill-options-{{ p.id }}"
-                           placeholder="Firearms / Brawl / Weaponry">
+                           value="{{ p.attack_preview.skill_name }}"
+                           placeholder="{{ p.attack_preview.skill_name }}"
+                           list="skill-options-{{ p.id }}">
                     <datalist id="skill-options-{{ p.id }}">
                         <option value="Firearms">
                         <option value="Brawl">
                         <option value="Weaponry">
                         <option value="Athletics">
                     </datalist>
+                    {% if p.weapon_data %}
+                        <span class="muted" style="font-size: 0.6rem; grid-column: 1 / -1;">
+                            SKILL AUTO-PICKED FROM WEAPON CATEGORY ({{ p.weapon_data.category|default:"unarmed" }}). EDIT TO OVERRIDE.
+                        </span>
+                    {% endif %}
 
                     <label for="mod-{{ p.id }}">MOD</label>
                     <input id="mod-{{ p.id }}" name="gm_modifier" type="number" value="0" step="1">
 
-                    {% if p.willpower_current > 0 %}
-                        <label class="part-wp-spend">
-                            <input type="checkbox" name="spend_willpower" value="1">
-                            SPEND WP (+3 DICE, COSTS 1 WP)
-                        </label>
-                    {% else %}
-                        <span class="part-wp-spend muted" title="No willpower to spend">
-                            (NO WP TO SPEND)
-                        </span>
-                    {% endif %}
+                    {% comment %}
+                    v0.15.9 — willpower availability hint. Disable the
+                    spend checkbox at zero WP rather than swap it for
+                    a static label, so the form layout stays stable.
+                    {% endcomment %}
+                    <span class="part-wp-hint muted" style="grid-column: 1 / -1; font-size: 0.65rem;">
+                        WP {{ p.willpower_current }}/{{ p.willpower_max }}{% if p.willpower_current > 0 %} — SPEND FOR +3 DICE{% else %} — NONE TO SPEND{% endif %}
+                    </span>
+                    <label class="part-wp-spend">
+                        <input type="checkbox" name="spend_willpower" value="1"
+                               {% if p.willpower_current == 0 %}disabled{% endif %}>
+                        SPEND WP (+3 DICE, COSTS 1 WP)
+                    </label>
+
+                    {% comment %}
+                    v0.15.9 — server-rendered numeric breakdown.
+                    Mooks roll a flat ``mook_combat_pool`` so their
+                    breakdown collapses to POOL + WOUND + COND;
+                    characters and NPCs show DEX + SKILL + WEAPON.
+                    The LIVE TOTAL span is updated client-side as
+                    the GM modifier <input> changes.
+                    {% endcomment %}
+                    <div class="part-attack-preview" style="grid-column: 1 / -1; margin-top: 0.4rem; padding: 0.4rem 0.5rem; border: 1px solid var(--c-dim); background: var(--c-soft);">
+                        <div style="font-size: 0.7rem; letter-spacing: 0.05em;">
+                            ATTACK POOL: <strong>{{ p.attack_preview.total }}</strong> DICE
+                            <span class="muted">(against unmodified target / no cover / no WP)</span>
+                        </div>
+                        {% if p.participant_kind == "mook" %}
+                            <div style="font-size: 0.65rem; color: var(--c-dim); margin-top: 0.2rem;">
+                                └─ MOOK POOL {{ p.attack_preview.base }}{% if p.attack_preview.wound_penalty %}  WOUND {{ p.attack_preview.wound_penalty }}{% endif %}{% if p.attack_preview.condition_mod %}  COND {{ p.attack_preview.condition_mod }}{% endif %}
+                            </div>
+                        {% else %}
+                            <div style="font-size: 0.65rem; color: var(--c-dim); margin-top: 0.2rem;">
+                                └─ DEX/POOL {{ p.attack_preview.base }}  + {{ p.attack_preview.skill_name }} {{ p.attack_preview.skill }}  + WEAPON {{ p.attack_preview.weapon_dice }}{% if p.attack_preview.wound_penalty %}  WOUND {{ p.attack_preview.wound_penalty }}{% endif %}{% if p.attack_preview.condition_mod %}  COND {{ p.attack_preview.condition_mod }}{% endif %}
+                            </div>
+                        {% endif %}
+                        <div style="font-size: 0.65rem; color: var(--c-dim); margin-top: 0.15rem;">
+                            └─ + GM MOD <span id="gm-mod-display-{{ p.id }}">0</span>
+                            = LIVE TOTAL
+                            <span id="live-total-{{ p.id }}"
+                                  style="color: var(--c-primary); text-shadow: 0 0 6px var(--c-glow); font-family: var(--font-mono, ui-monospace, monospace); font-size: 1.1rem; font-weight: bold;">{{ p.attack_preview.total }}</span>
+                        </div>
+                    </div>
 
                     <button type="submit" class="btn-primary">ATTACK &rarr;</button>
-
-                    <span class="part-attack-preview">
-                        PREVIEW: BASE +{% if p.participant_kind == "mook" %}{{ p.mook_combat_pool|default:0 }}{% else %}DEX{% endif %} ± SKILL ± WEAPON ± MOD
-                        {% if p.attack_modifier_total != 0 %} ({{ p.attack_modifier_total }} MOD){% endif %}
-                        − DEFENSE − COVER
-                    </span>
                 </form>
+
+                {% comment %}
+                v0.15.9 — inline live-total updater. One <script>
+                block per attacker is fine: the active-attack form is
+                only emitted on the active participant's row, so the
+                page renders at most one of these at a time during
+                normal play.
+                {% endcomment %}
+                <script>
+                (function() {
+                    var modInput = document.getElementById("mod-{{ p.id }}");
+                    var display = document.getElementById("gm-mod-display-{{ p.id }}");
+                    var liveTotal = document.getElementById("live-total-{{ p.id }}");
+                    var baseTotal = {{ p.attack_preview.total }};
+                    if (!modInput || !display || !liveTotal) return;
+                    function update() {
+                        var mod = parseInt(modInput.value, 10) || 0;
+                        display.textContent = mod >= 0 ? "+" + mod : String(mod);
+                        liveTotal.textContent = Math.max(0, baseTotal + mod);
+                    }
+                    modInput.addEventListener("input", update);
+                    update();  // initial render — also normalises the +0 prefix
+                })();
+                </script>
             {% endif %}
 
             {% comment %}
