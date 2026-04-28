@@ -3290,12 +3290,13 @@ def _apply_round_boundary_effects(encounter):
     Called from ``_advance_turn_pointer`` when the round rolls over.
     Two responsibilities:
 
-    1. **Burning tick** — every participant carrying the ``burning``
-       tag takes 1L damage at round-start. There is no auto-clear; the
-       GM must extinguish manually via the condition × button. Damage
-       is applied through ``_apply_damage`` so the WoD 2.0 track-upgrade
-       rules apply (overflow eats bashing, etc.). Auto-incapacitates
-       the target if the tick fills the track.
+    1. **Burning roll-call** — every burning, non-incapacitated
+       participant gets named in a single system log row so the GM
+       remembers to tick them. The actual damage is GM-applied via
+       the per-row TICK BURN sub-form (``tick_burn`` view) — this
+       gives the GM narrative control over the dice / damage type
+       per round. Auto-tick was the v0.15.29 model; v0.15.30 moves
+       it to manual control.
 
     2. **Persistent-effect expiry** — companion tags of the form
        ``<effect>_until:<round>`` are scanned. When the encounter has
@@ -3305,46 +3306,36 @@ def _apply_round_boundary_effects(encounter):
 
     ``burning`` deliberately does NOT participate in the expiry path
     (its companion tag, if any, is ignored at the round boundary so
-    the burn keeps ticking until the GM extinguishes it).
+    the burn keeps ticking until the GM extinguishes it via × on the
+    condition pill).
 
-    Logs every tick / expiry as a system row so the timeline reads
-    accurately. Assumes the caller has opened a transaction.
+    Logs the burning roll-call as a single system row and every
+    expiry as its own system row. Assumes the caller has opened a
+    transaction.
     """
     current_round = encounter.round_number
+    # v0.15.30 — Burning tick is now GM-driven, not auto-applied. At
+    # round-roll, list every burning participant in a single system
+    # row so the GM remembers to tick each one via the TICK BURN
+    # sub-form on the participant's row. This gives the GM narrative
+    # control: "you rolled on the floor — only 1B this round" or
+    # "you walked into the fire pit again — 2L".
+    burning_names = [
+        p.name for p in encounter.participants.all()
+        if "burning" in (p.conditions or []) and "incapacitated" not in (p.conditions or [])
+    ]
+    if burning_names:
+        _log(
+            encounter,
+            "system",
+            "BURNING: "
+            + ", ".join(burning_names)
+            + " — GM: tick each via TICK BURN on their row.",
+            burning=burning_names,
+        )
+
     for p in encounter.participants.all():
         conds = list(p.conditions or [])
-        # 1. Burning tick (1L per round). Skip the dead — incapacitated
-        #    targets shouldn't soak more damage from the burn (still
-        #    burning narratively but mechanically zero-effect).
-        if "burning" in conds and "incapacitated" not in conds:
-            _apply_damage(p, 1, "L")
-            _log(
-                encounter,
-                "system",
-                f"{p.name} burns — 1L damage from burning condition.",
-                target_participant_id=p.id,
-                effect_tag="burning",
-            )
-            # Re-fetch conditions because _apply_damage may have stripped
-            # an aim tag and re-saved the participant. Using the in-memory
-            # ``conds`` list below would otherwise drift from disk state.
-            p.refresh_from_db(fields=["conditions"])
-            conds = list(p.conditions or [])
-            # Auto-incap if the tick filled the track.
-            total_dmg = (
-                p.health_bashing + p.health_lethal + p.health_aggravated
-            )
-            if total_dmg >= p.health_max and "incapacitated" not in conds:
-                conds.append("incapacitated")
-                p.conditions = conds
-                p.save(update_fields=["conditions"])
-                _log(
-                    encounter,
-                    "condition_set",
-                    f"{p.name} is INCAPACITATED.",
-                    target_participant_id=p.id,
-                    condition="incapacitated",
-                )
 
         # 2. Expiry sweep. Scan companion tags; strip both companion
         #    and effect when round_number >= until_round.
@@ -5917,6 +5908,129 @@ def adjust_hp(request, pk, participant_id):
             encounter,
             "condition_clear",
             f"{participant.name} no longer INCAPACITATED.",
+            target_participant_id=participant.id,
+            condition="incapacitated",
+        )
+
+    return redirect("combat:detail", pk=encounter.pk)
+
+
+# ---------------------------------------------------------------------------
+# v0.15.30 — Manual GM burn tick
+# ---------------------------------------------------------------------------
+
+
+@login_required
+@_gm_only
+@csrf_protect
+@transaction.atomic
+def tick_burn(request, pk, participant_id):
+    """POST — GM-only: apply this round's burn damage to a burning participant.
+
+    v0.15.30 — replaces the v0.15.29 auto-tick at round-roll. The GM
+    now decides per-round how many dice the burn deals, what damage
+    type, or whether to skip a round entirely.
+
+    Form fields:
+
+    * ``burn_dice``: int (default 1). How many points of damage to
+      apply this tick. ``0`` is a valid choice — narrative reasons
+      ("rolled on the floor", "soaked by sprinkler") for skipping a
+      tick without extinguishing.
+    * ``damage_type``: ``"B"`` | ``"L"`` | ``"A"`` (default ``"L"``).
+
+    Side effects:
+
+    * Damage applied via :func:`_apply_damage` (track upgrades honoured).
+    * Auto-incapacitates the participant if the tick fills the track.
+    * Logs ``burn_tick`` action_type with the dice / type / before /
+      after payload.
+
+    The ``burning`` tag itself is NOT stripped — only the GM extinguishes
+    via × on the BURNING condition pill. To stop a burn entirely, use
+    that path.
+    """
+    if request.method != "POST":
+        return HttpResponseNotAllowed(["POST"])
+
+    encounter = get_object_or_404(Encounter, pk=pk)
+    participant = get_object_or_404(
+        Participant, pk=participant_id, encounter=encounter
+    )
+
+    if "burning" not in (participant.conditions or []):
+        messages.error(request, f"{participant.name} is not burning.")
+        return redirect("combat:detail", pk=encounter.pk)
+
+    if "incapacitated" in (participant.conditions or []):
+        # Burning narratively continues but mechanically does nothing
+        # — incapacitated targets can't take more damage from burn.
+        messages.error(request, f"{participant.name} is incapacitated; burn ticks are no-ops.")
+        return redirect("combat:detail", pk=encounter.pk)
+
+    burn_dice = max(0, _safe_int(request.POST.get("burn_dice"), 1))
+    dtype = (request.POST.get("damage_type") or "L").upper()
+    if dtype not in ("B", "L", "A"):
+        dtype = "L"
+
+    before = {
+        "bashing": participant.health_bashing,
+        "lethal": participant.health_lethal,
+        "aggravated": participant.health_aggravated,
+    }
+
+    if burn_dice == 0:
+        # Skip the tick — no damage, but log it so the timeline shows
+        # the GM made a choice.
+        _log(
+            encounter,
+            "burn_tick",
+            f"{participant.name}: BURN tick SKIPPED (GM ruling).",
+            target_participant_id=participant.id,
+            burn_dice=0,
+            damage_type=dtype,
+            before=before,
+            after=before,
+        )
+        return redirect("combat:detail", pk=encounter.pk)
+
+    applied, upgrades, overflow = _apply_damage(participant, burn_dice, dtype)
+
+    after = {
+        "bashing": participant.health_bashing,
+        "lethal": participant.health_lethal,
+        "aggravated": participant.health_aggravated,
+    }
+
+    _log(
+        encounter,
+        "burn_tick",
+        f"{participant.name}: BURN tick {burn_dice}{dtype} ({applied} applied, {upgrades} upgraded).",
+        target_participant_id=participant.id,
+        burn_dice=burn_dice,
+        damage_type=dtype,
+        applied=applied,
+        upgrades=upgrades,
+        overflow=overflow,
+        before=before,
+        after=after,
+    )
+
+    # Auto-incapacitate when the tick fills the track.
+    new_total = (
+        participant.health_bashing
+        + participant.health_lethal
+        + participant.health_aggravated
+    )
+    if new_total >= participant.health_max and "incapacitated" not in (participant.conditions or []):
+        new_conds = list(participant.conditions or [])
+        new_conds.append("incapacitated")
+        participant.conditions = new_conds
+        participant.save(update_fields=["conditions"])
+        _log(
+            encounter,
+            "condition_set",
+            f"{participant.name} is INCAPACITATED.",
             target_participant_id=participant.id,
             condition="incapacitated",
         )

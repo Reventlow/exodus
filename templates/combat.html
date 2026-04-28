@@ -464,7 +464,7 @@
         <p style="margin: 0 0 0.4rem 0;"><span class="mono-text text-accent">▸ TURN COST</span> &nbsp;— costs the active actor's turn (<code>acted_this_round=True</code>) but does NOT auto-advance. The GM clicks NEXT TURN to actually pass the turn (same shape as ATTACK / AIM / FULL DEFENSE).</p>
         <p style="margin: 0 0 0.4rem 0;"><span class="mono-text text-accent">▸ DAMAGE</span> &nbsp;— damage-dealing grenades apply <code>damage_dice + successes</code>, minus cover penalty (when <code>cover_resists=True</code>). Full cover with <code>cover_resists=True</code> blocks both damage AND effect.</p>
         <p style="margin: 0 0 0.4rem 0;"><span class="mono-text text-accent">▸ PERSISTENT EFFECTS</span> &nbsp;— effects with <code>effect_duration_rounds &gt; 0</code> carry a companion <code>&lt;tag&gt;_until:&lt;round&gt;</code> marker. The round-boundary cleanup strips both the effect and its companion when the round counter reaches the expiry round.</p>
-        <p style="margin: 0 0 0.4rem 0;"><span class="mono-text text-accent">▸ BURNING</span> &nbsp;— phosphor's signature effect. Ticks <strong>1L per round</strong> at round-start. <em>No</em> auto-clear — the GM extinguishes via the condition × button (an explicit EXTINGUISH action lands in v0.15.30). Auto-incaps on track fill.</p>
+        <p style="margin: 0 0 0.4rem 0;"><span class="mono-text text-accent">▸ BURNING</span> &nbsp;— phosphor's signature effect. <strong>GM-driven tick</strong>: at round-roll the system names every burning participant in a single log row, and the GM applies damage per row via the <strong>🔥 TICK BURN</strong> sub-form (default 1L; can be 2L for severe burns, 1B for "smoke inhalation only", or 0 to skip the tick this round narratively). Auto-incaps on track fill. <em>No</em> auto-clear — the GM extinguishes via × on the BURNING condition pill.</p>
         <p style="margin: 0 0 0.4rem 0;"><span class="mono-text text-accent">▸ EMP</span> &nbsp;— affects AI / cyber-augmented characters only. Biological targets (player characters with non-AI class, NPCs with non-AI class, mooks) are immune; the throw still resolves but the EMP tag isn't applied. Logged as <em>"X immune to EMP — no electronic systems"</em>.</p>
         <table class="mono-text" style="width: 100%; border-collapse: collapse; font-size: 0.78rem; margin: 0.6rem 0 0 0;">
             <thead style="color: var(--ink-dim);">
@@ -513,7 +513,7 @@
                 <tr style="border-bottom: 1px dotted var(--c-dim);">
                     <td style="padding: 0.35rem 0.5rem; color: var(--ink);">PHOSPHOR</td>
                     <td style="padding: 0.35rem 0.5rem; color: var(--c-primary);">4L + successes</td>
-                    <td style="padding: 0.35rem 0.5rem;">burning (1L/round, manual extinguish)</td>
+                    <td style="padding: 0.35rem 0.5rem;">burning (GM ticks per round, manual extinguish)</td>
                     <td style="padding: 0.35rem 0.5rem;">until cleared</td>
                     <td style="padding: 0.35rem 0.5rem; text-align: center; color: var(--c-primary);">RESISTS</td>
                     <td style="padding: 0.35rem 0.5rem;">MEDIUM</td>

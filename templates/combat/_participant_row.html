@@ -1117,6 +1117,33 @@ dodge), ADD CONDITION, WILLPOWER.
                 <button type="submit" title="Set the inventory count for this grenade type. 0 removes it from the participant's inventory.">SET</button>
             </form>
             {% endif %}
+
+            {% comment %}
+            v0.15.30 — TICK BURN (GM only). Visible only when the
+            participant carries the ``burning`` tag. GM picks dice +
+            damage type per round; 0 dice is a valid "skip this
+            round" choice. The ``burning`` tag itself is not stripped
+            here — extinguish via × on the BURNING condition pill.
+            {% endcomment %}
+            {% if "burning" in p.conditions %}
+            <form method="post"
+                  action="{% url 'combat:tick_burn' encounter.id p.id %}"
+                  class="part-mini-form"
+                  style="grid-column: 1 / -1; padding-top: 0.4rem; border-top: 1px dashed var(--accent-danger);">
+                {% csrf_token %}
+                <label style="color: var(--accent-danger);">🔥 TICK BURN</label>
+                <input name="burn_dice" type="number" value="1" min="0" max="20"
+                       class="field-input" style="max-width: 4rem;"
+                       title="Dice to apply this round. 0 = skip the tick (e.g. character rolled on the floor).">
+                <select name="damage_type" title="Damage type for this tick.">
+                    <option value="L" selected>L</option>
+                    <option value="B">B</option>
+                    <option value="A">A</option>
+                </select>
+                <span class="muted" style="font-size: 0.6rem;">default 1L · 0 = skip</span>
+                <button type="submit" style="background: rgba(239, 68, 68, 0.1); border-color: var(--accent-danger); color: var(--accent-danger);">APPLY TICK</button>
+            </form>
+            {% endif %}
             {% endif %}
 
         </div>

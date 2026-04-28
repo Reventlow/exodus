@@ -189,6 +189,14 @@ urlpatterns = [
         views.reload_offhand,
         name="reload_offhand",
     ),
+    # v0.15.30 — manual GM burn tick. Replaces the v0.15.29 auto-tick
+    # at round-roll. GM picks dice / type per round per burning
+    # participant; 0 is a valid skip.
+    path(
+        "combat/<int:pk>/participants/<int:participant_id>/tick-burn/",
+        views.tick_burn,
+        name="tick_burn",
+    ),
     # v0.15.26 — GM-only manual HP adjustment (heal / correct damage).
     # Three integer fields (B / L / A) clamped to 0..health_max with
     # the cumulative sum bounded by the same total. Auto-toggles the

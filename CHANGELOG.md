@@ -1,5 +1,13 @@
 # Changelog
 
+## v0.15.30
+- **Burning tick is now GM-driven, not auto-applied.** v0.15.29 ticked 1L automatically at round-roll. v0.15.30 replaces that with a per-burning-participant **🔥 TICK BURN** sub-form (GM-only) on the participant's row. GM picks dice (default 1) and damage type (default L) per round. **0 dice is a valid skip** — narrative reasons like "rolled on the floor" or "soaked by sprinkler" without extinguishing
+- **Round-roll roll-call** — at round-advance, the system writes a single log row naming every burning, non-incapacitated participant. Reminds the GM to tick each via their row sub-form. No automatic damage from this row
+- **Reaffirmed: GM picks who's affected by grenade explosions.** The THROW GRENADE form's multi-target checkbox panel (shipped in v0.15.29) lets the thrower (or GM) explicitly check every participant in the blast — no faction restriction, friendly fire allowed. Working as designed
+- New `tick_burn` view and URL (`combat:tick_burn`). New CombatLog action_type: `burn_tick`. Track-upgrade rules honoured (B can overflow to L, etc.); auto-incapacitates on track fill
+- Rules explainer at `/rules/combat/` GRENADES subsection updated — BURNING bullet now describes the GM-driven flow with worked examples (1L default, 2L severe, 1B smoke inhalation, 0 skip)
+- No model schema changes, no migrations, no new dependencies
+
 ## v0.15.29
 - **Grenades** — new `category="grenade"` weapon catalogue type. Seven default seeds: Frag, Concussion, Smoke, Stun (Flashbang), Phosphor, Tear Gas, EMP. Each has `radius` / `effect_tag` / `effect_duration_rounds` / `damage_dice` / `damage_type` / `cover_resists` fields
 - **Per-participant inventory** stored as `grenades:<type>:<count>` condition tags. GM gives grenades via the GIVE GRENADES sub-form on the participant action panel during setup
