@@ -1451,7 +1451,8 @@ def _specialisations_for_skill(actor, skill_name):
 
 
 def _actor_total_pool(actor, weapon_data, gm_modifier, weapon_skill_name="",
-                     spend_willpower=False, applied_specialisations=None):
+                     spend_willpower=False, applied_specialisations=None,
+                     range_band="close"):
     """Compose the attacker's full pre-cover, pre-defense dice pool.
 
     Wraps ``_attack_dice_pool`` (the catalogue + skill base) and adds
@@ -1467,6 +1468,14 @@ def _actor_total_pool(actor, weapon_data, gm_modifier, weapon_skill_name="",
       for validating each entry against
       ``_specialisations_for_skill(actor, weapon_skill_name)`` before
       passing it through; this helper trusts what it gets.
+
+    v0.15.33 — additionally applies the weapon's catalogue
+    ``close_range_penalty`` (signed int) when ``range_band == "close"``.
+    Negative values (DMR -2, Scoped Rifle -3 by seed) reflect the
+    unwieldy long-barrel-rifle-in-CQB use case. ``range_band == "long"``
+    suppresses the penalty entirely. Off-hand callers pass their own
+    ``weapon_data`` snapshot so the penalty is consulted independently
+    for the off-hand weapon (a DMR off-hand would also pay -2 close).
     """
     base = _attack_dice_pool(actor, weapon_data, gm_modifier, weapon_skill_name)
     base += _wound_penalty(actor)
@@ -1478,6 +1487,22 @@ def _actor_total_pool(actor, weapon_data, gm_modifier, weapon_skill_name="",
         # already filtered out unknown / non-matching names, so we
         # simply count.
         base += len(applied_specialisations)
+    # v0.15.33 — close-range penalty. Defense-in-depth: trust nothing
+    # from the catalogue snapshot, coerce via int() with a 0 fallback,
+    # and bound the result to ±10 to mirror the model-layer clamp.
+    # Only fires on the close band so multi-range weapons (e.g.
+    # shotgun "4L close / 2L long") avoid the penalty when the GM /
+    # player explicitly picks LONG on the attack form.
+    if range_band == "close":
+        try:
+            crp = int((weapon_data or {}).get("close_range_penalty", 0))
+        except (TypeError, ValueError):
+            crp = 0
+        if crp < -10:
+            crp = -10
+        elif crp > 10:
+            crp = 10
+        base += crp
     return base
 
 
@@ -1575,10 +1600,28 @@ def _attack_preview(actor, weapon_data, gm_modifier, weapon_skill_name=""):
         actor, skill_name
     )
 
+    # v0.15.33 — close-range penalty preview. The preview always assumes
+    # the close range band (it's the default for any non-multi-range
+    # weapon, and the form's RANGE selector defaults to CLOSE for
+    # multi-range entries). The JS hook in the row template suppresses
+    # the displayed penalty when the user toggles the selector to LONG.
+    # Defense-in-depth: int-coerce + clamp ±10 against tampered
+    # snapshots, matching the model-layer hydration.
+    try:
+        close_range_penalty = int(
+            (weapon_data or {}).get("close_range_penalty", 0)
+        )
+    except (TypeError, ValueError):
+        close_range_penalty = 0
+    if close_range_penalty < -10:
+        close_range_penalty = -10
+    elif close_range_penalty > 10:
+        close_range_penalty = 10
+
     total = max(
         0,
         base + skill_value + weapon_dice + wound_pen + cond_mod + gm_mod
-        + skill_merit_bonus,
+        + skill_merit_bonus + close_range_penalty,
     )
 
     # v0.15.10 — surface the actor's specialisations relevant to the
@@ -1649,6 +1692,13 @@ def _attack_preview(actor, weapon_data, gm_modifier, weapon_skill_name=""):
         "weapon_has_long_range": weapon_has_long_range,
         "weapon_close_dmg":      weapon_close_dmg,
         "weapon_long_dmg":       weapon_long_dmg,
+        # v0.15.33 — close-range penalty preview. Surfaced as a signed
+        # int for the breakdown line ("−2 CLOSE-RANGE"). ``range_band``
+        # is the band the preview's ``total`` was computed against;
+        # the row template's JS reads both to drive the LIVE TOTAL
+        # update when the user flips the RANGE selector.
+        "close_range_penalty":   close_range_penalty,
+        "range_band":            "close",
         "total":            total,
     }
 
@@ -4903,6 +4953,12 @@ def attack(request, pk, attacker_id):
         attacker, weapon_data, gm_modifier_int, weapon_skill,
         spend_willpower=spent_wp,
         applied_specialisations=applied_specs,
+        # v0.15.33 — pass the GM-selected range_band so the helper can
+        # apply the weapon's close_range_penalty (DMR -2, Scoped Rifle
+        # -3 by seed) when band == "close". The same band is used for
+        # spread extras (sharing this base) — they don't pay the
+        # penalty twice.
+        range_band=range_band,
     )
     all_out_bonus = 2 if all_out else 0
     primary_pool = base_pool_no_burst + burst_bonus + aim_bonus + all_out_bonus
@@ -5276,6 +5332,13 @@ def attack(request, pk, attacker_id):
                 offhand_skill,
                 spend_willpower=False,
                 applied_specialisations=None,
+                # v0.15.33 — same range_band as the main hand. The
+                # off-hand consults its own ``offhand_data`` snapshot
+                # for ``close_range_penalty`` so e.g. a DMR off-hand
+                # also pays -2 dice on close, while a Hand Gun off-hand
+                # is unaffected. Defaults-to-close behaviour matches
+                # the legacy single-band weapon path.
+                range_band=range_band,
             )
             offhand_pool = max(0, offhand_base_pool + offhand_penalty)
 
@@ -5356,6 +5419,12 @@ def attack(request, pk, attacker_id):
                 spread_penalty=0,
                 extra_payload=offhand_extra_payload,
                 bonus_successes=offhand_gun_fu,
+                # v0.15.33 — same range_band for the off-hand resolve
+                # so damage parsing reads the off-hand's own close /
+                # long band consistently with the main hand. The
+                # close_range_penalty is already baked into
+                # ``offhand_pool`` above via ``_actor_total_pool``.
+                range_band=range_band,
             )
 
             # Decrement off-hand ammo after the resolve. Refresh

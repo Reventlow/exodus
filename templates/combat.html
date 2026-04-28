@@ -449,6 +449,24 @@
     </div>
 
     {% comment %}
+    v0.15.33 — CLOSE-RANGE PENALTY (RIFLES) subsection. Sits after
+    KNOCKDOWN because it pairs with the existing range-band /
+    multi-range damage rules and applies on every attack regardless
+    of stance / aim / burst. Rules-driven by the per-weapon
+    ``close_range_penalty`` catalogue field; default seed is DMR -2,
+    Scoped Rifle -3 with all other firearms at 0.
+    {% endcomment %}
+    <h4 class="mono-text text-accent" style="font-size: 0.85rem; letter-spacing: 0.2em; margin: 1.2rem 0 0.4rem 0;">CLOSE-RANGE PENALTY (RIFLES)</h4>
+    <div class="text-secondary" style="font-size: 0.85rem; line-height: 1.7; margin: 0 0 1rem 0;">
+        <p style="margin: 0 0 0.4rem 0;"><span class="mono-text text-accent">▸ RULE</span> &nbsp;— long-barrel rifles are unwieldy in close-quarters combat. Each weapon carries a <strong>close_range_penalty</strong> integer (negative = penalty, positive = bonus). When the resolved range band is <code>close</code>, the value is added to the attack pool — typically subtracting dice on rifles.</p>
+        <p style="margin: 0 0 0.4rem 0;"><span class="mono-text text-accent">▸ DEFAULT SEED</span> &nbsp;— <strong>DMR &minus;2</strong>, <strong>Scoped Rifle &minus;3</strong>. Other firearms (Hand Gun, Large Hand Gun, SMG, Assault Rifle, Shotgun, Twin-Barrel, Auto Shotgun, Taser Cartridge) seed at <strong>0</strong> — they're CQB-friendly and unaffected.</p>
+        <p style="margin: 0 0 0.4rem 0;"><span class="mono-text text-accent">▸ AVOID THE PENALTY</span> &nbsp;— on multi-range weapons the player can pick <strong>LONG</strong> in the RANGE selector when the target is at long range. The close-range penalty fires only when band == close; LONG suppresses it entirely. Single-band weapons (e.g. DMR seed) always resolve at close, so the penalty always lands on them.</p>
+        <p style="margin: 0 0 0.4rem 0;"><span class="mono-text text-accent">▸ DUAL-WIELD</span> &nbsp;— applies to both main hand and off-hand independently. Each slot consults its own weapon's <code>close_range_penalty</code>, so a DMR off-hand pays &minus;2 dice on close while a Hand Gun off-hand is unaffected.</p>
+        <p style="margin: 0 0 0.4rem 0;"><span class="mono-text text-accent">▸ POOL BREAKDOWN</span> &nbsp;— the attack form's breakdown line surfaces the segment as <code>−2 CLOSE-RANGE</code>. The LIVE TOTAL reflects the penalty in real time; flipping the RANGE selector to LONG hides the segment and bumps the displayed total back up.</p>
+        <p style="margin: 0;"><span class="mono-text text-accent">▸ EDIT</span> &nbsp;— per-weapon in <code>/settings/ → COMBAT → Weapons → CR PEN</code>. Bounded ±10 server-side via <code>_clamp_close_range_penalty</code>; bad input collapses to 0.</p>
+    </div>
+
+    {% comment %}
     v0.15.29 — GRENADES subsection. AOE area-effect throws. Cover
     applies on damage-dealing types (frag, concussion, phosphor) and
     bypasses on stun / smoke / tear gas / EMP. Persistent effects

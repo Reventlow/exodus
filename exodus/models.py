@@ -29,6 +29,33 @@ def _clamp_again(value):
     return 10
 
 
+def _clamp_close_range_penalty(value):
+    """Clamp the close_range_penalty integer to a sensible range.
+
+    v0.15.33 — long-barrel rifles (DMR, Scoped Rifle) take an attack
+    penalty when fired at close range — they're unwieldy in CQB.
+    Encoded as a per-weapon catalogue field on the firearm entries.
+
+    Negative = unwieldy / inaccurate at close range. Positive = bonus
+    (rare). Bounded ±10 to avoid pathological pool inflation. Bad input
+    (None, non-int strings, garbage) collapses to ``0`` so legacy /
+    hand-edited catalogue rows behave like the pre-v0.15.33 code path.
+
+    Used by:
+      * ``SiteSettings.get_weapons`` to hydrate the read path.
+      * ``exodus.views`` weapons settings POST + ``api_weapons`` /
+        ``api_weapon_detail`` write paths.
+      * ``combat.views._actor_total_pool`` reads the hydrated value
+        directly from the weapon snapshot — no cross-app import needed
+        because the field is a plain int on the dict.
+    """
+    try:
+        v = int(value)
+    except (TypeError, ValueError):
+        return 0
+    return max(-10, min(10, v))
+
+
 class PullingString(models.Model):
     """Game-level catalog of available pulling strings."""
 
@@ -234,7 +261,12 @@ class SiteSettings(models.Model):
             "for the attack roll — 10-again (default) re-rolls on 10, "
             "9-again re-rolls on 9 or 10, 8-again re-rolls on 8/9/10. "
             "The success threshold (8+) does NOT change between tiers — "
-            "only the explosion trigger does. See "
+            "only the explosion trigger does. For firearms, an optional "
+            "close_range_penalty (int, default 0; clamped ±10 via "
+            "_clamp_close_range_penalty) subtracts from the attack pool "
+            "when the resolved range_band is 'close' — long-barrel "
+            "rifles (DMR, Scoped Rifle) are unwieldy in CQB and seed "
+            "with negative values (DMR -2, Scoped Rifle -3). See "
             "SiteSettings.default_weapons() for the seed catalogue."
         ),
     )
@@ -335,6 +367,16 @@ class SiteSettings(models.Model):
         time — which the ammo system reads as "no ammo concept", so
         the weapon falls back to the pre-v0.15.15 unlimited-ammo
         behaviour without a data migration.
+
+        v0.15.33 — firearms additionally carry ``close_range_penalty:
+        int`` — a signed dice modifier applied to the attack pool when
+        the resolved range_band is ``close``. Negative = unwieldy in
+        CQB (DMR -2, Scoped Rifle -3 by seed); positive = bonus (none
+        seeded — kept for symmetry). Other firearms (Hand Gun, Assault
+        Rifle, SMG, shotguns, taser cartridge) seed at 0 and are
+        unaffected at close range. Non-firearm entries omit the field;
+        legacy entries without it default to 0 at read time via
+        ``_clamp_close_range_penalty``.
         """
         return [
             # ----- Melee --------------------------------------------------
@@ -382,7 +424,8 @@ class SiteSettings(models.Model):
             {"name": "DMR", "category": "firearm", "damage": "4L",
              "range": "200/400/800 m", "capacity": "20",
              "auto_capable": False, "magazine": 10,
-             "notes": "Semi-auto designated marksman rifle. Pairs well with optics."},
+             "close_range_penalty": -2,
+             "notes": "Semi-auto designated marksman rifle. Pairs well with optics. Unwieldy at close range (-2 dice in CQB)."},
             {"name": "Shotgun", "category": "firearm", "damage": "4L close / 2L long",
              "range": "5/10/40 m", "capacity": "5+1",
              "auto_capable": False, "magazine": 6,
@@ -401,7 +444,8 @@ class SiteSettings(models.Model):
             {"name": "Scoped Rifle", "category": "firearm", "damage": "4L",
              "range": "250/500/1000 m", "capacity": "5+1",
              "auto_capable": False, "magazine": 5,
-             "notes": "−2 initiative; +1 aim per turn (max +3) with proper scope."},
+             "close_range_penalty": -3,
+             "notes": "−2 initiative; +1 aim per turn (max +3) with proper scope. Utterly impractical at point-blank (-3 dice in CQB)."},
             {"name": "Taser (Cartridge)", "category": "firearm", "damage": "1L + stun",
              "range": "4/8/15 m", "capacity": "1 cartridge",
              "auto_capable": False, "magazine": 1,
@@ -490,6 +534,14 @@ class SiteSettings(models.Model):
         the field is hydrated on every row uniformly so callers don't
         have to special-case the category — the combat resolver only
         ever consults it on a firearm anyway.
+
+        ``close_range_penalty`` (v0.15.33) defaults to ``0`` at read
+        time for every entry that doesn't carry the field. Bounded
+        ±10 via ``_clamp_close_range_penalty``; negative values are
+        the common case (rifles unwieldy at close range). The combat
+        resolver applies the value on every attack where ``range_band
+        == "close"`` regardless of category, but only firearms seed
+        non-zero values in the catalogue.
         """
         weapons = self.weapons if isinstance(self.weapons, list) and self.weapons else self.default_weapons()
         hydrated = []
@@ -568,6 +620,16 @@ class SiteSettings(models.Model):
                 "damage_type": (w.get("damage_type", "") or "") or "",
                 "damage_dice": damage_dice,
                 "cover_resists": bool(w.get("cover_resists", True)),
+                # v0.15.33 — close-range penalty. Always present on
+                # the hydrated dict so callers can read
+                # ``entry["close_range_penalty"]`` uniformly without a
+                # KeyError on legacy / non-firearm rows. Conceptually
+                # firearm-only (rifles unwieldy in CQB) but hydrated on
+                # every row at 0 by default. ``_clamp_close_range_penalty``
+                # bounds bad input to ±10 and collapses garbage to 0.
+                "close_range_penalty": _clamp_close_range_penalty(
+                    w.get("close_range_penalty", 0)
+                ),
             })
         return hydrated
 

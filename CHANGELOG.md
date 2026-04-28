@@ -1,5 +1,14 @@
 # Changelog
 
+## v0.15.33
+- **Close-range rifle penalty** — new `close_range_penalty: int` field on the firearm catalogue (default 0; clamped −10..10 via `_clamp_close_range_penalty`). Default seed: **DMR −2**, **Scoped Rifle −3**. All other firearms (Hand Gun, Large Hand Gun, SMG, Assault Rifle, Shotgun, Twin-Barrel Shotgun, Auto Shotgun, Taser Cartridge) seed at 0 and are unaffected
+- Server applies the penalty in `_actor_total_pool` whenever `range_band == "close"` (the default for any non-multi-range weapon, or explicitly selected for multi-range entries). Suppressed entirely on `range_band == "long"`
+- Affects both main-hand and off-hand attacks — off-hand uses its own weapon snapshot, so e.g. a DMR off-hand also pays −2 dice on close while a Hand Gun off-hand is unaffected
+- Pool breakdown line shows the segment: `−2 CLOSE-RANGE`. LIVE TOTAL reflects it in real time; switching to LONG range on a multi-range weapon hides the segment and bumps the displayed total back up
+- Settings UI gets a CR PEN column on firearm rows (parallel-array `weapons_firearm_close_range_penalty`); weapons API accepts the field on POST/PUT for firearms with the same `_clamp_close_range_penalty` defense-in-depth
+- Rules explainer at `/rules/combat/` documents the rule, the seed defaults, and the multi-range avoidance path
+- No model schema changes, no migrations, no new dependencies
+
 ## v0.15.32
 - **Initiative re-rolls every round.** Switched from canonical "roll once at scene start" (WoD 2.0) to the Storyteller variant where every round-roll re-rolls initiative for every participant and rebuilds the order
 - Behaviour: at the round-advance branch of `_advance_turn_pointer`, every participant re-rolls (`_compute_initiative`); `Encounter.initiative_order` rebuilds sorted desc by score (ties by id); active pointer resets to whoever rolled highest. The `round_advance` log row carries the full new ordering as a comma-list and a structured `rolled` payload key

@@ -480,6 +480,17 @@
                                 Twin-Barrel / Auto Shotgun.
                                 {% endcomment %}
                                 <th style="width: 5%; text-align: center;" title="Knockdown-capable: a successful hit auto-triggers a Strength + Stamina contest vs the attacker's successes. Failure drops the target prone.">KO</th>
+                                {% comment %}
+                                v0.15.33 — CR PEN column (firearms
+                                only). Signed integer dice modifier
+                                applied when the resolved range_band
+                                is close. Negative = unwieldy in CQB
+                                (long-barrel rifles). Default seed:
+                                DMR -2, Scoped Rifle -3; other firearms
+                                seed at 0. Bounded ±10 server-side via
+                                ``_clamp_close_range_penalty``.
+                                {% endcomment %}
+                                <th style="width: 6%; text-align: center;" title="Close-range penalty: signed dice modifier applied to the attack pool when range_band is 'close'. Negative = unwieldy in CQB (DMR -2, Scoped Rifle -3 by seed). Bounded ±10.">CR PEN</th>
                                 {% endif %}
                                 {% comment %}
                                 v0.15.29 — RADIUS / DUR columns appear
@@ -582,6 +593,24 @@
                                            {% if w.knockdown_capable %}checked{% endif %}
                                            title="Knockdown-capable: a successful hit auto-triggers a Strength + Stamina contest vs the attacker's successes. Failure drops the target prone.">
                                 </td>
+                                {% comment %}
+                                v0.15.33 — CR PEN cell. Parallel-array
+                                ``weapons_firearm_close_range_penalty``
+                                pairs row-for-row with the rest of the
+                                firearm columns. Signed integer; server-
+                                side ``_clamp_close_range_penalty``
+                                bounds the value to ±10 and collapses
+                                bad input to 0.
+                                {% endcomment %}
+                                <td style="text-align: center;">
+                                    <input type="number"
+                                           name="weapons_firearm_close_range_penalty"
+                                           value="{{ w.close_range_penalty|default:0 }}"
+                                           min="-10" max="10" step="1"
+                                           class="weapons-cr-pen"
+                                           style="max-width: 4rem; text-align: center;"
+                                           title="Close-range penalty: signed dice modifier applied to the attack pool when the range band is close. Negative = unwieldy in CQB. Bounded ±10.">
+                                </td>
                                 {% endif %}
                                 {% comment %}
                                 v0.15.29 — grenade-only cells. Parallel
@@ -677,6 +706,11 @@
                         // to False (most weapons aren't knockdown-
                         // capable; shotgun-class entries opt-in).
                         var koCell = '';
+                        // v0.15.33 — CR PEN cell. New firearm rows
+                        // default to 0 (no close-range penalty); GM
+                        // bumps the value negative for unwieldy
+                        // long-barrel rifles. Bounded ±10 server-side.
+                        var crPenCell = '';
                         if (cat === 'firearm') {
                             autoCell =
                                 '<td style="text-align: center;">' +
@@ -710,6 +744,15 @@
                                          'value="0" class="weap-ko-flag">' +
                                   '<input type="checkbox" class="weap-ko-cb" ' +
                                          'title="Knockdown-capable: a successful hit auto-triggers a Strength + Stamina contest vs the attacker successes. Failure drops the target prone.">' +
+                                '</td>';
+                            crPenCell =
+                                '<td style="text-align: center;">' +
+                                  '<input type="number" ' +
+                                         'name="weapons_firearm_close_range_penalty" ' +
+                                         'value="0" min="-10" max="10" step="1" ' +
+                                         'class="weapons-cr-pen" ' +
+                                         'style="max-width: 4rem; text-align: center;" ' +
+                                         'title="Close-range penalty: signed dice modifier applied to the attack pool when the range band is close. Negative = unwieldy in CQB. Bounded ±10.">' +
                                 '</td>';
                         }
                         // v0.15.29 — grenade-only cells. New rows
@@ -747,6 +790,7 @@
                             magCell +
                             againCell +
                             koCell +
+                            crPenCell +
                             radiusCell +
                             durCell +
                             '<td><input type="text" name="weapons_' + cat + '_notes" maxlength="240" placeholder=""></td>' +

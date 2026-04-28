@@ -712,13 +712,23 @@ dodge), ADD CONDITION, WILLPOWER.
                         returns 0 for mook actors), so the same conditional
                         works in both branches without divergence.
                         {% endcomment %}
+                        {% comment %}
+                        v0.15.33 — close-range penalty segment. The
+                        ID-bearing <span> lets the inline JS toggle
+                        the segment's display when the GM flips the
+                        RANGE selector to LONG (penalty suppressed).
+                        Server-rendered initial visibility tracks the
+                        preview's range_band ("close" by default).
+                        Negative values render as "−2 CLOSE-RANGE"
+                        verbatim.
+                        {% endcomment %}
                         {% if p.participant_kind == "mook" %}
                             <div style="font-size: 0.65rem; color: var(--c-dim); margin-top: 0.2rem;">
-                                └─ MOOK POOL {{ p.attack_preview.base }}{% if p.attack_preview.skill_merit_bonus %}  + {{ p.attack_preview.skill_merit_name|upper }} {{ p.attack_preview.skill_merit_bonus }}{% endif %}{% if p.attack_preview.wound_penalty %}  WOUND {{ p.attack_preview.wound_penalty }}{% endif %}{% if p.attack_preview.condition_mod %}  COND {{ p.attack_preview.condition_mod }}{% endif %}
+                                └─ MOOK POOL {{ p.attack_preview.base }}{% if p.attack_preview.skill_merit_bonus %}  + {{ p.attack_preview.skill_merit_name|upper }} {{ p.attack_preview.skill_merit_bonus }}{% endif %}{% if p.attack_preview.wound_penalty %}  WOUND {{ p.attack_preview.wound_penalty }}{% endif %}{% if p.attack_preview.condition_mod %}  COND {{ p.attack_preview.condition_mod }}{% endif %}{% if p.attack_preview.close_range_penalty %}<span id="cr-pen-seg-{{ p.id }}"{% if p.attack_preview.range_band != "close" %} style="display: none;"{% endif %}>  {{ p.attack_preview.close_range_penalty }} CLOSE-RANGE</span>{% endif %}
                             </div>
                         {% else %}
                             <div style="font-size: 0.65rem; color: var(--c-dim); margin-top: 0.2rem;">
-                                └─ DEX/POOL {{ p.attack_preview.base }}  + {{ p.attack_preview.skill_name }} {{ p.attack_preview.skill }}  + WEAPON {{ p.attack_preview.weapon_dice }}{% if p.attack_preview.skill_merit_bonus %}  + {{ p.attack_preview.skill_merit_name|upper }} {{ p.attack_preview.skill_merit_bonus }}{% endif %}{% if p.attack_preview.wound_penalty %}  WOUND {{ p.attack_preview.wound_penalty }}{% endif %}{% if p.attack_preview.condition_mod %}  COND {{ p.attack_preview.condition_mod }}{% endif %}
+                                └─ DEX/POOL {{ p.attack_preview.base }}  + {{ p.attack_preview.skill_name }} {{ p.attack_preview.skill }}  + WEAPON {{ p.attack_preview.weapon_dice }}{% if p.attack_preview.skill_merit_bonus %}  + {{ p.attack_preview.skill_merit_name|upper }} {{ p.attack_preview.skill_merit_bonus }}{% endif %}{% if p.attack_preview.wound_penalty %}  WOUND {{ p.attack_preview.wound_penalty }}{% endif %}{% if p.attack_preview.condition_mod %}  COND {{ p.attack_preview.condition_mod }}{% endif %}{% if p.attack_preview.close_range_penalty %}<span id="cr-pen-seg-{{ p.id }}"{% if p.attack_preview.range_band != "close" %} style="display: none;"{% endif %}>  {{ p.attack_preview.close_range_penalty }} CLOSE-RANGE</span>{% endif %}
                             </div>
                         {% endif %}
                         {% if p.attack_preview.specialisations %}
@@ -780,6 +790,16 @@ dodge), ADD CONDITION, WILLPOWER.
                     // checkbox may be absent on rows where the form
                     // didn't render it (defensive null check).
                     var allOutCb = document.getElementById("all-out-{{ p.id }}");
+                    // v0.15.33 — RANGE selector + close-range penalty.
+                    // ``baseTotal`` already includes the penalty (the
+                    // server preview computed against range_band="close").
+                    // When the user flips to LONG we add |penalty| back
+                    // so LIVE TOTAL reflects the penalty being suppressed.
+                    // Both refs may be null on single-band weapons / rows
+                    // with no penalty — both code paths defensive.
+                    var rangeSel = document.getElementById("range-{{ p.id }}");
+                    var crPenSeg = document.getElementById("cr-pen-seg-{{ p.id }}");
+                    var closeRangePenalty = {{ p.attack_preview.close_range_penalty|default:0 }};
                     // v0.15.15 — ammo telemetry. ``currentAmmo`` is
                     // server-rendered into the JS at row render time
                     // and isn't refreshed mid-form (the page reload
@@ -842,8 +862,36 @@ dodge), ADD CONDITION, WILLPOWER.
                         }
                         // v0.15.26 — all-out attack bonus.
                         var allOutBonus = (allOutCb && allOutCb.checked) ? 2 : 0;
+                        // v0.15.33 — range adjust. The server preview's
+                        // ``baseTotal`` already includes ``closeRangePenalty``
+                        // (computed against range_band="close"). When the
+                        // GM flips the selector to LONG we subtract the
+                        // penalty back (i.e. add ``-closeRangePenalty``)
+                        // so LIVE TOTAL reflects the penalty being
+                        // suppressed at long range. ``rangeSel`` is null
+                        // on single-band weapons; in that case the penalty
+                        // (if any) is always in effect and the adjust
+                        // stays at zero.
+                        var rangeAdjust = 0;
+                        if (rangeSel && rangeSel.value === "long" && closeRangePenalty !== 0) {
+                            rangeAdjust = -closeRangePenalty;
+                        }
                         display.textContent = mod >= 0 ? "+" + mod : String(mod);
-                        liveTotal.textContent = Math.max(0, baseTotal + mod + specBonus + burstBonus + allOutBonus);
+                        liveTotal.textContent = Math.max(
+                            0,
+                            baseTotal + mod + specBonus + burstBonus
+                                + allOutBonus + rangeAdjust
+                        );
+                    }
+
+                    // v0.15.33 — toggle the CLOSE-RANGE breakdown segment
+                    // in lock-step with the RANGE selector. Only present
+                    // when the row has both a multi-range selector AND
+                    // a non-zero penalty.
+                    function updateCrPenSegmentVisibility() {
+                        if (!crPenSeg) return;
+                        var atLong = (rangeSel && rangeSel.value === "long");
+                        crPenSeg.style.display = atLong ? "none" : "";
                     }
 
                     modInput.addEventListener("input", update);
@@ -860,9 +908,16 @@ dodge), ADD CONDITION, WILLPOWER.
                     if (allOutCb) {
                         allOutCb.addEventListener("change", update);
                     }
+                    if (rangeSel) {
+                        rangeSel.addEventListener("change", function() {
+                            update();
+                            updateCrPenSegmentVisibility();
+                        });
+                    }
                     update();  // initial render — also normalises the +0 prefix
                     updateAutofireVisibility();
                     updateAmmoHints();
+                    updateCrPenSegmentVisibility();
                 })();
                 </script>
             {% endif %}

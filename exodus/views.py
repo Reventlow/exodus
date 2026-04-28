@@ -11,7 +11,13 @@ from django.http import HttpResponseForbidden, JsonResponse
 from django.shortcuts import redirect, render
 from django.views.decorators.http import require_GET, require_http_methods, require_POST
 
-from .models import MeritDefinition, PullingString, SiteSettings, _clamp_again
+from .models import (
+    MeritDefinition,
+    PullingString,
+    SiteSettings,
+    _clamp_again,
+    _clamp_close_range_penalty,
+)
 
 User = get_user_model()
 
@@ -231,6 +237,15 @@ def site_settings(request):
             firearm_knockdown_flags = request.POST.getlist(
                 "weapons_firearm_knockdown_flag"
             )
+            # v0.15.33 — close_range_penalty parallel-array. Signed
+            # integer paired row-for-row with the rest of the firearm
+            # columns. ``_clamp_close_range_penalty`` enforces the
+            # ±10 bounds and collapses bad input to 0. Surfaces as the
+            # CR PEN column in the editor; seeds DMR -2 / Scoped Rifle
+            # -3 by default with all other firearms at 0.
+            firearm_close_range_penalties = request.POST.getlist(
+                "weapons_firearm_close_range_penalty"
+            )
             # v0.15.29 — grenade-specific parallel arrays. ``radius`` and
             # ``effect_duration_rounds`` are the two GM-tweakable fields
             # surfaced in the editor; the rest of the grenade fields
@@ -328,6 +343,19 @@ def site_settings(request):
                             if i < len(firearm_knockdown_flags) else "0"
                         )
                         entry["knockdown_capable"] = (ko_raw == "1")
+                        # v0.15.33 — close_range_penalty parallel-array.
+                        # Length-defensive on read; missing entry → 0
+                        # (default no-penalty). ``_clamp_close_range_penalty``
+                        # enforces the ±10 bound and collapses any
+                        # garbage input back to 0 — mirroring the
+                        # ``_clamp_again`` defensive pattern.
+                        crp_raw = (
+                            firearm_close_range_penalties[i]
+                            if i < len(firearm_close_range_penalties) else 0
+                        )
+                        entry["close_range_penalty"] = (
+                            _clamp_close_range_penalty(crp_raw)
+                        )
                     if cat == "grenade":
                         # v0.15.29 — preserve catalogue-fixed fields by
                         # name lookup. New rows (no prior entry) get
@@ -1084,6 +1112,13 @@ def api_weapons(request):
         # shotgun-class weapons by default seed; arbitrary firearms
         # opt-in via this flag. Bool coercion mirrors auto_capable.
         new_w["knockdown_capable"] = bool(body.get("knockdown_capable", False))
+        # v0.15.33 — close_range_penalty (firearms only). Signed int
+        # clamped ±10 via ``_clamp_close_range_penalty``; bad / missing
+        # input collapses to 0 (default no-penalty). Mirrors the
+        # ``again`` field's silent-drop behaviour for non-firearm POSTs.
+        new_w["close_range_penalty"] = _clamp_close_range_penalty(
+            body.get("close_range_penalty", 0)
+        )
     weapons.append(new_w)
     settings_obj.weapons = weapons
     settings_obj.save(update_fields=["weapons"])
@@ -1098,7 +1133,9 @@ def api_weapon_detail(request, name):
     Allowed fields: ``name`` (rename), ``category``, ``damage``,
     ``range``, ``capacity``, ``notes``, ``auto_capable`` (firearm only,
     v0.15.14), ``magazine`` (firearm only, v0.15.15), ``again`` (firearm
-    only, v0.15.19; one of 8 / 9 / 10).
+    only, v0.15.19; one of 8 / 9 / 10), ``knockdown_capable`` (firearm
+    only, v0.15.26), ``close_range_penalty`` (firearm only, v0.15.33;
+    signed int clamped ±10).
 
     Admin / MCP-superuser only.
     """
@@ -1180,6 +1217,13 @@ def api_weapon_detail(request, name):
     # auto_capable / magazine / again gating.
     if "knockdown_capable" in body and w.get("category") == "firearm":
         w["knockdown_capable"] = bool(body["knockdown_capable"])
+    # v0.15.33 — close_range_penalty (firearms only). Signed int clamped
+    # ±10 via ``_clamp_close_range_penalty``; bad input collapses to 0.
+    # Silently dropped on non-firearm PUTs to keep the schema clean.
+    if "close_range_penalty" in body and w.get("category") == "firearm":
+        w["close_range_penalty"] = _clamp_close_range_penalty(
+            body["close_range_penalty"]
+        )
     weapons[idx] = w
     settings_obj.weapons = weapons
     settings_obj.save(update_fields=["weapons"])
