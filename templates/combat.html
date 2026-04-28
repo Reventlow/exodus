@@ -277,6 +277,32 @@
         <p style="margin: 0;"><span class="mono-text text-accent">▸ DEFERRED — OFF-HAND RELOAD</span> &nbsp;— <strong>not yet implemented in v0.15.16</strong>. When an off-hand firearm runs dry it stays empty until you re-equip it (which refills via the EQUIP OFF-HAND form). v0.15.17+ may add a dedicated off-hand reload action.</p>
     </div>
 
+    {% comment %}
+    v0.15.17 — GUN FU subsection. Soldier-only merit (1-5 dots) that
+    grants free auto-successes in firearm combat. Lives on the
+    Character sheet's existing /spendMeritUse/ tracking; this combat
+    integration just lets the player declare a total spend N on the
+    attack form. Server distributes evenly across primary + spread
+    extras + off-hand; remainder lands on the first targets in
+    declaration order.
+    {% endcomment %}
+    <h4 class="mono-text text-accent" style="font-size: 0.85rem; letter-spacing: 0.2em; margin: 1.2rem 0 0.4rem 0;">GUN FU (SOLDIER ONLY)</h4>
+    <div class="text-secondary" style="font-size: 0.85rem; line-height: 1.7; margin: 0 0 1rem 0;">
+        <p style="margin: 0 0 0.4rem 0;"><span class="mono-text text-accent">▸ ELIGIBILITY</span> &nbsp;— soldier-only merit, <strong>1 to 5 dots</strong>. Each dot grants <strong>1 free auto-success per session</strong> in gun combat. Visible on the attack form only when the actor is a soldier with the merit, has remaining session uses, and the equipped weapon is a firearm.</p>
+        <p style="margin: 0 0 0.4rem 0;"><span class="mono-text text-accent">▸ ACTIVATION</span> &nbsp;— enter an integer <strong>N</strong> in the <strong>GUN FU (+N SUCCESS)</strong> input on the attack form. Capped server-side at the remaining count. N=0 (default) declines the spend.</p>
+        <p style="margin: 0 0 0.4rem 0;"><span class="mono-text text-accent">▸ DISTRIBUTION</span> &nbsp;— spread evenly across <em>all</em> targets in the action (primary + autofire spread extras + off-hand on dual-wield). The integer remainder lands on the <strong>first</strong> targets in declaration order, so the primary gets the bonus when the math doesn't divide cleanly.</p>
+        <p style="margin: 0 0 0.4rem 0;"><span class="mono-text text-accent">▸ EXAMPLES</span> &nbsp;—
+            <span style="display: block; margin: 0.3rem 0 0 1rem;">Gun Fu 5 vs 4 targets (medium burst spread): <strong>2 / 1 / 1 / 1</strong> (primary gets the +1 remainder).</span>
+            <span style="display: block; margin: 0.15rem 0 0 1rem;">Gun Fu 3 vs 2 targets (dual-wield, no spread): <strong>2 / 1</strong> (main-hand gets the +1 remainder).</span>
+            <span style="display: block; margin: 0.15rem 0 0 1rem;">Gun Fu 5 vs 1 target (single shot): <strong>5</strong> (all uses on the one target).</span>
+            <span style="display: block; margin: 0.15rem 0 0 1rem;">Gun Fu 7 vs 4 targets (long burst spread): <strong>2 / 2 / 2 / 1</strong>.</span>
+        </p>
+        <p style="margin: 0 0 0.4rem 0;"><span class="mono-text text-accent">▸ EFFECT</span> &nbsp;— bonus successes are added to the rolled success count <em>after</em> defense and cover are applied. They <strong>do not</strong> bypass full cover (a blocked shot stays blocked) and <strong>do</strong> persist even when the dice roll comes up empty (a 0-success roll plus 1 Gun Fu success = 1 success on damage math).</p>
+        <p style="margin: 0 0 0.4rem 0;"><span class="mono-text text-accent">▸ NON-FIREARM</span> &nbsp;— ignored. The merit is gun combat only; submitting a spend on a melee / improvised / thrown / unarmed attack zeroes out server-side (silent — no flash, no rejection).</p>
+        <p style="margin: 0 0 0.4rem 0;"><span class="mono-text text-accent">▸ PERSISTENCE</span> &nbsp;— spent uses are written to the underlying Character's <code>merit_uses["Gun Fu"]</code> immediately after the action. The character sheet's REMAINING display refreshes on next load. The GM resets per-session counters via the existing <strong>RESET MERIT USES</strong> action on the character sheet.</p>
+        <p style="margin: 0;"><span class="mono-text text-accent">▸ TIMELINE</span> &nbsp;— each per-target attack row carries a <code>gun_fu_bonus_successes</code> integer payload key, plus a <code>(GUN FU +N SUCC)</code> message tail when bonus &gt; 0. A summary <em>system</em> row records the total spend and remaining count after the action.</p>
+    </div>
+
     {# === WEAPONS CATALOGUE (live from /settings/) ===================== #}
     {% if weapons_by_cat.melee or weapons_by_cat.improvised or weapons_by_cat.firearm or weapons_by_cat.thrown %}
     <header class="block-head"><span class="block-bullet">■</span><h3>WEAPONS CATALOGUE</h3><span class="block-line"></span></header>

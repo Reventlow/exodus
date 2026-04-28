@@ -649,6 +649,91 @@ def _has_ambidextrous_merit(actor):
 BURST_AMMO_COST = {"single": 1, "short": 3, "medium": 10, "long": 20}
 
 
+# ---------------------------------------------------------------------------
+# v0.15.17 — Gun Fu merit integration
+# ---------------------------------------------------------------------------
+#
+# The Gun Fu merit (soldier-only, 1-5 dots) grants "1 free success per
+# dot per session in gun combat". The character sheet already exposes
+# spend/reset UI (characters/views.py:225-244) and the JSONField
+# ``Character.merit_uses`` tracks per-session usage. v0.15.17 wires
+# the merit into the combat resolver so soldiers paying for the dots
+# actually receive the bonus successes during firearm encounters.
+#
+# State helper returns a (rating, used, remaining) triple. Distribution
+# helper splits a player-declared total spend across all attack targets
+# in a single action (primary + spread extras + off-hand on dual-wield).
+
+
+def _gun_fu_state(actor):
+    """Return (rating, used, remaining) for the actor's Gun Fu merit.
+
+    Returns ``(0, 0, 0)`` for any actor that cannot benefit from Gun Fu:
+
+    * Mooks (no character FK).
+    * NPCs (the NPC sheet has no per-session merit-use tracking yet —
+      the spend / reset UI lives only on Character sheets, so emitting
+      a Gun Fu input on an NPC row would be a one-way street that
+      drains uses with no way to refresh them).
+    * Characters without the Gun Fu merit attached.
+    * Characters whose ``character_class`` is not ``soldier`` (defense
+      in depth — the merit is canonically soldier-locked at the
+      catalogue level, but a hand-edited DB row could attach it
+      elsewhere; we silently ignore that).
+
+    Soldiers with Gun Fu and remaining session uses return positive
+    ``remaining``. Reads ``CharacterMerit.rating`` (the through-table
+    field, related_name ``character_merits`` per
+    ``characters.models.CharacterMerit.Meta``) as the dot total and
+    ``Character.merit_uses["Gun Fu"]`` as the count consumed this
+    session.
+    """
+    if actor.participant_kind != "character" or actor.character is None:
+        return 0, 0, 0
+    char = actor.character
+    if (char.character_class or "").strip().lower() != "soldier":
+        return 0, 0, 0
+    # Resolve through the canonical M2M through-table. ``character_merits``
+    # is the related_name on CharacterMerit (characters/models.py:155-157).
+    # Case-insensitive name match shields against catalogue casing drift.
+    cm = char.character_merits.filter(merit__name__iexact="Gun Fu").first()
+    if cm is None:
+        return 0, 0, 0
+    rating = int(cm.rating or 0)
+    used = int((char.merit_uses or {}).get("Gun Fu", 0))
+    remaining = max(0, rating - used)
+    return rating, used, remaining
+
+
+def _distribute_gun_fu(total_uses, num_targets):
+    """Spread ``total_uses`` Gun Fu auto-successes across ``num_targets``.
+
+    Distribution is as even as possible. The integer remainder lands on
+    the **first** targets in declaration order so the primary target
+    gets the bonus when the math doesn't divide cleanly. Order of
+    targets in the caller is fixed: primary main-hand → spread extras
+    in their normal order → off-hand last (per the v0.15.17 spec).
+
+    Examples (matching the spec)::
+
+        _distribute_gun_fu(5, 4) == [2, 1, 1, 1]
+        _distribute_gun_fu(5, 2) == [3, 2]
+        _distribute_gun_fu(3, 1) == [3]
+        _distribute_gun_fu(0, 4) == [0, 0, 0, 0]
+        _distribute_gun_fu(7, 4) == [2, 2, 2, 1]
+
+    Empty / zero edge cases collapse to ``[]`` or ``[0, ...]`` so the
+    caller can always index by target slot.
+    """
+    if num_targets <= 0:
+        return []
+    if total_uses <= 0:
+        return [0] * num_targets
+    base = total_uses // num_targets
+    extra = total_uses % num_targets
+    return [base + (1 if i < extra else 0) for i in range(num_targets)]
+
+
 def _condition_attack_modifier(participant):
     """Sum ``atk_mod`` across active conditions, floored at -10.
 
@@ -1402,6 +1487,18 @@ def encounter_page(request, pk):
         if p.offhand_ammo_max < 0:
             p.offhand_ammo_max = 0
         p.is_ambidextrous = _has_ambidextrous_merit(p)
+
+        # v0.15.17 — Gun Fu annotations. ``gun_fu_remaining`` drives the
+        # GUN FU input visibility on the attack form (only rendered when
+        # > 0 AND the equipped weapon is a firearm). Rating + used are
+        # surfaced for the muted REMAINING THIS SESSION caption.
+        # ``_gun_fu_state`` returns (0, 0, 0) for mooks, NPCs, and
+        # non-soldier characters, so the input is suppressed for every
+        # ineligible row without an explicit conditional in the template.
+        gf_rating, gf_used, gf_remaining = _gun_fu_state(p)
+        p.gun_fu_rating = gf_rating
+        p.gun_fu_used = gf_used
+        p.gun_fu_remaining = gf_remaining
         # ``ammo_pct`` drives the colour tier of the indicator —
         # green ≥50%, amber 25–50%, red <25% / 0. Pre-computed in
         # Python so the template stays declarative.
@@ -2960,6 +3057,7 @@ def _resolve_single_attack(
     msg_tail, msg_tail_parts,
     spread_index=0, spread_penalty=0,
     extra_payload=None,
+    bonus_successes=0,
 ):
     """Resolve one attack roll against one target, write log rows.
 
@@ -2975,6 +3073,16 @@ def _resolve_single_attack(
     ``extra_payload`` lets the caller stuff additional structured data
     into the row (e.g. burst_mode, burst_bonus, aim_bonus).
 
+    ``bonus_successes`` (v0.15.17) is added to the rolled success count
+    *post-roll* (after defense/cover/dice but before damage math). It
+    drives the Gun Fu merit's "free auto successes" effect. The roll
+    itself still happens — auto-successes do not bypass full cover, do
+    not turn a missed roll into a hit when defense + cover already
+    blocked the entire pool, and do not double as the dice. They simply
+    bump the success tally before damage is calculated. A miss with
+    bonus successes upgrades to a hit (the per-target log row carries
+    ``gun_fu_bonus_successes`` so the timeline reflects the source).
+
     Returns nothing — log rows are the side effect. The caller is
     responsible for the encounter-level redirect and any cross-target
     summary row.
@@ -2983,6 +3091,16 @@ def _resolve_single_attack(
     spread_tail = (
         f" (BURST SPREAD #{spread_index})" if spread_index > 0 else ""
     )
+    # v0.15.17 — Gun Fu tail. Appended after spread_tail so per-target
+    # rows read e.g. "(WP+3) (BURST SPREAD #2) (GUN FU +1 SUCC)".
+    gun_fu_bonus = max(0, int(bonus_successes or 0))
+    gun_fu_tail = (
+        f" (GUN FU +{gun_fu_bonus} SUCC)" if gun_fu_bonus > 0 else ""
+    )
+    # Always present on the payload so timeline filters can group on
+    # the key without checking for absence (zero is a valid value
+    # meaning "no Gun Fu spend on this target").
+    extra_payload.setdefault("gun_fu_bonus_successes", gun_fu_bonus)
 
     defense = _compute_defense(target)
     cover_pen = _cover_penalty(target.cover_state)
@@ -3008,6 +3126,12 @@ def _resolve_single_attack(
 
     # ---- Full cover short-circuit -----------------------------------------
     if cover_pen == "BLOCKED":
+        # v0.15.17 — Gun Fu auto-successes do NOT bypass full cover.
+        # Cover state blocks the shot entirely; if the bullet can't
+        # reach the target the merit's free successes are wasted on
+        # this target. The caller still records the spend on the
+        # character (we don't refund here — the player declared the
+        # split before resolution).
         payload = dict(base_payload)
         payload.update(
             outcome="blocked_by_cover",
@@ -3018,13 +3142,19 @@ def _resolve_single_attack(
             encounter,
             "attack",
             f"{attacker.name} → {target.name}: BLOCKED BY FULL COVER."
-            + msg_tail + spread_tail,
+            + msg_tail + spread_tail + gun_fu_tail,
             **payload,
         )
         return
 
     final_pool = max(0, attack_pool - defense - cover_pen)
     successes, dice = _roll_pool(final_pool)
+    # v0.15.17 — apply Gun Fu auto-successes to the success tally
+    # post-roll. ``rolled_successes`` is preserved on the payload so
+    # the timeline can show the dice contribution separately from the
+    # merit contribution.
+    rolled_successes = successes
+    successes = rolled_successes + gun_fu_bonus
 
     # ---- Miss --------------------------------------------------------------
     if successes == 0:
@@ -3035,12 +3165,13 @@ def _resolve_single_attack(
             final_pool=final_pool,
             dice=dice,
             successes=0,
+            rolled_successes=rolled_successes,
         )
         _log(
             encounter,
             "attack",
             f"{attacker.name} attacks {target.name}: missed."
-            + msg_tail + spread_tail,
+            + msg_tail + spread_tail + gun_fu_tail,
             **payload,
         )
         return
@@ -3083,6 +3214,7 @@ def _resolve_single_attack(
         final_pool=final_pool,
         dice=dice,
         successes=successes,
+        rolled_successes=rolled_successes,
         raw_damage=raw_damage,
         weapon_damage=weapon_amount,
         armor_reduction=armor_reduction,
@@ -3097,14 +3229,14 @@ def _resolve_single_attack(
         encounter,
         "attack",
         f"{attacker.name} hits {target.name} for {final_damage} {type_label} damage."
-        + msg_tail + spread_tail,
+        + msg_tail + spread_tail + gun_fu_tail,
         **payload,
     )
     _log(
         encounter,
         "health_change",
         f"{target.name} takes {final_damage} {type_label} damage."
-        + spread_tail,
+        + spread_tail + gun_fu_tail,
         **payload,
     )
 
@@ -3421,6 +3553,29 @@ def attack(request, pk, attacker_id):
     is_ambidextrous = _has_ambidextrous_merit(attacker) if dual_attack else False
     offhand_penalty = 0 if is_ambidextrous else -2
 
+    # v0.15.17 — Gun Fu spend. Defense-in-depth gating mirrors every
+    # eligibility rule in ``_gun_fu_state``:
+    #   * Mooks / NPCs / non-soldier characters return remaining=0,
+    #     so the player-declared total is clamped to 0 and the merit
+    #     never engages.
+    #   * Non-firearm equipped main hand zeroes out the spend silently
+    #     (Gun Fu is gun combat — a sword swing doesn't use it).
+    #   * The cap-at-remaining ``min`` makes a tampered POST harmless;
+    #     the player can never spend more than they have on file.
+    # Distribution order is fixed: primary (slot 0) → spread extras
+    # (slots 1..N) → off-hand (slot N+1). The caller below threads
+    # the matching slot index into each ``_resolve_single_attack`` call
+    # via the ``bonus_successes`` kwarg.
+    gun_fu_uses_requested = max(0, _safe_int(request.POST.get("gun_fu_uses"), 0))
+    gun_fu_rating, gun_fu_used, gun_fu_remaining = _gun_fu_state(attacker)
+    gun_fu_to_spend = min(gun_fu_uses_requested, gun_fu_remaining)
+    if (weapon_data or {}).get("category") != "firearm":
+        gun_fu_to_spend = 0
+    target_count = 1 + extras_total
+    if dual_attack and attacker.offhand_weapon_data:
+        target_count += 1
+    gun_fu_distribution = _distribute_gun_fu(gun_fu_to_spend, target_count)
+
     extra_payload = {
         "burst_mode": burst_mode,
         "burst_bonus": burst_bonus,
@@ -3446,9 +3601,16 @@ def attack(request, pk, attacker_id):
         "dual_wield_offhand": False,
         "dual_wield_penalty": 0,
         "ambidextrous": is_ambidextrous if dual_attack else False,
+        # v0.15.17 — Gun Fu spend metadata. Present on every row so
+        # the timeline can read the action-wide spend (``gun_fu_total``)
+        # and which slot got the bonus (``gun_fu_bonus_successes`` is
+        # set per-row inside ``_resolve_single_attack``).
+        "gun_fu_total": gun_fu_to_spend,
+        "gun_fu_rating": gun_fu_rating,
     }
 
     # ---- Primary attack ----------------------------------------------------
+    primary_gun_fu = gun_fu_distribution[0] if gun_fu_distribution else 0
     _resolve_single_attack(
         encounter, attacker, target,
         weapon_data=weapon_data,
@@ -3466,6 +3628,7 @@ def attack(request, pk, attacker_id):
         spread_index=0,
         spread_penalty=0,
         extra_payload=extra_payload,
+        bonus_successes=primary_gun_fu,
     )
 
     # ---- Aim tag housekeeping ---------------------------------------------
@@ -3497,6 +3660,12 @@ def attack(request, pk, attacker_id):
         # Extras get the burst bonus but NOT the aim bonus. Spread
         # penalty is subtracted from the pool before defense/cover.
         extra_pool = max(0, base_pool_no_burst + burst_bonus - spread_penalty)
+        # v0.15.17 — pull this extra's Gun Fu slot from the
+        # distribution. Slot index ``i`` (1-based) maps directly to
+        # ``gun_fu_distribution[i]`` because slot 0 is the primary.
+        extra_gun_fu = (
+            gun_fu_distribution[i] if i < len(gun_fu_distribution) else 0
+        )
         _resolve_single_attack(
             encounter, attacker, extra_target,
             weapon_data=weapon_data,
@@ -3514,6 +3683,7 @@ def attack(request, pk, attacker_id):
             spread_index=i,
             spread_penalty=spread_penalty,
             extra_payload=extra_payload,
+            bonus_successes=extra_gun_fu,
         )
 
     # ---- Ammo decrement (v0.15.15) -----------------------------------------
@@ -3674,6 +3844,11 @@ def attack(request, pk, attacker_id):
                 # downstream consumers (timeline, WS replay) can read
                 # which slot fired without re-walking the participant.
                 "offhand_weapon_name": offhand_name,
+                # v0.15.17 — Gun Fu metadata mirrors the main-hand row
+                # so a dual-wield Gun Fu spend can be reconciled across
+                # both rows by the same key.
+                "gun_fu_total": gun_fu_to_spend,
+                "gun_fu_rating": gun_fu_rating,
             }
 
             offhand_msg_tail_parts = ["OFF-HAND"]
@@ -3681,6 +3856,16 @@ def attack(request, pk, attacker_id):
                 offhand_msg_tail_parts.append("AMBIDEXTROUS")
             offhand_msg_tail = (
                 " (" + ", ".join(offhand_msg_tail_parts) + ")"
+            )
+
+            # v0.15.17 — Gun Fu off-hand slot is the LAST element of
+            # the distribution (after primary at slot 0 and any spread
+            # extras at slots 1..N). Compute by index; gracefully
+            # collapse to 0 if the distribution is empty (defensive).
+            offhand_gun_fu = (
+                gun_fu_distribution[-1]
+                if (gun_fu_distribution and len(gun_fu_distribution) >= 2)
+                else 0
             )
 
             _resolve_single_attack(
@@ -3700,6 +3885,7 @@ def attack(request, pk, attacker_id):
                 spread_index=0,
                 spread_penalty=0,
                 extra_payload=offhand_extra_payload,
+                bonus_successes=offhand_gun_fu,
             )
 
             # Decrement off-hand ammo after the resolve. Refresh
@@ -3710,6 +3896,42 @@ def attack(request, pk, attacker_id):
                 attacker.refresh_from_db()
                 _set_offhand_ammo(attacker, oh_ammo_after)
                 attacker.save(update_fields=["conditions"])
+
+    # ---- Gun Fu spend persistence (v0.15.17) -------------------------------
+    # Persist the merit-use spend on the underlying Character so the
+    # character sheet's existing /spendMeritUse/ count and remaining
+    # display reflect the new total immediately. Mirrors the canonical
+    # spend pattern from characters/views.py:230 (read merit_uses dict,
+    # increment, cap at rating). The cap was already applied via
+    # ``min(gun_fu_uses_requested, gun_fu_remaining)`` upstream, so this
+    # block trusts ``gun_fu_to_spend`` and never over-counts.
+    #
+    # The spend lands on the character regardless of per-target outcome
+    # (a Gun Fu success that fell on a fully-covered target is still
+    # spent — the player committed before resolution, no refund).
+    if gun_fu_to_spend > 0 and attacker.character is not None:
+        # Defensive re-fetch before mutating the JSONField — earlier
+        # housekeeping (willpower / ammo) round-tripped the attacker
+        # but the character itself was untouched, so the dict on the
+        # in-memory copy is canonical. Still, refresh for symmetry
+        # with the encounter's other persistence sites.
+        char = attacker.character
+        char.refresh_from_db(fields=["merit_uses"])
+        uses = dict(char.merit_uses or {})
+        uses["Gun Fu"] = int(uses.get("Gun Fu", 0)) + gun_fu_to_spend
+        char.merit_uses = uses
+        char.save(update_fields=["merit_uses"])
+        remaining_after = max(0, gun_fu_remaining - gun_fu_to_spend)
+        _log(
+            encounter,
+            "system",
+            f"{attacker.name} spent {gun_fu_to_spend} Gun Fu auto-success(es). "
+            f"{remaining_after} remaining this session.",
+            actor_participant_id=attacker.id,
+            gun_fu_used=gun_fu_to_spend,
+            gun_fu_remaining_after=remaining_after,
+            gun_fu_rating=gun_fu_rating,
+        )
 
     return redirect("combat:detail", pk=encounter.pk)
 

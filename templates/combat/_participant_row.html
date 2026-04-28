@@ -476,6 +476,42 @@ dodge), ADD CONDITION, WILLPOWER.
                     {% endif %}
 
                     {% comment %}
+                    v0.15.17 — GUN FU input. Soldier-only merit grants
+                    "1 free success per dot per session in gun combat".
+                    The character sheet (/characters/<id>/) already
+                    tracks per-session uses via Character.merit_uses;
+                    this input lets the player declare a total spend
+                    N at attack time. Server distributes evenly across
+                    primary + spread extras + off-hand; remainder lands
+                    on the first targets (primary first).
+
+                    Visibility rules (server-enforced; the template
+                    only suppresses the chrome to keep the form
+                    legible):
+                      * p.gun_fu_remaining > 0 — soldier with the
+                        merit and remaining session uses
+                      * p.weapon_data.category == "firearm" — Gun Fu
+                        is gun combat; non-firearms zero out the spend
+                        server-side, so we don't show the input
+
+                    The number input is a deliberate choice over a
+                    checkbox — the player declares an integer N, capped
+                    server-side at remaining. They can spend 0 (no
+                    checkbox to forget to untick), or up to all
+                    remaining in one action.
+                    {% endcomment %}
+                    {% if p.gun_fu_remaining > 0 and p.weapon_data.category == "firearm" %}
+                    <label for="gunfu-{{ p.id }}">GUN FU (+N SUCCESS)</label>
+                    <input type="number" id="gunfu-{{ p.id }}" name="gun_fu_uses"
+                           value="0" min="0" max="{{ p.gun_fu_remaining }}"
+                           class="field-input">
+                    <div class="muted" style="grid-column: 1 / -1; font-size: 0.7rem;">
+                        {{ p.gun_fu_remaining }}/{{ p.gun_fu_rating }} REMAINING THIS SESSION ·
+                        SPREADS ACROSS ALL TARGETS IN THIS ACTION (primary + spread extras + off-hand)
+                    </div>
+                    {% endif %}
+
+                    {% comment %}
                     v0.15.9 — willpower availability hint. Disable the
                     spend checkbox at zero WP rather than swap it for
                     a static label, so the form layout stays stable.
