@@ -471,6 +471,15 @@
                                 threshold (8+) is unaffected.
                                 {% endcomment %}
                                 <th style="width: 6%; text-align: center;" title="X-again explosion threshold. 10 = re-roll on 10 (default); 9 = re-roll on 9 or 10; 8 = re-roll on 8 / 9 / 10. Success threshold stays at 8+.">AGAIN</th>
+                                {% comment %}
+                                v0.15.26 — KO column. Drives the
+                                knockdown auto-trigger on a successful
+                                hit (target rolls Strength + Stamina vs
+                                attacker's successes; failure = prone).
+                                Default seed: True on Shotgun /
+                                Twin-Barrel / Auto Shotgun.
+                                {% endcomment %}
+                                <th style="width: 5%; text-align: center;" title="Knockdown-capable: a successful hit auto-triggers a Strength + Stamina contest vs the attacker's successes. Failure drops the target prone.">KO</th>
                                 {% endif %}
                                 <th>NOTES</th>
                                 <th style="width: 1%;"></th>
@@ -542,6 +551,24 @@
                                            style="text-align: center;"
                                            title="X-again explosion threshold (8 / 9 / 10). 10 = classic 10-again. 9-again re-rolls on 9 or 10. 8-again re-rolls on 8/9/10. Success threshold stays at 8+.">
                                 </td>
+                                {% comment %}
+                                v0.15.26 — KO cell. Parallel-array
+                                ``weapons_firearm_knockdown_flag``
+                                ("1" / "0") pairs row-for-row with the
+                                other firearm columns. Hidden flag +
+                                visible checkbox; the bind handler
+                                further down syncs the two on click.
+                                {% endcomment %}
+                                <td style="text-align: center;">
+                                    <input type="hidden"
+                                           name="weapons_firearm_knockdown_flag"
+                                           value="{% if w.knockdown_capable %}1{% else %}0{% endif %}"
+                                           class="weap-ko-flag">
+                                    <input type="checkbox"
+                                           class="weap-ko-cb"
+                                           {% if w.knockdown_capable %}checked{% endif %}
+                                           title="Knockdown-capable: a successful hit auto-triggers a Strength + Stamina contest vs the attacker's successes. Failure drops the target prone.">
+                                </td>
                                 {% endif %}
                                 <td><input type="text" name="weapons_{{ sec.cat }}_notes" value="{{ w.notes }}" maxlength="240"></td>
                                 <td><button type="button" class="weap-del" onclick="this.closest('tr').remove()">×</button></td>
@@ -575,6 +602,19 @@
                 }
                 document.querySelectorAll('.weap-auto-cb').forEach(bindAutoFlag);
 
+                // v0.15.26 — same shape for the KO checkbox / hidden
+                // flag pair. Separate function so a future column add
+                // doesn't have to share the lookup-class with AUTO.
+                function bindKoFlag(cb) {
+                    if (!cb || cb.dataset.bound === '1') return;
+                    cb.dataset.bound = '1';
+                    cb.addEventListener('change', function () {
+                        var hidden = cb.parentElement.querySelector('.weap-ko-flag');
+                        if (hidden) hidden.value = cb.checked ? '1' : '0';
+                    });
+                }
+                document.querySelectorAll('.weap-ko-cb').forEach(bindKoFlag);
+
                 document.querySelectorAll('.weap-add').forEach(function (btn) {
                     btn.addEventListener('click', function () {
                         var cat = btn.getAttribute('data-add-cat');
@@ -594,6 +634,10 @@
                         // default to 10 (classic 10-again behaviour);
                         // GM bumps to 9 or 8 per-weapon as needed.
                         var againCell = '';
+                        // v0.15.26 — KO cell. New firearm rows default
+                        // to False (most weapons aren't knockdown-
+                        // capable; shotgun-class entries opt-in).
+                        var koCell = '';
                         if (cat === 'firearm') {
                             autoCell =
                                 '<td style="text-align: center;">' +
@@ -620,6 +664,14 @@
                                          'style="text-align: center;" ' +
                                          'title="X-again explosion threshold (8 / 9 / 10). 10 = classic 10-again. 9-again re-rolls on 9 or 10. 8-again re-rolls on 8/9/10. Success threshold stays at 8+.">' +
                                 '</td>';
+                            koCell =
+                                '<td style="text-align: center;">' +
+                                  '<input type="hidden" ' +
+                                         'name="weapons_firearm_knockdown_flag" ' +
+                                         'value="0" class="weap-ko-flag">' +
+                                  '<input type="checkbox" class="weap-ko-cb" ' +
+                                         'title="Knockdown-capable: a successful hit auto-triggers a Strength + Stamina contest vs the attacker successes. Failure drops the target prone.">' +
+                                '</td>';
                         }
                         var tr = document.createElement('tr');
                         tr.innerHTML =
@@ -630,12 +682,15 @@
                             autoCell +
                             magCell +
                             againCell +
+                            koCell +
                             '<td><input type="text" name="weapons_' + cat + '_notes" maxlength="240" placeholder=""></td>' +
                             '<td><button type="button" class="weap-del" onclick="this.closest(\'tr\').remove()">×</button></td>';
                         tbody.appendChild(tr);
-                        // Bind the new row's checkbox if present.
-                        var newCb = tr.querySelector('.weap-auto-cb');
-                        if (newCb) bindAutoFlag(newCb);
+                        // Bind the new row's checkboxes if present.
+                        var newAutoCb = tr.querySelector('.weap-auto-cb');
+                        if (newAutoCb) bindAutoFlag(newAutoCb);
+                        var newKoCb = tr.querySelector('.weap-ko-cb');
+                        if (newKoCb) bindKoFlag(newKoCb);
                         var firstInput = tr.querySelector('input[type="text"]');
                         if (firstInput) firstInput.focus();
                     });

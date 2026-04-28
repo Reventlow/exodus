@@ -1,5 +1,16 @@
 # Changelog
 
+## v0.15.26
+- **Surprise round wiring** — the `surprise_immune` field has been on `Participant` since v0.15.0 but `_compute_defense` never read it. Now does. New `is_surprise_round` flag on `Encounter.metadata` (no schema change), GM toggle on the encounter detail page, per-participant `[ALERT]` exemption with a TOGGLE ALERT sub-form. Round-1-only effect: surprised non-immune defenders get defense=0 regardless of all other modifiers
+- **Off-hand reload action** — `reload_offhand` view + URL + STANCE strip button. Same cost rules as main-hand reload (turn on own turn, free off-turn). Closes the deferred item from v0.15.16
+- **Shotgun range damage** — `_parse_weapon_damage` now detects multi-range strings (`"4L close / 2L long"`). Attack form gets a CLOSE / LONG range selector when relevant. Log payload tracks the chosen range band
+- **Heal / Adjust HP during combat** — new GM-only `adjust_hp` endpoint and sub-form. Three integer inputs (B/L/A) clamped to 0..health_max. Auto-toggles the `incapacitated` condition based on the new total. Logs as `health_adjust` with before/after
+- **All-out attack** — new attack-form checkbox. +2 dice on the attack, attacker gains `all_out_attack` condition (def_mod=-99) until round boundary. Mutex with FULL DEFENSE — server rejects ALL-OUT ATTACK if attacker already has `defense_full`. LIVE TOTAL preview reflects the +2
+- **Knockdown** — new `knockdown_capable` weapon catalogue flag (firearm only, default False; seeded True on Shotgun / Twin-Barrel / Auto Shotgun). Auto-triggered on a successful hit when the weapon has the flag and the target isn't already prone. Target rolls Str+Stamina vs attacker's successes; failure = prone. Logged as `knockdown` action_type with the resistance roll. KO column added to settings UI and the rules-page weapon catalogue
+- Rules explainer at `/rules/combat/` gains SURPRISE ROUND / ALL-OUT ATTACK / KNOCKDOWN subsections; AMMO & RELOAD updated for off-hand reload; HEALTH & CONSEQUENCES mentions the new GM adjust path
+- New CombatLog action_types: `reload_offhand`, `health_adjust`, `knockdown`. Existing `attack` payload extended: `range_band`, `surprised`, `all_out`. New CONDITION_DEFS entry: `all_out_attack`
+- No model schema changes, no migrations, no new dependencies. State lives in existing JSONFields (`Encounter.metadata`, `Participant.conditions`, `weapons` catalogue); `Participant.surprise_immune` already existed
+
 ## v0.15.25
 - **Combat race-condition hardening.** Every mutation view in `combat/` is now wrapped in `transaction.atomic()`. SQLite IMMEDIATE mode serializes writers at transaction-start, so two parallel attacks against the same target can no longer lose damage by overwriting each other's state. Two `next_turn` clicks can no longer race the pointer. Two `_log` writes can no longer collide on the unique `(encounter, sequence)` constraint
 - **`_log()` retry-on-IntegrityError** — defense in depth. The atomic block already prevents collisions on IMMEDIATE, but if a future backend change relaxes that, `_log` retries once on IntegrityError before re-raising. Broadcast happens AFTER commit so a Channels-layer failure can't roll back a log row

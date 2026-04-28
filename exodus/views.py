@@ -218,6 +218,13 @@ def site_settings(request):
             firearm_again_thresholds = request.POST.getlist(
                 "weapons_firearm_again"
             )
+            # v0.15.26 — knockdown_capable parallel-array. "1" / "0"
+            # paired row-for-row with the rest of the firearm columns.
+            # Surfaces as the KO column in the editor and seeds True
+            # on Shotgun / Twin-Barrel / Auto Shotgun by default.
+            firearm_knockdown_flags = request.POST.getlist(
+                "weapons_firearm_knockdown_flag"
+            )
             new_weapons = []
             for cat in categories:
                 names = request.POST.getlist(f"weapons_{cat}_name")
@@ -279,6 +286,16 @@ def site_settings(request):
                             if i < len(firearm_again_thresholds) else 10
                         )
                         entry["again"] = _clamp_again(again_raw)
+                        # v0.15.26 — knockdown_capable parallel-array.
+                        # "1" / "0" string semantics mirror auto_capable;
+                        # length-defensive on read so a partial POST
+                        # (or a row-deletion mid-edit) collapses cleanly
+                        # to False rather than raising IndexError.
+                        ko_raw = (
+                            firearm_knockdown_flags[i]
+                            if i < len(firearm_knockdown_flags) else "0"
+                        )
+                        entry["knockdown_capable"] = (ko_raw == "1")
                     new_weapons.append(entry)
             settings_obj.weapons = new_weapons
 
@@ -974,6 +991,10 @@ def api_weapons(request):
         # set. MCP / API clients sending the field for non-firearms
         # have it silently dropped, mirroring auto_capable / magazine.
         new_w["again"] = _clamp_again(body.get("again", 10))
+        # v0.15.26 — knockdown_capable flag (firearms only). True on
+        # shotgun-class weapons by default seed; arbitrary firearms
+        # opt-in via this flag. Bool coercion mirrors auto_capable.
+        new_w["knockdown_capable"] = bool(body.get("knockdown_capable", False))
     weapons.append(new_w)
     settings_obj.weapons = weapons
     settings_obj.save(update_fields=["weapons"])
@@ -1065,6 +1086,11 @@ def api_weapon_detail(request, name):
     # Silently dropped on non-firearm PUTs to keep the schema clean.
     if "again" in body and w.get("category") == "firearm":
         w["again"] = _clamp_again(body["again"])
+    # v0.15.26 — knockdown_capable (firearms only). Sent as a bool.
+    # Non-firearm rows silently drop the field on PUT, mirroring the
+    # auto_capable / magazine / again gating.
+    if "knockdown_capable" in body and w.get("category") == "firearm":
+        w["knockdown_capable"] = bool(body["knockdown_capable"])
     weapons[idx] = w
     settings_obj.weapons = weapons
     settings_obj.save(update_fields=["weapons"])

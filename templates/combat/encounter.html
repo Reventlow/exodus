@@ -939,6 +939,34 @@ The END button also prompts for confirmation.
                             {% endif %}
                             <button type="submit" class="init-action-btn primary">START ENCOUNTER &rarr;</button>
                         </form>
+                        {% comment %}
+                        v0.15.26 — SURPRISE ROUND toggle. GM-only
+                        checkbox stored on ``Encounter.metadata``
+                        (no schema change). Round 1 of a surprise
+                        encounter zeroes defense for any defender
+                        lacking the per-row Alert exemption
+                        (``surprise_immune``). Round 2+ falls back to
+                        normal defense computation regardless. Posts
+                        to encounter_update with the
+                        ``surprise_round_submitted`` marker so unrelated
+                        edits don't accidentally clear the flag.
+                        {% endcomment %}
+                        {% if is_gm %}
+                        <form method="post" action="{% url 'combat:update' encounter.id %}"
+                              style="display:inline-block; margin-left: 0.6rem; vertical-align: middle;">
+                            {% csrf_token %}
+                            <input type="hidden" name="surprise_round_submitted" value="1">
+                            <input type="hidden" name="title" value="{{ encounter.title }}">
+                            <input type="hidden" name="scene_description" value="{{ encounter.scene_description }}">
+                            <input type="hidden" name="location_text" value="{{ encounter.location_text }}">
+                            <label style="font-size: 0.7rem; margin-right: 0.4rem;">
+                                <input type="checkbox" name="is_surprise_round" value="1"
+                                       {% if encounter.metadata.is_surprise_round %}checked{% endif %}
+                                       onchange="this.form.submit()">
+                                SURPRISE ROUND (defenders without "Alert" merit get no defense in round 1)
+                            </label>
+                        </form>
+                        {% endif %}
                     {% else %}
                         {% if participants|length == 0 %}
                             <span class="init-note">ADD PARTICIPANTS TO START</span>

@@ -145,6 +145,16 @@ dodge), ADD CONDITION, WILLPOWER.
             {% endif %}
 
             {% comment %}
+            v0.15.26 — Alert chip. Visible on every participant row
+            whenever ``surprise_immune=True``; cyan to match the
+            stance-pill colour family. Read-only — the GM toggles via
+            the TOGGLE ALERT button in the action panel below.
+            {% endcomment %}
+            {% if p.surprise_immune %}
+                <span class="part-cond-pill cyan" title="Alert merit equivalent — exempt from surprise round zero-defense.">[ALERT]</span>
+            {% endif %}
+
+            {% comment %}
             v0.15.14 — AIM banner. Visible whenever the participant
             carries an aiming_at:* tag, on every viewer's screen
             (so allies / GMs see the threat). The × CANCEL AIM
@@ -205,12 +215,19 @@ dodge), ADD CONDITION, WILLPOWER.
                 badge. Default 10-again renders no badge to keep the
                 row uncluttered.
                 {% endcomment %}
+                {% comment %}
+                v0.15.26 — KNOCKDOWN badge surfaces when the equipped
+                weapon's catalogue entry has ``knockdown_capable=True``
+                (default seed: Shotgun, Twin-Barrel, Auto Shotgun).
+                Cyan to match the stance-tag colour family — the badge
+                is informational, not a stance.
+                {% endcomment %}
                 {% if p.weapon_name and p.offhand_weapon_name %}
-                    &middot; MAIN: {{ p.weapon_name }}{% if p.weapon_data.again == 9 %}<span class="part-again-badge">9-AGAIN</span>{% endif %}{% if p.weapon_data.again == 8 %}<span class="part-again-badge">8-AGAIN</span>{% endif %} | OFF-HAND: {{ p.offhand_weapon_name }}{% if p.offhand_weapon_data.again == 9 %}<span class="part-again-badge">9-AGAIN</span>{% endif %}{% if p.offhand_weapon_data.again == 8 %}<span class="part-again-badge">8-AGAIN</span>{% endif %}
+                    &middot; MAIN: {{ p.weapon_name }}{% if p.weapon_data.again == 9 %}<span class="part-again-badge">9-AGAIN</span>{% endif %}{% if p.weapon_data.again == 8 %}<span class="part-again-badge">8-AGAIN</span>{% endif %}{% if p.weapon_data.knockdown_capable %}<span class="part-again-badge" style="background:rgba(0,200,255,0.12); border-color:rgba(0,200,255,0.4); color:#5cf;" title="Knockdown-capable: a successful hit forces the target to roll Strength + Stamina or fall prone.">KNOCKDOWN</span>{% endif %} | OFF-HAND: {{ p.offhand_weapon_name }}{% if p.offhand_weapon_data.again == 9 %}<span class="part-again-badge">9-AGAIN</span>{% endif %}{% if p.offhand_weapon_data.again == 8 %}<span class="part-again-badge">8-AGAIN</span>{% endif %}{% if p.offhand_weapon_data.knockdown_capable %}<span class="part-again-badge" style="background:rgba(0,200,255,0.12); border-color:rgba(0,200,255,0.4); color:#5cf;" title="Knockdown-capable off-hand.">KNOCKDOWN</span>{% endif %}
                 {% elif p.weapon_name %}
-                    &middot; {{ p.weapon_name }}{% if p.weapon_data.again == 9 %}<span class="part-again-badge">9-AGAIN</span>{% endif %}{% if p.weapon_data.again == 8 %}<span class="part-again-badge">8-AGAIN</span>{% endif %}
+                    &middot; {{ p.weapon_name }}{% if p.weapon_data.again == 9 %}<span class="part-again-badge">9-AGAIN</span>{% endif %}{% if p.weapon_data.again == 8 %}<span class="part-again-badge">8-AGAIN</span>{% endif %}{% if p.weapon_data.knockdown_capable %}<span class="part-again-badge" style="background:rgba(0,200,255,0.12); border-color:rgba(0,200,255,0.4); color:#5cf;" title="Knockdown-capable: a successful hit forces the target to roll Strength + Stamina or fall prone.">KNOCKDOWN</span>{% endif %}
                 {% elif p.offhand_weapon_name %}
-                    &middot; OFF-HAND: {{ p.offhand_weapon_name }}{% if p.offhand_weapon_data.again == 9 %}<span class="part-again-badge">9-AGAIN</span>{% endif %}{% if p.offhand_weapon_data.again == 8 %}<span class="part-again-badge">8-AGAIN</span>{% endif %}
+                    &middot; OFF-HAND: {{ p.offhand_weapon_name }}{% if p.offhand_weapon_data.again == 9 %}<span class="part-again-badge">9-AGAIN</span>{% endif %}{% if p.offhand_weapon_data.again == 8 %}<span class="part-again-badge">8-AGAIN</span>{% endif %}{% if p.offhand_weapon_data.knockdown_capable %}<span class="part-again-badge" style="background:rgba(0,200,255,0.12); border-color:rgba(0,200,255,0.4); color:#5cf;" title="Knockdown-capable off-hand.">KNOCKDOWN</span>{% endif %}
                 {% endif %}
                 {% if p.armor_name %} &middot; {{ p.armor_name }}{% endif %}
             </span>
@@ -495,6 +512,21 @@ dodge), ADD CONDITION, WILLPOWER.
                     <input id="mod-{{ p.id }}" name="gm_modifier" type="number" value="0" step="1">
 
                     {% comment %}
+                    v0.15.26 — RANGE BAND selector. Only rendered when
+                    the equipped weapon's catalogue ``damage`` field
+                    parsed to a multi-range entry (e.g. "4L close /
+                    2L long"). Single-band weapons skip the selector
+                    entirely and the resolver defaults to close.
+                    {% endcomment %}
+                    {% if p.attack_preview.weapon_has_long_range %}
+                    <label for="range-{{ p.id }}">RANGE</label>
+                    <select id="range-{{ p.id }}" name="range_band">
+                        <option value="close" selected>CLOSE ({{ p.attack_preview.weapon_close_dmg }})</option>
+                        <option value="long">LONG ({{ p.attack_preview.weapon_long_dmg }})</option>
+                    </select>
+                    {% endif %}
+
+                    {% comment %}
                     v0.15.14 — FIRE MODE selector. Single is always
                     available; the burst options only render when the
                     equipped weapon's catalogue entry has
@@ -622,6 +654,24 @@ dodge), ADD CONDITION, WILLPOWER.
                     </label>
 
                     {% comment %}
+                    v0.15.26 — ALL-OUT ATTACK. +2 dice on the attacker's
+                    primary roll; attacker forfeits Defense for the
+                    round (def_mod=-99 from the all_out_attack tag,
+                    cleared automatically at the round boundary). Mutex
+                    with FULL DEFENSE — server rejects on conflict and
+                    the front-end disables the checkbox visually when
+                    the row already carries defense_full.
+                    {% endcomment %}
+                    <label class="part-wp-spend"
+                           title="WoD 2.0 all-out attack: +2 dice on the attack, no Defense until next round.">
+                        <input type="checkbox" name="all_out_attack" value="1"
+                               id="all-out-{{ p.id }}"
+                               class="all-out-cb-{{ p.id }}"
+                               {% for tag, label, color in p.condition_pills %}{% if tag == "defense_full" %}disabled title="Cannot ALL-OUT ATTACK while in FULL DEFENSE."{% endif %}{% endfor %}>
+                        ALL-OUT ATTACK (+2 DICE, LOSE DEFENSE THIS ROUND)
+                    </label>
+
+                    {% comment %}
                     v0.15.16 — DUAL ATTACK. Visible only when an
                     off-hand weapon is equipped. Fires both weapons
                     against the primary target in one action. Off-hand
@@ -725,6 +775,11 @@ dodge), ADD CONDITION, WILLPOWER.
                     var burstAmmoMap = {"single": 1, "short": 3, "medium": 10, "long": 20};
                     var ext = document.getElementById("autofire-extras-{{ p.id }}");
                     var spreadHint = document.getElementById("spread-hint-{{ p.id }}");
+                    // v0.15.26 — ALL-OUT ATTACK checkbox. +2 dice on the
+                    // primary attack pool, mirrored in LIVE TOTAL. The
+                    // checkbox may be absent on rows where the form
+                    // didn't render it (defensive null check).
+                    var allOutCb = document.getElementById("all-out-{{ p.id }}");
                     // v0.15.15 — ammo telemetry. ``currentAmmo`` is
                     // server-rendered into the JS at row render time
                     // and isn't refreshed mid-form (the page reload
@@ -785,8 +840,10 @@ dodge), ADD CONDITION, WILLPOWER.
                         if (burstSel) {
                             burstBonus = burstBonusMap[burstSel.value] || 0;
                         }
+                        // v0.15.26 — all-out attack bonus.
+                        var allOutBonus = (allOutCb && allOutCb.checked) ? 2 : 0;
                         display.textContent = mod >= 0 ? "+" + mod : String(mod);
-                        liveTotal.textContent = Math.max(0, baseTotal + mod + specBonus + burstBonus);
+                        liveTotal.textContent = Math.max(0, baseTotal + mod + specBonus + burstBonus + allOutBonus);
                     }
 
                     modInput.addEventListener("input", update);
@@ -799,6 +856,9 @@ dodge), ADD CONDITION, WILLPOWER.
                             updateAutofireVisibility();
                             updateAmmoHints();
                         });
+                    }
+                    if (allOutCb) {
+                        allOutCb.addEventListener("change", update);
                     }
                     update();  // initial render — also normalises the +0 prefix
                     updateAutofireVisibility();
@@ -850,6 +910,28 @@ dodge), ADD CONDITION, WILLPOWER.
                             <button type="submit"
                                     {% if current == p.ammo_max %}disabled title="Magazine already full."{% else %}title="Reload to full magazine. Costs the turn if you're the active actor."{% endif %}>
                                 RELOAD ({{ current }}/{{ p.ammo_max }})
+                            </button>
+                        </form>
+                        {% endwith %}
+                    {% endif %}
+
+                    {% comment %}
+                    v0.15.26 — RELOAD OFF-HAND button. Mirror of the
+                    main-hand RELOAD: only rendered when the off-hand is
+                    a firearm with a positive catalogue magazine.
+                    Disabled when the off-hand mag is already full. Same
+                    cost rules as the main-hand reload (active turn →
+                    costs the turn; off-turn → free GM bookkeeping).
+                    {% endcomment %}
+                    {% if p.offhand_ammo_max > 0 %}
+                        {% with offcurrent=p.offhand_ammo_state|default_if_none:0 %}
+                        <form method="post"
+                              action="{% url 'combat:reload_offhand' encounter.id p.id %}"
+                              style="display:inline;">
+                            {% csrf_token %}
+                            <button type="submit"
+                                    {% if offcurrent == p.offhand_ammo_max %}disabled title="Off-hand magazine already full."{% else %}title="Reload off-hand to full magazine. Costs the turn if you're the active actor."{% endif %}>
+                                RELOAD OFF-HAND ({{ offcurrent }}/{{ p.offhand_ammo_max }})
                             </button>
                         </form>
                         {% endwith %}
@@ -923,6 +1005,56 @@ dodge), ADD CONDITION, WILLPOWER.
                 <span class="muted" style="font-size: 0.6rem;">/ {{ p.willpower_max }}</span>
                 <button type="submit">SET</button>
             </form>
+
+            {% comment %}
+            v0.15.26 — GM-only HP ADJUST. Three integer fields (B / L
+            / A) clamped server-side to 0..health_max with the sum
+            also bounded by health_max. Auto-toggles ``incapacitated``
+            based on the new total. Useful for narrative healing,
+            applying poison ticks, or correcting damage that was
+            misapplied. Never shown to players.
+
+            Also includes the GM-only TOGGLE ALERT button — flips the
+            participant's ``surprise_immune`` exemption used by the
+            round-1 surprise-round zero-defense effect.
+            {% endcomment %}
+            {% if is_gm %}
+            <form method="post"
+                  action="{% url 'combat:adjust_hp' encounter.id p.id %}"
+                  class="part-mini-form"
+                  style="grid-column: 1 / -1; padding-top: 0.4rem; border-top: 1px dashed var(--c-dim);">
+                {% csrf_token %}
+                <label>HP (GM ADJUST)</label>
+                <input name="health_bashing" type="number"
+                       min="0" max="{{ p.health_max }}"
+                       value="{{ p.health_bashing }}"
+                       title="Bashing" style="max-width: 4rem;">
+                <input name="health_lethal" type="number"
+                       min="0" max="{{ p.health_max }}"
+                       value="{{ p.health_lethal }}"
+                       title="Lethal" style="max-width: 4rem;">
+                <input name="health_aggravated" type="number"
+                       min="0" max="{{ p.health_max }}"
+                       value="{{ p.health_aggravated }}"
+                       title="Aggravated" style="max-width: 4rem;">
+                <span class="muted" style="font-size: 0.6rem;">B/L/A · sum &le; {{ p.health_max }}</span>
+                <button type="submit">SET HP</button>
+            </form>
+
+            <form method="post"
+                  action="{% url 'combat:toggle_alert' encounter.id p.id %}"
+                  class="part-mini-form">
+                {% csrf_token %}
+                <label>ALERT</label>
+                <span class="muted" style="font-size: 0.7rem;">
+                    {% if p.surprise_immune %}EXEMPT from surprise round{% else %}NOT exempt{% endif %}
+                </span>
+                <button type="submit"
+                        title="Toggle Alert (surprise_immune). Round-1 of a surprise encounter zeroes defense for non-immune defenders.">
+                    TOGGLE ALERT
+                </button>
+            </form>
+            {% endif %}
 
         </div>
     </details>

@@ -437,6 +437,19 @@ CONDITION_DEFS = {
         "note": "Rolled dodge pool replaces normal defense (clears "
                 "at next turn).",
     },
+    # v0.15.26 — ALL-OUT ATTACK stance. +2 dice on the attacker's roll
+    # (applied as a one-shot bonus at attack time; this entry's atk_mod
+    # is intentionally 0 so it doesn't accidentally re-apply via
+    # _condition_attack_modifier on a subsequent action). def_mod=-99
+    # zeroes out defense for the round; the round-boundary clear in
+    # _advance_turn_pointer strips the tag along with defense_full /
+    # dodging:N / aiming_at:*.
+    "all_out_attack": {
+        "label": "ALL-OUT ATTACK",
+        "atk_mod": 0,
+        "def_mod": -99,
+        "note": "+2 dice on attack, no defense until next round.",
+    },
 }
 
 # Stance tags are managed by the FULL DEFENSE / DODGE buttons rather
@@ -1080,12 +1093,37 @@ def _compute_defense(participant):
     * ``defense_full``  → baseline doubled, then ordinary condition
                           modifiers applied on top.
 
+    v0.15.26 adds two more zero-defense branches:
+
+    * ``all_out_attack`` → 0 (attacker forfeited defense for the round).
+    * Encounter ``metadata["is_surprise_round"]`` is True, the
+      encounter is in round 1, and the participant is NOT
+      ``surprise_immune`` (i.e. doesn't have the Alert merit
+      equivalent) → 0. Round 2+ falls back to normal computation
+      regardless of the encounter flag.
+
     Falls back to the v0.15.4 baseline (``min(Dex, Wits) +
     Athletics`` for character / NPC, ``mook_defense`` for mooks,
     overridden by ``defense_override`` if pinned) plus the sum of
     plain condition modifiers (``prone``, ``stunned``, etc.).
     """
     if _has_condition(participant, "incapacitated"):
+        return 0
+    if _has_condition(participant, "all_out_attack"):
+        # v0.15.26 — attacker forfeited defense by going all-out.
+        # Trumps every other defense calculation.
+        return 0
+    # v0.15.26 — surprise round override. Round 1 of a surprise
+    # encounter zeroes defense for every defender lacking the Alert
+    # merit (encoded as ``Participant.surprise_immune``). Round 2+ no
+    # longer fires this branch — falls through to the normal stack.
+    encounter = participant.encounter
+    metadata = encounter.metadata or {}
+    if (
+        metadata.get("is_surprise_round")
+        and encounter.round_number == 1
+        and not participant.surprise_immune
+    ):
         return 0
     if _has_prefix_condition(participant, "dodging"):
         return _dodge_successes(participant)
@@ -1360,6 +1398,21 @@ def _attack_preview(actor, weapon_data, gm_modifier, weapon_skill_name=""):
          "bonus": 3, "available": auto_capable},
     ]
 
+    # v0.15.26 — multi-range damage preview. The attack form needs
+    # to know whether the equipped weapon has a separate long-range
+    # damage band so it can render the CLOSE / LONG selector. We
+    # pre-format the close / long damage strings (e.g. "4L", "2L")
+    # for the option labels.
+    parsed_dmg = _parse_weapon_damage((weapon_data or {}).get("damage", ""))
+    weapon_has_long_range = parsed_dmg["long"] is not None
+    close_amt, close_type = parsed_dmg["close"]
+    weapon_close_dmg = f"{close_amt}{close_type}" if close_amt or close_type else ""
+    if weapon_has_long_range:
+        long_amt, long_type = parsed_dmg["long"]
+        weapon_long_dmg = f"{long_amt}{long_type}"
+    else:
+        weapon_long_dmg = ""
+
     return {
         "base":             base,
         "skill":            skill_value,
@@ -1384,6 +1437,13 @@ def _attack_preview(actor, weapon_data, gm_modifier, weapon_skill_name=""):
         # is non-zero. ``total`` already has the bonus baked in.
         "skill_merit_name":  skill_merit_name,
         "skill_merit_bonus": skill_merit_bonus,
+        # v0.15.26 — multi-range damage. Drives the CLOSE / LONG
+        # range_band selector on the attack form. ``weapon_has_long_range``
+        # is False for single-band weapons; in that case the selector
+        # is suppressed and the resolver uses the close band by default.
+        "weapon_has_long_range": weapon_has_long_range,
+        "weapon_close_dmg":      weapon_close_dmg,
+        "weapon_long_dmg":       weapon_long_dmg,
         "total":            total,
     }
 
@@ -1427,39 +1487,97 @@ def _parse_armor_rating(rating_str):
         return 0, 0
 
 
-def _parse_weapon_damage(damage_field):
-    """Parse a weapon catalogue ``damage`` value into ``(amount, type)``.
+def _parse_damage_token(text):
+    """Parse a single damage token like ``"4L"`` or ``"2L"``.
 
-    The catalogue stores damage as a free-text string like ``"2L"``,
-    ``"1B"``, ``"4L close / 2L long"``, or even ``"5L (both barrels)"``.
-    For v0.15.4 we only need the leading numeric magnitude and the
-    first ``B``/``L``/``A`` suffix character — the GM modifier is the
-    pressure-relief valve for everything more nuanced.
+    Reads the leading run of digits (the magnitude) and the first
+    ``B``/``L``/``A`` character (the damage type). Defensive against
+    empty / whitespace / no-digits input — collapses to ``(0, "L")``,
+    matching the legacy fallback.
 
-    Falls back to ``(0, "L")`` for missing / unparseable input —
-    lethal is the WoD 2.0 default and zero damage is harmless.
+    v0.15.26 helper — extracted from the legacy ``_parse_weapon_damage``
+    body so the new dict-returning function can call it once per range
+    band without duplicating the digit-and-type scan.
     """
-    if damage_field is None:
-        return 0, "L"
-    text = str(damage_field).strip()
     if not text:
         return 0, "L"
-    # Read leading digits as the damage magnitude.
+    s = str(text).strip()
+    if not s:
+        return 0, "L"
     digits = ""
-    for ch in text:
+    for ch in s:
         if ch.isdigit():
             digits += ch
         else:
             break
     amount = int(digits) if digits else 0
-    # First B / L / A character anywhere in the string is the type.
     damage_type = "L"
-    for ch in text:
+    for ch in s:
         upper = ch.upper()
         if upper in ("B", "L", "A"):
             damage_type = upper
             break
     return amount, damage_type
+
+
+def _parse_weapon_damage(damage_field):
+    """Parse a weapon catalogue ``damage`` value into structured form.
+
+    v0.15.26 — supports multi-range entries. The catalogue stores
+    damage as a free-text string. Three shapes are recognised:
+
+      * Plain single-band, e.g. ``"2L"``, ``"1B"``, ``"3A"``.
+      * Multi-range with explicit ``close`` / ``long`` keywords,
+        e.g. ``"4L close / 2L long"``. Either side of the ``/``
+        separator may carry the keyword in either order; whichever
+        token contains ``"long"`` (case-insensitive) becomes the
+        long-range entry; the other becomes close.
+      * Catalogue-flavour tails like ``"5L (both barrels)"`` —
+        treated as plain single-band (parses the leading numeric
+        and B/L/A from the prefix; trailing text is ignored).
+
+    Returns a dict::
+
+        {
+            "close": (int, "B"|"L"|"A"),  # always present
+            "long":  (int, "B"|"L"|"A") | None,  # set on multi-range
+            "raw":   str,
+        }
+
+    Backwards compatibility: callers that previously read the legacy
+    ``(amount, type)`` tuple now read ``parsed["close"]`` (which
+    matches the single-band path's old return value).
+
+    Falls back to ``{"close": (0, "L"), "long": None, ...}`` for
+    missing / unparseable input — lethal is the WoD 2.0 default and
+    zero damage is harmless.
+    """
+    raw = "" if damage_field is None else str(damage_field)
+    text = raw.strip()
+    if not text:
+        return {"close": (0, "L"), "long": None, "raw": raw}
+
+    # Multi-range detection: look for a "/" separator and check whether
+    # either side carries the keyword "long". If yes, route to the
+    # multi-range branch; otherwise fall back to single-band parsing.
+    if "/" in text:
+        left, _, right = text.partition("/")
+        left_s = left.strip()
+        right_s = right.strip()
+        left_has_long = "long" in left_s.lower()
+        right_has_long = "long" in right_s.lower()
+        if left_has_long or right_has_long:
+            # Whichever token mentions "long" wins the long slot.
+            if right_has_long:
+                close_token, long_token = left_s, right_s
+            else:
+                close_token, long_token = right_s, left_s
+            close = _parse_damage_token(close_token)
+            long_band = _parse_damage_token(long_token)
+            return {"close": close, "long": long_band, "raw": raw}
+
+    # Single-band fallback — same semantics as the legacy parser.
+    return {"close": _parse_damage_token(text), "long": None, "raw": raw}
 
 
 def _attack_dice_pool(actor, weapon_data, gm_modifier, weapon_skill_name=""):
@@ -2183,6 +2301,18 @@ def encounter_update(request, pk):
     if "story_idea_id" in request.POST:
         encounter.story_idea = _resolve_story_idea(request.POST.get("story_idea_id"))
         update_fields.append("story_idea")
+    # v0.15.26 — surprise round flag. Lives in the metadata JSONField
+    # (no schema change). Only mutated when the form actually carries
+    # the ``surprise_round_submitted`` marker so unrelated update
+    # paths (title-only edits, scene tweaks) don't accidentally clear
+    # the flag. Checkbox absence in a marked POST means False.
+    if "surprise_round_submitted" in request.POST:
+        meta = dict(encounter.metadata or {})
+        meta["is_surprise_round"] = (
+            request.POST.get("is_surprise_round") == "1"
+        )
+        encounter.metadata = meta
+        update_fields.append("metadata")
     encounter.save(update_fields=update_fields)
 
     _log(encounter, "system", "Encounter metadata updated.")
@@ -2612,6 +2742,44 @@ def toggle_ready(request, pk, participant_id):
 @_gm_only
 @csrf_protect
 @transaction.atomic
+def toggle_alert(request, pk, participant_id):
+    """POST — toggle the participant's ``surprise_immune`` Alert flag.
+
+    v0.15.26 — Alert (or its NPC / mook equivalent) exempts a defender
+    from the round-1 zero-defense effect of a surprise encounter.
+    State lives on ``Participant.surprise_immune`` (BooleanField,
+    introduced in v0.15.0 but only wired into the resolver in this
+    release).
+
+    GM-only by design — a player toggling Alert on themselves would
+    invalidate the surprise mechanic, so the action stays behind the
+    @_gm_only gate. Idempotent: clicking on an already-immune row
+    flips it back off.
+    """
+    if request.method != "POST":
+        return HttpResponseNotAllowed(["POST"])
+    encounter = get_object_or_404(Encounter, pk=pk)
+    participant = get_object_or_404(
+        Participant, pk=participant_id, encounter=encounter
+    )
+    new_state = not bool(participant.surprise_immune)
+    participant.surprise_immune = new_state
+    participant.save(update_fields=["surprise_immune"])
+    label = "ALERT" if new_state else "ALERT cleared"
+    _log(
+        encounter,
+        "system",
+        f"{participant.name}: {label}.",
+        participant_id=participant.pk,
+        surprise_immune=new_state,
+    )
+    return redirect("combat:detail", pk=encounter.pk)
+
+
+@login_required
+@_gm_only
+@csrf_protect
+@transaction.atomic
 def start_encounter(request, pk):
     """POST — transition the encounter from setup to active.
 
@@ -2805,6 +2973,7 @@ def _advance_turn_pointer(encounter):
             new_conds = [
                 c for c in (p.conditions or [])
                 if c != "defense_full"
+                and c != "all_out_attack"
                 and not c.startswith("dodging:")
                 and not c.startswith("aiming_at:")
             ]
@@ -3649,6 +3818,7 @@ def _resolve_single_attack(
     spread_index=0, spread_penalty=0,
     extra_payload=None,
     bonus_successes=0,
+    range_band="close",
 ):
     """Resolve one attack roll against one target, write log rows.
 
@@ -3713,6 +3883,35 @@ def _resolve_single_attack(
     defense = _compute_defense(target)
     cover_pen = _cover_penalty(target.cover_state)
 
+    # v0.15.26 — surprise flag. The target was caught surprised iff
+    # the encounter's surprise-round flag is set, we're in round 1,
+    # and the target lacks the Alert exemption. Used to append a
+    # ``(SURPRISE — no defense)`` tail to the attack message and
+    # carry the boolean through the log payload.
+    encounter_meta = encounter.metadata or {}
+    target_surprised = bool(
+        encounter_meta.get("is_surprise_round")
+        and encounter.round_number == 1
+        and not target.surprise_immune
+    )
+    surprise_tail = " (SURPRISE — no defense)" if target_surprised else ""
+
+    # v0.15.26 — range band. ``parsed_damage`` carries close + optional
+    # long entries; ``range_band`` selects which one drives damage on
+    # this resolve call. Falls back to close whenever long is None
+    # (single-band weapons) or the band string is unknown.
+    parsed_damage = _parse_weapon_damage(
+        (weapon_data or {}).get("damage", "")
+    )
+    band = "long" if (range_band == "long" and parsed_damage["long"]) else "close"
+    band_amount, band_type = (
+        parsed_damage["long"] if band == "long" else parsed_damage["close"]
+    )
+    weapon_damage_used_str = f"{band_amount}{band_type}"
+    range_tail = (
+        f" (LONG RANGE — {weapon_damage_used_str})" if band == "long" else ""
+    )
+
     # v0.15.19 — record the X-again threshold up-front so it's
     # available for both the full-cover blocked branch and the rolled
     # branches without re-deriving it. Reading from the snapshot keeps
@@ -3743,6 +3942,14 @@ def _resolve_single_attack(
         # read which trigger value was active per row, even after the
         # catalogue has been re-tuned.
         weapon_again=weapon_again_for_log,
+        # v0.15.26 — surprise flag for the target. Always present so
+        # timeline filters can group on the key without absence checks.
+        surprised=target_surprised,
+        # v0.15.26 — range band metadata. ``range_band`` is one of
+        # {"close", "long"}; ``weapon_damage_used`` is the human-
+        # readable damage string the resolver picked.
+        range_band=band,
+        weapon_damage_used=weapon_damage_used_str,
     )
     base_payload.update(extra_payload)
 
@@ -3764,7 +3971,8 @@ def _resolve_single_attack(
             encounter,
             "attack",
             f"{attacker.name} → {target.name}: BLOCKED BY FULL COVER."
-            + msg_tail + spread_tail + gun_fu_tail + skill_merit_tail,
+            + msg_tail + spread_tail + gun_fu_tail + skill_merit_tail
+            + surprise_tail + range_tail,
             **payload,
         )
         return
@@ -3799,23 +4007,26 @@ def _resolve_single_attack(
             encounter,
             "attack",
             f"{attacker.name} attacks {target.name}: missed."
-            + msg_tail + spread_tail + gun_fu_tail + skill_merit_tail,
+            + msg_tail + spread_tail + gun_fu_tail + skill_merit_tail
+            + surprise_tail + range_tail,
             **payload,
         )
         return
 
     # ---- Hit ---------------------------------------------------------------
-    weapon_amount, damage_type_from_field = _parse_weapon_damage(
-        weapon_data.get("damage", "")
-    )
+    # v0.15.26 — band_amount / band_type were resolved up-front against
+    # the requested range_band ("close" or "long"). For single-band
+    # weapons (parsed["long"] is None) the band always collapses to
+    # close, preserving the legacy behaviour.
     damage_type = (
         weapon_data.get("damage_type")
-        or damage_type_from_field
+        or band_type
         or "L"
     ).upper()
     if damage_type not in ("B", "L", "A"):
         damage_type = "L"
 
+    weapon_amount = band_amount
     raw_damage = successes + weapon_amount
 
     if target.participant_kind == "mook":
@@ -3857,14 +4068,16 @@ def _resolve_single_attack(
         encounter,
         "attack",
         f"{attacker.name} hits {target.name} for {final_damage} {type_label} damage."
-        + msg_tail + spread_tail + gun_fu_tail + skill_merit_tail,
+        + msg_tail + spread_tail + gun_fu_tail + skill_merit_tail
+        + surprise_tail + range_tail,
         **payload,
     )
     _log(
         encounter,
         "health_change",
         f"{target.name} takes {final_damage} {type_label} damage."
-        + spread_tail + gun_fu_tail + skill_merit_tail,
+        + spread_tail + gun_fu_tail + skill_merit_tail
+        + surprise_tail + range_tail,
         **payload,
     )
 
@@ -3885,6 +4098,77 @@ def _resolve_single_attack(
             target_participant_id=target.id,
             condition="incapacitated",
         )
+
+    # v0.15.26 — knockdown auto-trigger. Fires when the equipped weapon
+    # carries the ``knockdown_capable`` catalogue flag, the attack
+    # landed (successes > 0), and the target isn't already prone. The
+    # target rolls Strength + Stamina (a clean WoD 2.0 contest — no GM
+    # modifier, no wound penalty); failure vs the attacker's success
+    # count drops them prone. Mooks borrow ``mook_combat_pool / 3``
+    # as a stand-in resistance pool.
+    knockdown_capable = bool((weapon_data or {}).get("knockdown_capable", False))
+    if (
+        knockdown_capable
+        and successes > 0
+        and not _has_condition(target, "prone")
+    ):
+        if target.participant_kind == "mook":
+            resistance_pool = max(0, (target.mook_combat_pool or 0) // 3)
+        else:
+            source = target.character or target.npc
+            resistance_pool = 0
+            if source is not None:
+                try:
+                    strength = int(source.attributes["power"]["physical"])
+                    stamina = int(source.attributes["resistance"]["physical"])
+                    resistance_pool = max(0, strength + stamina)
+                except (KeyError, TypeError, ValueError):
+                    resistance_pool = 0
+        ko_successes, ko_dice = _roll_pool(resistance_pool)
+        if ko_successes < successes:
+            # Resistance failed — drop prone.
+            new_conds = list(target.conditions or [])
+            if "prone" not in new_conds:
+                new_conds.append("prone")
+            target.conditions = new_conds
+            target.save(update_fields=["conditions"])
+            _log(
+                encounter,
+                "knockdown",
+                (
+                    f"{target.name} knocked down: "
+                    f"{resistance_pool}d → {ko_successes} successes "
+                    f"(failed by {successes - ko_successes})."
+                ),
+                actor_participant_id=attacker.id,
+                target_participant_id=target.id,
+                weapon_name=weapon_name,
+                attacker_successes=successes,
+                resistance_pool=resistance_pool,
+                resistance_successes=ko_successes,
+                resistance_dice=ko_dice,
+                outcome="knocked_down",
+            )
+        else:
+            # Resistance held — stay up. Still log a row so the timeline
+            # captures the contest for narrative completeness.
+            _log(
+                encounter,
+                "knockdown",
+                (
+                    f"{target.name} resists knockdown: "
+                    f"{resistance_pool}d → {ko_successes} successes "
+                    f"(stayed up)."
+                ),
+                actor_participant_id=attacker.id,
+                target_participant_id=target.id,
+                weapon_name=weapon_name,
+                attacker_successes=successes,
+                resistance_pool=resistance_pool,
+                resistance_successes=ko_successes,
+                resistance_dice=ko_dice,
+                outcome="stayed_up",
+            )
 
 
 @login_required
@@ -3981,6 +4265,28 @@ def attack(request, pk, attacker_id):
     # spend so we never decrement below zero.
     spend_wp_requested = bool(request.POST.get("spend_willpower"))
     spent_wp = spend_wp_requested and (attacker.willpower_current or 0) > 0
+
+    # v0.15.26 — ALL-OUT ATTACK. +2 dice on the attack, attacker gains
+    # the ``all_out_attack`` condition (def_mod=-99) until the round
+    # boundary. Mutex with FULL DEFENSE — server rejects ALL-OUT ATTACK
+    # if the attacker already has ``defense_full`` set this round (you
+    # can't both forfeit and double your defense in one round).
+    all_out = (request.POST.get("all_out_attack") == "1")
+    if all_out and _has_condition(attacker, "defense_full"):
+        messages.error(
+            request,
+            "Cannot ALL-OUT ATTACK while in FULL DEFENSE stance — "
+            "wait for next round.",
+        )
+        return redirect("combat:detail", pk=encounter.pk)
+
+    # v0.15.26 — RANGE BAND. Multi-range catalogue entries (e.g.
+    # ``"4L close / 2L long"``) carry a long band that the player can
+    # opt into via the form's range_band selector. Bad / missing
+    # values collapse to "close". Single-band weapons ignore the
+    # field; the resolver auto-falls-back to close when long is None.
+    range_band_raw = (request.POST.get("range_band", "close") or "close").strip().lower()
+    range_band = "long" if range_band_raw == "long" else "close"
 
     weapon_data = attacker.weapon_data or {}
     weapon_name = attacker.weapon_name or "(unarmed)"
@@ -4104,6 +4410,8 @@ def attack(request, pk, attacker_id):
     # v0.15.5 + v0.15.10 — full pool composition (base + wound + cond +
     # WP + spec). v0.15.14 — adds burst bonus + aim bonus on the
     # PRIMARY target. Extras don't get aim; extras do get burst bonus.
+    # v0.15.26 — adds the all-out attack +2 dice on the primary only;
+    # spread extras and off-hand do not double-dip on the bonus.
     wound_pen = _wound_penalty(attacker)
     cond_atk_mod = _condition_attack_modifier(attacker)
     base_pool_no_burst = _actor_total_pool(
@@ -4111,13 +4419,36 @@ def attack(request, pk, attacker_id):
         spend_willpower=spent_wp,
         applied_specialisations=applied_specs,
     )
-    primary_pool = base_pool_no_burst + burst_bonus + aim_bonus
+    all_out_bonus = 2 if all_out else 0
+    primary_pool = base_pool_no_burst + burst_bonus + aim_bonus + all_out_bonus
 
     # Decrement willpower and persist if the spend went through.
     # Done *before* any roll so payload's willpower_after is accurate.
     if spent_wp:
         attacker.willpower_current = max(0, (attacker.willpower_current or 0) - 1)
         attacker.save(update_fields=["willpower_current"])
+
+    # v0.15.26 — apply the ALL-OUT ATTACK condition tag now so the
+    # def_mod=-99 zero-defense effect is in place for any inbound shot
+    # before this attacker's next turn. Stripped at the round boundary
+    # alongside defense_full / dodging:N / aiming_at:* in
+    # _advance_turn_pointer.
+    if all_out:
+        # Re-fetch from DB to avoid clobbering the willpower decrement
+        # that may have just persisted.
+        attacker.refresh_from_db()
+        if not _has_condition(attacker, "all_out_attack"):
+            new_conds = list(attacker.conditions or [])
+            new_conds.append("all_out_attack")
+            attacker.conditions = new_conds
+            attacker.save(update_fields=["conditions"])
+            _log(
+                encounter,
+                "condition_set",
+                f"{attacker.name} is ALL-OUT ATTACKING (no defense this round).",
+                target_participant_id=attacker.id,
+                condition="all_out_attack",
+            )
 
     # v0.15.10/v0.15.14 — pre-built log message tail (WP / SPEC / AIM /
     # BURST suffixes). Centralised so blocked / miss / hit all read
@@ -4131,6 +4462,8 @@ def attack(request, pk, attacker_id):
         msg_tail_parts.append(f"+{aim_bonus} AIM")
     if burst_bonus:
         msg_tail_parts.append(f"+{burst_bonus} BURST")
+    if all_out:
+        msg_tail_parts.append("ALL-OUT")
     msg_tail = (" (" + " | ".join(msg_tail_parts) + ")") if msg_tail_parts else ""
 
     # v0.15.14 — extra targets for autofire spread. Cap by burst mode,
@@ -4223,6 +4556,12 @@ def attack(request, pk, attacker_id):
         "aim_broken": aim_broken,
         "aim_only_on_primary": aim_only_on_primary,
         "extras_total": extras_total,
+        # v0.15.26 — ALL-OUT ATTACK metadata. Always present on every
+        # row so timeline filters can group on the key without absence
+        # checks. ``all_out_bonus`` carries the +2 dice that landed on
+        # the primary pool (zero on extras / off-hand).
+        "all_out": all_out,
+        "all_out_bonus": all_out_bonus,
         # v0.15.15 — ammo accounting. Present on every attack row so
         # the timeline reads accurately even on legacy / non-firearm
         # attacks (where the values stay None / 0 / False).
@@ -4268,6 +4607,7 @@ def attack(request, pk, attacker_id):
         spread_penalty=0,
         extra_payload=extra_payload,
         bonus_successes=primary_gun_fu,
+        range_band=range_band,
     )
 
     # ---- Aim tag housekeeping ---------------------------------------------
@@ -4323,6 +4663,7 @@ def attack(request, pk, attacker_id):
             spread_penalty=spread_penalty,
             extra_payload=extra_payload,
             bonus_successes=extra_gun_fu,
+            range_band=range_band,
         )
 
     # ---- Ammo decrement (v0.15.15) -----------------------------------------
@@ -4473,6 +4814,11 @@ def attack(request, pk, attacker_id):
                 "aim_broken": False,
                 "aim_only_on_primary": False,
                 "extras_total": 0,
+                # v0.15.26 — off-hand never inherits the all-out attack
+                # +2 bonus (only the main hand pays for the open
+                # defense). Carry the keys for payload-shape parity.
+                "all_out": all_out,
+                "all_out_bonus": 0,
                 "ammo_tracked": oh_ammo_tracked,
                 "ammo_before": oh_ammo_before,
                 "ammo_after": oh_ammo_after,
@@ -4919,6 +5265,208 @@ def reload_weapon(request, pk, participant_id):
             f"{participant.name}: out-of-band reload (off-turn — no turn consumed).",
             actor_participant_id=participant.id,
         )
+    return redirect("combat:detail", pk=encounter.pk)
+
+
+@login_required
+@_gm_or_owner()
+@csrf_protect
+@transaction.atomic
+def reload_offhand(request, pk, participant_id):
+    """POST — reload the participant's equipped off-hand firearm.
+
+    v0.15.26 — mirror of :func:`reload_weapon` against the off-hand
+    slot. Reads the magazine size from ``offhand_weapon_data["magazine"]``
+    and writes the parallel ``offhand_ammo:N`` condition tag via
+    ``_set_offhand_ammo``. Closes the deferred item from v0.15.16
+    where the off-hand had no in-fight reload path.
+
+    Turn cost rules match the main-hand reload:
+
+    * Active participant on their own turn → costs the turn
+      (``acted_this_round=True``); GM still clicks NEXT TURN to
+      advance the pointer.
+    * Off-turn (typically GM bookkeeping between rounds) → free; an
+      extra ``system`` log row notes the out-of-band off-hand reload.
+
+    Rejected (flash + redirect) when:
+
+    * encounter is not active
+    * the participant has no off-hand equipped, or has a non-firearm
+      off-hand, or has a firearm with no ``magazine`` size on file
+      (legacy / hand-edited catalogue entry).
+    """
+    if request.method != "POST":
+        return HttpResponseNotAllowed(["POST"])
+
+    encounter = get_object_or_404(Encounter, pk=pk)
+    if encounter.status != "active":
+        messages.error(
+            request, "Cannot reload outside an active encounter.",
+        )
+        return redirect("combat:detail", pk=encounter.pk)
+
+    participant = get_object_or_404(
+        Participant, pk=participant_id, encounter=encounter
+    )
+
+    offhand_data = participant.offhand_weapon_data or {}
+    if offhand_data.get("category") != "firearm":
+        messages.error(
+            request,
+            "Cannot reload off-hand: equipped off-hand is not a firearm.",
+        )
+        return redirect("combat:detail", pk=encounter.pk)
+
+    try:
+        mag_size = int(offhand_data.get("magazine", 0) or 0)
+    except (TypeError, ValueError):
+        mag_size = 0
+    if mag_size <= 0:
+        messages.error(
+            request,
+            "Cannot reload off-hand: equipped off-hand has no magazine "
+            "size on file.",
+        )
+        return redirect("combat:detail", pk=encounter.pk)
+
+    on_turn = (encounter.active_participant_id == participant.id)
+
+    _set_offhand_ammo(participant, mag_size)
+    if on_turn:
+        participant.acted_this_round = True
+        participant.save(update_fields=["conditions", "acted_this_round"])
+    else:
+        participant.save(update_fields=["conditions"])
+
+    _log(
+        encounter,
+        "reload_offhand",
+        f"{participant.name} reloaded off-hand — {mag_size} rounds chambered.",
+        actor_participant_id=participant.id,
+        weapon_name=participant.offhand_weapon_name,
+        magazine=mag_size,
+        mag_size=mag_size,
+        on_turn=on_turn,
+    )
+    if not on_turn:
+        _log(
+            encounter,
+            "system",
+            f"{participant.name}: out-of-band off-hand reload "
+            f"(off-turn — no turn consumed).",
+            actor_participant_id=participant.id,
+        )
+    return redirect("combat:detail", pk=encounter.pk)
+
+
+@login_required
+@_gm_only
+@csrf_protect
+@transaction.atomic
+def adjust_hp(request, pk, participant_id):
+    """POST — GM-only manual adjustment of a participant's health track.
+
+    v0.15.26 — lets the GM apply narrative healing, post-combat
+    recovery, or correct mis-applied damage without re-running an
+    attack flow.
+
+    Form fields (all integers, clamped to ``0..health_max``):
+
+    * ``health_bashing``
+    * ``health_lethal``
+    * ``health_aggravated``
+
+    The sum across the three tracks is also bounded by ``health_max``;
+    a submission that sums above that is rejected with a flash message
+    rather than truncated, since the GM might not realise the
+    constraint and silently dropping damage could mask a mistake.
+
+    Side effect: the ``incapacitated`` condition tag is auto-toggled
+    based on the new total. Filling the track adds it (and writes a
+    ``condition_set`` row); reducing below the cap strips it (and
+    writes a ``condition_clear`` row). Idempotent if the tag already
+    matches the post-adjust total.
+    """
+    if request.method != "POST":
+        return HttpResponseNotAllowed(["POST"])
+
+    encounter = get_object_or_404(Encounter, pk=pk)
+    participant = get_object_or_404(
+        Participant, pk=participant_id, encounter=encounter
+    )
+
+    hm = participant.health_max or 0
+    new_b = _safe_int(request.POST.get("health_bashing"), participant.health_bashing)
+    new_l = _safe_int(request.POST.get("health_lethal"), participant.health_lethal)
+    new_a = _safe_int(request.POST.get("health_aggravated"), participant.health_aggravated)
+    # Per-track clamp first.
+    new_b = max(0, min(hm, new_b))
+    new_l = max(0, min(hm, new_l))
+    new_a = max(0, min(hm, new_a))
+    # Sum check — reject if it overflows the track total.
+    if (new_b + new_l + new_a) > hm:
+        messages.error(
+            request,
+            f"HP totals exceed health_max ({hm}) — adjust each track so "
+            f"the sum fits. Submitted: B={new_b} L={new_l} A={new_a}.",
+        )
+        return redirect("combat:detail", pk=encounter.pk)
+
+    old_b = participant.health_bashing
+    old_l = participant.health_lethal
+    old_a = participant.health_aggravated
+    if (new_b, new_l, new_a) == (old_b, old_l, old_a):
+        # No-op — silent redirect, no log row.
+        return redirect("combat:detail", pk=encounter.pk)
+
+    participant.health_bashing = new_b
+    participant.health_lethal = new_l
+    participant.health_aggravated = new_a
+    participant.save(update_fields=[
+        "health_bashing", "health_lethal", "health_aggravated",
+    ])
+
+    _log(
+        encounter,
+        "health_adjust",
+        (
+            f"{participant.name}: HP {old_b}/{old_l}/{old_a} → "
+            f"{new_b}/{new_l}/{new_a} (GM adjust)."
+        ),
+        target_participant_id=participant.id,
+        before={"bashing": old_b, "lethal": old_l, "aggravated": old_a},
+        after={"bashing": new_b, "lethal": new_l, "aggravated": new_a},
+    )
+
+    # Auto-toggle incapacitated based on the new total.
+    new_total = new_b + new_l + new_a
+    has_incap = _has_condition(participant, "incapacitated")
+    if new_total >= hm and not has_incap:
+        new_conds = list(participant.conditions or [])
+        new_conds.append("incapacitated")
+        participant.conditions = new_conds
+        participant.save(update_fields=["conditions"])
+        _log(
+            encounter,
+            "condition_set",
+            f"{participant.name} is INCAPACITATED.",
+            target_participant_id=participant.id,
+            condition="incapacitated",
+        )
+    elif new_total < hm and has_incap:
+        participant.conditions = [
+            c for c in (participant.conditions or []) if c != "incapacitated"
+        ]
+        participant.save(update_fields=["conditions"])
+        _log(
+            encounter,
+            "condition_clear",
+            f"{participant.name} no longer INCAPACITATED.",
+            target_participant_id=participant.id,
+            condition="incapacitated",
+        )
+
     return redirect("combat:detail", pk=encounter.pk)
 
 

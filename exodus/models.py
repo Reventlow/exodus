@@ -378,14 +378,17 @@ class SiteSettings(models.Model):
             {"name": "Shotgun", "category": "firearm", "damage": "4L close / 2L long",
              "range": "5/10/40 m", "capacity": "5+1",
              "auto_capable": False, "magazine": 6,
+             "knockdown_capable": True,
              "notes": "Pump-action. Damage drops with range as shot spreads."},
             {"name": "Twin-Barrel Shotgun", "category": "firearm", "damage": "5L (both barrels)",
              "range": "5/10/40 m", "capacity": "2",
              "auto_capable": False, "magazine": 2,
+             "knockdown_capable": True,
              "notes": "Fire one or both. Both = +1 damage, then full reload."},
             {"name": "Auto Shotgun", "category": "firearm", "damage": "4L",
              "range": "5/10/40 m", "capacity": "8",
              "auto_capable": True, "magazine": 8,
+             "knockdown_capable": True,
              "notes": "Box-fed. Burst-fire +1 dice at close range."},
             {"name": "Scoped Rifle", "category": "firearm", "damage": "4L",
              "range": "250/500/1000 m", "capacity": "5+1",
@@ -465,6 +468,12 @@ class SiteSettings(models.Model):
                 # and any non-firearm row. ``_clamp_again`` clamps bad
                 # / out-of-range values back to 10.
                 "again": _clamp_again(w.get("again", 10)),
+                # v0.15.26 — knockdown capability flag. Firearm-only
+                # in practice (shotguns, etc.) but hydrated uniformly so
+                # callers don't have to special-case the category. Legacy
+                # entries default to False; a tampered non-bool value
+                # collapses via ``bool()``.
+                "knockdown_capable": bool(w.get("knockdown_capable", False)),
             })
         return hydrated
 

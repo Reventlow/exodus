@@ -85,6 +85,16 @@ urlpatterns = [
         name="toggle_ready",
     ),
 
+    # v0.15.26 — surprise round support. GM toggles the per-participant
+    # Alert exemption (``surprise_immune`` field). The encounter-wide
+    # ``is_surprise_round`` flag is written via ``encounter_update``
+    # (no separate URL).
+    path(
+        "combat/<int:pk>/participants/<int:participant_id>/toggle-alert/",
+        views.toggle_alert,
+        name="toggle_alert",
+    ),
+
     # POST — equip + cover + attack (v0.15.4)
     path(
         "combat/<int:pk>/participants/<int:participant_id>/equip-weapon/",
@@ -166,6 +176,22 @@ urlpatterns = [
         "combat/<int:pk>/participants/<int:participant_id>/reload/",
         views.reload_weapon,
         name="reload",
+    ),
+    # v0.15.26 — off-hand reload. Closes the deferred item from
+    # v0.15.16. Same cost rules as the main-hand reload.
+    path(
+        "combat/<int:pk>/participants/<int:participant_id>/reload-offhand/",
+        views.reload_offhand,
+        name="reload_offhand",
+    ),
+    # v0.15.26 — GM-only manual HP adjustment (heal / correct damage).
+    # Three integer fields (B / L / A) clamped to 0..health_max with
+    # the cumulative sum bounded by the same total. Auto-toggles the
+    # incapacitated condition based on the new total.
+    path(
+        "combat/<int:pk>/participants/<int:participant_id>/adjust-hp/",
+        views.adjust_hp,
+        name="adjust_hp",
     ),
 
     # ---------------------------------------------------------------

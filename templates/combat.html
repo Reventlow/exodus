@@ -214,7 +214,8 @@
     <div class="text-secondary" style="font-size: 0.9rem; line-height: 1.7; margin: 0.6rem 0 1.6rem 0;">
         <p style="margin: 0 0 0.5rem 0;">Total boxes = <strong>Stamina + Size</strong> (typically 7 for a Size 5 human with Stamina 2). The <strong>rightmost three boxes carry −1 / −2 / −3 wound penalties</strong> (left → right). The penalty applies to every dice pool — attacks, defense, dodge, skill rolls, everything. See the dedicated subsection below for worked examples.</p>
         <p style="margin: 0 0 0.5rem 0;"><span class="mono-text text-accent">▸ INCAPACITATED</span> &nbsp;— full track of bashing → unconscious for [Stamina] minutes. Full track of lethal → unconscious + bleeding 1L per minute until stabilized. Full track of aggravated → dead.</p>
-        <p style="margin: 0;"><span class="mono-text text-accent">▸ HEALING</span> &nbsp;— bashing heals 1 box per 15 minutes rest. Lethal heals 1 box per 2 days (less in field conditions). Aggravated heals 1 box per week. Medical care doubles bashing and lethal rates; cybernetic limbs heal as integrity damage on the limb itself.</p>
+        <p style="margin: 0 0 0.5rem 0;"><span class="mono-text text-accent">▸ HEALING</span> &nbsp;— bashing heals 1 box per 15 minutes rest. Lethal heals 1 box per 2 days (less in field conditions). Aggravated heals 1 box per week. Medical care doubles bashing and lethal rates; cybernetic limbs heal as integrity damage on the limb itself.</p>
+        <p style="margin: 0;"><span class="mono-text text-accent">▸ HEAL / ADJUST HP (GM)</span> &nbsp;— v0.15.26 adds a GM-only <strong>HP (GM ADJUST)</strong> sub-form on every participant row. Three integer fields (B / L / A) are clamped to <code>0..health_max</code>; the cumulative sum is also bounded by <code>health_max</code>. The <code>incapacitated</code> condition tag is auto-toggled based on the new total. Logged as <code>health_adjust</code> with <code>before</code> / <code>after</code> snapshots so the timeline shows narrative healing alongside attack damage.</p>
     </div>
 
     {# === COMMON MODIFIERS ============================================= #}
@@ -401,15 +402,49 @@
         <p style="margin: 0 0 0.4rem 0;"><span class="mono-text text-accent">▸ INSUFFICIENT AMMO</span> &nbsp;— if the magazine has fewer rounds than the requested burst mode needs, the server silently downgrades to <strong>SINGLE</strong> and logs a system warning.</p>
         <p style="margin: 0 0 0.4rem 0;"><span class="mono-text text-accent">▸ EMPTY MAGAZINE</span> &nbsp;— attempting to fire with zero rounds is rejected with an <strong>OUT OF AMMO</strong> flash; you must reload first.</p>
         <p style="margin: 0 0 0.4rem 0;"><span class="mono-text text-accent">▸ RELOAD</span> &nbsp;— resets the magazine to capacity. <strong>Always available</strong> — players have unlimited magazines (no reserve tracking).</p>
-        <p style="margin: 0;"><span class="mono-text text-accent">▸ RELOAD COST</span> &nbsp;— costs your full turn when called by the active participant. Off-turn reloads (GM bookkeeping) are free but flagged in the log as out-of-band.</p>
+        <p style="margin: 0 0 0.4rem 0;"><span class="mono-text text-accent">▸ RELOAD COST</span> &nbsp;— costs your full turn when called by the active participant. Off-turn reloads (GM bookkeeping) are free but flagged in the log as out-of-band.</p>
+        <p style="margin: 0;"><span class="mono-text text-accent">▸ RELOAD OFF-HAND (v0.15.26)</span> &nbsp;— <strong>RELOAD OFF-HAND (current/max)</strong> button now sits next to the main RELOAD on the STANCE strip whenever an off-hand firearm is equipped with <code>magazine &gt; 0</code>. Same cost model as the main-hand reload; the parallel <code>offhand_ammo:N</code> tag is reset independently. Closes the deferred item from v0.15.16.</p>
+    </div>
+
+    {% comment %}
+    v0.15.26 — SURPRISE ROUND, ALL-OUT ATTACK, KNOCKDOWN subsections.
+    Sit between AMMO & RELOAD and DUAL-WIELDING because they cover
+    new combat-round mechanics that orthogonally compose with the
+    existing aim / burst / dual-wield surface (a surprise round can
+    pair with a shotgun knockdown can pair with an all-out attack).
+    {% endcomment %}
+    <h4 class="mono-text text-accent" style="font-size: 0.85rem; letter-spacing: 0.2em; margin: 1.2rem 0 0.4rem 0;">SURPRISE ROUND</h4>
+    <div class="text-secondary" style="font-size: 0.85rem; line-height: 1.7; margin: 0 0 1rem 0;">
+        <p style="margin: 0 0 0.4rem 0;"><span class="mono-text text-accent">▸ TOGGLE</span> &nbsp;— GM-only checkbox next to the <strong>START ENCOUNTER</strong> button: <em>SURPRISE ROUND (defenders without "Alert" merit get no defense in round 1)</em>. Stored on <code>Encounter.metadata["is_surprise_round"]</code>; no schema change.</p>
+        <p style="margin: 0 0 0.4rem 0;"><span class="mono-text text-accent">▸ EFFECT</span> &nbsp;— round 1 only. Every defender lacking the per-row Alert exemption returns <strong>defense = 0</strong> regardless of all other modifiers (trumps Dex+Athletics, FULL DEFENSE doubling, dodge successes, condition mods). Round 2+ falls back to normal defense computation.</p>
+        <p style="margin: 0 0 0.4rem 0;"><span class="mono-text text-accent">▸ ALERT EXEMPTION</span> &nbsp;— per-participant flag (<code>Participant.surprise_immune</code>). Surfaces on the row as a cyan <strong>[ALERT]</strong> chip. The GM toggles via the <strong>TOGGLE ALERT</strong> sub-form in the action panel. Used for characters / NPCs with the <em>Alert</em> merit (or its NPC equivalent).</p>
+        <p style="margin: 0;"><span class="mono-text text-accent">▸ TIMELINE</span> &nbsp;— attack rows landing on a surprised target carry <code>surprised: true</code> on the payload and append <code>(SURPRISE — no defense)</code> to the message tail.</p>
+    </div>
+
+    <h4 class="mono-text text-accent" style="font-size: 0.85rem; letter-spacing: 0.2em; margin: 1.2rem 0 0.4rem 0;">ALL-OUT ATTACK</h4>
+    <div class="text-secondary" style="font-size: 0.85rem; line-height: 1.7; margin: 0 0 1rem 0;">
+        <p style="margin: 0 0 0.4rem 0;"><span class="mono-text text-accent">▸ COST / BENEFIT</span> &nbsp;— checkbox on the attack form: <strong>+2 dice</strong> on the primary attack, but the attacker forfeits Defense for the round.</p>
+        <p style="margin: 0 0 0.4rem 0;"><span class="mono-text text-accent">▸ DURATION</span> &nbsp;— the <code>all_out_attack</code> condition tag (def_mod = −99, effectively zero defense) sticks on the attacker until the round boundary. Cleared automatically alongside <code>defense_full</code> / <code>dodging:N</code> / <code>aiming_at:*</code> in the round-roll housekeeping.</p>
+        <p style="margin: 0 0 0.4rem 0;"><span class="mono-text text-accent">▸ MUTEX WITH FULL DEFENSE</span> &nbsp;— rejected server-side if the attacker already has <code>defense_full</code> set this round. The two stances are logically incompatible (you can't both forfeit and double your defense in one round).</p>
+        <p style="margin: 0 0 0.4rem 0;"><span class="mono-text text-accent">▸ SCOPE</span> &nbsp;— bonus applies to the <strong>primary</strong> attack only. Spread extras and off-hand resolutions don't double-dip on the +2.</p>
+        <p style="margin: 0;"><span class="mono-text text-accent">▸ TIMELINE</span> &nbsp;— attack rows carry <code>all_out: true</code> and <code>all_out_bonus: 2</code> on the payload; message tail appends <code>(ALL-OUT)</code>. The LIVE TOTAL preview reflects the +2 the moment the checkbox is ticked.</p>
+    </div>
+
+    <h4 class="mono-text text-accent" style="font-size: 0.85rem; letter-spacing: 0.2em; margin: 1.2rem 0 0.4rem 0;">KNOCKDOWN</h4>
+    <div class="text-secondary" style="font-size: 0.85rem; line-height: 1.7; margin: 0 0 1rem 0;">
+        <p style="margin: 0 0 0.4rem 0;"><span class="mono-text text-accent">▸ TRIGGER</span> &nbsp;— a <em>successful hit</em> with a weapon whose catalogue entry has the <strong>knockdown_capable</strong> flag set. Default seed: <strong>Shotgun, Twin-Barrel Shotgun, Auto Shotgun</strong>. The KO column in <code>/settings/ → COMBAT → Weapons</code> opts other firearms in.</p>
+        <p style="margin: 0 0 0.4rem 0;"><span class="mono-text text-accent">▸ AUTO-FIRES</span> &nbsp;— no checkbox on the attack form. The resolver triggers it automatically on every successful hit by a knockdown-capable weapon. Skipped when the target is already prone (you can't knock down someone on the ground).</p>
+        <p style="margin: 0 0 0.4rem 0;"><span class="mono-text text-accent">▸ CONTEST</span> &nbsp;— the target rolls <strong>Strength + Stamina</strong> (clean WoD 2.0 contest — no GM modifier, no wound penalty) against the attacker's success count. Mooks borrow <code>mook_combat_pool / 3</code> as a stand-in resistance pool.</p>
+        <p style="margin: 0 0 0.4rem 0;"><span class="mono-text text-accent">▸ OUTCOME</span> &nbsp;— resistance &lt; attacker successes ⇒ target gains the <code>prone</code> tag. Resistance &ge; attacker successes ⇒ target stays up. Both branches log a <code>knockdown</code> CombatLog row with the resistance pool, dice, and result for narrative completeness.</p>
+        <p style="margin: 0;"><span class="mono-text text-accent">▸ ROW BADGE</span> &nbsp;— a cyan <strong>KNOCKDOWN</strong> badge surfaces on the participant row whenever the equipped weapon (main or off-hand) carries the flag.</p>
     </div>
 
     {% comment %}
     v0.15.16 — DUAL-WIELDING subsection. Server enforces every rule
     here: off-hand presence gates the dual flag, ambidextrous merit
     waives the penalty, off-hand single-shot only, no aim / WP /
-    burst on the off-hand. Off-hand reload is an explicit deferred
-    item — flagged so players don't expect it.
+    burst on the off-hand. v0.15.26 — off-hand reload is now
+    available (deferred item from v0.15.16 closed).
     {% endcomment %}
     <h4 class="mono-text text-accent" style="font-size: 0.85rem; letter-spacing: 0.2em; margin: 1.2rem 0 0.4rem 0;">DUAL-WIELDING</h4>
     <div class="text-secondary" style="font-size: 0.85rem; line-height: 1.7; margin: 0 0 1rem 0;">
@@ -420,7 +455,7 @@
         <p style="margin: 0 0 0.4rem 0;"><span class="mono-text text-accent">▸ AMBIDEXTROUS MERIT</span> &nbsp;— Physical, 1 dot. <strong>Removes the −2 off-hand penalty.</strong> Detection looks at both the canonical merit list and any legacy free-text merit entry; the DUAL ATTACK label adapts to read <em>AMBIDEXTROUS — no penalty</em> when the merit is detected.</p>
         <p style="margin: 0 0 0.4rem 0;"><span class="mono-text text-accent">▸ AMMO</span> &nbsp;— off-hand ammo is tracked separately as <code>offhand_ammo:N</code> (parallel tag). The OFF-MAG indicator on the row reads independently of the main MAG.</p>
         <p style="margin: 0 0 0.4rem 0;"><span class="mono-text text-accent">▸ OFF-HAND OUT OF AMMO</span> &nbsp;— if the off-hand firearm is empty when DUAL ATTACK is requested, the main-hand attack still resolves and the off-hand resolution is skipped (logged as a system warning).</p>
-        <p style="margin: 0;"><span class="mono-text text-accent">▸ DEFERRED — OFF-HAND RELOAD</span> &nbsp;— <strong>not yet implemented in v0.15.16</strong>. When an off-hand firearm runs dry it stays empty until you re-equip it (which refills via the EQUIP OFF-HAND form). v0.15.17+ may add a dedicated off-hand reload action.</p>
+        <p style="margin: 0;"><span class="mono-text text-accent">▸ OFF-HAND RELOAD (v0.15.26)</span> &nbsp;— closes the deferred item from v0.15.16. The <strong>RELOAD OFF-HAND (current/max)</strong> button on the STANCE strip resets the off-hand magazine to capacity. Same cost rules as the main-hand reload (turn cost on own turn; free off-turn for GM bookkeeping). Logged as <code>reload_offhand</code>.</p>
     </div>
 
     {% comment %}
@@ -476,6 +511,11 @@
                     <th style="text-align: left; padding: 0.35rem 0.5rem; width: 12%;">CAPACITY</th>
                     {% if entry.cat == "firearm" %}
                     <th style="text-align: left; padding: 0.35rem 0.5rem; width: 7%;">MAG</th>
+                    {% comment %}
+                    v0.15.26 — KO column flags weapons that auto-trigger
+                    a knockdown contest on a successful hit.
+                    {% endcomment %}
+                    <th style="text-align: center; padding: 0.35rem 0.5rem; width: 5%;" title="Knockdown-capable: a successful hit auto-triggers a Strength + Stamina contest vs the attacker's successes; failure drops the target prone.">KO</th>
                     {% endif %}
                     <th style="text-align: left; padding: 0.35rem 0.5rem;">NOTES</th>
                 </tr>
@@ -489,6 +529,7 @@
                     <td style="padding: 0.35rem 0.5rem;">{{ w.capacity|default:"—" }}</td>
                     {% if entry.cat == "firearm" %}
                     <td style="padding: 0.35rem 0.5rem; color: var(--c-primary);">{% if w.magazine %}{{ w.magazine }}{% else %}—{% endif %}</td>
+                    <td style="padding: 0.35rem 0.5rem; text-align: center; color: var(--c-primary);">{% if w.knockdown_capable %}✓{% else %}—{% endif %}</td>
                     {% endif %}
                     <td style="padding: 0.35rem 0.5rem; color: var(--ink-dim);">{{ w.notes }}</td>
                 </tr>
