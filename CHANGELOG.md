@@ -1,5 +1,15 @@
 # Changelog
 
+## v0.15.23
+- **Equipping a weapon costs the turn during active combat.** WoD 2.0: drawing or switching a weapon during a fight is an action. The rule is now enforced server-side on both `equip_weapon` and `equip_offhand`. Setup-phase prep stays free (the encounter hasn't started); concluded encounters also free (post-mortem cleanup)
+- **Unequipping is always free** — dropping a weapon is a WoD 2.0 free action. Only NEW equips trigger the cost
+- **GM `instant_equip` override** — superuser-only checkbox on the form; bypasses both the active-turn check and the turn cost. For narrative beats ("the bandit drops his rifle and pulls a knife in the same instant")
+- **Action-cost behaviour** mirrors `full_defense` / `dodge` / `aim`: marks `acted_this_round=True` but does NOT auto-advance the pointer. The GM still clicks NEXT TURN
+- **UI hints** — EQUIP forms now show "⚠ COSTS YOUR TURN" on the active actor's row, and "Wait for your turn (or unequip — that's free)" on everyone else's. A muted "Equipping is free during setup; costs an action once combat starts." preamble sits at the top of the action panel during setup
+- **CombatLog `weapon_change` payload extended** with `action_cost: "turn" | "free" | "instant"` so the timeline shows the cost mode
+- **Rules explainer** at `/rules/combat/` ROUND STRUCTURE gains a small ACTION COSTS table (drop / equip-setup / equip-active / off-hand / GM override / reload) plus a TURN-line tweak that flags weapon-draw as an action and points readers at the new table
+- No model schema changes, no migrations, no new dependencies. State already lives in `Participant.acted_this_round`
+
 ## v0.15.22
 - **Wound-penalty merits now auto-applied in combat.** *Increased Pain Threshold* reduces the wound penalty by 1 toward zero at every tier (−1 → 0, −2 → −1, −3 → −2); *Pain Tolerance* short-circuits the penalty to 0 regardless of damage taken. Pain Tolerance overrides Increased Pain Threshold when both are present. The participant row's WP chip and the attack pool breakdown reflect the reduced value automatically — the GM no longer applies these by hand
 - **Merit description sweep** — five combat-relevant merit definitions updated in production via MCP to flag their integration status:

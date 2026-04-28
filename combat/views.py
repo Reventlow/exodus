@@ -2965,6 +2965,16 @@ def equip_weapon(request, pk, participant_id):
     tag. Equipping a non-firearm (or unequipping) strips any stale
     ``ammo:*`` tag. Mooks aren't routed through this view in v0.15.15
     so the ammo plumbing only touches Character / NPC participants.
+
+    v0.15.23 — drawing or switching a weapon during ``active`` combat
+    costs the actor's turn (WoD 2.0: changing weapons mid-fight is an
+    action). Setup-phase prep is free (the encounter hasn't started),
+    concluded encounters are free (post-mortem cleanup), and
+    *unequipping* is always free (dropping a weapon is a free action).
+    GM superusers can bypass the cost with ``instant_equip=1`` for
+    narrative beats. Mirrors the ``full_defense`` / ``dodge`` / ``aim``
+    pattern: marks ``acted_this_round=True`` but does NOT auto-advance
+    the pointer — the GM clicks NEXT TURN.
     """
     if request.method != "POST":
         return HttpResponseNotAllowed(["POST"])
@@ -2975,6 +2985,36 @@ def equip_weapon(request, pk, participant_id):
     )
 
     name = request.POST.get("weapon_name", "").strip()
+    is_unequip = (name == "")
+    instant_equip = (
+        request.user.is_superuser
+        and request.POST.get("instant_equip") == "1"
+    )
+
+    # v0.15.23 — action-cost gating. Only fires during active combat,
+    # only for non-instant equips, and never for unequips. Defense in
+    # depth: the front-end shows a hint, but the server is the
+    # authority. A tampered POST that strips the front-end check still
+    # hits this gate.
+    action_cost = "free"
+    if encounter.status == "active" and not is_unequip and not instant_equip:
+        if participant.id != encounter.active_participant_id:
+            messages.error(
+                request,
+                "Equipping a weapon costs an action — wait for your turn, "
+                "or ask the GM to override.",
+            )
+            return redirect("combat:detail", pk=encounter.pk)
+        # Costs the turn — mark acted, don't auto-advance. GM clicks
+        # NEXT TURN, mirroring full_defense / dodge / aim.
+        participant.acted_this_round = True
+        participant.save(update_fields=["acted_this_round"])
+        action_cost = "turn"
+    elif instant_equip and not is_unequip:
+        # GM narrative override — declared a non-action; do NOT mark
+        # acted_this_round (the GM is asserting "this happens for free").
+        action_cost = "instant"
+    # else: setup / concluded / unequip → action_cost stays "free".
 
     if not name:
         # Empty submission = unequip. Strip any ammo tag so the next
@@ -2990,6 +3030,7 @@ def equip_weapon(request, pk, participant_id):
             participant_id=participant.pk,
             weapon_name="",
             magazine_full=False,
+            action_cost=action_cost,
         )
         return redirect("combat:detail", pk=encounter.pk)
 
@@ -3010,6 +3051,7 @@ def equip_weapon(request, pk, participant_id):
             participant_id=participant.pk,
             weapon_name="",
             magazine_full=False,
+            action_cost=action_cost,
         )
         return redirect("combat:detail", pk=encounter.pk)
 
@@ -3044,6 +3086,7 @@ def equip_weapon(request, pk, participant_id):
         weapon_name=participant.weapon_name,
         magazine=mag,
         magazine_full=magazine_full,
+        action_cost=action_cost,
     )
     return redirect("combat:detail", pk=encounter.pk)
 
@@ -3069,6 +3112,11 @@ def equip_offhand(request, pk, participant_id):
       * NOT refillable mid-fight — there's no off-hand reload action
         in v0.15.16. Run dry → empty until re-equipped. Re-equipping
         the same weapon counts as "swap out / swap in" and refills.
+
+    v0.15.23 — same action-cost gating as :func:`equip_weapon`. Drawing
+    the off-hand mid-fight is an action; setup / concluded / unequip
+    are free; GM ``instant_equip=1`` bypasses the cost. Marks
+    ``acted_this_round=True`` on cost but does NOT auto-advance.
     """
     if request.method != "POST":
         return HttpResponseNotAllowed(["POST"])
@@ -3079,6 +3127,27 @@ def equip_offhand(request, pk, participant_id):
     )
 
     name = request.POST.get("weapon_name", "").strip()
+    is_unequip = (name == "")
+    instant_equip = (
+        request.user.is_superuser
+        and request.POST.get("instant_equip") == "1"
+    )
+
+    # v0.15.23 — mirror the main-hand action-cost gate.
+    action_cost = "free"
+    if encounter.status == "active" and not is_unequip and not instant_equip:
+        if participant.id != encounter.active_participant_id:
+            messages.error(
+                request,
+                "Equipping a weapon costs an action — wait for your turn, "
+                "or ask the GM to override.",
+            )
+            return redirect("combat:detail", pk=encounter.pk)
+        participant.acted_this_round = True
+        participant.save(update_fields=["acted_this_round"])
+        action_cost = "turn"
+    elif instant_equip and not is_unequip:
+        action_cost = "instant"
 
     if not name:
         # Empty submission = unequip. Strip any off-hand ammo tag so a
@@ -3097,6 +3166,7 @@ def equip_offhand(request, pk, participant_id):
             offhand=True,
             weapon_name="",
             magazine_full=False,
+            action_cost=action_cost,
         )
         return redirect("combat:detail", pk=encounter.pk)
 
@@ -3119,6 +3189,7 @@ def equip_offhand(request, pk, participant_id):
             offhand=True,
             weapon_name="",
             magazine_full=False,
+            action_cost=action_cost,
         )
         return redirect("combat:detail", pk=encounter.pk)
 
@@ -3157,6 +3228,7 @@ def equip_offhand(request, pk, participant_id):
         weapon_name=participant.offhand_weapon_name,
         magazine=mag,
         magazine_full=magazine_full,
+        action_cost=action_cost,
     )
     return redirect("combat:detail", pk=encounter.pk)
 

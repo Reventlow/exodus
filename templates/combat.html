@@ -21,9 +21,59 @@
     <header class="block-head"><span class="block-bullet">■</span><h3>ROUND STRUCTURE</h3><span class="block-line"></span></header>
     <div class="text-secondary" style="font-size: 0.9rem; line-height: 1.7; margin: 0.6rem 0 1.6rem 0;">
         <p style="margin: 0 0 0.5rem 0;"><span class="mono-text text-accent">▸ INITIATIVE</span> &nbsp;— roll once at scene start. Pool = <strong>Dexterity + Composure</strong>. Highest acts first; ties resolve by Composure, then Dexterity. Surprise bypasses Defense for the entire first round if the target was unaware.</p>
-        <p style="margin: 0 0 0.5rem 0;"><span class="mono-text text-accent">▸ TURN</span> &nbsp;— on your initiative you may take <strong>one</strong> action (an attack, a discipline of magic, a complex maneuver) plus any number of free actions (drawing a weapon, talking, dropping prone). Reflexive defense and dodge do not consume the turn.</p>
+        <p style="margin: 0 0 0.5rem 0;"><span class="mono-text text-accent">▸ TURN</span> &nbsp;— on your initiative you may take <strong>one</strong> action (an attack, a discipline of magic, a complex maneuver) plus any number of free actions (talking, dropping prone, dropping a weapon). Reflexive defense and dodge do not consume the turn. <em>Drawing or switching a weapon mid-fight is an action</em> — see ACTION COSTS below.</p>
         <p style="margin: 0;"><span class="mono-text text-accent">▸ END OF ROUND</span> &nbsp;— resolve ongoing effects (bleeding, fire, poison), tick durations down, repeat from the top.</p>
     </div>
+
+    {% comment %}
+    v0.15.23 — ACTION COSTS mini-table. Sits between ROUND STRUCTURE
+    and ATTACK POOLS so the turn-economy rules are visible right after
+    the round-structure overview. Equip-cost gating is enforced
+    server-side in combat/views.py :: equip_weapon / equip_offhand.
+    Reload cost is documented further down in the AMMO subsection.
+    {% endcomment %}
+    <h4 class="mono-text text-accent" style="font-size: 0.85rem; letter-spacing: 0.2em; margin: 1.2rem 0 0.4rem 0;">ACTION COSTS</h4>
+    <table class="mono-text" style="width: 100%; border-collapse: collapse; font-size: 0.82rem; margin: 0 0 1.6rem 0;">
+        <thead style="color: var(--ink-dim);">
+            <tr style="border-bottom: 1px solid var(--c-dim);">
+                <th style="text-align: left; padding: 0.4rem 0.6rem;">ACTION</th>
+                <th style="text-align: left; padding: 0.4rem 0.6rem; width: 18%;">COST</th>
+                <th style="text-align: left; padding: 0.4rem 0.6rem;">NOTES</th>
+            </tr>
+        </thead>
+        <tbody>
+            <tr style="border-bottom: 1px dotted var(--c-dim);">
+                <td style="padding: 0.4rem 0.6rem;">Drop / unequip a weapon</td>
+                <td style="padding: 0.4rem 0.6rem; color: var(--c-primary);">FREE</td>
+                <td style="padding: 0.4rem 0.6rem; color: var(--ink-dim);">Always free — drop the gun, draw nothing</td>
+            </tr>
+            <tr style="border-bottom: 1px dotted var(--c-dim);">
+                <td style="padding: 0.4rem 0.6rem;">Draw / equip a weapon (setup)</td>
+                <td style="padding: 0.4rem 0.6rem; color: var(--c-primary);">FREE</td>
+                <td style="padding: 0.4rem 0.6rem; color: var(--ink-dim);">Pre-combat prep; no turn cost</td>
+            </tr>
+            <tr style="border-bottom: 1px dotted var(--c-dim);">
+                <td style="padding: 0.4rem 0.6rem;">Draw / equip a weapon (active)</td>
+                <td style="padding: 0.4rem 0.6rem; color: var(--accent-warning);">TURN</td>
+                <td style="padding: 0.4rem 0.6rem; color: var(--ink-dim);">Costs the participant's turn — <code>acted_this_round=True</code>, GM clicks NEXT TURN</td>
+            </tr>
+            <tr style="border-bottom: 1px dotted var(--c-dim);">
+                <td style="padding: 0.4rem 0.6rem;">Switch to off-hand</td>
+                <td style="padding: 0.4rem 0.6rem; color: var(--accent-warning);">TURN</td>
+                <td style="padding: 0.4rem 0.6rem; color: var(--ink-dim);">Same as main-hand draw — drawing the off-hand mid-fight is an action</td>
+            </tr>
+            <tr style="border-bottom: 1px dotted var(--c-dim);">
+                <td style="padding: 0.4rem 0.6rem;">GM instant override</td>
+                <td style="padding: 0.4rem 0.6rem; color: var(--c-primary);">FREE</td>
+                <td style="padding: 0.4rem 0.6rem; color: var(--ink-dim);">Superuser-only checkbox, bypasses cost for narrative beats</td>
+            </tr>
+            <tr>
+                <td style="padding: 0.4rem 0.6rem;">Reload</td>
+                <td style="padding: 0.4rem 0.6rem; color: var(--accent-warning);">TURN <span style="color: var(--ink-dim);">(active)</span> / <span style="color: var(--c-primary);">FREE</span> <span style="color: var(--ink-dim);">(off-turn)</span></td>
+                <td style="padding: 0.4rem 0.6rem; color: var(--ink-dim);">Already enforced — see AMMO subsection</td>
+            </tr>
+        </tbody>
+    </table>
 
     {# === ATTACK POOLS ================================================= #}
     <header class="block-head"><span class="block-bullet">■</span><h3>ATTACK POOLS</h3><span class="block-line"></span></header>

@@ -244,6 +244,19 @@ dodge), ADD CONDITION, WILLPOWER.
         <summary><span>actions</span></summary>
         <div class="part-actions-grid">
 
+            {% comment %}
+            v0.15.23 — equip-cost preamble. Surfaces the WoD 2.0 rule
+            once at the top of the action panel rather than per-form,
+            so the EQUIP / EQUIP OFF-HAND forms below stay clean. The
+            per-form hints further down spell out the consequence on
+            this specific row's turn-position.
+            {% endcomment %}
+            {% if encounter.status == "setup" %}
+                <div class="muted" style="grid-column: 1 / -1; font-size: 0.7rem; color: var(--ink-mute); margin: 0 0 0.2rem 0;">
+                    Equipping is free during setup; costs an action once combat starts.
+                </div>
+            {% endif %}
+
             {# --- EQUIP WEAPON --- #}
             <form method="post" action="{% url 'combat:equip_weapon' encounter.id p.id %}"
                   class="part-mini-form">
@@ -258,6 +271,25 @@ dodge), ADD CONDITION, WILLPOWER.
                     {% endfor %}
                 </select>
                 <button type="submit">EQUIP</button>
+                {% comment %}
+                v0.15.23 — action-cost hint. Server enforces (see
+                combat/views.py :: equip_weapon) — this is purely
+                informational. The "wait for your turn" branch points
+                at unequip as the always-free escape hatch.
+                {% endcomment %}
+                {% if encounter.status == "active" %}
+                    {% if encounter.active_participant_id == p.id %}
+                        <span class="muted" style="font-size: 0.7rem;">⚠ COSTS YOUR TURN</span>
+                    {% else %}
+                        <span class="muted" style="font-size: 0.7rem; color: var(--ink-mute);">Wait for your turn (or unequip — that's free)</span>
+                    {% endif %}
+                {% endif %}
+                {% if is_gm and encounter.status == "active" %}
+                <label style="display: flex; align-items: center; gap: 4px; font-size: 0.7rem; margin-top: 0.3rem;">
+                    <input type="checkbox" name="instant_equip" value="1">
+                    INSTANT (GM override — bypass turn cost)
+                </label>
+                {% endif %}
             </form>
 
             {% comment %}
@@ -266,6 +298,9 @@ dodge), ADD CONDITION, WILLPOWER.
             slot. Empty submission unequips. Off-hand firearm magazine
             fills on equip; v0.15.16 has no off-hand reload action so
             running dry requires re-equipping.
+
+            v0.15.23 — same action-cost hint + GM override as the
+            main-hand form.
             {% endcomment %}
             <form method="post" action="{% url 'combat:equip_offhand' encounter.id p.id %}"
                   class="part-mini-form">
@@ -280,6 +315,19 @@ dodge), ADD CONDITION, WILLPOWER.
                     {% endfor %}
                 </select>
                 <button type="submit">EQUIP</button>
+                {% if encounter.status == "active" %}
+                    {% if encounter.active_participant_id == p.id %}
+                        <span class="muted" style="font-size: 0.7rem;">⚠ COSTS YOUR TURN</span>
+                    {% else %}
+                        <span class="muted" style="font-size: 0.7rem; color: var(--ink-mute);">Wait for your turn (or unequip — that's free)</span>
+                    {% endif %}
+                {% endif %}
+                {% if is_gm and encounter.status == "active" %}
+                <label style="display: flex; align-items: center; gap: 4px; font-size: 0.7rem; margin-top: 0.3rem;">
+                    <input type="checkbox" name="instant_equip" value="1">
+                    INSTANT (GM override — bypass turn cost)
+                </label>
+                {% endif %}
             </form>
 
             {# --- EQUIP ARMOR --- #}
