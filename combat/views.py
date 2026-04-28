@@ -190,63 +190,102 @@ def _roll_d10():
     return secrets.randbelow(10) + 1
 
 
-def _roll_pool(n):
-    """Roll ``n`` d10s and count WoD 2.0 successes with 10-again explode.
+def _clamp_again_local(value):
+    """Clamp a weapon ``again`` value to one of {8, 9, 10}.
 
-    8/9/10 each count as one success; a rolled 10 also explodes and
-    is re-rolled, with the exploded die also counting on 8+. The
-    explosion chain is capped at five recursion levels per starting
-    die so a (vanishingly unlikely) infinite-tens streak cannot stall
-    the request loop.
+    v0.15.19 — deliberate local copy of ``exodus.models._clamp_again``.
+    The cross-app import would force the combat module to drag the
+    site-settings model graph in at module-load time, which has caused
+    cold-start cycles before. This helper has a five-line body and the
+    semantics are stable; the cost of the duplication is negligible
+    versus the import-graph footprint. Bad / out-of-range / None input
+    silently collapses to 10 (classic 10-again).
+    """
+    try:
+        v = int(value)
+    except (TypeError, ValueError):
+        return 10
+    if v in (8, 9, 10):
+        return v
+    return 10
 
-    v0.15.18 — returns ``(successes, dice)`` where ``dice`` is now a
-    list of dicts of shape::
+
+def _roll_pool(n, again_threshold=10):
+    """Roll ``n`` d10s and count WoD 2.0 successes with X-again explode.
+
+    The success threshold is always ``8+`` — a rolled face of 8, 9, or
+    10 is one success. The ``again_threshold`` controls only the
+    EXPLOSION trigger, i.e. which faces re-roll:
+
+      * 10 (default, classic 10-again): re-roll on 10.
+      * 9 (9-again): re-roll on 9 or 10.
+      * 8 (8-again): re-roll on 8, 9, or 10.
+
+    v0.15.19 — the threshold becomes weapon-specific. ``again_threshold``
+    is read from the equipped weapon's snapshot
+    (``weapon_data["again"]``) by ``_resolve_single_attack``; non-attack
+    pool rolls (e.g. dodge) leave it at the 10 default. Bad / out-of-
+    range input is clamped to ``[8, 10]`` defensively in case a tampered
+    value reaches us.
+
+    Returns ``(successes, dice)`` where ``dice`` is a list of dicts::
 
         [{"face": int, "kind": "base"|"explode",
-          "from_index": int|None, "success": bool}, ...]
+          "from_index": int|None, "success": bool,
+          "exploded": bool}, ...]
 
     'base' dice are the initial pool. 'explode' dice are re-rolls
-    triggered by a 10. ``from_index`` on an explode die points to the
-    PARENT die's position in the list (so the timeline renderer can
-    walk the chain). 'success' is True iff face >= 8 — both base and
-    explode dice may succeed.
+    triggered by a face that hit the explosion threshold.
+    ``from_index`` on an explode die points to the PARENT die's
+    position in the list. ``success`` is True iff ``face >= 8``.
+    ``exploded`` (NEW in v0.15.19) is True iff this die's face hit the
+    explosion threshold AND triggered a re-roll — used by the renderer
+    to visually distinguish trigger-faces from non-trigger successes
+    when the threshold is 9 or 8 (a 9 in 9-again should glow like a
+    classic 10; a 9 in 10-again should not).
 
-    The richer shape is what the v0.15.18 timeline renderer reads to
-    visually distinguish 10-again explosions from base rolls. Older
-    log rows persisted as a flat int list still parse via
-    ``_normalize_dice_payload`` (see below).
+    Explosion recursion is capped at 5 levels per starting die so a
+    pathological all-trigger streak can't loop indefinitely.
     """
     if n <= 0:
         return 0, []
+    # Defensive clamp — the caller normally goes through
+    # ``_clamp_again_local`` already, but a stray ``None`` or arbitrary
+    # int from a hand-rolled call still has to land safely.
+    threshold = max(8, min(10, int(again_threshold or 10)))
     dice = []
     successes = 0
     for _ in range(n):
         base_idx = len(dice)
         face = _roll_d10()
         is_succ = face >= 8
+        triggers = face >= threshold
         dice.append({
             "face": face,
             "kind": "base",
             "from_index": None,
             "success": is_succ,
+            "exploded": triggers,
         })
         if is_succ:
             successes += 1
-        # 10-again: keep rolling while we hit 10s, capped at 5 levels
-        # of recursion so a pathological all-10s streak can't loop
-        # indefinitely. ``from_index`` chains each explode back to its
-        # immediate parent (which may itself be an explode die).
+        # X-again: keep rolling while the latest face hits the
+        # threshold, capped at 5 levels of recursion. ``from_index``
+        # chains each explode back to its immediate parent (which may
+        # itself be an explode die).
         parent_idx = base_idx
         parent_face = face
         depth = 0
-        while parent_face == 10 and depth < 5:
+        while parent_face >= threshold and depth < 5:
             explode_face = _roll_d10()
             explode_succ = explode_face >= 8
+            explode_triggers = explode_face >= threshold
             dice.append({
                 "face": explode_face,
                 "kind": "explode",
                 "from_index": parent_idx,
                 "success": explode_succ,
+                "exploded": explode_triggers,
             })
             if explode_succ:
                 successes += 1
@@ -259,16 +298,25 @@ def _roll_pool(n):
 def _normalize_dice_payload(dice_raw):
     """Coerce a CombatLog ``data["dice"]`` payload to the structured shape.
 
-    Accepts both:
+    Accepts:
 
       * v0.15.17 and earlier — flat list of ints, e.g. ``[10, 7, 8]``.
         Every entry is marked ``kind="base"`` because the explosion
-        chain was not recorded at the time. The renderer cannot show
-        a parent → re-roll arrow on legacy rows; this is by design.
+        chain was not recorded at the time. ``exploded`` back-fills
+        conservatively to ``face == 10`` because every legacy attack
+        was 10-again — non-10 trigger faces couldn't have existed.
+        The renderer cannot show a parent → re-roll arrow on legacy
+        rows; this is by design.
 
-      * v0.15.18+ — list of dicts already in the structured shape.
-        Re-coerces each dict's fields so a hand-edited or partially
-        populated payload still renders without raising.
+      * v0.15.18 — list of dicts in the structured shape but missing
+        the ``exploded`` flag introduced in v0.15.19. Same conservative
+        back-fill (``face == 10``) — those attacks were all 10-again
+        because the threshold wasn't yet recorded.
+
+      * v0.15.19+ — list of dicts including the ``exploded`` flag,
+        which the resolver now writes accurately based on the
+        weapon's recorded ``again`` threshold. A 9-again 9 lights up
+        as a trigger; a 10-again 9 does not.
 
     Always returns a list — empty on garbage input or ``None``.
     """
@@ -277,11 +325,14 @@ def _normalize_dice_payload(dice_raw):
     out = []
     for d in dice_raw:
         if isinstance(d, int):
+            # v0.15.17 and earlier — every legacy roll was 10-again,
+            # so a 10 is the only face that could have triggered.
             out.append({
                 "face": d,
                 "kind": "base",
                 "from_index": None,
                 "success": d >= 8,
+                "exploded": d == 10,
             })
         elif isinstance(d, dict) and "face" in d:
             face = int(d.get("face", 0))
@@ -290,6 +341,10 @@ def _normalize_dice_payload(dice_raw):
                 "kind": d.get("kind", "base"),
                 "from_index": d.get("from_index"),
                 "success": bool(d.get("success", face >= 8)),
+                # v0.15.19 — back-compat default for v0.15.18 rows that
+                # pre-date the flag. ``face == 10`` is the only
+                # conservative back-fill (those attacks were 10-again).
+                "exploded": bool(d.get("exploded", face == 10)),
             })
     return out
 
@@ -3174,6 +3229,15 @@ def _resolve_single_attack(
     defense = _compute_defense(target)
     cover_pen = _cover_penalty(target.cover_state)
 
+    # v0.15.19 — record the X-again threshold up-front so it's
+    # available for both the full-cover blocked branch and the rolled
+    # branches without re-deriving it. Reading from the snapshot keeps
+    # the action's recorded threshold stable even if the catalogue
+    # is edited mid-encounter.
+    weapon_again_for_log = _clamp_again_local(
+        (weapon_data or {}).get("again", 10) if weapon_data else 10
+    )
+
     base_payload = dict(
         actor_participant_id=attacker.id,
         target_participant_id=target.id,
@@ -3190,6 +3254,11 @@ def _resolve_single_attack(
         spec_bonus=spec_bonus,
         spread_index=spread_index,
         spread_penalty=spread_penalty,
+        # v0.15.19 — X-again explosion threshold for this attack roll
+        # (one of {8, 9, 10}). Surfaces in the timeline so the GM can
+        # read which trigger value was active per row, even after the
+        # catalogue has been re-tuned.
+        weapon_again=weapon_again_for_log,
     )
     base_payload.update(extra_payload)
 
@@ -3217,7 +3286,13 @@ def _resolve_single_attack(
         return
 
     final_pool = max(0, attack_pool - defense - cover_pen)
-    successes, dice = _roll_pool(final_pool)
+    # v0.15.19 — pass the X-again threshold from the equipped weapon's
+    # snapshot (cached as ``weapon_again_for_log`` above). Default 10
+    # covers legacy snapshots captured before v0.15.19, plus every
+    # non-firearm row (which carries 10 by hydration anyway).
+    successes, dice = _roll_pool(
+        final_pool, again_threshold=weapon_again_for_log
+    )
     # v0.15.17 — apply Gun Fu auto-successes to the success tally
     # post-roll. ``rolled_successes`` is preserved on the payload so
     # the timeline can show the dice contribution separately from the

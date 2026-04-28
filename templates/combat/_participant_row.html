@@ -157,12 +157,20 @@ dodge), ADD CONDITION, WILLPOWER.
                 glance sees both slots. Without an off-hand we keep
                 the leaner pre-v0.15.16 single-weapon prefix.
                 {% endcomment %}
+                {% comment %}
+                v0.15.19 — append a 9-AGAIN / 8-AGAIN badge when the
+                equipped weapon's snapshot carries a non-default
+                explosion threshold. Both main-hand and off-hand carry
+                their own snapshots; either or both may sport a
+                badge. Default 10-again renders no badge to keep the
+                row uncluttered.
+                {% endcomment %}
                 {% if p.weapon_name and p.offhand_weapon_name %}
-                    &middot; MAIN: {{ p.weapon_name }} | OFF-HAND: {{ p.offhand_weapon_name }}
+                    &middot; MAIN: {{ p.weapon_name }}{% if p.weapon_data.again == 9 %}<span class="part-again-badge">9-AGAIN</span>{% endif %}{% if p.weapon_data.again == 8 %}<span class="part-again-badge">8-AGAIN</span>{% endif %} | OFF-HAND: {{ p.offhand_weapon_name }}{% if p.offhand_weapon_data.again == 9 %}<span class="part-again-badge">9-AGAIN</span>{% endif %}{% if p.offhand_weapon_data.again == 8 %}<span class="part-again-badge">8-AGAIN</span>{% endif %}
                 {% elif p.weapon_name %}
-                    &middot; {{ p.weapon_name }}
+                    &middot; {{ p.weapon_name }}{% if p.weapon_data.again == 9 %}<span class="part-again-badge">9-AGAIN</span>{% endif %}{% if p.weapon_data.again == 8 %}<span class="part-again-badge">8-AGAIN</span>{% endif %}
                 {% elif p.offhand_weapon_name %}
-                    &middot; OFF-HAND: {{ p.offhand_weapon_name }}
+                    &middot; OFF-HAND: {{ p.offhand_weapon_name }}{% if p.offhand_weapon_data.again == 9 %}<span class="part-again-badge">9-AGAIN</span>{% endif %}{% if p.offhand_weapon_data.again == 8 %}<span class="part-again-badge">8-AGAIN</span>{% endif %}
                 {% endif %}
                 {% if p.armor_name %} &middot; {{ p.armor_name }}{% endif %}
             </span>

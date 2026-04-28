@@ -434,6 +434,25 @@ The END button also prompts for confirmation.
         border-color: var(--accent-danger);
         text-shadow: 0 0 4px rgba(239, 68, 68, 0.45);
     }
+    /* v0.15.19 — X-AGAIN badge next to the equipped weapon name on
+       the participant row. Mono pill, primary border + glow — matches
+       the AUTO / MAG family aesthetically while adding a subtle text
+       shadow so the GM at a glance reads "this weapon explodes more
+       generously than the default". Only rendered when the equipped
+       weapon's snapshot carries a non-10 ``again`` value. */
+    .part-again-badge {
+        display: inline-block;
+        font-size: 0.55rem;
+        letter-spacing: 0.18em;
+        padding: 0 5px;
+        margin-left: 6px;
+        text-transform: uppercase;
+        vertical-align: middle;
+        font-family: var(--font-mono, ui-monospace, monospace);
+        color: var(--c-primary);
+        border: 1px solid var(--c-primary);
+        text-shadow: 0 0 4px var(--c-glow);
+    }
     .part-cond-clear {
         background: transparent;
         border: none;
@@ -620,8 +639,11 @@ The END button also prompts for confirmation.
     /* v0.15.18 — Combat dice timeline rendering.
        Inline span cluster surfacing the actual dice faces beneath
        each attack / dodge / initiative log row. Class semantics:
-         * .die-ten     — solid + glow on the 10-again trigger
-         * .die-succ    — solid primary on 8/9 successes
+         * .die-trigger — solid + glow on any X-again trigger face
+                          (was .die-ten in v0.15.18, generalised in
+                          v0.15.19 to fire on the action's recorded
+                          ``again`` threshold)
+         * .die-succ    — solid primary on 8/9 successes (non-trigger)
          * .die-fail    — muted on 1..7 failures
          * .die-explode — dashed border + ↳ prefix on re-rolls
          * .combat-die-gunfu — amber pill for Gun Fu auto-successes
@@ -644,7 +666,7 @@ The END button also prompts for confirmation.
         border: 1px solid var(--c-dim);
         background: rgba(0, 0, 0, 0.25);
     }
-    .combat-die.die-ten {
+    .combat-die.die-trigger {
         color: var(--c-primary);
         border-color: var(--c-primary);
         text-shadow: 0 0 6px var(--c-glow);

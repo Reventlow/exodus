@@ -3,6 +3,32 @@
 from django.db import models
 
 
+def _clamp_again(value):
+    """Coerce a weapon ``again`` field to one of {8, 9, 10}.
+
+    v0.15.19 — the X-again explosion threshold is the only valid
+    weapon-level lever on the attack roll: 10 (default) re-rolls on 10,
+    9 re-rolls on 9 or 10, 8 re-rolls on 8/9/10. The base success
+    threshold stays at 8+ regardless.
+
+    Bad input (None, non-int strings, out-of-range ints) silently falls
+    back to ``10`` so legacy / hand-edited catalogue rows behave like
+    the pre-v0.15.19 code path. Used by:
+      * ``SiteSettings.get_weapons`` to hydrate the read path.
+      * ``exodus.views`` weapons settings POST + ``api_weapons`` /
+        ``api_weapon_detail`` write paths.
+    The combat module carries a deliberate local copy
+    (``combat.views._clamp_again_local``) to avoid a cross-app import.
+    """
+    try:
+        v = int(value)
+    except (TypeError, ValueError):
+        return 10
+    if v in (8, 9, 10):
+        return v
+    return 10
+
+
 class PullingString(models.Model):
     """Game-level catalog of available pulling strings."""
 
@@ -195,8 +221,13 @@ class SiteSettings(models.Model):
             "optional magazine (int) field defines the catalogue "
             "magazine size in rounds (legacy entries without the field "
             "default to 0 at read time, which suppresses ammo tracking "
-            "for that weapon). See SiteSettings.default_weapons() for "
-            "the seed catalogue."
+            "for that weapon). For firearms, an optional again (int: "
+            "8 / 9 / 10, default 10) sets the X-again explosion threshold "
+            "for the attack roll — 10-again (default) re-rolls on 10, "
+            "9-again re-rolls on 9 or 10, 8-again re-rolls on 8/9/10. "
+            "The success threshold (8+) does NOT change between tiers — "
+            "only the explosion trigger does. See "
+            "SiteSettings.default_weapons() for the seed catalogue."
         ),
     )
 
@@ -389,6 +420,14 @@ class SiteSettings(models.Model):
         entry, so legacy firearm rows behave the way they did before
         v0.15.15 (unlimited ammo) until an admin gives them a real mag
         size in /settings/.
+
+        ``again`` (v0.15.19) defaults to ``10`` at read time for every
+        entry that doesn't carry the field — preserves classic 10-again
+        behaviour. Valid values are {8, 9, 10}; anything else clamps
+        back to 10 via ``_clamp_again``. Conceptually firearm-only, but
+        the field is hydrated on every row uniformly so callers don't
+        have to special-case the category — the combat resolver only
+        ever consults it on a firearm anyway.
         """
         weapons = self.weapons if isinstance(self.weapons, list) and self.weapons else self.default_weapons()
         hydrated = []
@@ -421,6 +460,11 @@ class SiteSettings(models.Model):
                 # or ``entry["magazine"]`` interchangeably without a
                 # KeyError on legacy data.
                 "magazine": mag,
+                # v0.15.19 — X-again explosion threshold. Always present
+                # on the hydrated dict; defaults to 10 for legacy entries
+                # and any non-firearm row. ``_clamp_again`` clamps bad
+                # / out-of-range values back to 10.
+                "again": _clamp_again(w.get("again", 10)),
             })
         return hydrated
 

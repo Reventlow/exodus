@@ -1,5 +1,17 @@
 # Changelog
 
+## v0.15.19
+- **Weapon-specific X-again threshold** (10 / 9 / 8) on the firearm catalogue. Default 10 for every existing entry — preserves v0.15.18 behaviour exactly. GM configures per-weapon via `/settings/ → COMBAT → Weapons → AGAIN`. No default catalogue weapon ships with anything other than 10-again — leave it to the GM's table
+- **The success threshold stays at 8+ at every tier** — the X-again number is the explosion trigger only, not a different success threshold. 9-again means dice exploding on 9 or 10. 8-again means dice exploding on 8 / 9 / 10. The success count doesn't change between tiers
+- `_roll_pool` now takes an `again_threshold` keyword (default 10); `_resolve_single_attack` reads it from the equipped weapon's snapshot. Off-hand uses its own snapshot independently. Dodge and initiative stay 10-again (no weapon involved)
+- Structured dice payload gains an `exploded` flag — True when the die's face triggered a re-roll. Renderer uses this to glow ANY trigger-face (no longer hardcoded to 10). 9-again 9s now light up the same way 10s do. The CSS class `.die-ten` is renamed to `.die-trigger` (same styling: bold + glow)
+- **Backwards-compat:** legacy log rows (pre-v0.15.18 flat int lists, or v0.15.18 structured rows missing `exploded`) back-fill the flag conservatively (`face == 10`). Pre-v0.15.19 9-again attacks won't show 9s glowing because the threshold wasn't recorded — only forward-looking attacks get the precise rendering. Initiative rendering also adopts `die-trigger` for the lone 10
+- **`9-AGAIN` / `8-AGAIN` badge** on the participant row next to the equipped weapon name, both main-hand and off-hand. Mono pill, primary border + glow, in the AUTO / MAG family. Suppressed for the default 10 to keep the row uncluttered
+- **Settings UI** gains an AGAIN integer column in the firearm weapons editor (parallel-array `weapons_firearm_again`, paired row-for-row with the AUTO and MAG columns). Helper `_clamp_again` in `exodus/models.py` enforces `{8, 9, 10}` with 10 fallback; reused by the form POST handler and by the `api_weapons` POST / `api_weapon_detail` PUT JSON endpoints. Combat carries a deliberate local copy `_clamp_again_local` to avoid a cross-app import
+- **CombatLog `attack` payload** extended with `weapon_again: int` so the timeline can read which trigger value was active per row even after the catalogue is re-tuned
+- **Rules explainer** at `/rules/combat/` ADVANCED ACTIONS gains an X-AGAIN subsection (between BURST and AUTOFIRE SPREAD) covering the three tiers, the success-threshold-stays-at-8 clarification, the 5-level chain cap, the per-weapon configuration model, and the no-default-non-10 note
+- No model schema changes, no migrations, no new dependencies. Field lives in the existing `weapons` JSONField on `SiteSettings`
+
 ## v0.15.18
 - **Dice rendered visually in the combat timeline.** Every attack / dodge / initiative log row now shows the actual dice faces below its message, with markup distinguishing successes (8+) from failures, 10-again explosions from base rolls, and Gun Fu auto-successes from rolled successes
 - Bold + glow on 10s (the trigger) · solid primary on 8/9 successes · muted dim on 1-7 failures · dashed border + ↳ arrow prefix on explosion re-rolls (so the chain is visible) · amber `+N GUN FU` chip after the dice when an auto-success was credited

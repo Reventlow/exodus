@@ -11,7 +11,7 @@ from django.http import HttpResponseForbidden, JsonResponse
 from django.shortcuts import redirect, render
 from django.views.decorators.http import require_GET, require_http_methods, require_POST
 
-from .models import MeritDefinition, PullingString, SiteSettings
+from .models import MeritDefinition, PullingString, SiteSettings, _clamp_again
 
 User = get_user_model()
 
@@ -211,6 +211,13 @@ def site_settings(request):
             firearm_magazines = request.POST.getlist(
                 "weapons_firearm_magazine"
             )
+            # v0.15.19 — X-again explosion threshold parallel-array.
+            # Same parallel-array pattern as the magazine / auto flag.
+            # Each entry is one of {8, 9, 10}; ``_clamp_again`` defends
+            # against bad input by collapsing to 10 (classic behaviour).
+            firearm_again_thresholds = request.POST.getlist(
+                "weapons_firearm_again"
+            )
             new_weapons = []
             for cat in categories:
                 names = request.POST.getlist(f"weapons_{cat}_name")
@@ -262,6 +269,16 @@ def site_settings(request):
                         if mag_val > 999:
                             mag_val = 999
                         entry["magazine"] = mag_val
+                        # v0.15.19 — pull this row's X-again threshold
+                        # from the parallel array and clamp to one of
+                        # {8, 9, 10}. Missing / bad input collapses to
+                        # 10 so existing catalogues survive a partial
+                        # POST without changing semantics.
+                        again_raw = (
+                            firearm_again_thresholds[i]
+                            if i < len(firearm_again_thresholds) else 10
+                        )
+                        entry["again"] = _clamp_again(again_raw)
                     new_weapons.append(entry)
             settings_obj.weapons = new_weapons
 
@@ -952,6 +969,11 @@ def api_weapons(request):
         if mag_val > 999:
             mag_val = 999
         new_w["magazine"] = mag_val
+        # v0.15.19 — X-again threshold (firearms only). Defaults to 10
+        # if the field is absent; ``_clamp_again`` enforces the {8,9,10}
+        # set. MCP / API clients sending the field for non-firearms
+        # have it silently dropped, mirroring auto_capable / magazine.
+        new_w["again"] = _clamp_again(body.get("again", 10))
     weapons.append(new_w)
     settings_obj.weapons = weapons
     settings_obj.save(update_fields=["weapons"])
@@ -964,7 +986,9 @@ def api_weapon_detail(request, name):
 
     PUT body is partial — only the fields you include are changed.
     Allowed fields: ``name`` (rename), ``category``, ``damage``,
-    ``range``, ``capacity``, ``notes``.
+    ``range``, ``capacity``, ``notes``, ``auto_capable`` (firearm only,
+    v0.15.14), ``magazine`` (firearm only, v0.15.15), ``again`` (firearm
+    only, v0.15.19; one of 8 / 9 / 10).
 
     Admin / MCP-superuser only.
     """
@@ -1036,6 +1060,11 @@ def api_weapon_detail(request, name):
         if mag_val > 999:
             mag_val = 999
         w["magazine"] = mag_val
+    # v0.15.19 — X-again threshold (firearms only). ``_clamp_again``
+    # enforces the {8, 9, 10} set; bad / missing input collapses to 10.
+    # Silently dropped on non-firearm PUTs to keep the schema clean.
+    if "again" in body and w.get("category") == "firearm":
+        w["again"] = _clamp_again(body["again"])
     weapons[idx] = w
     settings_obj.weapons = weapons
     settings_obj.save(update_fields=["weapons"])

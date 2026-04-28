@@ -463,6 +463,14 @@
                                 {% if sec.cat == "firearm" %}
                                 <th style="width: 6%; text-align: center;" title="Auto-capable: shows burst-fire and autofire-spread modes on the attack form.">AUTO</th>
                                 <th style="width: 7%; text-align: center;" title="Magazine size in rounds. Drives the ammo tracking system: filled on equip / combat start; consumed by single (1) / short (3) / medium (10) / long (20) burst.">MAG</th>
+                                {% comment %}
+                                v0.15.19 — AGAIN column. Sets the X-again
+                                explosion threshold for the attack roll.
+                                10 (default) re-rolls on 10, 9 re-rolls
+                                on 9 or 10, 8 re-rolls on 8/9/10. Success
+                                threshold (8+) is unaffected.
+                                {% endcomment %}
+                                <th style="width: 6%; text-align: center;" title="X-again explosion threshold. 10 = re-roll on 10 (default); 9 = re-roll on 9 or 10; 8 = re-roll on 8 / 9 / 10. Success threshold stays at 8+.">AGAIN</th>
                                 {% endif %}
                                 <th>NOTES</th>
                                 <th style="width: 1%;"></th>
@@ -517,6 +525,23 @@
                                            style="text-align: center;"
                                            title="Magazine size in rounds. 0 disables ammo tracking for this entry.">
                                 </td>
+                                {% comment %}
+                                v0.15.19 — AGAIN cell. Parallel-array
+                                ``weapons_firearm_again`` paired
+                                row-for-row with the other firearm
+                                columns. Server-side ``_clamp_again``
+                                normalises to one of {8, 9, 10}; bad
+                                input falls back to 10.
+                                {% endcomment %}
+                                <td style="text-align: center;">
+                                    <input type="number"
+                                           name="weapons_firearm_again"
+                                           value="{{ w.again|default:10 }}"
+                                           min="8" max="10" step="1"
+                                           class="weapons-again"
+                                           style="text-align: center;"
+                                           title="X-again explosion threshold (8 / 9 / 10). 10 = classic 10-again. 9-again re-rolls on 9 or 10. 8-again re-rolls on 8/9/10. Success threshold stays at 8+.">
+                                </td>
                                 {% endif %}
                                 <td><input type="text" name="weapons_{{ sec.cat }}_notes" value="{{ w.notes }}" maxlength="240"></td>
                                 <td><button type="button" class="weap-del" onclick="this.closest('tr').remove()">×</button></td>
@@ -565,6 +590,10 @@
                         // sets a real value.
                         var autoCell = '';
                         var magCell = '';
+                        // v0.15.19 — AGAIN cell. New firearm rows
+                        // default to 10 (classic 10-again behaviour);
+                        // GM bumps to 9 or 8 per-weapon as needed.
+                        var againCell = '';
                         if (cat === 'firearm') {
                             autoCell =
                                 '<td style="text-align: center;">' +
@@ -582,6 +611,15 @@
                                          'style="text-align: center;" ' +
                                          'title="Magazine size in rounds. 0 disables ammo tracking for this entry.">' +
                                 '</td>';
+                            againCell =
+                                '<td style="text-align: center;">' +
+                                  '<input type="number" ' +
+                                         'name="weapons_firearm_again" ' +
+                                         'value="10" min="8" max="10" step="1" ' +
+                                         'class="weapons-again" ' +
+                                         'style="text-align: center;" ' +
+                                         'title="X-again explosion threshold (8 / 9 / 10). 10 = classic 10-again. 9-again re-rolls on 9 or 10. 8-again re-rolls on 8/9/10. Success threshold stays at 8+.">' +
+                                '</td>';
                         }
                         var tr = document.createElement('tr');
                         tr.innerHTML =
@@ -591,6 +629,7 @@
                             '<td><input type="text" name="weapons_' + cat + '_capacity" maxlength="48" placeholder="—"></td>' +
                             autoCell +
                             magCell +
+                            againCell +
                             '<td><input type="text" name="weapons_' + cat + '_notes" maxlength="240" placeholder=""></td>' +
                             '<td><button type="button" class="weap-del" onclick="this.closest(\'tr\').remove()">×</button></td>';
                         tbody.appendChild(tr);

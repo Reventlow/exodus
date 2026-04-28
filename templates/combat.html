@@ -181,6 +181,11 @@
     v0.15.15 — explainer for AIM (v0.15.14), burst fire (v0.15.14),
     autofire spread (v0.15.14), and ammo / reload (v0.15.15).
     v0.15.16 — adds the DUAL-WIELDING subsection at the tail.
+    v0.15.17 — adds the GUN FU subsection.
+    v0.15.19 — adds the X-AGAIN subsection between BURST and AUTOFIRE
+    SPREAD (firearms-cluster), covering the 10/9/8 explosion tiers,
+    the success-threshold-stays-at-8 clarification, the 5-level chain
+    cap, and the GM-configures-per-weapon model.
     Mirrors the live combat module's enforcement so players reading
     /rules/combat/ get the same dice math the server applies.
     {% endcomment %}
@@ -237,6 +242,28 @@
             </tr>
         </tbody>
     </table>
+
+    {% comment %}
+    v0.15.19 — X-AGAIN subsection. Sits between BURST FIRE and
+    AUTOFIRE SPREAD because both subsections cover firearm-specific
+    mechanics; X-again is a per-weapon catalogue lever the GM tunes
+    in /settings/. Stresses two things: (a) the success threshold
+    (8+) does NOT change between tiers, only the explosion trigger
+    does, and (b) no default catalogue weapon ships with anything
+    other than 10-again — the GM configures per-table.
+    {% endcomment %}
+    <h4 class="mono-text text-accent" style="font-size: 0.85rem; letter-spacing: 0.2em; margin: 1.2rem 0 0.4rem 0;">X-AGAIN — WEAPON-SPECIFIC EXPLODE THRESHOLDS</h4>
+    <div class="text-secondary" style="font-size: 0.85rem; line-height: 1.7; margin: 0 0 1rem 0;">
+        <p style="margin: 0 0 0.4rem 0;"><span class="mono-text text-accent">▸ 10-AGAIN (DEFAULT)</span> &nbsp;— a rolled <strong>10</strong> succeeds AND re-rolls. The re-roll counts as another success on 8+ and itself re-rolls on 10. Default for every catalogue entry as of v0.15.19.</p>
+        <p style="margin: 0 0 0.4rem 0;"><span class="mono-text text-accent">▸ 9-AGAIN</span> &nbsp;— explodes on <strong>9 or 10</strong>. Re-rolls feed back into the same threshold (a 9 on the explode chain re-rolls just like a 10 does in 10-again).</p>
+        <p style="margin: 0 0 0.4rem 0;"><span class="mono-text text-accent">▸ 8-AGAIN</span> &nbsp;— explodes on <strong>8, 9, or 10</strong>. The most generous tier — every success can chain another roll.</p>
+        <p style="margin: 0 0 0.4rem 0;"><span class="mono-text text-accent">▸ SUCCESS THRESHOLD UNCHANGED</span> &nbsp;— 8+ is one success at every tier. The X-again number is the <em>explosion trigger</em>, not a different success threshold. A 9-again attack still counts an 8 as one success; a 9 still counts as one success and now also explodes.</p>
+        <p style="margin: 0 0 0.4rem 0;"><span class="mono-text text-accent">▸ CHAIN CAP</span> &nbsp;— the explosion chain is capped at <strong>5 levels per starting die</strong>. A pathological all-trigger streak will halt at five re-rolls regardless of tier.</p>
+        <p style="margin: 0 0 0.4rem 0;"><span class="mono-text text-accent">▸ CONFIGURATION</span> &nbsp;— per weapon at <code>/settings/ → COMBAT → Weapons → AGAIN</code>. Default is <strong>10</strong>. Catalogue edits do <strong>not</strong> retroactively mutate equipped weapons — the participant's snapshot wins until they re-equip.</p>
+        <p style="margin: 0 0 0.4rem 0;"><span class="mono-text text-accent">▸ ATTACK FORM BADGE</span> &nbsp;— a <strong>9-AGAIN</strong> or <strong>8-AGAIN</strong> badge appears next to the equipped weapon name on the participant row when the snapshot's threshold is non-default. Both main-hand and off-hand are badged independently.</p>
+        <p style="margin: 0 0 0.4rem 0;"><span class="mono-text text-accent">▸ DICE TIMELINE</span> &nbsp;— every triggering face lights up with the same bold-glow treatment 10s currently use, so a 9-again 9 reads exactly like a classic 10-again 10. A 9 in a 10-again attack stays a plain success.</p>
+        <p style="margin: 0;"><span class="mono-text text-accent">▸ DEFAULT CATALOGUE</span> &nbsp;— as of v0.15.19, <strong>no</strong> default weapon ships with anything other than 10-again. The GM tunes individual entries per table.</p>
+    </div>
 
     <h4 class="mono-text text-accent" style="font-size: 0.85rem; letter-spacing: 0.2em; margin: 1.2rem 0 0.4rem 0;">AUTOFIRE SPREAD</h4>
     <div class="text-secondary" style="font-size: 0.85rem; line-height: 1.7; margin: 0 0 1rem 0;">

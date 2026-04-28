@@ -12,6 +12,12 @@ dice + Gun Fu chip markup used by the encounter timeline. Reads the
 ``CombatLog.data`` JSONField directly (``dice`` and
 ``gun_fu_bonus_successes``) and is fully backwards-compatible with
 legacy flat-int dice payloads via ``_normalize_dice_payload``.
+
+v0.15.19 — the trigger glow class (formerly ``die-ten``, hardcoded to
+``face == 10``) is now ``die-trigger`` and fires on any die whose
+``exploded`` flag is True. That makes a 9-again 9 light up the same
+way a classic 10-again 10 does, while a regular 9 in a 10-again
+attack stays a plain ``die-succ``.
 """
 
 from django import template
@@ -65,11 +71,17 @@ def render_combat_dice(entry):
 
     Visual treatment (CSS classes, defined in encounter.html):
 
-      * face 10 — ``die-ten`` — bold + glow on the explosion trigger.
-      * face 8 / 9 — ``die-succ`` — solid primary, bold.
+      * trigger faces — ``die-trigger`` — bold + glow on any die whose
+        ``exploded`` flag is True (i.e. it hit the action's X-again
+        threshold and triggered a re-roll). For a 10-again attack
+        that's only a 10; for 9-again it's 9 or 10; for 8-again it's
+        8 / 9 / 10.
+      * face 8 / 9 (non-trigger) — ``die-succ`` — solid primary, bold.
       * face 1..7 — ``die-fail`` — muted dim, half-opacity.
       * explode dice — ``die-explode`` — dashed border + ``↳``
-        prefix so the chain is visually anchored to the parent.
+        prefix so the chain is visually anchored to the parent. Keeps
+        priority over ``die-trigger`` so a re-rolled trigger reads as
+        a chain link rather than another trigger.
       * Gun Fu chip — ``combat-die-gunfu`` — amber pill, distinct so
         die-derived successes can't be confused with merit successes.
 
@@ -83,12 +95,14 @@ def render_combat_dice(entry):
 
     # Initiative carries a single ``d10`` int instead of a pool — render
     # it as a one-die cluster with the same colour rules as a pool die.
+    # Initiative has no X-again concept (it's a single d10 + modifier),
+    # so the trigger class only fires on a literal 10 here.
     if entry.action_type == "initiative":
         d10 = data.get("d10")
         if isinstance(d10, int):
             succ = d10 >= 8
             if d10 == 10:
-                cls = "die-ten"
+                cls = "die-trigger"
             elif succ:
                 cls = "die-succ"
             else:
@@ -111,14 +125,20 @@ def render_combat_dice(entry):
         face = d["face"]
         kind = d["kind"]
         succ = d["success"]
+        # v0.15.19 — read the structured ``exploded`` flag instead of
+        # hardcoding ``face == 10``. ``_normalize_dice_payload`` back-
+        # fills the flag for legacy / pre-v0.15.19 rows so this read
+        # is always safe.
+        triggered = bool(d.get("exploded", False))
         # Class precedence: explode keeps its own class regardless of
-        # face value (so a re-rolled 10 still reads as a chain link
-        # rather than another trigger). Otherwise face 10 → die-ten,
-        # successes → die-succ, failures → die-fail.
+        # face value (so a re-rolled trigger still reads as a chain
+        # link rather than another trigger). Otherwise trigger faces
+        # → die-trigger, plain successes → die-succ, failures →
+        # die-fail.
         if kind == "explode":
             cls = "die-explode"
-        elif face == 10:
-            cls = "die-ten"
+        elif triggered:
+            cls = "die-trigger"
         elif succ:
             cls = "die-succ"
         else:
