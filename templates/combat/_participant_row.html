@@ -67,6 +67,46 @@ dodge), ADD CONDITION, WILLPOWER.
             <span class="part-name">{{ p.name }}</span>
 
             {% comment %}
+            v0.15.24 — Player-ready gate. During setup, every Character
+            participant must toggle READY before the GM can start
+            combat. Three rendering branches:
+              * Controllable Character row → submit-button toggle
+                (player on own row, or GM on any character).
+              * Read-only Character row → static chip so other players
+                / spectators see the readiness state.
+              * NPCs / mooks → no chip (GM-controlled, bypass gate).
+            Hidden once the encounter goes active — the tag is
+            stripped at start_encounter, but the conditional belt-
+            and-suspenders ensures the chip doesn't reappear if a
+            stale tag survives a backend quirk.
+            {% endcomment %}
+            {% if encounter.status == "setup" and p.participant_kind == "character" %}
+                {% if p.can_control %}
+                    <form method="post"
+                          action="{% url 'combat:toggle_ready' encounter.id p.id %}"
+                          style="display: inline; margin-left: 0.4rem;">
+                        {% csrf_token %}
+                        {% if p.is_ready %}
+                            <button type="submit" class="part-ready-btn ready"
+                                    title="Click to un-ready.">
+                                &#x2713; READY
+                            </button>
+                        {% else %}
+                            <button type="submit" class="part-ready-btn not-ready"
+                                    title="Click when you've chosen your starting layout.">
+                                &#x25EF; NOT READY
+                            </button>
+                        {% endif %}
+                    </form>
+                {% else %}
+                    <span class="part-ready-chip {% if p.is_ready %}ready{% else %}not-ready{% endif %}"
+                          title="Setup readiness state — only the controlling player or GM can change this.">
+                        {% if p.is_ready %}&#x2713; READY{% else %}&#x25EF; NOT READY{% endif %}
+                    </span>
+                {% endif %}
+            {% endif %}
+
+            {% comment %}
             Condition pills — color tier comes from the view annotation:
             red for incapacitated, cyan for stances (full def, dodging,
             dodge_pending), amber for ordinary status conditions.

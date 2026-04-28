@@ -75,6 +75,22 @@
         </tbody>
     </table>
 
+    {% comment %}
+    v0.15.24 — READY GATE subsection. Sits at the tail of ROUND
+    STRUCTURE / ACTION COSTS so the setup-phase gate is documented
+    alongside the rest of the turn-economy rules. Server enforcement
+    lives in combat/views.py :: start_encounter; UI surface lives in
+    _participant_row.html (per-row toggle) and encounter.html (START
+    button summary + FORCE START checkbox).
+    {% endcomment %}
+    <h4 class="mono-text text-accent" style="font-size: 0.85rem; letter-spacing: 0.2em; margin: 1.2rem 0 0.4rem 0;">READY GATE</h4>
+    <div class="text-secondary" style="font-size: 0.9rem; line-height: 1.7; margin: 0.4rem 0 1.6rem 0;">
+        <p style="margin: 0 0 0.5rem 0;">During the <strong>setup phase</strong>, every <em>Character</em> participant must toggle <span class="mono-text text-accent">READY</span> on their row before the GM can roll initiative and start combat. The toggle confirms the player has chosen their starting layout — equipped weapons, equipped armor, taken cover, applied any starting conditions like <code>prone</code>, etc.</p>
+        <p style="margin: 0 0 0.5rem 0;">The GM can <span class="mono-text text-accent">FORCE START</span> to bypass the gate when a player is offline or unresponsive. The override is a superuser-only checkbox surfaced next to the START button; it appears only while at least one Character is unready.</p>
+        <p style="margin: 0 0 0.5rem 0;"><span class="mono-text text-accent">▸ NPCs and mooks don't ready up</span> &nbsp;— they're GM-controlled and bypass the gate. Only player-character rows count toward the <code>READY: N / M CHARACTERS</code> tally.</p>
+        <p style="margin: 0;"><span class="mono-text text-accent">▸ Setup-only flag</span> &nbsp;— once combat is active, the READY tag is automatically stripped from every participant. Rewinding via <span class="mono-text text-accent">CLEAR INITIATIVE</span> does NOT auto-re-ready; players opt back in. A fresh <code>ready_change</code> log row fires on every toggle and broadcasts over WebSocket so the table sees state shifts in real time.</p>
+    </div>
+
     {# === ATTACK POOLS ================================================= #}
     <header class="block-head"><span class="block-bullet">■</span><h3>ATTACK POOLS</h3><span class="block-line"></span></header>
     <table class="mono-text" style="width: 100%; border-collapse: collapse; font-size: 0.82rem; margin: 0.8rem 0 1.6rem 0;">

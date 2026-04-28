@@ -1512,6 +1512,55 @@ def _compute_initiative(participant):
     return modifier, d10, modifier + d10
 
 
+# ---------------------------------------------------------------------------
+# v0.15.24 — Player-ready gate (setup-only flag on Participant.conditions)
+# ---------------------------------------------------------------------------
+#
+# Every Character participant must toggle ``ready`` during setup before the
+# GM can roll initiative and start combat. The state is encoded as a flat
+# string tag ``"ready"`` on the existing ``Participant.conditions`` JSONField
+# — same storage shape as ``defense_full`` / ``dodge_pending`` etc., so no
+# schema change. The tag is stripped from every participant when the
+# encounter transitions setup → active (it's a setup-only flag and must
+# not pollute conditions during play). Rewinding via ``clear_initiative``
+# does NOT auto-re-ready — players opt back in.
+
+
+def _is_ready(participant):
+    """True if the participant has the ``ready`` tag in ``conditions``."""
+    return "ready" in (participant.conditions or [])
+
+
+def _set_ready(participant, ready):
+    """Toggle the ``ready`` tag in-place. Caller saves.
+
+    Idempotent: setting True when already ready (or False when not) is a
+    no-op on the underlying list. List membership is the source of truth;
+    we never duplicate the tag.
+    """
+    conds = list(participant.conditions or [])
+    has = "ready" in conds
+    if ready and not has:
+        conds.append("ready")
+    elif not ready and has:
+        conds = [c for c in conds if c != "ready"]
+    participant.conditions = conds
+
+
+def _participants_needing_ready(encounter):
+    """Return a queryset of Character participants who must toggle READY
+    before ``start_encounter`` is allowed to fire.
+
+    NPCs and mooks are GM-controlled and don't need to ready up — the
+    GM owns their setup choices. Only Character rows (with a real
+    ``character_id``) gate the encounter start.
+    """
+    return encounter.participants.filter(
+        participant_kind="character",
+        character__isnull=False,
+    )
+
+
 def _gm_only(view):
     """Decorator factory: 403 unless ``request.user.is_superuser``.
 
@@ -1722,6 +1771,14 @@ def encounter_page(request, pk):
         # NPCs and mooks have no character FK, so players can never
         # control them — only the GM.
         p.can_control = _can_control_participant(request.user, p)
+
+        # v0.15.24 — ready flag annotation. Drives the per-row READY
+        # button / chip during setup phase. Only relevant for
+        # Character participants — NPCs and mooks bypass the gate so
+        # their ``is_ready`` is left at False (the row template only
+        # renders the chip / button when participant_kind == "character"
+        # anyway, so the value is harmless but kept consistent).
+        p.is_ready = _is_ready(p)
 
         # v0.15.14 — burst-fire eligibility (firearm has auto_capable).
         # Drives the FIRE MODE select on the attack form: when False,
@@ -1953,6 +2010,24 @@ def encounter_page(request, pk):
     # always True; the kicker is suppressed for the GM regardless.
     has_any_control = any(p.can_control for p in ordered_participants)
 
+    # v0.15.24 — readiness summary for the START button block. Only
+    # Character participants (not NPCs / mooks) gate the encounter
+    # start, so the totals filter on participant_kind. The CSV of
+    # unready names is rendered next to the summary so the GM can
+    # chase the holdouts at the table.
+    char_total = 0
+    char_ready_count = 0
+    unready_names = []
+    for p in participants:
+        if p.participant_kind != "character" or p.character_id is None:
+            continue
+        char_total += 1
+        if p.is_ready:
+            char_ready_count += 1
+        else:
+            unready_names.append(p.name)
+    unready_names_csv = ", ".join(unready_names)
+
     return render(
         request,
         "combat/encounter.html",
@@ -1983,6 +2058,14 @@ def encounter_page(request, pk):
             # PLAYER-VIEW vs SPECTATOR kicker.
             "is_gm": is_gm,
             "has_any_control": has_any_control,
+            # v0.15.24 — Player-ready gate context. ``char_total`` is
+            # the Character-participant count; ``char_ready_count`` is
+            # the subset toggled READY; ``unready_names_csv`` is a
+            # comma-joined string of the holdouts for the GM-only
+            # "missing: X, Y" hint next to the START button.
+            "char_total": char_total,
+            "char_ready_count": char_ready_count,
+            "unready_names_csv": unready_names_csv,
         },
     )
 
@@ -2430,6 +2513,57 @@ def clear_initiative(request, pk):
 
 
 @login_required
+@_gm_or_owner()
+@csrf_protect
+def toggle_ready(request, pk, participant_id):
+    """POST — toggle the participant's READY flag during setup.
+
+    v0.15.24 — every Character participant must toggle READY before
+    the GM can roll initiative and start combat. The flag confirms
+    the player has chosen their starting layout (weapons, armor,
+    cover, prone, etc.). Once combat is active, the flag is
+    auto-stripped (it's setup-only).
+
+    Authorisation:
+      * @_gm_or_owner — GM may toggle anyone; players may toggle only
+        their own row's character. NPCs / mooks have no character FK
+        and are rejected with a flash message (the decorator already
+        forbids non-owners; this view also explicitly rejects NPC /
+        mook kinds for clarity).
+      * Idempotent: clicking a ready row toggles it back to not-ready.
+      * Setup-only: 302-with-flash if the encounter has already
+        transitioned to active / concluded.
+
+    The view writes a ``ready_change`` CombatLog row so the timeline
+    and WebSocket clients see the state shift. Real-time fan-out is
+    handled by the existing ``_log`` broadcast wrapper.
+    """
+    if request.method != "POST":
+        return HttpResponseNotAllowed(["POST"])
+    encounter = get_object_or_404(Encounter, pk=pk)
+    if encounter.status != "setup":
+        messages.error(request, "READY toggle only available during setup phase.")
+        return redirect("combat:detail", pk=encounter.pk)
+    participant = get_object_or_404(
+        Participant, pk=participant_id, encounter=encounter
+    )
+    if participant.participant_kind != "character" or participant.character_id is None:
+        messages.error(request, "Only Character participants can be ready.")
+        return redirect("combat:detail", pk=encounter.pk)
+    new_state = not _is_ready(participant)
+    _set_ready(participant, new_state)
+    participant.save(update_fields=["conditions"])
+    _log(
+        encounter,
+        "ready_change",
+        f"{participant.name} is{'' if new_state else ' NO LONGER'} ready.",
+        participant_id=participant.pk,
+        ready=new_state,
+    )
+    return redirect("combat:detail", pk=encounter.pk)
+
+
+@login_required
 @_gm_only
 @csrf_protect
 def start_encounter(request, pk):
@@ -2446,6 +2580,32 @@ def start_encounter(request, pk):
     encounter = get_object_or_404(Encounter, pk=pk)
     if encounter.status != "setup":
         return redirect("combat:detail", pk=encounter.pk)
+
+    # v0.15.24 — Player-ready gate. Every Character participant must
+    # toggle READY during setup before the GM can fire combat. NPCs /
+    # mooks are GM-controlled and bypass the gate. Superuser-only
+    # ``force_start=1`` POST flag overrides for offline / unresponsive
+    # players (matches the FORCE START checkbox surfaced in the UI).
+    force_start = (
+        request.user.is_superuser and request.POST.get("force_start") == "1"
+    )
+    if not force_start:
+        # JSONField __contains is supported on SQLite + PostgreSQL for
+        # whole-list match, but we re-check with ``_is_ready`` in
+        # Python as belt-and-suspenders so any backend quirk surfaces
+        # as a flash-message rather than a silent pass.
+        unready_qs = _participants_needing_ready(encounter).exclude(
+            conditions__contains=["ready"]
+        )
+        unready_names = [p.name for p in unready_qs if not _is_ready(p)]
+        if unready_names:
+            messages.error(
+                request,
+                "Cannot start: the following characters haven't readied — "
+                + ", ".join(unready_names)
+                + ". GM can override with FORCE START.",
+            )
+            return redirect("combat:detail", pk=encounter.pk)
 
     unrolled_count = encounter.participants.filter(
         initiative_score__isnull=True
@@ -2517,6 +2677,19 @@ def start_encounter(request, pk):
         p.save(update_fields=["conditions"])
         filled_count += 1
 
+    # v0.15.24 — strip the setup-only ``ready`` tag from every
+    # participant now that combat is active. The flag exists to gate
+    # the setup → active transition and has no in-combat semantics, so
+    # carrying it forward into the conditions list would just clutter
+    # the row pills. A single ``system`` log row is appended below if
+    # at least one tag was cleared.
+    cleared_ready_count = 0
+    for p in encounter.participants.all():
+        if "ready" in (p.conditions or []):
+            p.conditions = [c for c in p.conditions if c != "ready"]
+            p.save(update_fields=["conditions"])
+            cleared_ready_count += 1
+
     _log(
         encounter,
         "system",
@@ -2529,6 +2702,13 @@ def start_encounter(request, pk):
             "system",
             f"Magazines filled at combat start ({filled_count} participants).",
             filled_count=filled_count,
+        )
+    if cleared_ready_count > 0:
+        _log(
+            encounter,
+            "system",
+            "Ready flags cleared at combat start.",
+            cleared_ready_count=cleared_ready_count,
         )
     return redirect("combat:detail", pk=encounter.pk)
 

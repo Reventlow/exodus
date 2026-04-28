@@ -75,6 +75,16 @@ urlpatterns = [
     path("combat/<int:pk>/next-turn/", views.next_turn, name="next_turn"),
     path("combat/<int:pk>/end/", views.end_encounter, name="end"),
 
+    # v0.15.24 — Player-ready gate (setup only). GM or character owner
+    # toggles the ``ready`` tag on a Character participant; the START
+    # button refuses to fire while any character is unready (FORCE
+    # START checkbox bypasses for the GM).
+    path(
+        "combat/<int:pk>/participants/<int:participant_id>/ready/",
+        views.toggle_ready,
+        name="toggle_ready",
+    ),
+
     # POST — equip + cover + attack (v0.15.4)
     path(
         "combat/<int:pk>/participants/<int:participant_id>/equip-weapon/",

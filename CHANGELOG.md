@@ -1,5 +1,15 @@
 # Changelog
 
+## v0.15.24
+- **Player-ready gate** — every Character participant must toggle READY before the GM can start combat. Stops the encounter from going live before players have chosen their starting layout (weapons, armor, cover, prone, etc.)
+- READY button per row, visible only during setup, on Character participants only, gated on `p.can_control` (player on own row, GM on any character). Read-only `READY` / `NOT READY` chip visible on rows the user can't control — everyone at the table sees the state
+- **GM `FORCE START` override** — checkbox visible only when at least one character is unready; bypasses the gate for offline / unresponsive players
+- START button form shows a `READY: N / M CHARACTERS` summary; lists unready names so the GM can chase the holdouts
+- State stored as `"ready"` flat tag on `Participant.conditions` — no schema change. Auto-stripped from every participant when combat goes live (it's a setup-only flag). Rewinding via CLEAR INITIATIVE does NOT auto-re-ready — players opt back in
+- New CombatLog action_type: `ready_change`. Real-time WS fan-out picks up toggles automatically
+- NPCs and mooks don't need to ready up (GM-controlled)
+- Rules explainer at `/rules/combat/` ROUND STRUCTURE gains a READY GATE subsection
+
 ## v0.15.23
 - **Equipping a weapon costs the turn during active combat.** WoD 2.0: drawing or switching a weapon during a fight is an action. The rule is now enforced server-side on both `equip_weapon` and `equip_offhand`. Setup-phase prep stays free (the encounter hasn't started); concluded encounters also free (post-mortem cleanup)
 - **Unequipping is always free** — dropping a weapon is a WoD 2.0 free action. Only NEW equips trigger the cost

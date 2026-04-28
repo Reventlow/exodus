@@ -288,6 +288,56 @@ The END button also prompts for confirmation.
         margin-left: 0.4rem;
     }
 
+    /* v0.15.24 — Player-ready toggle (button on controllable rows,
+       static chip on read-only rows). Shares the clearance-gate
+       aesthetic with the rest of the combat surface — primary glow
+       when ready, dashed-border / muted ink when not. */
+    .part-ready-btn,
+    .part-ready-chip {
+        display: inline-block;
+        padding: 0.2rem 0.55rem;
+        font-family: var(--font-mono);
+        font-size: 0.7rem;
+        letter-spacing: 0.12em;
+        border: 1px solid var(--c-dim);
+        background: rgba(0, 0, 0, 0.3);
+        text-transform: uppercase;
+    }
+    .part-ready-btn { cursor: pointer; }
+    .part-ready-btn.ready,
+    .part-ready-chip.ready {
+        color: var(--c-primary);
+        border-color: var(--c-primary);
+        text-shadow: 0 0 6px var(--c-glow);
+    }
+    .part-ready-btn.not-ready,
+    .part-ready-chip.not-ready {
+        color: var(--ink-mute);
+        border-color: var(--c-dim);
+        border-style: dashed;
+    }
+    .part-ready-btn:hover { filter: brightness(1.15); }
+
+    /* v0.15.24 — readiness summary banner under the lifecycle action
+       strip. Shows READY: N / M CHARACTERS plus a muted "missing: X, Y"
+       hint so the GM can chase holdouts. */
+    .part-ready-summary {
+        font-family: var(--font-mono);
+        font-size: 0.72rem;
+        letter-spacing: 0.14em;
+        color: var(--ink-mute);
+        margin: 0.5rem 0 0.2rem 0;
+        padding: 0.35rem 0.5rem;
+        border: 1px dashed var(--c-dim);
+        background: rgba(0, 0, 0, 0.25);
+        text-transform: uppercase;
+    }
+    .part-ready-summary strong {
+        color: var(--c-primary);
+        text-shadow: 0 0 6px var(--c-glow);
+    }
+    .part-ready-summary .muted { color: var(--ink-dim); }
+
     /* Initiative tracker rows — like .part-row but with order index
        and score badge. */
     .init-list { margin-top: 0.4rem; }
@@ -871,8 +921,22 @@ The END button also prompts for confirmation.
                     {% endif %}
 
                     {% if unrolled_count == 0 and participants|length > 0 %}
+                        {% comment %}
+                        v0.15.24 — START form augmented with the
+                        FORCE START override (GM-only, only when at
+                        least one Character is unready). The server
+                        enforces the gate regardless; the checkbox
+                        just makes the override visible in the same
+                        form rather than a hidden GM URL parameter.
+                        {% endcomment %}
                         <form method="post" action="{% url 'combat:start' encounter.id %}" style="display:inline;">
                             {% csrf_token %}
+                            {% if is_gm and char_ready_count < char_total %}
+                                <label style="font-size: 0.7rem; margin-right: 0.4rem;">
+                                    <input type="checkbox" name="force_start" value="1">
+                                    FORCE START (override unready)
+                                </label>
+                            {% endif %}
                             <button type="submit" class="init-action-btn primary">START ENCOUNTER &rarr;</button>
                         </form>
                     {% else %}
@@ -925,6 +989,24 @@ The END button also prompts for confirmation.
                 <span class="init-note">ENCOUNTER CONCLUDED</span>
             {% endif %}
         </div>
+
+        {% comment %}
+        v0.15.24 — Player-ready summary. Visible only during setup
+        and only when at least one Character participant exists.
+        Lists READY: N / M CHARACTERS plus the unready holdouts (so
+        the GM can chase them at the table). NPCs / mooks are
+        excluded from both totals — they're GM-controlled and don't
+        gate the encounter start. Stripped automatically once the
+        encounter transitions to active.
+        {% endcomment %}
+        {% if encounter.status == "setup" and char_total > 0 %}
+            <div class="part-ready-summary">
+                READY: <strong>{{ char_ready_count }}</strong> / {{ char_total }} CHARACTERS
+                {% if char_ready_count < char_total %}
+                    <span class="muted">&mdash; missing: {{ unready_names_csv }}</span>
+                {% endif %}
+            </div>
+        {% endif %}
 
         {# Initiative roster — sorted by score desc, id asc, nulls last. #}
         <div class="init-list">
