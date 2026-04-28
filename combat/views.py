@@ -1814,9 +1814,15 @@ def encounter_list_page(request):
     if request.user.is_superuser:
         encounters = Encounter.objects.all().prefetch_related("participants")
     else:
+        # v0.15.28 — players never see hidden encounters. The
+        # ``is_hidden=False`` clause is the first of three independent
+        # gates (this list filter, the detail-page 403, and the WS
+        # consumer 4404) so a hand-crafted POST or direct URL still
+        # bounces.
         encounters = (
             Encounter.objects.filter(
-                participants__character__owner=request.user
+                participants__character__owner=request.user,
+                is_hidden=False,
             )
             .distinct()
             .prefetch_related("participants")
@@ -1879,12 +1885,17 @@ def encounter_page(request, pk):
     # Authorisation gate. Superusers always pass. Player participants
     # are admitted to drive their own row(s); everybody else is
     # rejected.
+    #
+    # v0.15.28 — hidden encounters reject all non-GM access here too.
+    # 403 (not 404) is intentional: same response shape as the
+    # not-a-participant block above, so neither code path leaks
+    # encounter existence to a fishing player.
     is_gm = request.user.is_superuser
     if not is_gm:
         is_player_participant = encounter.participants.filter(
             character__owner=request.user
         ).exists()
-        if not is_player_participant:
+        if not is_player_participant or encounter.is_hidden:
             return HttpResponseForbidden("ACCESS DENIED.")
 
     # Participants split by faction so the three columns can each
@@ -2254,11 +2265,28 @@ def encounter_create(request):
 
     v0.15.7: also reads optional ``story_idea_id`` from the form. Blank
     or unknown values fall through to ``None`` (no story arc).
+
+    v0.15.28: new encounters default to ``is_hidden=True`` (the GM-prep
+    workflow — set up scene / participants / equipment in private,
+    then RELEASE TO PLAYERS). The form override here pins the default;
+    the model-level default of ``False`` only kicks in for migration
+    backfill on existing rows. An explicit ``is_hidden=0`` POST flips
+    the new row to published immediately — supported but unusual.
     """
     if request.method != "POST":
         return HttpResponseNotAllowed(["POST"])
 
     story_idea = _resolve_story_idea(request.POST.get("story_idea_id"))
+
+    # v0.15.28 — new-encounter visibility default.
+    # Truthy / missing → True (hidden, the prep workflow).
+    # Explicit "0" → False (published immediately).
+    raw_hidden = request.POST.get("is_hidden")
+    if raw_hidden == "0":
+        is_hidden = False
+    else:
+        is_hidden = True
+
     encounter = Encounter.objects.create(
         title=request.POST.get("title", "").strip() or "Untitled Encounter",
         scene_description=request.POST.get("scene_description", "").strip(),
@@ -2267,10 +2295,15 @@ def encounter_create(request):
         status="setup",
         round_number=0,
         story_idea=story_idea,
+        is_hidden=is_hidden,
     )
     # First log row is always sequence=1; seed via the helper so the
     # invariant holds even if a future migration backfills history.
-    _log(encounter, "system", "Encounter created.")
+    _log(
+        encounter,
+        "system",
+        "Encounter created (HIDDEN)." if is_hidden else "Encounter created (PUBLISHED).",
+    )
     return redirect("combat:detail", pk=encounter.pk)
 
 
@@ -2301,6 +2334,24 @@ def encounter_update(request, pk):
     if "story_idea_id" in request.POST:
         encounter.story_idea = _resolve_story_idea(request.POST.get("story_idea_id"))
         update_fields.append("story_idea")
+    # v0.15.28 — visibility toggle via the EDIT form.
+    # The form sends a hidden marker ``is_hidden_submitted=1`` so an
+    # unrelated update path (title-only edits, scene tweaks, the
+    # surprise-round flag) doesn't accidentally republish a hidden
+    # encounter on save. Only mutate when the marker is present.
+    # A flipped value gets its own ``is_hidden_change`` log row with
+    # before/after booleans — the dedicated RELEASE / HIDE endpoints
+    # also write a ``system`` row for the state transition.
+    is_hidden_changed = False
+    is_hidden_before = None
+    is_hidden_after = None
+    if "is_hidden_submitted" in request.POST:
+        is_hidden_before = bool(encounter.is_hidden)
+        is_hidden_after = request.POST.get("is_hidden") == "1"
+        if is_hidden_before != is_hidden_after:
+            encounter.is_hidden = is_hidden_after
+            update_fields.append("is_hidden")
+            is_hidden_changed = True
     # v0.15.26 — surprise round flag. Lives in the metadata JSONField
     # (no schema change). Only mutated when the form actually carries
     # the ``surprise_round_submitted`` marker so unrelated update
@@ -2316,6 +2367,82 @@ def encounter_update(request, pk):
     encounter.save(update_fields=update_fields)
 
     _log(encounter, "system", "Encounter metadata updated.")
+    if is_hidden_changed:
+        # Defense-in-depth: emit a structured action_type so an audit
+        # trail of every visibility flip exists, even if the operator
+        # used the EDIT form rather than the dedicated RELEASE / HIDE
+        # buttons. Payload mirrors the before/after pattern used by
+        # other change rows.
+        _log(
+            encounter,
+            "is_hidden_change",
+            (
+                "Encounter hidden — players can no longer see it."
+                if is_hidden_after
+                else "Encounter released — players can now see it."
+            ),
+            before=is_hidden_before,
+            after=is_hidden_after,
+        )
+    return redirect("combat:detail", pk=encounter.pk)
+
+
+@login_required
+@_gm_only
+@csrf_protect
+@transaction.atomic
+def release_encounter(request, pk):
+    """POST — flip ``is_hidden`` False (publish) on an encounter.
+
+    v0.15.28 — one-click GM action surfaced as ``RELEASE TO PLAYERS``
+    on the encounter detail page. No-op when the encounter is already
+    published. Always writes a ``system`` log row on the transition so
+    the audit trail captures the publish event even when called more
+    than once. Players whose characters are participants will see the
+    encounter in their ``/combat/`` list and can spectate per the
+    existing v0.15.7 visibility logic from this point on.
+    """
+    if request.method != "POST":
+        return HttpResponseNotAllowed(["POST"])
+
+    encounter = get_object_or_404(Encounter, pk=pk)
+    if encounter.is_hidden:
+        encounter.is_hidden = False
+        encounter.save(update_fields=["is_hidden", "updated_at"])
+        _log(
+            encounter,
+            "system",
+            "Encounter released — players can now see it.",
+        )
+    return redirect("combat:detail", pk=encounter.pk)
+
+
+@login_required
+@_gm_only
+@csrf_protect
+@transaction.atomic
+def hide_encounter(request, pk):
+    """POST — flip ``is_hidden`` True (re-hide) on an encounter.
+
+    v0.15.28 — rare GM action, surfaced as ``HIDE AGAIN`` on the
+    encounter detail page. Useful for "I made a mistake" recoveries
+    after an accidental release; players who already loaded the page
+    keep their copy until they refresh, but the next list query, the
+    next detail-page hit, and any new WS subscription all bounce.
+    No-op when already hidden.
+    """
+    if request.method != "POST":
+        return HttpResponseNotAllowed(["POST"])
+
+    encounter = get_object_or_404(Encounter, pk=pk)
+    if not encounter.is_hidden:
+        encounter.is_hidden = True
+        encounter.save(update_fields=["is_hidden", "updated_at"])
+        _log(
+            encounter,
+            "system",
+            "Encounter hidden — players can no longer see it.",
+        )
     return redirect("combat:detail", pk=encounter.pk)
 
 

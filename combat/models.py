@@ -86,6 +86,21 @@ class Encounter(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
+    # v0.15.28 — GM-prep gate. New encounters created via the web form
+    # default to ``True`` (set explicitly in ``encounter_create``); the
+    # field-level default is ``False`` so the migration backfill keeps
+    # existing rows visible on upgrade. Toggle via the RELEASE / HIDE
+    # AGAIN buttons on the encounter detail page.
+    is_hidden = models.BooleanField(
+        default=False,
+        help_text=(
+            "If True, the encounter is GM-prep only — players don't see it "
+            "in their list, can't access the detail page, and the WS "
+            "consumer rejects their subscription. Toggle visibility via the "
+            "RELEASE / HIDE button on the encounter detail page."
+        ),
+    )
+
     class Meta:
         ordering = ["-created_at"]
 

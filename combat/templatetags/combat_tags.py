@@ -40,12 +40,21 @@ def has_combat_visibility(user):
       Participant in any encounter (active, setup, or concluded — the
       detail page renders concluded encounters in read-only mode too,
       so historical access is preserved).
+
+    v0.15.28 — hidden-encounter participations don't count. A player
+    whose only character participation lives on a still-prepping
+    encounter doesn't see the COMBAT nav link until the GM releases
+    it. Without this clause the link would tip players off that an
+    encounter is being prepared, defeating the whole prep-gate.
     """
     if not getattr(user, "is_authenticated", False):
         return False
     if user.is_superuser:
         return True
-    return Participant.objects.filter(character__owner=user).exists()
+    return Participant.objects.filter(
+        character__owner=user,
+        encounter__is_hidden=False,
+    ).exists()
 
 
 @register.simple_tag

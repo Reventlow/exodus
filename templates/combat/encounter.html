@@ -70,6 +70,26 @@ The END button also prompts for confirmation.
         text-shadow: 0 0 6px rgba(239, 68, 68, 0.45);
     }
 
+    /* v0.15.28 — hidden-encounter banner.
+       Amber border + glow + monospace, mirroring the WP / IMPERSONATING
+       chip aesthetic so it reads as a clearance gate rather than a
+       danger state. Only ever rendered to the GM, since players can't
+       reach a hidden encounter's detail page in the first place
+       (encounter_page returns 403). */
+    .enc-hidden-banner {
+        display: inline-block;
+        margin-right: 0.5rem;
+        padding: 0.4rem 0.9rem;
+        border: 1px solid #ffb454;
+        color: #ffb454;
+        font-family: var(--font-mono);
+        font-size: 0.72rem;
+        letter-spacing: 0.16em;
+        text-transform: uppercase;
+        text-shadow: 0 0 6px rgba(255, 180, 84, 0.45);
+        box-shadow: inset 0 0 10px rgba(255, 180, 84, 0.10);
+    }
+
     /* Hidden edit form, toggled by toggleEditForm() */
     .enc-edit-form { display: none; margin-top: 1rem; padding-top: 1rem; border-top: 1px dashed var(--c-dim); }
     .enc-edit-form.open { display: block; }
@@ -815,6 +835,33 @@ The END button also prompts for confirmation.
                     </a>
                 {% else %}
                     <span>{{ encounter.story_idea.title|upper }}</span>
+                {% endif %}
+            </div>
+        {% endif %}
+
+        {% comment %}
+        v0.15.28 — hidden-encounter clearance row. The banner +
+        RELEASE button (or HIDE AGAIN button when published) sits
+        above the BACK / EDIT / DELETE row so it's the first thing
+        the GM sees on a prep-state encounter. Players never reach
+        this template on a hidden encounter (encounter_page returns
+        403), so the banner block is implicitly GM-only — but we
+        still gate on ``is_gm`` for clarity.
+        {% endcomment %}
+        {% if is_gm %}
+            <div class="enc-actions" style="margin-top: 0.6rem;">
+                {% if encounter.is_hidden %}
+                    <span class="enc-hidden-banner">&#x1F512; HIDDEN — PLAYERS CANNOT SEE THIS YET</span>
+                    <form method="post" action="{% url 'combat:release' encounter.id %}" style="display:inline;">
+                        {% csrf_token %}
+                        <button type="submit" class="btn-primary">RELEASE TO PLAYERS</button>
+                    </form>
+                {% else %}
+                    <form method="post" action="{% url 'combat:hide' encounter.id %}" style="display:inline;"
+                          onsubmit="return confirm('Re-hide this encounter? Players who already loaded the page keep their copy until they refresh.');">
+                        {% csrf_token %}
+                        <button type="submit" class="enc-action-btn">&#x1F512; HIDE AGAIN</button>
+                    </form>
                 {% endif %}
             </div>
         {% endif %}

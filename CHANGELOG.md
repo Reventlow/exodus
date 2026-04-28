@@ -1,5 +1,15 @@
 # Changelog
 
+## v0.15.28
+- **Hidden encounters** for GM prep. New encounters default to `is_hidden=True` — only the GM can see them while preparing scene, participants, equipment, conditions. RELEASE TO PLAYERS button publishes; HIDE AGAIN re-hides (rare)
+- Players don't see hidden encounters in their `/combat/` list, can't access the detail page (403), and the WS consumer rejects their subscription (close 4404). Three independent gates so a tampered POST or direct URL access still bounces
+- The COMBAT nav link's `has_combat_visibility` template tag also excludes hidden-encounter participations — a player whose only participation is in a hidden encounter doesn't see the link until release
+- Migration `combat/0004_encounter_is_hidden` adds the field with `default=False` so existing in-flight encounters remain visible after the migration applies. Form override sets `True` on new creates
+- New CombatLog action types: `is_hidden_change` (on field flip via the EDIT form, with `before` / `after` boolean payload), plus the lifecycle `system` rows on RELEASE / HIDE AGAIN
+- Rules explainer at `/rules/combat/` ROUND STRUCTURE gains a HIDDEN ENCOUNTERS paragraph
+- New URLs: `combat:release` at `combat/<pk>/release/`, `combat:hide` at `combat/<pk>/hide/`. Both GM-only, idempotent, redirect back to detail
+- Detail-page header gains an amber "🔒 HIDDEN — players cannot see this yet" banner + RELEASE TO PLAYERS button while hidden, or a muted HIDE AGAIN button while published. Aesthetic matches the WP / IMPERSONATING chip pattern (amber border + glow + monospace)
+
 ## v0.15.27
 - **Removed mooks from `/rules/combat/`.** The STOCK ADVERSARIES section (table of mook stat-block templates) is gone — the catalogue is GM-facing infrastructure, not player-facing rules. Two flow-text mentions also scrubbed: the READY GATE bullet now reads "NPCs don't ready up" (was "NPCs and mooks"), and the KNOCKDOWN CONTEST bullet drops the `mook_combat_pool / 3` parenthetical
 - The implementation still uses the `mook` participant kind internally (catalogue-spawned adversaries; no FK to Character/NPC; stat block on the row directly). The settings UI `/settings/ → COMBAT → Combat NPCs` still exists for GM template management. Players just don't see the term anymore on the rules page

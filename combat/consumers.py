@@ -77,6 +77,22 @@ class EncounterConsumer(WebsocketConsumer):
         #   in encounter_page so WS visibility never widens the
         #   surface beyond the page view).
         if not user.is_superuser:
+            # v0.15.28 — hidden encounters reject all non-GM
+            # subscriptions. Placed *before* the per-character
+            # participant check so the more-restrictive filter wins:
+            # a player whose character was added to a hidden encounter
+            # during prep still can't subscribe until the GM clicks
+            # RELEASE TO PLAYERS. 4404 mirrors the 4403 / 4404 pattern
+            # already used in this consumer — generic "not found / no
+            # access" so we don't leak whether the encounter exists.
+            from .models import Encounter  # local import — avoid loading cycle
+            enc = Encounter.objects.filter(
+                pk=encounter_id, is_hidden=False
+            ).first()
+            if enc is None:
+                self.close(code=4404)
+                return
+
             # Local import to avoid an app-loading cycle: this module
             # is imported by combat/views.py at module load time.
             from .models import Participant

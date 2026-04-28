@@ -22,7 +22,16 @@
     <div class="text-secondary" style="font-size: 0.9rem; line-height: 1.7; margin: 0.6rem 0 1.6rem 0;">
         <p style="margin: 0 0 0.5rem 0;"><span class="mono-text text-accent">▸ INITIATIVE</span> &nbsp;— roll once at scene start. Pool = <strong>Dexterity + Composure</strong>. Highest acts first; ties resolve by Composure, then Dexterity. Surprise bypasses Defense for the entire first round if the target was unaware.</p>
         <p style="margin: 0 0 0.5rem 0;"><span class="mono-text text-accent">▸ TURN</span> &nbsp;— on your initiative you may take <strong>one</strong> action (an attack, a discipline of magic, a complex maneuver) plus any number of free actions (talking, dropping prone, dropping a weapon). Reflexive defense and dodge do not consume the turn. <em>Drawing or switching a weapon mid-fight is an action</em> — see ACTION COSTS below.</p>
-        <p style="margin: 0;"><span class="mono-text text-accent">▸ END OF ROUND</span> &nbsp;— resolve ongoing effects (bleeding, fire, poison), tick durations down, repeat from the top.</p>
+        <p style="margin: 0 0 0.5rem 0;"><span class="mono-text text-accent">▸ END OF ROUND</span> &nbsp;— resolve ongoing effects (bleeding, fire, poison), tick durations down, repeat from the top.</p>
+        {% comment %}
+        v0.15.28 — HIDDEN ENCOUNTERS paragraph. Sits at the tail of
+        ROUND STRUCTURE so the GM-prep workflow is documented next
+        to the rest of the lifecycle rules. Server enforcement lives
+        across three independent gates (list-view filter, detail-page
+        403, WS consumer 4404) — the player-facing rule is just "you
+        won't see it until the GM clicks RELEASE".
+        {% endcomment %}
+        <p style="margin: 0;"><span class="mono-text text-accent">▸ HIDDEN ENCOUNTERS</span> &nbsp;— new encounters start <strong>hidden</strong>: only the GM can see them while preparing the scene, participants, equipment, and conditions. The GM clicks <span class="mono-text text-accent">RELEASE TO PLAYERS</span> to publish; from that point, players whose characters are participants see the encounter in their <code>/combat/</code> list, can read-only spectate, and receive live updates. The GM can re-hide a published encounter via the <span class="mono-text text-accent">&#x1F512; HIDE AGAIN</span> button (rare — players already saw it, so the experience is jarring; reserved for "I made a mistake" recoveries).</p>
     </div>
 
     {% comment %}

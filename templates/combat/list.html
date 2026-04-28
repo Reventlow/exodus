@@ -150,6 +150,17 @@ self-contained.
         <summary>NEW ENCOUNTER</summary>
         <form method="post" action="{% url 'combat:create' %}" style="margin-top: 0.75rem;">
             {% csrf_token %}
+            {% comment %}
+            v0.15.28 — new encounters default to HIDDEN. The
+            ``encounter_create`` view treats a missing ``is_hidden``
+            POST field as True, so no explicit input is needed here;
+            this note just reminds the GM about the prep-gate
+            workflow.
+            {% endcomment %}
+            <div class="muted" style="font-size: 0.7rem; letter-spacing: 0.14em; margin-bottom: 0.4rem;">
+                NEW ENCOUNTERS ARE <span style="color: #ffb454;">HIDDEN</span> BY DEFAULT — RELEASE WHEN READY.
+            </div>
+
             <label class="field-label" for="enc-title">TITLE</label>
             <input class="ss-input" type="text" id="enc-title" name="title"
                    maxlength="200" required placeholder="OP NAME / SCENE">
@@ -206,6 +217,18 @@ self-contained.
                         <a href="{% url 'combat:detail' enc.id %}" style="color: var(--ink); text-decoration: none;">
                             {{ enc.title|upper }}
                         </a>
+                        {% comment %}
+                        v0.15.28 — HIDDEN pill. Only the GM ever sees
+                        a hidden row in this list (the player branch
+                        of the view filters them out), but we still
+                        gate the pill render on ``is_gm`` for safety
+                        — any future loosening of the list filter
+                        won't accidentally leak the prep state to
+                        players.
+                        {% endcomment %}
+                        {% if is_gm and enc.is_hidden %}
+                            <span class="part-cond-pill amber" style="margin-left: 0.5rem;">&#x1F512; HIDDEN</span>
+                        {% endif %}
                         {% if enc.location_text %}
                         <div class="muted" style="font-size: 0.65rem; margin-top: 2px;">
                             {{ enc.location_text }}

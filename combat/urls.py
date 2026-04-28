@@ -38,6 +38,11 @@ urlpatterns = [
     path("combat/create/", views.encounter_create, name="create"),
     path("combat/<int:pk>/update/", views.encounter_update, name="update"),
     path("combat/<int:pk>/delete/", views.encounter_delete, name="delete"),
+    # v0.15.28 — visibility toggle. RELEASE flips ``is_hidden`` False
+    # (publish to players), HIDE flips it True (rare; "I made a
+    # mistake" recovery). Both are GM-only and idempotent.
+    path("combat/<int:pk>/release/", views.release_encounter, name="release"),
+    path("combat/<int:pk>/hide/", views.hide_encounter, name="hide"),
 
     # POST — participant CRUD
     path(
