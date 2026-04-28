@@ -766,6 +766,97 @@ def _has_ambidextrous_merit(actor):
     return False
 
 
+# ---------------------------------------------------------------------------
+# v0.15.21 — per-skill dice merits (Martial Arts, Fencing)
+# ---------------------------------------------------------------------------
+#
+# Two character merits in the catalogue grant ``+rating`` dice on
+# attack rolls when the resolved skill matches:
+#
+#   * Martial Arts → Brawl    (unarmed strikes, grapples)
+#   * Fencing      → Weaponry (melee weapons — knives, swords, batons)
+#
+# Detection runs on the canonical ``Character.character_merits`` /
+# ``NPC.npc_merits`` through-tables (named accordingly per
+# ``CharacterMerit.Meta.related_name`` / ``NpcMerit.Meta.related_name``).
+# Mooks have no merits and always skip. The legacy ``merits_old``
+# JSONField stores names without ratings, so it cannot reliably drive
+# a per-rating bonus and is intentionally NOT consulted here.
+
+SKILL_MERIT_MAP = {
+    "Brawl":    "Martial Arts",
+    "Weaponry": "Fencing",
+}
+"""Skill name → merit name. When the actor's resolved attack skill
+matches a key, the corresponding merit's rating contributes
+``+rating`` dice to the attack pool. Reverse-lookup-friendly because
+each merit binds to exactly one skill in v0.15.21."""
+
+
+def _skill_merit_bonus(actor, skill_name):
+    """Return ``(merit_name, rating)`` when the actor has a per-skill
+    dice merit matching ``skill_name``. Returns ``(None, 0)`` on no
+    match.
+
+    Reads the through-row's ``rating`` field via
+    ``Character.character_merits`` / ``NPC.npc_merits``; the legacy
+    ``merits_old`` JSON list has no rating field, so it can't drive a
+    per-rating bonus reliably and is skipped entirely.
+
+    Skip-paths (each returns ``(None, 0)`` silently — server is
+    authoritative, so a missing merit must NEVER apply a bonus):
+
+    * Mook actors (no character / NPC sheet, no merits attached).
+    * ``skill_name`` empty / whitespace / ``None``.
+    * ``skill_name`` not in ``SKILL_MERIT_MAP`` (e.g. Firearms,
+      Athletics — those don't bind to a per-skill dice merit).
+    * Source FK is ``None`` (Character/NPC was deleted with
+      ``on_delete=SET_NULL``).
+    * Source has the merit catalogue row attached but the through-row
+      has rating == 0 (defensive — the catalogue's min_cost should be
+      1, but a hand-edited DB row could land here).
+    """
+    if actor.participant_kind == "mook":
+        return None, 0
+    if not skill_name:
+        return None, 0
+    skill_clean = skill_name.strip()
+    if not skill_clean:
+        return None, 0
+    # Direct hit on the canonical map; fall back to a case-insensitive
+    # walk if the resolved skill string drifts in casing (e.g. the
+    # player typed "brawl" by hand into the SKILL field).
+    target_merit = SKILL_MERIT_MAP.get(skill_clean)
+    if not target_merit:
+        for k, v in SKILL_MERIT_MAP.items():
+            if k.lower() == skill_clean.lower():
+                target_merit = v
+                break
+    if not target_merit:
+        return None, 0
+    source = actor.character or actor.npc
+    if source is None:
+        return None, 0
+    # Resolve the through-row directly. ``character_merits`` is the
+    # related_name on ``CharacterMerit`` (characters/models.py:155-157);
+    # ``npc_merits`` is the related_name on ``NpcMerit``
+    # (npcs/models.py:103-110). Both expose the chosen ``rating`` int.
+    # Filter on the catalogue's ``name`` (case-insensitive) via the FK.
+    if actor.participant_kind == "character":
+        link = source.character_merits.filter(
+            merit__name__iexact=target_merit
+        ).first()
+    elif actor.participant_kind == "npc":
+        link = source.npc_merits.filter(
+            merit__name__iexact=target_merit
+        ).first()
+    else:
+        return None, 0
+    if link is None or not link.rating:
+        return None, 0
+    return target_merit, int(link.rating)
+
+
 # v0.15.15 — rounds-fired-per-burst-mode lookup. Mirrors the
 # ``BURST_BONUSES`` dice-bonus table but in the inverse direction
 # (cost rather than benefit). Keep these two tables aligned: any
@@ -1164,9 +1255,19 @@ def _attack_preview(actor, weapon_data, gm_modifier, weapon_skill_name=""):
     cond_mod = _condition_attack_modifier(actor)
     gm_mod = _safe_int(gm_modifier, 0)
 
+    # v0.15.21 — per-skill dice merits (Martial Arts / Fencing). Same
+    # helper used by ``_attack_dice_pool``, so the preview's ``total``
+    # exactly matches the pool the resolver will compute on submit.
+    # Bonus is exposed as separate keys so the template can render
+    # ``MARTIAL ARTS +N`` / ``FENCING +N`` on the breakdown line.
+    skill_merit_name, skill_merit_bonus = _skill_merit_bonus(
+        actor, skill_name
+    )
+
     total = max(
         0,
-        base + skill_value + weapon_dice + wound_pen + cond_mod + gm_mod,
+        base + skill_value + weapon_dice + wound_pen + cond_mod + gm_mod
+        + skill_merit_bonus,
     )
 
     # v0.15.10 — surface the actor's specialisations relevant to the
@@ -1209,6 +1310,12 @@ def _attack_preview(actor, weapon_data, gm_modifier, weapon_skill_name=""):
         "burst_options":    burst_options,
         "auto_capable":     auto_capable,
         "burst_bonus":      0,   # preview is single-fire; JS recomputes live
+        # v0.15.21 — per-skill dice merit breakdown. ``skill_merit_name``
+        # is None when the bonus isn't firing; the template renders the
+        # ``MARTIAL ARTS +N`` segment only when ``skill_merit_bonus``
+        # is non-zero. ``total`` already has the bonus baked in.
+        "skill_merit_name":  skill_merit_name,
+        "skill_merit_bonus": skill_merit_bonus,
         "total":            total,
     }
 
@@ -1297,6 +1404,14 @@ def _attack_dice_pool(actor, weapon_data, gm_modifier, weapon_skill_name=""):
     Firearms / Brawl / Weaponry without specifying the tier). The
     weapon's dice modifier (catalogue field, optional) and the GM's
     free-form signed integer modifier are applied last.
+
+    v0.15.21 — when the resolved attack skill matches a per-skill
+    dice merit (Brawl → Martial Arts, Weaponry → Fencing) and the
+    actor has the merit attached, ``+rating`` dice are added to the
+    pool. Defense in depth lives in ``_skill_merit_bonus`` — mooks,
+    missing source FK, missing merit, and rating == 0 all silently
+    yield zero. Non-attack rolls (dodge, initiative) bypass this
+    helper entirely and never receive the bonus.
     """
     base = 0
     if actor.participant_kind == "mook":
@@ -1324,7 +1439,14 @@ def _attack_dice_pool(actor, weapon_data, gm_modifier, weapon_skill_name=""):
                     except (KeyError, TypeError, ValueError):
                         continue
     weapon_dice = _safe_int((weapon_data or {}).get("dice_modifier"), 0)
-    return base + weapon_dice + gm_modifier
+    # v0.15.21 — per-skill dice merits (Martial Arts / Fencing). The
+    # helper returns ``(None, 0)`` for any non-matching path so the
+    # add is a no-op when the merit isn't present. The bonus is
+    # baked into the pre-cover, pre-defense base pool here so every
+    # caller (``_actor_total_pool``, ``_attack_preview``, off-hand
+    # composition in the dual-attack branch) inherits it for free.
+    _, skill_merit_bonus = _skill_merit_bonus(actor, weapon_skill_name)
+    return base + weapon_dice + gm_modifier + skill_merit_bonus
 
 
 def _compute_initiative(participant):
@@ -3226,6 +3348,23 @@ def _resolve_single_attack(
     # meaning "no Gun Fu spend on this target").
     extra_payload.setdefault("gun_fu_bonus_successes", gun_fu_bonus)
 
+    # v0.15.21 — per-skill dice merit (Martial Arts / Fencing) tail
+    # and payload. The bonus is already baked into ``attack_pool`` via
+    # ``_attack_dice_pool``; here we re-derive the (name, rating) pair
+    # purely for log surface and payload keys. Empty tail when no
+    # bonus fires; payload keys are always present (None / 0) so
+    # timeline filters can read them without absence-checking.
+    skill_merit_name, skill_merit_bonus = _skill_merit_bonus(
+        attacker, weapon_skill
+    )
+    skill_merit_tail = (
+        f" ({skill_merit_name.upper()} +{skill_merit_bonus})"
+        if skill_merit_bonus > 0 and skill_merit_name
+        else ""
+    )
+    extra_payload.setdefault("skill_merit_name", skill_merit_name)
+    extra_payload.setdefault("skill_merit_bonus", int(skill_merit_bonus))
+
     defense = _compute_defense(target)
     cover_pen = _cover_penalty(target.cover_state)
 
@@ -3280,7 +3419,7 @@ def _resolve_single_attack(
             encounter,
             "attack",
             f"{attacker.name} → {target.name}: BLOCKED BY FULL COVER."
-            + msg_tail + spread_tail + gun_fu_tail,
+            + msg_tail + spread_tail + gun_fu_tail + skill_merit_tail,
             **payload,
         )
         return
@@ -3315,7 +3454,7 @@ def _resolve_single_attack(
             encounter,
             "attack",
             f"{attacker.name} attacks {target.name}: missed."
-            + msg_tail + spread_tail + gun_fu_tail,
+            + msg_tail + spread_tail + gun_fu_tail + skill_merit_tail,
             **payload,
         )
         return
@@ -3373,14 +3512,14 @@ def _resolve_single_attack(
         encounter,
         "attack",
         f"{attacker.name} hits {target.name} for {final_damage} {type_label} damage."
-        + msg_tail + spread_tail + gun_fu_tail,
+        + msg_tail + spread_tail + gun_fu_tail + skill_merit_tail,
         **payload,
     )
     _log(
         encounter,
         "health_change",
         f"{target.name} takes {final_damage} {type_label} damage."
-        + spread_tail + gun_fu_tail,
+        + spread_tail + gun_fu_tail + skill_merit_tail,
         **payload,
     )
 

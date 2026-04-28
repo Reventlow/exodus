@@ -227,6 +227,26 @@
         <p style="margin: 0;"><span class="mono-text text-accent">▸ MERITS</span> &nbsp;— <em>Increased Pain Threshold</em> reduces wound penalty by 1; <em>Pain Tolerance</em> ignores wound penalties entirely. Merits are not yet auto-detected by combat (planned for a later release) — the GM applies the adjustment by hand on hurt characters' rolls.</p>
     </div>
 
+    {% comment %}
+    v0.15.21 — SKILL-DICE MERITS subsection. Sits between WOUND
+    PENALTIES and AIMING because, like wound penalties, this is a
+    passive every-attack modifier — no checkbox, no input, the server
+    detects the merit via the canonical ``character_merits`` /
+    ``npc_merits`` through-table and bakes the bonus into the pool
+    automatically. Distinct from AIMING / BURST FIRE (player-driven
+    inputs) and from GUN FU (consumable per-session resource).
+    {% endcomment %}
+    <h4 class="mono-text text-accent" style="font-size: 0.85rem; letter-spacing: 0.2em; margin: 1.2rem 0 0.4rem 0;">SKILL-DICE MERITS — MARTIAL ARTS, FENCING</h4>
+    <div class="text-secondary" style="font-size: 0.85rem; line-height: 1.7; margin: 0 0 1rem 0;">
+        <p style="margin: 0 0 0.4rem 0;"><span class="mono-text text-accent">▸ AUTO-APPLIED</span> &nbsp;— no checkbox, no input. The server detects the merit on the actor's sheet and adds <strong>+rating dice</strong> to the attack pool when the attack's resolved skill matches. If the attack uses a different skill, the merit doesn't fire — the bonus is targeted, not generic.</p>
+        <p style="margin: 0 0 0.4rem 0;"><span class="mono-text text-accent">▸ MARTIAL ARTS → BRAWL</span> &nbsp;— +rating dice on every attack resolved with the <strong>Brawl</strong> skill: unarmed strikes, grapples, improvised-by-fist attacks, and any weapon whose category resolves to Brawl.</p>
+        <p style="margin: 0 0 0.4rem 0;"><span class="mono-text text-accent">▸ FENCING → WEAPONRY</span> &nbsp;— +rating dice on every attack resolved with the <strong>Weaponry</strong> skill: melee weapons (knives, batons, swords, hammers, axes, etc.) and improvised weapons that auto-pick to Weaponry.</p>
+        <p style="margin: 0 0 0.4rem 0;"><span class="mono-text text-accent">▸ STACKS WITH</span> &nbsp;— the underlying skill rating, the weapon's dice modifier, any matching specialisations, willpower spend, and aim. Wound and condition penalties still subtract afterwards. Off-hand attacks honour the bonus too — a Fencing duellist with a knife in each hand applies the bonus to both rolls.</p>
+        <p style="margin: 0 0 0.4rem 0;"><span class="mono-text text-accent">▸ DETECTION</span> &nbsp;— canonical <code>Character.character_merits</code> (or <code>NPC.npc_merits</code>) M2M to <code>MeritDefinition</code>, case-insensitive name match, plus the through-row's <code>rating</code> field. Mooks have no merits and never receive the bonus. The legacy <code>merits_old</code> JSONField has no rating field and is intentionally NOT consulted — re-attach the merit canonically to drive the bonus.</p>
+        <p style="margin: 0 0 0.4rem 0;"><span class="mono-text text-accent">▸ NON-ATTACK ROLLS</span> &nbsp;— dodge and initiative do <strong>not</strong> route through the attack pool helper, so neither merit fires on those rolls. Future skill-roll surfaces (e.g. melee parry rolls) will need explicit wiring if they want the bonus.</p>
+        <p style="margin: 0;"><span class="mono-text text-accent">▸ TIMELINE + UI</span> &nbsp;— the attack form's breakdown line shows <code>+ MARTIAL ARTS N</code> / <code>+ FENCING N</code> after WEAPON when the bonus fires. The attack log payload carries <code>skill_merit_name</code> (str or null) and <code>skill_merit_bonus</code> (int) on every row, with a <code>(MARTIAL ARTS +N)</code> / <code>(FENCING +N)</code> message tail when bonus &gt; 0.</p>
+    </div>
+
     <h4 class="mono-text text-accent" style="font-size: 0.85rem; letter-spacing: 0.2em; margin: 1.2rem 0 0.4rem 0;">AIMING</h4>
     <div class="text-secondary" style="font-size: 0.85rem; line-height: 1.7; margin: 0 0 1rem 0;">
         <p style="margin: 0 0 0.4rem 0;"><span class="mono-text text-accent">▸ COST</span> &nbsp;— spends your full turn against a specific named target. The pointer does <em>not</em> auto-advance; the GM steps the round forward when ready.</p>

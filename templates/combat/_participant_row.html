@@ -564,13 +564,23 @@ dodge), ADD CONDITION, WILLPOWER.
                             ATTACK POOL: <strong>{{ p.attack_preview.total }}</strong> DICE
                             <span class="muted">(against unmodified target / no cover / no WP)</span>
                         </div>
+                        {% comment %}
+                        v0.15.21 — per-skill dice merits (Martial Arts /
+                        Fencing) surface inline as ``+ MARTIAL ARTS N`` /
+                        ``+ FENCING N`` after WEAPON. The bonus is already
+                        baked into the LIVE TOTAL via the server-side
+                        preview ``total``; this segment is a label-only
+                        breakdown line. Mooks never have it (helper
+                        returns 0 for mook actors), so the same conditional
+                        works in both branches without divergence.
+                        {% endcomment %}
                         {% if p.participant_kind == "mook" %}
                             <div style="font-size: 0.65rem; color: var(--c-dim); margin-top: 0.2rem;">
-                                └─ MOOK POOL {{ p.attack_preview.base }}{% if p.attack_preview.wound_penalty %}  WOUND {{ p.attack_preview.wound_penalty }}{% endif %}{% if p.attack_preview.condition_mod %}  COND {{ p.attack_preview.condition_mod }}{% endif %}
+                                └─ MOOK POOL {{ p.attack_preview.base }}{% if p.attack_preview.skill_merit_bonus %}  + {{ p.attack_preview.skill_merit_name|upper }} {{ p.attack_preview.skill_merit_bonus }}{% endif %}{% if p.attack_preview.wound_penalty %}  WOUND {{ p.attack_preview.wound_penalty }}{% endif %}{% if p.attack_preview.condition_mod %}  COND {{ p.attack_preview.condition_mod }}{% endif %}
                             </div>
                         {% else %}
                             <div style="font-size: 0.65rem; color: var(--c-dim); margin-top: 0.2rem;">
-                                └─ DEX/POOL {{ p.attack_preview.base }}  + {{ p.attack_preview.skill_name }} {{ p.attack_preview.skill }}  + WEAPON {{ p.attack_preview.weapon_dice }}{% if p.attack_preview.wound_penalty %}  WOUND {{ p.attack_preview.wound_penalty }}{% endif %}{% if p.attack_preview.condition_mod %}  COND {{ p.attack_preview.condition_mod }}{% endif %}
+                                └─ DEX/POOL {{ p.attack_preview.base }}  + {{ p.attack_preview.skill_name }} {{ p.attack_preview.skill }}  + WEAPON {{ p.attack_preview.weapon_dice }}{% if p.attack_preview.skill_merit_bonus %}  + {{ p.attack_preview.skill_merit_name|upper }} {{ p.attack_preview.skill_merit_bonus }}{% endif %}{% if p.attack_preview.wound_penalty %}  WOUND {{ p.attack_preview.wound_penalty }}{% endif %}{% if p.attack_preview.condition_mod %}  COND {{ p.attack_preview.condition_mod }}{% endif %}
                             </div>
                         {% endif %}
                         {% if p.attack_preview.specialisations %}
