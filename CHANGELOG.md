@@ -1,5 +1,10 @@
 # Changelog
 
+## v0.15.27
+- **Removed mooks from `/rules/combat/`.** The STOCK ADVERSARIES section (table of mook stat-block templates) is gone — the catalogue is GM-facing infrastructure, not player-facing rules. Two flow-text mentions also scrubbed: the READY GATE bullet now reads "NPCs don't ready up" (was "NPCs and mooks"), and the KNOCKDOWN CONTEST bullet drops the `mook_combat_pool / 3` parenthetical
+- The implementation still uses the `mook` participant kind internally (catalogue-spawned adversaries; no FK to Character/NPC; stat block on the row directly). The settings UI `/settings/ → COMBAT → Combat NPCs` still exists for GM template management. Players just don't see the term anymore on the rules page
+- No code change
+
 ## v0.15.26
 - **Surprise round wiring** — the `surprise_immune` field has been on `Participant` since v0.15.0 but `_compute_defense` never read it. Now does. New `is_surprise_round` flag on `Encounter.metadata` (no schema change), GM toggle on the encounter detail page, per-participant `[ALERT]` exemption with a TOGGLE ALERT sub-form. Round-1-only effect: surprised non-immune defenders get defense=0 regardless of all other modifiers
 - **Off-hand reload action** — `reload_offhand` view + URL + STANCE strip button. Same cost rules as main-hand reload (turn on own turn, free off-turn). Closes the deferred item from v0.15.16

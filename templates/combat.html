@@ -87,7 +87,7 @@
     <div class="text-secondary" style="font-size: 0.9rem; line-height: 1.7; margin: 0.4rem 0 1.6rem 0;">
         <p style="margin: 0 0 0.5rem 0;">During the <strong>setup phase</strong>, every <em>Character</em> participant must toggle <span class="mono-text text-accent">READY</span> on their row before the GM can roll initiative and start combat. The toggle confirms the player has chosen their starting layout — equipped weapons, equipped armor, taken cover, applied any starting conditions like <code>prone</code>, etc.</p>
         <p style="margin: 0 0 0.5rem 0;">The GM can <span class="mono-text text-accent">FORCE START</span> to bypass the gate when a player is offline or unresponsive. The override is a superuser-only checkbox surfaced next to the START button; it appears only while at least one Character is unready.</p>
-        <p style="margin: 0 0 0.5rem 0;"><span class="mono-text text-accent">▸ NPCs and mooks don't ready up</span> &nbsp;— they're GM-controlled and bypass the gate. Only player-character rows count toward the <code>READY: N / M CHARACTERS</code> tally.</p>
+        <p style="margin: 0 0 0.5rem 0;"><span class="mono-text text-accent">▸ NPCs don't ready up</span> &nbsp;— they're GM-controlled and bypass the gate. Only player-character rows count toward the <code>READY: N / M CHARACTERS</code> tally.</p>
         <p style="margin: 0;"><span class="mono-text text-accent">▸ Setup-only flag</span> &nbsp;— once combat is active, the READY tag is automatically stripped from every participant. Rewinding via <span class="mono-text text-accent">CLEAR INITIATIVE</span> does NOT auto-re-ready; players opt back in. A fresh <code>ready_change</code> log row fires on every toggle and broadcasts over WebSocket so the table sees state shifts in real time.</p>
     </div>
 
@@ -434,7 +434,7 @@
     <div class="text-secondary" style="font-size: 0.85rem; line-height: 1.7; margin: 0 0 1rem 0;">
         <p style="margin: 0 0 0.4rem 0;"><span class="mono-text text-accent">▸ TRIGGER</span> &nbsp;— a <em>successful hit</em> with a weapon whose catalogue entry has the <strong>knockdown_capable</strong> flag set. Default seed: <strong>Shotgun, Twin-Barrel Shotgun, Auto Shotgun</strong>. The KO column in <code>/settings/ → COMBAT → Weapons</code> opts other firearms in.</p>
         <p style="margin: 0 0 0.4rem 0;"><span class="mono-text text-accent">▸ AUTO-FIRES</span> &nbsp;— no checkbox on the attack form. The resolver triggers it automatically on every successful hit by a knockdown-capable weapon. Skipped when the target is already prone (you can't knock down someone on the ground).</p>
-        <p style="margin: 0 0 0.4rem 0;"><span class="mono-text text-accent">▸ CONTEST</span> &nbsp;— the target rolls <strong>Strength + Stamina</strong> (clean WoD 2.0 contest — no GM modifier, no wound penalty) against the attacker's success count. Mooks borrow <code>mook_combat_pool / 3</code> as a stand-in resistance pool.</p>
+        <p style="margin: 0 0 0.4rem 0;"><span class="mono-text text-accent">▸ CONTEST</span> &nbsp;— the target rolls <strong>Strength + Stamina</strong> (clean WoD 2.0 contest — no GM modifier, no wound penalty) against the attacker's success count.</p>
         <p style="margin: 0 0 0.4rem 0;"><span class="mono-text text-accent">▸ OUTCOME</span> &nbsp;— resistance &lt; attacker successes ⇒ target gains the <code>prone</code> tag. Resistance &ge; attacker successes ⇒ target stays up. Both branches log a <code>knockdown</code> CombatLog row with the resistance pool, dice, and result for narrative completeness.</p>
         <p style="margin: 0;"><span class="mono-text text-accent">▸ ROW BADGE</span> &nbsp;— a cyan <strong>KNOCKDOWN</strong> badge surfaces on the participant row whenever the equipped weapon (main or off-hand) carries the flag.</p>
     </div>
@@ -570,48 +570,6 @@
                     <td style="padding: 0.35rem 0.5rem;">{{ a.str_min|default:"—" }}</td>
                     <td style="padding: 0.35rem 0.5rem;">{{ a.penalty|default:"—" }}</td>
                     <td style="padding: 0.35rem 0.5rem; color: var(--ink-dim);">{{ a.notes }}</td>
-                </tr>
-                {% endfor %}
-            </tbody>
-        </table>
-        {% endif %}
-    {% endfor %}
-    {% endif %}
-
-    {# === STOCK ADVERSARIES (live from /settings/) ===================== #}
-    {% if combat_npcs_by_cat.guard or combat_npcs_by_cat.razor or combat_npcs_by_cat.corp or combat_npcs_by_cat.cultist or combat_npcs_by_cat.drone %}
-    <header class="block-head"><span class="block-bullet">■</span><h3>STOCK ADVERSARIES</h3><span class="block-line"></span></header>
-    <p class="text-secondary" style="font-size: 0.78rem; line-height: 1.5; margin: 0.6rem 0 1rem 0;">
-        Stock combat-ready stat blocks the GM can spawn into encounters as mooks. Edit at <a href="{% url 'site-settings' %}#combat-npcs" class="text-accent" style="text-decoration: none;">/settings/ → COMBAT → Combat NPCs</a>. <strong>POOL</strong> is the attack dice pool, <strong>DEF</strong> is passive defense, <strong>HP</strong> is total health boxes, <strong>ARMOR</strong> is bashing/lethal subtraction.
-    </p>
-
-    {% for entry in combat_npc_sections %}
-        {% if entry.rows %}
-        <h4 class="mono-text text-accent" style="font-size: 0.85rem; letter-spacing: 0.2em; margin: 1.2rem 0 0.4rem 0;">
-            {{ entry.label }} <span class="text-muted" style="font-weight: 400;">// {{ entry.hint }}</span>
-        </h4>
-        <table class="mono-text" style="width: 100%; border-collapse: collapse; font-size: 0.78rem; margin-bottom: 0.8rem;">
-            <thead style="color: var(--ink-dim);">
-                <tr style="border-bottom: 1px solid var(--c-dim);">
-                    <th style="text-align: left; padding: 0.35rem 0.5rem; width: 18%;">NAME</th>
-                    <th style="text-align: left; padding: 0.35rem 0.5rem; width: 6%;">POOL</th>
-                    <th style="text-align: left; padding: 0.35rem 0.5rem; width: 6%;">DEF</th>
-                    <th style="text-align: left; padding: 0.35rem 0.5rem; width: 6%;">HP</th>
-                    <th style="text-align: left; padding: 0.35rem 0.5rem; width: 9%;">ARMOR</th>
-                    <th style="text-align: left; padding: 0.35rem 0.5rem; width: 14%;">WEAPON</th>
-                    <th style="text-align: left; padding: 0.35rem 0.5rem;">NOTES</th>
-                </tr>
-            </thead>
-            <tbody>
-                {% for n in entry.rows %}
-                <tr style="border-bottom: 1px dotted var(--c-dim);">
-                    <td style="padding: 0.35rem 0.5rem; color: var(--ink);">{{ n.name }}</td>
-                    <td style="padding: 0.35rem 0.5rem; color: var(--c-primary);">{{ n.combat_pool|default:"—" }}</td>
-                    <td style="padding: 0.35rem 0.5rem; color: var(--c-primary);">{{ n.defense|default:"—" }}</td>
-                    <td style="padding: 0.35rem 0.5rem; color: var(--c-primary);">{{ n.health_max|default:"—" }}</td>
-                    <td style="padding: 0.35rem 0.5rem;">{{ n.armor_rating|default:"—" }}</td>
-                    <td style="padding: 0.35rem 0.5rem;">{{ n.weapon|default:"—" }}</td>
-                    <td style="padding: 0.35rem 0.5rem; color: var(--ink-dim);">{{ n.notes }}</td>
                 </tr>
                 {% endfor %}
             </tbody>
