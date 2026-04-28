@@ -146,7 +146,7 @@
     {# === HEALTH TRACK & CONSEQUENCES =================================== #}
     <header class="block-head"><span class="block-bullet">■</span><h3>HEALTH &amp; CONSEQUENCES</h3><span class="block-line"></span></header>
     <div class="text-secondary" style="font-size: 0.9rem; line-height: 1.7; margin: 0.6rem 0 1.6rem 0;">
-        <p style="margin: 0 0 0.5rem 0;">Total boxes = <strong>Stamina + Size</strong> (typically 7 for a Size 5 human with Stamina 2). Wound penalty: when only the last <strong>three</strong> boxes are unfilled, all dice pools take <strong>−1</strong>. When two remain, <strong>−2</strong>. One box, <strong>−3</strong>.</p>
+        <p style="margin: 0 0 0.5rem 0;">Total boxes = <strong>Stamina + Size</strong> (typically 7 for a Size 5 human with Stamina 2). The <strong>rightmost three boxes carry −1 / −2 / −3 wound penalties</strong> (left → right). The penalty applies to every dice pool — attacks, defense, dodge, skill rolls, everything. See the dedicated subsection below for worked examples.</p>
         <p style="margin: 0 0 0.5rem 0;"><span class="mono-text text-accent">▸ INCAPACITATED</span> &nbsp;— full track of bashing → unconscious for [Stamina] minutes. Full track of lethal → unconscious + bleeding 1L per minute until stabilized. Full track of aggravated → dead.</p>
         <p style="margin: 0;"><span class="mono-text text-accent">▸ HEALING</span> &nbsp;— bashing heals 1 box per 15 minutes rest. Lethal heals 1 box per 2 days (less in field conditions). Aggravated heals 1 box per week. Medical care doubles bashing and lethal rates; cybernetic limbs heal as integrity damage on the limb itself.</p>
     </div>
@@ -193,6 +193,39 @@
     <p class="text-secondary" style="font-size: 0.78rem; line-height: 1.5; margin: 0.6rem 0 1rem 0;">
         These are the four trigger-discipline actions exposed in the live combat module. The server enforces every cap and breakage rule below; this section is the player-facing reference.
     </p>
+
+    {% comment %}
+    v0.15.20 — WOUND PENALTIES subsection. Pulled out of HEALTH &
+    CONSEQUENCES so it sits next to the other every-roll modifiers
+    (aim, burst, conditions, gun fu). The server applies the penalty
+    to every dice pool routed through _actor_total_pool — attacks,
+    dodge, and any future skill rolls inherit it. Surface it visibly:
+    the participant row carries a red "WP −N" chip, and the attack
+    breakdown shows "WOUND −N" inline.
+    {% endcomment %}
+    <h4 class="mono-text text-accent" style="font-size: 0.85rem; letter-spacing: 0.2em; margin: 1.2rem 0 0.4rem 0;">WOUND PENALTIES</h4>
+    <div class="text-secondary" style="font-size: 0.85rem; line-height: 1.7; margin: 0 0 1rem 0;">
+        <p style="margin: 0 0 0.4rem 0;"><span class="mono-text text-accent">▸ THE RULE</span> &nbsp;— the <strong>rightmost three boxes</strong> of the health track carry <strong>−1 / −2 / −3</strong> penalties (left → right). The penalty kicks in the moment damage reaches that box. Applies to every dice pool — attack, defense, dodge, skill rolls, willpower rolls.</p>
+        <p style="margin: 0 0 0.4rem 0;"><span class="mono-text text-accent">▸ FORMULA</span> &nbsp;— <code>penalty = max(0, filled − (max − 3))</code> as a positive number; treated as a negative dice modifier server-side.</p>
+        <p style="margin: 0 0 0.4rem 0;"><span class="mono-text text-accent">▸ WORKED EXAMPLE (7-BOX TRACK)</span></p>
+        <table class="mono-text" style="width: 100%; border-collapse: collapse; font-size: 0.78rem; margin: 0 0 0.6rem 0;">
+            <thead style="color: var(--ink-dim);">
+                <tr style="border-bottom: 1px solid var(--c-dim);">
+                    <th style="text-align: left; padding: 0.3rem 0.5rem;">DAMAGE</th>
+                    <th style="text-align: left; padding: 0.3rem 0.5rem;">TRACK</th>
+                    <th style="text-align: left; padding: 0.3rem 0.5rem;">PENALTY</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr><td style="padding: 0.2rem 0.5rem;">0–4</td><td style="padding: 0.2rem 0.5rem;">⬜ in penalty zone</td><td style="padding: 0.2rem 0.5rem; color: var(--ink-dim);">0</td></tr>
+                <tr><td style="padding: 0.2rem 0.5rem;">5</td><td style="padding: 0.2rem 0.5rem;">3rd-from-end filled</td><td style="padding: 0.2rem 0.5rem;"><strong>−1</strong></td></tr>
+                <tr><td style="padding: 0.2rem 0.5rem;">6</td><td style="padding: 0.2rem 0.5rem;">2nd-from-end filled</td><td style="padding: 0.2rem 0.5rem;"><strong>−2</strong></td></tr>
+                <tr><td style="padding: 0.2rem 0.5rem;">7</td><td style="padding: 0.2rem 0.5rem;">last filled (incapacitated)</td><td style="padding: 0.2rem 0.5rem;"><strong>−3</strong></td></tr>
+            </tbody>
+        </table>
+        <p style="margin: 0 0 0.4rem 0;"><span class="mono-text text-accent">▸ COMBINES WITH</span> &nbsp;— condition modifiers (prone, stunned, blinded, grappled). The participant row's <strong>MOD</strong> chip shows the combined wound + condition total at a glance; the row's <strong>WP</strong> chip shows wound alone.</p>
+        <p style="margin: 0;"><span class="mono-text text-accent">▸ MERITS</span> &nbsp;— <em>Increased Pain Threshold</em> reduces wound penalty by 1; <em>Pain Tolerance</em> ignores wound penalties entirely. Merits are not yet auto-detected by combat (planned for a later release) — the GM applies the adjustment by hand on hurt characters' rolls.</p>
+    </div>
 
     <h4 class="mono-text text-accent" style="font-size: 0.85rem; letter-spacing: 0.2em; margin: 1.2rem 0 0.4rem 0;">AIMING</h4>
     <div class="text-secondary" style="font-size: 0.85rem; line-height: 1.7; margin: 0 0 1rem 0;">

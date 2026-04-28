@@ -1,5 +1,10 @@
 # Changelog
 
+## v0.15.20
+- **Rules clarification: wound penalties.** Promoted to its own subsection at the top of ADVANCED ACTIONS in `/rules/combat/`, ahead of AIMING. The previous wording in HEALTH & CONSEQUENCES was off-by-one ("when the last three boxes are unfilled, take −1") — replaced with the canonical "the rightmost three boxes carry −1 / −2 / −3 penalties (left → right)" plus a worked-example table for a 7-box track (damage 0–4 → 0; 5 → −1; 6 → −2; 7 → −3 / incapacitated)
+- New section also calls out the `MOD` chip (combined wound + condition) and `WP` chip (wound alone) on the participant row, and notes that the *Increased Pain Threshold* / *Pain Tolerance* merits are not yet auto-detected by the combat module (GM applies by hand for now)
+- **No code change** — the implementation has been correct since v0.15.5 (`_wound_penalty()` returns 0 / −1 / −2 / −3 based on damage total vs `health_max`; applied to every dice pool routed through `_actor_total_pool`). This release just fixes the rules text and surfaces the rule next to the other every-roll modifiers (aim, burst, conditions, gun fu, X-again)
+
 ## v0.15.19
 - **Weapon-specific X-again threshold** (10 / 9 / 8) on the firearm catalogue. Default 10 for every existing entry — preserves v0.15.18 behaviour exactly. GM configures per-weapon via `/settings/ → COMBAT → Weapons → AGAIN`. No default catalogue weapon ships with anything other than 10-again — leave it to the GM's table
 - **The success threshold stays at 8+ at every tier** — the X-again number is the explosion trigger only, not a different success threshold. 9-again means dice exploding on 9 or 10. 8-again means dice exploding on 8 / 9 / 10. The success count doesn't change between tiers
