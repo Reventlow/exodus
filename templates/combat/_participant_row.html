@@ -140,9 +140,22 @@ dodge), ADD CONDITION, WILLPOWER.
 
             {% if p.cover_state and p.cover_state != "none" %}
                 <span class="part-cover-pill {{ p.cover_state }}">
-                    COVER: {{ p.cover_state|upper }}{% if p.cover_entry_name %} · {{ p.cover_entry_name }}{% endif %}
+                    COVER: {{ p.cover_state|upper }}{% if p.cover_entry_name %} · {{ p.cover_entry_name }}{% endif %}{% if p.cover_health is not None %} · HP {{ p.cover_health }}{% endif %}
                 </span>
             {% endif %}
+
+            {% comment %}
+            v0.15.34 — POSITION chip. Always visible (default
+            "engaged"); cyan to match the stance-pill family. Read-
+            only chip; the controllable POSITION sub-form lives in
+            the action panel below.
+            {% endcomment %}
+            {% with pos=p.position_label|default:"engaged" %}
+            <span class="part-cond-pill cyan"
+                  title="Gridless narrative position. Engaged = melee range; short = 5-10 m; long = 20 m+. Move via the POSITION sub-form on this row's action panel.">
+                POS: {{ pos|upper }}
+            </span>
+            {% endwith %}
 
             {% comment %}
             v0.15.26 — Alert chip. Visible on every participant row
@@ -1178,7 +1191,9 @@ dodge), ADD CONDITION, WILLPOWER.
             participant carries the ``burning`` tag. GM picks dice +
             damage type per round; 0 dice is a valid "skip this
             round" choice. The ``burning`` tag itself is not stripped
-            here — extinguish via × on the BURNING condition pill.
+            here — extinguish via the EXTINGUISH button below (or via
+            × on the BURNING condition pill, which the existing prefix
+            clear handler also covers).
             {% endcomment %}
             {% if "burning" in p.conditions %}
             <form method="post"
@@ -1199,6 +1214,144 @@ dodge), ADD CONDITION, WILLPOWER.
                 <button type="submit" style="background: rgba(239, 68, 68, 0.1); border-color: var(--accent-danger); color: var(--accent-danger);">APPLY TICK</button>
             </form>
             {% endif %}
+            {% endif %}
+
+            {% comment %}
+            v0.15.34 — EXTINGUISH action. Visible only when the row
+            carries the ``burning`` tag AND the user can control it
+            (player on own row, GM on any row). Costs the actor's
+            turn when fired on their own turn; GM off-turn fires are
+            free narrative bookkeeping (an ally pats out the fire).
+            The button sits next to the TICK BURN sub-form so a GM
+            running a burning NPC can either tick or extinguish in
+            the same panel area.
+            {% endcomment %}
+            {% if p.can_control and "burning" in p.conditions %}
+            <form method="post"
+                  action="{% url 'combat:extinguish' encounter.id p.id %}"
+                  class="part-mini-form"
+                  style="grid-column: 1 / -1; padding-top: 0.4rem; border-top: 1px dashed var(--accent-danger);">
+                {% csrf_token %}
+                <label style="color: var(--accent-danger);">🚿 EXTINGUISH</label>
+                {% if encounter.active_participant_id == p.id %}
+                    <span class="muted" style="font-size: 0.6rem;">(costs your turn)</span>
+                {% elif is_gm %}
+                    <span class="muted" style="font-size: 0.6rem;">(off-turn — GM, free)</span>
+                {% endif %}
+                <button type="submit" title="Drop the burning condition. Costs the actor's turn when fired on their own turn; GM-driven off-turn extinguish is free.">EXTINGUISH</button>
+            </form>
+            {% endif %}
+
+            {% comment %}
+            v0.15.34 — POSITION sub-form. Three buttons (ENGAGED /
+            SHORT / LONG) drive the gridless narrative position. The
+            label is purely informational for v0.15.34 (no auto dice
+            modifiers), but it gates the reach-bonus melee check
+            (both combatants must be at engaged for reach to fire)
+            and gives the GM / players a shared mental model. Player
+            moves cost the turn; GM moves are free narrative
+            repositioning. The decorator gates ownership; the server
+            re-validates the label and the turn-cost rule on submit.
+            {% endcomment %}
+            {% if p.can_control and encounter.status == "active" %}
+            {% with pos=p.position_label|default:"engaged" %}
+            <form method="post"
+                  action="{% url 'combat:move_position' encounter.id p.id %}"
+                  class="part-mini-form"
+                  style="grid-column: 1 / -1;">
+                {% csrf_token %}
+                <label>POSITION</label>
+                <span class="muted" style="font-size: 0.7rem;">CURRENT: {{ pos|upper }}</span>
+                <button type="submit" name="position_label" value="engaged"
+                        {% if pos == "engaged" %}disabled{% endif %}
+                        title="Move to ENGAGED (melee range).">ENGAGED</button>
+                <button type="submit" name="position_label" value="short"
+                        {% if pos == "short" %}disabled{% endif %}
+                        title="Move to SHORT range (5-10 m).">SHORT</button>
+                <button type="submit" name="position_label" value="long"
+                        {% if pos == "long" %}disabled{% endif %}
+                        title="Move to LONG range (20 m+).">LONG</button>
+                {% if encounter.active_participant_id == p.id and not is_gm %}
+                    <span class="muted" style="font-size: 0.6rem;">(costs your turn)</span>
+                {% elif is_gm %}
+                    <span class="muted" style="font-size: 0.6rem;">(GM move — free)</span>
+                {% endif %}
+            </form>
+            {% endwith %}
+            {% endif %}
+
+            {% comment %}
+            v0.15.34 — DISARM action. Collapsible <details> wrapper
+            so the dense action panel doesn't grow another always-
+            visible form. Single-target only (no spread). The contest
+            uses Brawl by default (or Weaponry on override) for both
+            sides; the resolver computes attacker vs target successes
+            and unequips the target's main hand on attacker win.
+            Visible only on the active attacker's row.
+            {% endcomment %}
+            {% if encounter.status == "active" and encounter.active_participant_id == p.id and p.can_control %}
+            <details class="part-mini-form"
+                     style="grid-column: 1 / -1; padding-top: 0.4rem; border-top: 1px dashed var(--c-dim);">
+                <summary style="cursor: pointer; color: var(--c-primary); font-size: 0.85rem; letter-spacing: 0.08em;">
+                    DISARM ATTEMPT
+                </summary>
+                <form method="post"
+                      action="{% url 'combat:disarm' encounter.id p.id %}"
+                      style="margin-top: 0.5rem; display: grid; grid-template-columns: auto 1fr; gap: 0.4rem; align-items: center;">
+                    {% csrf_token %}
+                    <label for="disarm-tgt-{{ p.id }}">TARGET</label>
+                    <select id="disarm-tgt-{{ p.id }}" name="target_id" required>
+                        <option value="">— PICK —</option>
+                        {% for other in participants %}
+                            {% if other.id != p.id %}
+                                <option value="{{ other.id }}">
+                                    {{ other.name }}{% if other.weapon_name %} ({{ other.weapon_name }}){% else %} (UNARMED){% endif %}
+                                </option>
+                            {% endif %}
+                        {% endfor %}
+                    </select>
+                    <label for="disarm-mod-{{ p.id }}">MOD</label>
+                    <input id="disarm-mod-{{ p.id }}" name="gm_modifier" type="number" value="0" step="1">
+                    <label for="disarm-skill-{{ p.id }}">SKILL</label>
+                    <select id="disarm-skill-{{ p.id }}" name="weapon_skill">
+                        <option value="Brawl" selected>BRAWL (UNARMED)</option>
+                        <option value="Weaponry">WEAPONRY (HOOK / TRAP)</option>
+                    </select>
+                    <span style="grid-column: 1 / -1; font-size: 0.65rem; color: var(--ink-mute);">
+                        Contested: attacker (Dex + Brawl/Weaponry + mod) vs target (Dex + Brawl). Tie goes to defender.
+                    </span>
+                    <button type="submit" class="btn-primary" style="grid-column: 1 / -1;">DISARM &rarr;</button>
+                </form>
+            </details>
+            {% endif %}
+
+            {% comment %}
+            v0.15.34 — COUP DE GRACE action. Visible only on the
+            active attacker's row when at least one OTHER participant
+            in the encounter is incapacitated. Auto-aggravated 3
+            damage; no roll. Costs the turn (no auto-advance).
+            {% endcomment %}
+            {% if encounter.status == "active" and encounter.active_participant_id == p.id and p.can_control %}
+                {% with incap_targets=p.incapacitated_targets %}
+                {% if incap_targets %}
+                <form method="post"
+                      action="{% url 'combat:coup_de_grace' encounter.id p.id %}"
+                      class="part-mini-form"
+                      style="grid-column: 1 / -1; padding-top: 0.4rem; border-top: 1px dashed var(--accent-danger);"
+                      onsubmit="return confirm('Deliver the coup de grâce? Auto-aggravated 3 damage on an incapacitated target.');">
+                    {% csrf_token %}
+                    <label style="color: var(--accent-danger);">⚰ COUP DE GRÂCE</label>
+                    <select name="target_id" required>
+                        <option value="">— PICK INCAP TARGET —</option>
+                        {% for other in incap_targets %}
+                            <option value="{{ other.id }}">{{ other.name }}</option>
+                        {% endfor %}
+                    </select>
+                    <span class="muted" style="font-size: 0.65rem;">3A · no roll · costs your turn</span>
+                    <button type="submit" style="background: rgba(239, 68, 68, 0.1); border-color: var(--accent-danger); color: var(--accent-danger);">FINISH</button>
+                </form>
+                {% endif %}
+                {% endwith %}
             {% endif %}
 
         </div>

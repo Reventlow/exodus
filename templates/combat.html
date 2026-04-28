@@ -449,6 +449,83 @@
     </div>
 
     {% comment %}
+    v0.15.34 — REACH ADVANTAGE subsection. Sits before CLOSE-RANGE
+    PENALTY because it's the natural pair: range bands govern
+    firearms, reach governs melee. Both apply on every attack
+    regardless of stance / aim / burst.
+    {% endcomment %}
+    <h4 class="mono-text text-accent" style="font-size: 0.85rem; letter-spacing: 0.2em; margin: 1.2rem 0 0.4rem 0;">REACH (MELEE)</h4>
+    <div class="text-secondary" style="font-size: 0.85rem; line-height: 1.7; margin: 0 0 1rem 0;">
+        <p style="margin: 0 0 0.4rem 0;"><span class="mono-text text-accent">▸ RULE</span> &nbsp;— a long melee weapon (sword, axe, baton) gets <strong>+1 dice</strong> in melee against a shorter weapon (knife, knuckles, unarmed) when both combatants are at <code>position_label = "engaged"</code>. Capped at +2 when the difference is large.</p>
+        <p style="margin: 0 0 0.4rem 0;"><span class="mono-text text-accent">▸ DEFAULT SEED</span> &nbsp;— Knuckle Buster / Knife / Phone Book / Bottle / Taser at <strong>0</strong>; Baton / Chair / Hammer at <strong>1</strong>. Sword / axe / machete would seed at <strong>2</strong> when the GM adds them. Firearms / thrown / grenades all seed at 0 (no melee context).</p>
+        <p style="margin: 0 0 0.4rem 0;"><span class="mono-text text-accent">▸ POSITION GATE</span> &nbsp;— only fires when both attacker and target are at <code>engaged</code> range. Move to SHORT or LONG via the row's POSITION sub-form to break the engagement (and lose / dodge the bonus depending on which side benefits).</p>
+        <p style="margin: 0 0 0.4rem 0;"><span class="mono-text text-accent">▸ POOL BREAKDOWN</span> &nbsp;— the attack message tail surfaces as <code>(+N REACH)</code>. Off-hand attacks consult the off-hand weapon's own reach independently — a long off-hand vs a knife main hand still pays the bonus on that slot.</p>
+        <p style="margin: 0;"><span class="mono-text text-accent">▸ EDIT</span> &nbsp;— per-weapon in <code>/settings/ → COMBAT → Weapons → REACH</code>. Bounded 0..5 server-side via <code>_clamp_reach</code>; bad input collapses to 0.</p>
+    </div>
+
+    {% comment %}
+    v0.15.34 — POSITION (NARRATIVE MOVEMENT) subsection. Pairs with
+    REACH because the reach-bonus check reads the position label.
+    Three canonical slots; movement is purely narrative for v0.15.34.
+    {% endcomment %}
+    <h4 class="mono-text text-accent" style="font-size: 0.85rem; letter-spacing: 0.2em; margin: 1.2rem 0 0.4rem 0;">POSITION (NARRATIVE MOVEMENT)</h4>
+    <div class="text-secondary" style="font-size: 0.85rem; line-height: 1.7; margin: 0 0 1rem 0;">
+        <p style="margin: 0 0 0.4rem 0;"><span class="mono-text text-accent">▸ SLOTS</span> &nbsp;— <strong>ENGAGED</strong> (melee range, default), <strong>SHORT</strong> (5–10 m), <strong>LONG</strong> (20 m+). Gridless model — no spatial map; the GM and players share a mental model via the row's POSITION chip.</p>
+        <p style="margin: 0 0 0.4rem 0;"><span class="mono-text text-accent">▸ MOVE</span> &nbsp;— pick one of the three buttons in the row's POSITION sub-form. Players spend their turn on the move; the GM moves anyone, any time, for free narrative repositioning (scene shift, NPC reposition, setup adjustment).</p>
+        <p style="margin: 0 0 0.4rem 0;"><span class="mono-text text-accent">▸ MECHANICAL EFFECT</span> &nbsp;— <em>none</em> for v0.15.34 beyond gating the REACH bonus. Range bands on weapons already cover firearms; thrown range falloff is a separate damage-string parse. Future versions may layer ranged-defense modifiers, line-of-sight, etc.</p>
+        <p style="margin: 0;"><span class="mono-text text-accent">▸ TIMELINE</span> &nbsp;— logged as <code>move</code> with <code>from_label</code> / <code>to_label</code> / <code>on_turn</code> payload keys. Off-turn moves (GM only) carry <code>on_turn=False</code>.</p>
+    </div>
+
+    {% comment %}
+    v0.15.34 — EXTINGUISH subsection. Closes the deferred item from
+    v0.15.30 — burning previously cleared only via × on the BURNING
+    pill. EXTINGUISH gives players an in-character action.
+    {% endcomment %}
+    <h4 class="mono-text text-accent" style="font-size: 0.85rem; letter-spacing: 0.2em; margin: 1.2rem 0 0.4rem 0;">EXTINGUISH</h4>
+    <div class="text-secondary" style="font-size: 0.85rem; line-height: 1.7; margin: 0 0 1rem 0;">
+        <p style="margin: 0 0 0.4rem 0;"><span class="mono-text text-accent">▸ ACTION</span> &nbsp;— a player whose row carries the <code>burning</code> tag may spend their turn on <strong>EXTINGUISH</strong> (drop and roll, dunk in water, smother) — the row's button posts to <code>combat:extinguish</code> and strips the tag.</p>
+        <p style="margin: 0 0 0.4rem 0;"><span class="mono-text text-accent">▸ TURN COST</span> &nbsp;— costs the actor's turn when fired on their own turn (<code>acted_this_round=True</code>; no auto-advance, GM clicks NEXT TURN). GM-driven off-turn extinguish (an ally rushes over with a fire blanket) is free.</p>
+        <p style="margin: 0;"><span class="mono-text text-accent">▸ TIMELINE</span> &nbsp;— logged as <code>extinguish</code>. The <code>burning</code> tag and any <code>burning_until:N</code> companion are stripped together so the state machine stays clean.</p>
+    </div>
+
+    {% comment %}
+    v0.15.34 — DISARM subsection. Single-target WoD 2.0 contest;
+    target keeps weapon on tie (defender wins ties).
+    {% endcomment %}
+    <h4 class="mono-text text-accent" style="font-size: 0.85rem; letter-spacing: 0.2em; margin: 1.2rem 0 0.4rem 0;">DISARM</h4>
+    <div class="text-secondary" style="font-size: 0.85rem; line-height: 1.7; margin: 0 0 1rem 0;">
+        <p style="margin: 0 0 0.4rem 0;"><span class="mono-text text-accent">▸ POOL</span> &nbsp;— attacker rolls <strong>Dexterity + Brawl (or Weaponry) + GM modifier + wound + condition modifiers</strong>. Target rolls <strong>Dexterity + Brawl</strong> (clean contest, no wound penalty on the resistance).</p>
+        <p style="margin: 0 0 0.4rem 0;"><span class="mono-text text-accent">▸ OUTCOME</span> &nbsp;— attacker successes <em>strictly greater</em> than target successes ⇒ target's main-hand weapon is unequipped (<code>weapon_name=""</code>, <code>weapon_data={}</code>, ammo tag stripped). Tie or attacker miss ⇒ target keeps the weapon. Off-hand survives — disarming both hands is two separate actions.</p>
+        <p style="margin: 0 0 0.4rem 0;"><span class="mono-text text-accent">▸ FORM</span> &nbsp;— collapsible <strong>DISARM ATTEMPT</strong> sub-form on the active attacker's row. Target picker (single-target only — no spread on disarm); GM modifier; SKILL select (BRAWL default, WEAPONRY override).</p>
+        <p style="margin: 0;"><span class="mono-text text-accent">▸ TIMELINE</span> &nbsp;— logged as <code>disarm</code> with both pools, both success counts, both dice arrays, and <code>outcome ∈ {disarmed, kept}</code>. On disarm, <code>weapon_lost</code> carries the catalogue name for the timeline / WS replay.</p>
+    </div>
+
+    {% comment %}
+    v0.15.34 — COUP DE GRACE subsection. No roll; auto-aggravated.
+    Mercy kill / finishing blow on a helpless target.
+    {% endcomment %}
+    <h4 class="mono-text text-accent" style="font-size: 0.85rem; letter-spacing: 0.2em; margin: 1.2rem 0 0.4rem 0;">COUP DE GRÂCE</h4>
+    <div class="text-secondary" style="font-size: 0.85rem; line-height: 1.7; margin: 0 0 1rem 0;">
+        <p style="margin: 0 0 0.4rem 0;"><span class="mono-text text-accent">▸ TARGET</span> &nbsp;— must already carry the <code>incapacitated</code> condition. Action is mechanically pointless against a still-fighting opponent — use ATTACK instead.</p>
+        <p style="margin: 0 0 0.4rem 0;"><span class="mono-text text-accent">▸ EFFECT</span> &nbsp;— <strong>3 aggravated damage, no roll</strong>, applied via the standard track-upgrade ladder (B → L → A overflow). When the track is already full the damage upgrades existing B / L boxes to A.</p>
+        <p style="margin: 0 0 0.4rem 0;"><span class="mono-text text-accent">▸ TURN COST</span> &nbsp;— costs the attacker's turn (<code>acted_this_round=True</code>); no auto-advance.</p>
+        <p style="margin: 0;"><span class="mono-text text-accent">▸ TIMELINE</span> &nbsp;— logged as <code>coup_de_grace</code> with before / after track snapshots and the applied / upgrades / overflow split.</p>
+    </div>
+
+    {% comment %}
+    v0.15.34 — COVER DESTRUCTION subsection. Conservative model: 1
+    point of cover damage per attack that lands through the cover;
+    cover collapses when health hits 0.
+    {% endcomment %}
+    <h4 class="mono-text text-accent" style="font-size: 0.85rem; letter-spacing: 0.2em; margin: 1.2rem 0 0.4rem 0;">COVER DESTRUCTION</h4>
+    <div class="text-secondary" style="font-size: 0.85rem; line-height: 1.7; margin: 0 0 1rem 0;">
+        <p style="margin: 0 0 0.4rem 0;"><span class="mono-text text-accent">▸ RULE</span> &nbsp;— each landed attack against a target in cover (light / heavy / full) consumes <strong>1 point</strong> of <code>cover_health</code>. When health reaches 0 the cover collapses and the row's COVER pill clears.</p>
+        <p style="margin: 0 0 0.4rem 0;"><span class="mono-text text-accent">▸ ORDERING</span> &nbsp;— cover damage is applied <em>before</em> the participant damage roll, so a final bullet that destroys the cover ALSO hits the body if the attacker had enough successes. Saves a round of "wait the cover broke this turn".</p>
+        <p style="margin: 0 0 0.4rem 0;"><span class="mono-text text-accent">▸ COVER HP READOUT</span> &nbsp;— the COVER pill on the row reads <code>HP N</code> when active. The pill clears entirely on collapse; resetting cover via the SET COVER sub-form re-equips a fresh entry from the catalogue.</p>
+        <p style="margin: 0;"><span class="mono-text text-accent">▸ TIMELINE</span> &nbsp;— attack rows carry <code>cover_damage_taken</code> + <code>cover_destroyed</code> payload keys. A separate <code>cover_destroyed</code> log row fires on the killing strike with the cover entry name.</p>
+    </div>
+
+    {% comment %}
     v0.15.33 — CLOSE-RANGE PENALTY (RIFLES) subsection. Sits after
     KNOCKDOWN because it pairs with the existing range-band /
     multi-range damage rules and applies on every attack regardless
@@ -482,7 +559,8 @@
         <p style="margin: 0 0 0.4rem 0;"><span class="mono-text text-accent">▸ TURN COST</span> &nbsp;— costs the active actor's turn (<code>acted_this_round=True</code>) but does NOT auto-advance. The GM clicks NEXT TURN to actually pass the turn (same shape as ATTACK / AIM / FULL DEFENSE).</p>
         <p style="margin: 0 0 0.4rem 0;"><span class="mono-text text-accent">▸ DAMAGE</span> &nbsp;— damage-dealing grenades apply <code>damage_dice + successes</code>, minus cover penalty (when <code>cover_resists=True</code>). Full cover with <code>cover_resists=True</code> blocks both damage AND effect.</p>
         <p style="margin: 0 0 0.4rem 0;"><span class="mono-text text-accent">▸ PERSISTENT EFFECTS</span> &nbsp;— effects with <code>effect_duration_rounds &gt; 0</code> carry a companion <code>&lt;tag&gt;_until:&lt;round&gt;</code> marker. The round-boundary cleanup strips both the effect and its companion when the round counter reaches the expiry round.</p>
-        <p style="margin: 0 0 0.4rem 0;"><span class="mono-text text-accent">▸ BURNING</span> &nbsp;— phosphor's signature effect. <strong>GM-driven tick</strong>: at round-roll the system names every burning participant in a single log row, and the GM applies damage per row via the <strong>🔥 TICK BURN</strong> sub-form (default 1L; can be 2L for severe burns, 1B for "smoke inhalation only", or 0 to skip the tick this round narratively). Auto-incaps on track fill. <em>No</em> auto-clear — the GM extinguishes via × on the BURNING condition pill.</p>
+        <p style="margin: 0 0 0.4rem 0;"><span class="mono-text text-accent">▸ BURNING</span> &nbsp;— phosphor's signature effect. <strong>GM-driven tick</strong>: at round-roll the system names every burning participant in a single log row, and the GM applies damage per row via the <strong>🔥 TICK BURN</strong> sub-form (default 1L; can be 2L for severe burns, 1B for "smoke inhalation only", or 0 to skip the tick this round narratively). Auto-incaps on track fill. <em>Cleared</em> via <strong>EXTINGUISH</strong> (player turn cost, or GM off-turn freebie) — see the EXTINGUISH subsection below.</p>
+        <p style="margin: 0 0 0.4rem 0;"><span class="mono-text text-accent">▸ SCATTER ON MISS (v0.15.34)</span> &nbsp;— a grenade throw that rolls <strong>0 successes</strong> on the Dex+Athletics pool <em>scatters</em> off-target. The grenade is still consumed from inventory (you threw it, can't reel it back), the thrower's turn is still spent, and the timeline gets a <strong>GRENADE SCATTERED</strong> system warning + a <code>grenade_scatter</code> log row carrying the original target list. The GM picks the new target list narratively (or rules no effect) — gridless model means the resolver can't project a scatter direction onto a map.</p>
         <p style="margin: 0 0 0.4rem 0;"><span class="mono-text text-accent">▸ EMP</span> &nbsp;— affects AI / cyber-augmented characters only. Biological targets (player characters with non-AI class, NPCs with non-AI class, mooks) are immune; the throw still resolves but the EMP tag isn't applied. Logged as <em>"X immune to EMP — no electronic systems"</em>.</p>
         <table class="mono-text" style="width: 100%; border-collapse: collapse; font-size: 0.78rem; margin: 0.6rem 0 0 0;">
             <thead style="color: var(--ink-dim);">

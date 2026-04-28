@@ -1166,37 +1166,51 @@ def _gun_fu_state(actor):
 
     Returns ``(0, 0, 0)`` for any actor that cannot benefit from Gun Fu:
 
-    * Mooks (no character FK).
-    * NPCs (the NPC sheet has no per-session merit-use tracking yet —
-      the spend / reset UI lives only on Character sheets, so emitting
-      a Gun Fu input on an NPC row would be a one-way street that
-      drains uses with no way to refresh them).
-    * Characters without the Gun Fu merit attached.
-    * Characters whose ``character_class`` is not ``soldier`` (defense
-      in depth — the merit is canonically soldier-locked at the
-      catalogue level, but a hand-edited DB row could attach it
+    * Mooks (no character FK / npc FK — catalogue-only stat block).
+    * Characters / NPCs without the Gun Fu merit attached.
+    * Characters / NPCs whose ``character_class`` is not ``soldier``
+      (defense in depth — the merit is canonically soldier-locked at
+      the catalogue level, but a hand-edited DB row could attach it
       elsewhere; we silently ignore that).
 
     Soldiers with Gun Fu and remaining session uses return positive
-    ``remaining``. Reads ``CharacterMerit.rating`` (the through-table
-    field, related_name ``character_merits`` per
-    ``characters.models.CharacterMerit.Meta``) as the dot total and
-    ``Character.merit_uses["Gun Fu"]`` as the count consumed this
-    session.
+    ``remaining``. Reads ``CharacterMerit.rating`` /
+    ``NpcMerit.rating`` (the through-table field, related_name
+    ``character_merits`` / ``npc_merits``) as the dot total and
+    ``merit_uses["Gun Fu"]`` as the count consumed this session.
+
+    v0.15.34 — extended to NPCs. The NPC model gained a ``merit_uses``
+    JSONField in v0.15.34 mirroring ``Character.merit_uses``; the GM
+    can now drive an NPC with the Gun Fu merit and spend the auto-
+    success pool the same way a player would on a Character. Reset
+    happens via the same admin / API surface as the rest of the NPC
+    sheet — no per-session UI lives on the dossier yet, but a direct
+    ``npc.merit_uses = {}`` write does the job.
     """
-    if actor.participant_kind != "character" or actor.character is None:
+    if actor.participant_kind == "mook":
         return 0, 0, 0
-    char = actor.character
-    if (char.character_class or "").strip().lower() != "soldier":
+    if actor.participant_kind == "character" and actor.character is not None:
+        sheet = actor.character
+        merits_qs_name = "character_merits"
+    elif actor.participant_kind == "npc" and actor.npc is not None:
+        sheet = actor.npc
+        merits_qs_name = "npc_merits"
+    else:
         return 0, 0, 0
-    # Resolve through the canonical M2M through-table. ``character_merits``
-    # is the related_name on CharacterMerit (characters/models.py:155-157).
-    # Case-insensitive name match shields against catalogue casing drift.
-    cm = char.character_merits.filter(merit__name__iexact="Gun Fu").first()
+    if (sheet.character_class or "").strip().lower() != "soldier":
+        return 0, 0, 0
+    # Resolve through the canonical M2M through-table. The related_name
+    # differs (``character_merits`` for Character; ``npc_merits`` for
+    # NPC) so we look it up dynamically. Case-insensitive name match
+    # shields against catalogue casing drift.
+    qs = getattr(sheet, merits_qs_name, None)
+    if qs is None:
+        return 0, 0, 0
+    cm = qs.filter(merit__name__iexact="Gun Fu").first()
     if cm is None:
         return 0, 0, 0
     rating = int(cm.rating or 0)
-    used = int((char.merit_uses or {}).get("Gun Fu", 0))
+    used = int((sheet.merit_uses or {}).get("Gun Fu", 0))
     remaining = max(0, rating - used)
     return rating, used, remaining
 
@@ -1450,6 +1464,67 @@ def _specialisations_for_skill(actor, skill_name):
     return out
 
 
+def _reach_bonus(attacker, target, weapon_data):
+    """Return the v0.15.34 reach bonus when both combatants are at engaged range.
+
+    Long melee weapons (sword, axe, baton) get +1 dice in melee against
+    shorter weapons (knife, knuckles, unarmed) when both attacker and
+    target are at ``position_label == "engaged"``. The bonus equals
+    ``min(2, attacker_reach - target_reach)`` capped at +2 dice, and
+    only fires for melee skills (Brawl / Weaponry) — ranged attacks
+    never read this helper.
+
+    The catalogue-stored ``reach`` integer (0..5) lives on every
+    hydrated weapon entry. For mooks / unarmed combatants the off-the-
+    shelf snapshot defaults to 0 reach so they can still be advantaged
+    or disadvantaged by an opponent's catalogue weapon.
+
+    Returns 0 when:
+
+    * Either combatant is missing.
+    * Either combatant is not at engaged range (``position_label`` set
+      to ``"short"`` / ``"long"`` / a custom slot).
+    * The weapon category is firearm / thrown / grenade (ranged).
+    * The reach difference is non-positive.
+
+    Defense in depth: a tampered ``reach`` value collapses via int
+    coercion + ``max(0, ...)`` rather than raising.
+    """
+    if attacker is None or target is None:
+        return 0
+    # Position gate — both must be in melee range. The position labels
+    # are free-form strings on the participant; the canonical engaged
+    # value is "engaged". Anything else (short / long / a custom slot)
+    # means the combatants are out of melee range and the bonus
+    # doesn't apply.
+    if (attacker.position_label or "engaged") != "engaged":
+        return 0
+    if (target.position_label or "engaged") != "engaged":
+        return 0
+    # Skip ranged categories — the bonus is melee-only.
+    category = (weapon_data or {}).get("category", "")
+    if category in ("firearm", "thrown", "grenade"):
+        return 0
+    try:
+        attacker_reach = max(0, int((weapon_data or {}).get("reach", 0)))
+    except (TypeError, ValueError):
+        attacker_reach = 0
+    try:
+        target_reach = max(0, int(
+            (target.weapon_data or {}).get("reach", 0)
+        ))
+    except (TypeError, ValueError):
+        target_reach = 0
+    diff = attacker_reach - target_reach
+    if diff <= 0:
+        return 0
+    # Cap at +2 dice — keeps the effect proportional to typical
+    # catalogue ranges (0..2 reach for the seed; the GM can push to 5
+    # for exotic polearms etc., but the bonus shouldn't dominate the
+    # pool).
+    return min(2, diff)
+
+
 def _actor_total_pool(actor, weapon_data, gm_modifier, weapon_skill_name="",
                      spend_willpower=False, applied_specialisations=None,
                      range_band="close"):
@@ -1651,8 +1726,13 @@ def _attack_preview(actor, weapon_data, gm_modifier, weapon_skill_name=""):
     # damage band so it can render the CLOSE / LONG selector. We
     # pre-format the close / long damage strings (e.g. "4L", "2L")
     # for the option labels.
+    # v0.15.34 — additionally surface the optional medium band so the
+    # attack form can render a third range option when the catalogue
+    # entry defines one (e.g. ``"2L close / 1L medium / 1L long"`` on
+    # a hand-edited thrown weapon).
     parsed_dmg = _parse_weapon_damage((weapon_data or {}).get("damage", ""))
     weapon_has_long_range = parsed_dmg["long"] is not None
+    weapon_has_medium_range = parsed_dmg.get("medium") is not None
     close_amt, close_type = parsed_dmg["close"]
     weapon_close_dmg = f"{close_amt}{close_type}" if close_amt or close_type else ""
     if weapon_has_long_range:
@@ -1660,6 +1740,11 @@ def _attack_preview(actor, weapon_data, gm_modifier, weapon_skill_name=""):
         weapon_long_dmg = f"{long_amt}{long_type}"
     else:
         weapon_long_dmg = ""
+    if weapon_has_medium_range:
+        med_amt, med_type = parsed_dmg["medium"]
+        weapon_medium_dmg = f"{med_amt}{med_type}"
+    else:
+        weapon_medium_dmg = ""
 
     return {
         "base":             base,
@@ -1689,9 +1774,16 @@ def _attack_preview(actor, weapon_data, gm_modifier, weapon_skill_name=""):
         # range_band selector on the attack form. ``weapon_has_long_range``
         # is False for single-band weapons; in that case the selector
         # is suppressed and the resolver uses the close band by default.
+        # v0.15.34 — adds the optional medium band so the selector can
+        # render a CLOSE / MEDIUM / LONG variant when the catalogue
+        # entry defines all three. ``weapon_has_medium_range`` is False
+        # for the seed catalogue (no entries ship with medium tokens
+        # by default); GM-edited thrown weapons can opt in.
         "weapon_has_long_range": weapon_has_long_range,
         "weapon_close_dmg":      weapon_close_dmg,
         "weapon_long_dmg":       weapon_long_dmg,
+        "weapon_has_medium_range": weapon_has_medium_range,
+        "weapon_medium_dmg":       weapon_medium_dmg,
         # v0.15.33 — close-range penalty preview. Surfaced as a signed
         # int for the breakdown line ("−2 CLOSE-RANGE"). ``range_band``
         # is the band the preview's ``total`` was computed against;
@@ -1791,48 +1883,99 @@ def _parse_weapon_damage(damage_field):
         treated as plain single-band (parses the leading numeric
         and B/L/A from the prefix; trailing text is ignored).
 
+    v0.15.34 — additionally supports an optional ``medium`` band on
+    thrown weapons (and any weapon the GM hand-edits in the catalogue).
+    Two shapes:
+
+      * Three-token slash-separated, e.g.
+        ``"2L close / 2L medium / 1L long"``. Each token's keyword
+        determines its band; the order of tokens doesn't matter.
+      * Two-token with ``"medium"``, e.g. ``"2L close / 1L medium"``
+        (no long band) — close gets the close keyword, medium gets
+        the medium keyword, long stays ``None``.
+
     Returns a dict::
 
         {
-            "close": (int, "B"|"L"|"A"),  # always present
-            "long":  (int, "B"|"L"|"A") | None,  # set on multi-range
-            "raw":   str,
+            "close":  (int, "B"|"L"|"A"),  # always present
+            "medium": (int, "B"|"L"|"A") | None,  # set on multi-range
+            "long":   (int, "B"|"L"|"A") | None,  # set on multi-range
+            "raw":    str,
         }
 
     Backwards compatibility: callers that previously read the legacy
     ``(amount, type)`` tuple now read ``parsed["close"]`` (which
-    matches the single-band path's old return value).
+    matches the single-band path's old return value). The new
+    ``parsed["medium"]`` key is always present and is ``None`` when
+    the catalogue entry doesn't define a medium band — preserving the
+    v0.15.26 single-band / two-band call shapes for existing callers.
 
-    Falls back to ``{"close": (0, "L"), "long": None, ...}`` for
-    missing / unparseable input — lethal is the WoD 2.0 default and
-    zero damage is harmless.
+    Falls back to ``{"close": (0, "L"), "medium": None, "long": None,
+    ...}`` for missing / unparseable input — lethal is the WoD 2.0
+    default and zero damage is harmless.
     """
     raw = "" if damage_field is None else str(damage_field)
     text = raw.strip()
     if not text:
-        return {"close": (0, "L"), "long": None, "raw": raw}
+        return {"close": (0, "L"), "medium": None, "long": None, "raw": raw}
 
-    # Multi-range detection: look for a "/" separator and check whether
-    # either side carries the keyword "long". If yes, route to the
-    # multi-range branch; otherwise fall back to single-band parsing.
+    # Multi-range detection: look for "/" separators and inspect each
+    # token for the band keyword. v0.15.34 — supports up to three
+    # tokens (close / medium / long) in any order. Tokens without a
+    # keyword fall back to "close" (same default as the v0.15.26 path).
     if "/" in text:
-        left, _, right = text.partition("/")
-        left_s = left.strip()
-        right_s = right.strip()
-        left_has_long = "long" in left_s.lower()
-        right_has_long = "long" in right_s.lower()
-        if left_has_long or right_has_long:
-            # Whichever token mentions "long" wins the long slot.
-            if right_has_long:
-                close_token, long_token = left_s, right_s
-            else:
-                close_token, long_token = right_s, left_s
-            close = _parse_damage_token(close_token)
-            long_band = _parse_damage_token(long_token)
-            return {"close": close, "long": long_band, "raw": raw}
+        tokens = [t.strip() for t in text.split("/") if t.strip()]
+        # Only route to multi-range parsing when at least one token
+        # carries a band keyword. Otherwise stay on the single-band
+        # path so ``"5L (both barrels)"`` keeps working.
+        keyword_tokens = [
+            t for t in tokens
+            if any(k in t.lower() for k in ("long", "medium", "close"))
+        ]
+        if keyword_tokens:
+            close_token = None
+            medium_token = None
+            long_token = None
+            unkeyed_tokens = []
+            for t in tokens:
+                tl = t.lower()
+                if "long" in tl and long_token is None:
+                    long_token = t
+                elif "medium" in tl and medium_token is None:
+                    medium_token = t
+                elif "close" in tl and close_token is None:
+                    close_token = t
+                else:
+                    unkeyed_tokens.append(t)
+            # Backfill missing close from the first unkeyed token (so
+            # ``"4L / 2L long"`` still resolves close=4L). This mirrors
+            # the v0.15.26 fallback of "left token wins close when no
+            # close keyword is present".
+            if close_token is None and unkeyed_tokens:
+                close_token = unkeyed_tokens.pop(0)
+            close_band = (
+                _parse_damage_token(close_token) if close_token else (0, "L")
+            )
+            medium_band = (
+                _parse_damage_token(medium_token) if medium_token else None
+            )
+            long_band = (
+                _parse_damage_token(long_token) if long_token else None
+            )
+            return {
+                "close": close_band,
+                "medium": medium_band,
+                "long": long_band,
+                "raw": raw,
+            }
 
     # Single-band fallback — same semantics as the legacy parser.
-    return {"close": _parse_damage_token(text), "long": None, "raw": raw}
+    return {
+        "close": _parse_damage_token(text),
+        "medium": None,
+        "long": None,
+        "raw": raw,
+    }
 
 
 def _attack_dice_pool(actor, weapon_data, gm_modifier, weapon_skill_name=""):
@@ -2345,6 +2488,19 @@ def encounter_page(request, pk):
             continue
         target_id, _turns = p.aim_state
         p.aim_target_name = pid_to_name.get(target_id)
+
+    # v0.15.34 — pre-compute the COUP DE GRACE target list per row.
+    # An "incapacitated target" is any OTHER participant in the
+    # encounter that carries the ``incapacitated`` condition tag. The
+    # row template iterates this list to populate the COUP DE GRACE
+    # target dropdown; an empty list suppresses the form entirely.
+    # Done in Python to avoid an N^2 template-side filter.
+    incap_pool = [
+        other for other in participants
+        if "incapacitated" in (other.conditions or [])
+    ]
+    for p in participants:
+        p.incapacitated_targets = [o for o in incap_pool if o.id != p.id]
 
     by_faction = {
         "player_or_ally": [p for p in participants if p.faction in ("player", "ally")],
@@ -4435,17 +4591,30 @@ def _resolve_single_attack(
     # long entries; ``range_band`` selects which one drives damage on
     # this resolve call. Falls back to close whenever long is None
     # (single-band weapons) or the band string is unknown.
+    # v0.15.34 — additionally honours ``range_band == "medium"`` when
+    # the catalogue entry defines a medium token (e.g. thrown weapons
+    # the GM edits to add range falloff). Unknown / missing bands
+    # collapse to close, preserving the v0.15.26 semantics for every
+    # existing seed entry.
     parsed_damage = _parse_weapon_damage(
         (weapon_data or {}).get("damage", "")
     )
-    band = "long" if (range_band == "long" and parsed_damage["long"]) else "close"
-    band_amount, band_type = (
-        parsed_damage["long"] if band == "long" else parsed_damage["close"]
-    )
+    if range_band == "long" and parsed_damage["long"]:
+        band = "long"
+        band_amount, band_type = parsed_damage["long"]
+    elif range_band == "medium" and parsed_damage.get("medium"):
+        band = "medium"
+        band_amount, band_type = parsed_damage["medium"]
+    else:
+        band = "close"
+        band_amount, band_type = parsed_damage["close"]
     weapon_damage_used_str = f"{band_amount}{band_type}"
-    range_tail = (
-        f" (LONG RANGE — {weapon_damage_used_str})" if band == "long" else ""
-    )
+    if band == "long":
+        range_tail = f" (LONG RANGE — {weapon_damage_used_str})"
+    elif band == "medium":
+        range_tail = f" (MEDIUM RANGE — {weapon_damage_used_str})"
+    else:
+        range_tail = ""
 
     # v0.15.19 — record the X-again threshold up-front so it's
     # available for both the full-cover blocked branch and the rolled
@@ -4549,6 +4718,57 @@ def _resolve_single_attack(
         return
 
     # ---- Hit ---------------------------------------------------------------
+    # v0.15.34 — cover destruction. When the target is in cover and the
+    # attack landed (successes > 0), the cover takes 1 damage per
+    # successful attack. When ``cover_health`` reaches 0 the cover
+    # collapses (cover_state cleared, log row written). Heavy ordnance
+    # (grenades / explosives) routes through ``throw_grenade`` which
+    # handles cover separately. Conservative model: 1 damage per
+    # landed attack regardless of success count — easier to reason
+    # about than canon's "successes - durability" formula and avoids
+    # surprising one-shot collapses on a high-success burst.
+    cover_destroyed_this_attack = False
+    cover_damage_taken = 0
+    if (
+        target.cover_state in ("light", "heavy", "full")
+        and target.cover_health is not None
+        and target.cover_health > 0
+    ):
+        # Cover is consumed BEFORE the participant damage roll so a
+        # single attack that destroys cover can also tag the
+        # participant — that's the canon behaviour (the round of
+        # bullets that punched through still hits the body).
+        cover_damage_taken = 1
+        new_cover_health = target.cover_health - cover_damage_taken
+        cover_name_for_log = (target.cover_entry_name or target.cover_state).upper()
+        if new_cover_health <= 0:
+            # Cover collapsed. Strip every cover field on the target.
+            # ``cover_state`` falls back to "none"; the entry-name
+            # mirror, durability, and health all clear so a downstream
+            # ``set_cover`` can re-equip cleanly.
+            target.cover_state = "none"
+            target.cover_entry_name = ""
+            target.cover_durability = None
+            target.cover_health = None
+            target.save(update_fields=[
+                "cover_state",
+                "cover_entry_name",
+                "cover_durability",
+                "cover_health",
+            ])
+            cover_destroyed_this_attack = True
+            _log(
+                encounter,
+                "cover_destroyed",
+                f"{cover_name_for_log} cover behind {target.name} collapsed.",
+                target_participant_id=target.id,
+                cover_name=target.cover_entry_name or "",
+                cover_damage_taken=cover_damage_taken,
+            )
+        else:
+            target.cover_health = new_cover_health
+            target.save(update_fields=["cover_health"])
+
     # v0.15.26 — band_amount / band_type were resolved up-front against
     # the requested range_band ("close" or "long"). For single-band
     # weapons (parsed["long"] is None) the band always collapses to
@@ -4597,6 +4817,14 @@ def _resolve_single_attack(
         applied=applied,
         upgrades=upgraded,
         overflow=overflow,
+        # v0.15.34 — cover-destruction payload. ``cover_damage_taken``
+        # is 1 when the target was behind active cover at the time of
+        # the hit (zero otherwise). ``cover_destroyed`` flips True when
+        # the strike was the killing blow on the cover. Always present
+        # so timeline filters can group on the keys without absence
+        # checks.
+        cover_damage_taken=cover_damage_taken,
+        cover_destroyed=cover_destroyed_this_attack,
     )
 
     _log(
@@ -4820,8 +5048,18 @@ def attack(request, pk, attacker_id):
     # opt into via the form's range_band selector. Bad / missing
     # values collapse to "close". Single-band weapons ignore the
     # field; the resolver auto-falls-back to close when long is None.
+    # v0.15.34 — additionally honours ``"medium"`` for catalogue
+    # entries that define the third token (e.g. thrown weapons GM-
+    # edited to add medium-range falloff). The resolver
+    # short-circuits to close when the band string lands on a missing
+    # token, so a tampered POST or a single-band weapon stays safe.
     range_band_raw = (request.POST.get("range_band", "close") or "close").strip().lower()
-    range_band = "long" if range_band_raw == "long" else "close"
+    if range_band_raw == "long":
+        range_band = "long"
+    elif range_band_raw == "medium":
+        range_band = "medium"
+    else:
+        range_band = "close"
 
     weapon_data = attacker.weapon_data or {}
     weapon_name = attacker.weapon_name or "(unarmed)"
@@ -4961,7 +5199,19 @@ def attack(request, pk, attacker_id):
         range_band=range_band,
     )
     all_out_bonus = 2 if all_out else 0
-    primary_pool = base_pool_no_burst + burst_bonus + aim_bonus + all_out_bonus
+    # v0.15.34 — reach advantage. Melee-only, both combatants at
+    # engaged range, attacker's weapon reach > target's. Capped at +2.
+    # Computed against the primary target only — spread extras / off-
+    # hand consult their own targets via ``_reach_bonus`` at their
+    # respective resolve calls.
+    reach_bonus_primary = _reach_bonus(attacker, target, weapon_data)
+    primary_pool = (
+        base_pool_no_burst
+        + burst_bonus
+        + aim_bonus
+        + all_out_bonus
+        + reach_bonus_primary
+    )
 
     # Decrement willpower and persist if the spend went through.
     # Done *before* any roll so payload's willpower_after is accurate.
@@ -5005,6 +5255,10 @@ def attack(request, pk, attacker_id):
         msg_tail_parts.append(f"+{burst_bonus} BURST")
     if all_out:
         msg_tail_parts.append("ALL-OUT")
+    # v0.15.34 — reach segment. Only surfaces on the primary tail; the
+    # off-hand and spread-extra paths build their own tails.
+    if reach_bonus_primary:
+        msg_tail_parts.append(f"+{reach_bonus_primary} REACH")
     msg_tail = (" (" + " | ".join(msg_tail_parts) + ")") if msg_tail_parts else ""
 
     # v0.15.14 — extra targets for autofire spread. Cap by burst mode,
@@ -5126,6 +5380,10 @@ def attack(request, pk, attacker_id):
         # set per-row inside ``_resolve_single_attack``).
         "gun_fu_total": gun_fu_to_spend,
         "gun_fu_rating": gun_fu_rating,
+        # v0.15.34 — reach bonus metadata. ``reach_bonus`` is the
+        # primary's contribution; spread extras / off-hand each carry
+        # their own ``reach_bonus`` via per-row payload writes below.
+        "reach_bonus": reach_bonus_primary,
     }
 
     # ---- Primary attack ----------------------------------------------------
@@ -5179,7 +5437,15 @@ def attack(request, pk, attacker_id):
         spread_penalty = i  # cumulative -1, -2, ... per index
         # Extras get the burst bonus but NOT the aim bonus. Spread
         # penalty is subtracted from the pool before defense/cover.
-        extra_pool = max(0, base_pool_no_burst + burst_bonus - spread_penalty)
+        # v0.15.34 — reach is consulted per extra target. Practically
+        # only fires on melee weapons in odd POST shapes (the spread
+        # pipeline is firearm-territory) but the helper short-circuits
+        # to 0 for ranged categories so this is a free safety net.
+        extra_reach_bonus = _reach_bonus(attacker, extra_target, weapon_data)
+        extra_pool = max(
+            0,
+            base_pool_no_burst + burst_bonus + extra_reach_bonus - spread_penalty,
+        )
         # v0.15.17 — pull this extra's Gun Fu slot from the
         # distribution. Slot index ``i`` (1-based) maps directly to
         # ``gun_fu_distribution[i]`` because slot 0 is the primary.
@@ -5340,7 +5606,15 @@ def attack(request, pk, attacker_id):
                 # the legacy single-band weapon path.
                 range_band=range_band,
             )
-            offhand_pool = max(0, offhand_base_pool + offhand_penalty)
+            # v0.15.34 — reach consulted on the off-hand independently
+            # using the off-hand's own weapon snapshot. A long off-hand
+            # weapon vs a short main weapon on the target still pays
+            # the bonus on this slot.
+            offhand_reach_bonus = _reach_bonus(attacker, target, offhand_data)
+            offhand_pool = max(
+                0,
+                offhand_base_pool + offhand_penalty + offhand_reach_bonus,
+            )
 
             # Per-target payload for the off-hand row. ``dual_wield``
             # stays True and ``dual_wield_offhand`` flips so a
@@ -5382,11 +5656,17 @@ def attack(request, pk, attacker_id):
                 # both rows by the same key.
                 "gun_fu_total": gun_fu_to_spend,
                 "gun_fu_rating": gun_fu_rating,
+                # v0.15.34 — off-hand reach bonus, computed against the
+                # same primary target with the off-hand weapon's own
+                # ``reach`` value. Independent from the main-hand row.
+                "reach_bonus": offhand_reach_bonus,
             }
 
             offhand_msg_tail_parts = ["OFF-HAND"]
             if is_ambidextrous:
                 offhand_msg_tail_parts.append("AMBIDEXTROUS")
+            if offhand_reach_bonus:
+                offhand_msg_tail_parts.append(f"+{offhand_reach_bonus} REACH")
             offhand_msg_tail = (
                 " (" + ", ".join(offhand_msg_tail_parts) + ")"
             )
@@ -5448,18 +5728,26 @@ def attack(request, pk, attacker_id):
     # The spend lands on the character regardless of per-target outcome
     # (a Gun Fu success that fell on a fully-covered target is still
     # spent — the player committed before resolution, no refund).
-    if gun_fu_to_spend > 0 and attacker.character is not None:
+    # v0.15.34 — extended to NPCs. The NPC sheet gained a
+    # ``merit_uses`` JSONField in v0.15.34, so a GM-driven NPC with
+    # Gun Fu can now spend the auto-success pool the same way a player
+    # would on a Character. Sheet selection mirrors ``_gun_fu_state``.
+    sheet_for_spend = None
+    if attacker.participant_kind == "character" and attacker.character is not None:
+        sheet_for_spend = attacker.character
+    elif attacker.participant_kind == "npc" and attacker.npc is not None:
+        sheet_for_spend = attacker.npc
+    if gun_fu_to_spend > 0 and sheet_for_spend is not None:
         # Defensive re-fetch before mutating the JSONField — earlier
         # housekeeping (willpower / ammo) round-tripped the attacker
-        # but the character itself was untouched, so the dict on the
-        # in-memory copy is canonical. Still, refresh for symmetry
+        # but the underlying sheet itself was untouched, so the dict on
+        # the in-memory copy is canonical. Still, refresh for symmetry
         # with the encounter's other persistence sites.
-        char = attacker.character
-        char.refresh_from_db(fields=["merit_uses"])
-        uses = dict(char.merit_uses or {})
+        sheet_for_spend.refresh_from_db(fields=["merit_uses"])
+        uses = dict(sheet_for_spend.merit_uses or {})
         uses["Gun Fu"] = int(uses.get("Gun Fu", 0)) + gun_fu_to_spend
-        char.merit_uses = uses
-        char.save(update_fields=["merit_uses"])
+        sheet_for_spend.merit_uses = uses
+        sheet_for_spend.save(update_fields=["merit_uses"])
         remaining_after = max(0, gun_fu_remaining - gun_fu_to_spend)
         _log(
             encounter,
@@ -6348,6 +6636,46 @@ def throw_grenade(request, pk, participant_id):
     throw_pool = max(0, base_pool + gm_modifier + wound_pen + cond_atk)
     successes, dice = _roll_pool(throw_pool)
 
+    # v0.15.34 — grenade scatter on a missed throw. Canon WoD: a 0-
+    # success throw means the grenade scattered off-target. The grenade
+    # is still consumed from inventory (you threw it, can't reel it
+    # back), the thrower's turn is still spent, and the timeline gets
+    # a system warning row + a structured ``grenade_scatter`` log row
+    # so the GM can pick the new target list narratively. We
+    # deliberately don't auto-pick scatter targets — the gridless
+    # model has no spatial info to project a scatter direction onto;
+    # the GM rules where the grenade lands.
+    if successes == 0:
+        # Decrement inventory + spend the turn before redirecting.
+        new_count = inv.get(gtype, 0) - 1
+        _set_grenade_count(thrower, gtype, new_count)
+        thrower.acted_this_round = True
+        thrower.save(update_fields=["conditions", "acted_this_round"])
+        _log(
+            encounter,
+            "system",
+            f"GRENADE SCATTERED — {thrower.name}'s {grenade_name} landed off-target. "
+            "GM: pick the new target list narratively or accept no effect.",
+            actor_participant_id=thrower.id,
+            grenade_type=gtype,
+            grenade_name=grenade_name,
+        )
+        _log(
+            encounter,
+            "grenade_scatter",
+            f"{thrower.name}: {grenade_name} scattered (0 successes on {throw_pool}d).",
+            actor_participant_id=thrower.id,
+            grenade_type=gtype,
+            grenade_name=grenade_name,
+            original_targets=[t.id for t in targets],
+            scatter_outcome="off",
+            throw_pool=throw_pool,
+            successes=0,
+            dice=dice,
+            remaining_inventory=new_count,
+        )
+        return redirect("combat:detail", pk=encounter.pk)
+
     # 5) Per-target resolution. Effects bypass cover when
     #    cover_resists=False (stun / smoke / tear gas / EMP). Damage
     #    grenades subtract cover_pen when cover_resists=True (frag,
@@ -6627,6 +6955,462 @@ def dodge(request, pk, participant_id):
             f"{participant.name}'s aim broken — dodged.",
             actor_participant_id=participant.id,
         )
+    return redirect("combat:detail", pk=encounter.pk)
+
+
+# ---------------------------------------------------------------------------
+# v0.15.34 — Combat-rule completeness pass
+# ---------------------------------------------------------------------------
+#
+# EXTINGUISH, MOVE POSITION, DISARM, COUP DE GRACE — four new actions
+# layered onto the existing turn-based pacing model. All four mark
+# ``acted_this_round=True`` on the actor (when the action costs a
+# turn) without auto-advancing the pointer; the GM stays in control of
+# pacing via NEXT TURN. Same shape as ATTACK / AIM / FULL DEFENSE
+# from earlier releases.
+
+
+@login_required
+@_gm_or_owner()
+@csrf_protect
+@transaction.atomic
+def extinguish(request, pk, participant_id):
+    """POST — strip the ``burning`` tag from a participant.
+
+    v0.15.34 — players can extinguish their own burning condition by
+    spending their turn on the action (drop and roll, dunk in water,
+    etc.). The GM can fire the action off-turn for narrative
+    bookkeeping (e.g. an NPC ally puts the fire out) — those off-turn
+    extinguishes are free and don't mark ``acted_this_round``.
+
+    Strips the ``burning`` flat tag and any ``burning_until:N``
+    companion. Logs ``extinguish`` action_type with the on/off-turn
+    flag.
+
+    Rejected (flash + redirect) when:
+
+    * Encounter not active.
+    * Participant doesn't carry the ``burning`` tag (silent no-op
+      flash; the timeline doesn't get a row in that case).
+    * Non-GM player attempts the action off-turn (turn cost rejected).
+    """
+    if request.method != "POST":
+        return HttpResponseNotAllowed(["POST"])
+
+    encounter = get_object_or_404(Encounter, pk=pk)
+    if encounter.status != "active":
+        messages.error(request, "Cannot extinguish outside an active encounter.")
+        return redirect("combat:detail", pk=encounter.pk)
+
+    participant = get_object_or_404(
+        Participant, pk=participant_id, encounter=encounter
+    )
+
+    if "burning" not in (participant.conditions or []):
+        messages.error(request, f"{participant.name} is not burning.")
+        return redirect("combat:detail", pk=encounter.pk)
+
+    on_turn = (encounter.active_participant_id == participant.id)
+
+    # Players can only extinguish on their own turn — it's a turn-cost
+    # action. Off-turn extinguish is a GM convenience (an ally rushes
+    # over with a fire blanket while it's not your turn) and stays GM-
+    # only. The ``_gm_or_owner`` decorator already gated ownership.
+    if not on_turn and not request.user.is_superuser:
+        messages.error(
+            request,
+            "EXTINGUISH costs your turn — wait until you're up "
+            "(or ask the GM to extinguish for you).",
+        )
+        return redirect("combat:detail", pk=encounter.pk)
+
+    # Strip the flat tag plus any ``burning_until:N`` companion. The
+    # companion shouldn't normally be set on burning (phosphor seeds it
+    # without a duration tag) but we strip defensively to keep the
+    # state machine clean.
+    new_conds = [
+        c for c in (participant.conditions or [])
+        if c != "burning" and not c.startswith("burning_until:")
+    ]
+    participant.conditions = new_conds
+    update_fields = ["conditions"]
+    if on_turn:
+        participant.acted_this_round = True
+        update_fields.append("acted_this_round")
+    participant.save(update_fields=update_fields)
+
+    _log(
+        encounter,
+        "extinguish",
+        f"{participant.name} extinguished the fire."
+        + ("" if on_turn else " (off-turn — GM ruling)"),
+        target_participant_id=participant.id,
+        actor_participant_id=participant.id,
+        on_turn=on_turn,
+    )
+    return redirect("combat:detail", pk=encounter.pk)
+
+
+# v0.15.34 — canonical position labels for the move action. Anything
+# outside this set is rejected; the participant keeps the existing
+# label. Free-form labels can still be set via direct admin / API
+# writes if a GM needs an exotic narrative slot.
+POSITION_LABELS = ("engaged", "short", "long")
+
+
+@login_required
+@_gm_or_owner()
+@csrf_protect
+@transaction.atomic
+def move_position(request, pk, participant_id):
+    """POST — change a participant's narrative position label.
+
+    v0.15.34 — gridless WoD 2.0 movement. Three canonical slots:
+
+    * ``engaged`` — melee range (default).
+    * ``short``   — 5–10 m (close-combat-adjacent / pistol territory).
+    * ``long``    — 20 m+ (rifles, cover-to-cover, retreat).
+
+    The label is purely narrative for v0.15.34 — no automatic dice
+    modifiers based on distance (range bands on weapons already cover
+    that). The position drives the reach-bonus check (``_reach_bonus``
+    only fires when both combatants are at engaged range) and gives
+    the GM / players a shared mental model of who's where without
+    needing a battle map.
+
+    Players can move their own row on their own turn (action cost:
+    marks ``acted_this_round=True``). The GM can move anyone any
+    time without a turn cost — useful for narrative repositioning,
+    starting-position setup, scene-shift adjustments.
+
+    Logs ``move`` action_type with from/to labels and the on-turn
+    flag.
+
+    Rejected (flash + redirect) when:
+
+    * Encounter not active.
+    * Submitted ``position_label`` is not one of {engaged|short|long}.
+    * Non-GM player attempts to move off-turn (turn cost rejected).
+    """
+    if request.method != "POST":
+        return HttpResponseNotAllowed(["POST"])
+
+    encounter = get_object_or_404(Encounter, pk=pk)
+    if encounter.status != "active":
+        messages.error(request, "Cannot move outside an active encounter.")
+        return redirect("combat:detail", pk=encounter.pk)
+
+    participant = get_object_or_404(
+        Participant, pk=participant_id, encounter=encounter
+    )
+
+    label = (request.POST.get("position_label", "") or "").strip().lower()
+    if label not in POSITION_LABELS:
+        messages.error(
+            request,
+            f"Unknown position '{label}'. Pick one of: "
+            + ", ".join(POSITION_LABELS),
+        )
+        return redirect("combat:detail", pk=encounter.pk)
+
+    is_gm = request.user.is_superuser
+    on_turn = (encounter.active_participant_id == participant.id)
+
+    # Non-GM players must move on their own turn. The decorator
+    # already gated ownership; this is the action-cost gate.
+    if not is_gm and not on_turn:
+        messages.error(
+            request,
+            "Movement costs your turn — wait until you're up.",
+        )
+        return redirect("combat:detail", pk=encounter.pk)
+
+    from_label = participant.position_label or "engaged"
+    if from_label == label:
+        # No-op — silent success rather than a noisy log row.
+        return redirect("combat:detail", pk=encounter.pk)
+
+    participant.position_label = label
+    update_fields = ["position_label"]
+    # Player-driven move on own turn costs the turn. GM moves are
+    # always free narrative repositioning — no turn cost regardless
+    # of pointer state.
+    if on_turn and not is_gm:
+        participant.acted_this_round = True
+        update_fields.append("acted_this_round")
+    participant.save(update_fields=update_fields)
+
+    _log(
+        encounter,
+        "move",
+        f"{participant.name} moved to {label.upper()} range.",
+        actor_participant_id=participant.id,
+        target_participant_id=participant.id,
+        from_label=from_label,
+        to_label=label,
+        on_turn=on_turn,
+    )
+    return redirect("combat:detail", pk=encounter.pk)
+
+
+@login_required
+@_gm_or_owner("attacker_id")
+@csrf_protect
+@transaction.atomic
+def disarm(request, pk, attacker_id):
+    """POST — attempt to disarm a single target.
+
+    v0.15.34 — WoD 2.0 disarm contest:
+
+    * **Attacker pool**: ``Dexterity + Brawl (or Weaponry) +
+      weapon_dice + GM modifier + wound + condition_attack_modifier``.
+      The skill defaults to Brawl (unarmed disarm); pass
+      ``weapon_skill=Weaponry`` to use a melee weapon.
+    * **Target resistance pool**: ``Dexterity + Brawl`` — clean
+      contest, no GM modifier or wound penalty.
+    * Both roll via ``_roll_pool``. Attacker successes vs target
+      successes; ties go to the target (defender wins ties).
+    * On attacker win: target's main-hand weapon is unequipped
+      (``weapon_name=""``, ``weapon_data={}``, ammo tag stripped).
+      The off-hand stays put — disarming both hands is a separate
+      action.
+    * On miss / tie: target keeps the weapon.
+
+    Marks ``acted_this_round=True`` (turn-cost action, no auto-
+    advance — GM clicks NEXT TURN).
+
+    Form fields:
+
+    * ``target_id``    — required participant id (must be in the
+                         encounter, not the attacker themselves).
+    * ``gm_modifier``  — signed int added to the attacker pool.
+    * ``weapon_skill`` — optional override; defaults to Brawl.
+
+    Rejected (flash + redirect) when:
+
+    * Encounter not active.
+    * Attacker not the active participant.
+    * Target missing / not in encounter / equals attacker.
+    """
+    if request.method != "POST":
+        return HttpResponseNotAllowed(["POST"])
+
+    encounter = get_object_or_404(Encounter, pk=pk)
+    if encounter.status != "active":
+        messages.error(request, "Cannot disarm outside an active encounter.")
+        return redirect("combat:detail", pk=encounter.pk)
+
+    attacker = get_object_or_404(
+        Participant, pk=attacker_id, encounter=encounter
+    )
+    if encounter.active_participant_id != attacker.id:
+        messages.error(
+            request, "Disarm must be attempted on your own turn."
+        )
+        return redirect("combat:detail", pk=encounter.pk)
+
+    target_id_raw = request.POST.get("target_id")
+    if not target_id_raw:
+        messages.error(request, "Pick a target to disarm.")
+        return redirect("combat:detail", pk=encounter.pk)
+    target = get_object_or_404(
+        Participant, pk=target_id_raw, encounter=encounter
+    )
+    if target.id == attacker.id:
+        messages.error(request, "Cannot disarm self.")
+        return redirect("combat:detail", pk=encounter.pk)
+
+    if not (target.weapon_name or target.weapon_data):
+        messages.error(
+            request,
+            f"{target.name} has no weapon to disarm.",
+        )
+        return redirect("combat:detail", pk=encounter.pk)
+
+    gm_modifier_int = _safe_int(request.POST.get("gm_modifier"), 0)
+    skill_input = (request.POST.get("weapon_skill", "") or "").strip()
+    # Default to Brawl; explicit Weaponry override is honoured if the
+    # attacker passes it. Anything else collapses to Brawl.
+    if skill_input.lower() == "weaponry":
+        attacker_skill = "Weaponry"
+    else:
+        attacker_skill = "Brawl"
+
+    # Compose attacker pool. Use the equipped weapon's dice modifier
+    # iff the chosen skill is Weaponry (the weapon hooks the contest);
+    # Brawl-disarm uses bare-handed leverage and ignores the equipped
+    # weapon's ``dice_modifier`` (mostly inert in our seed catalogue
+    # anyway, but kept defensive).
+    attacker_weapon = attacker.weapon_data if attacker_skill == "Weaponry" else {}
+    attacker_pool = _actor_total_pool(
+        attacker, attacker_weapon, gm_modifier_int, attacker_skill,
+        spend_willpower=False, applied_specialisations=None,
+        range_band="close",
+    )
+
+    # Target resistance: Dex + Brawl. Mooks borrow
+    # ``mook_combat_pool / 2`` as a stand-in resistance — same shape
+    # as the throw pool fallback in throw_grenade.
+    if target.participant_kind == "mook":
+        target_pool = max(0, (target.mook_combat_pool or 0) // 2)
+    else:
+        source = target.character or target.npc
+        if source is None:
+            target_pool = 0
+        else:
+            try:
+                dex = int(source.attributes["finesse"]["physical"])
+                brawl = int(source.skills["physical"].get("Brawl", 0))
+                target_pool = dex + brawl
+            except (KeyError, TypeError, ValueError):
+                target_pool = 0
+
+    attacker_successes, attacker_dice = _roll_pool(max(0, attacker_pool))
+    target_successes, target_dice = _roll_pool(max(0, target_pool))
+
+    weapon_lost = ""
+    if attacker_successes > target_successes:
+        # Disarmed. Strip main-hand weapon snapshot + any ammo tag.
+        weapon_lost = target.weapon_name or "(weapon)"
+        target.weapon_name = ""
+        target.weapon_data = {}
+        # Drop the ammo:N tag if any (parallel ammo system).
+        _strip_ammo(target)
+        target.save(update_fields=[
+            "weapon_name", "weapon_data", "conditions",
+        ])
+        outcome = "disarmed"
+        msg = (
+            f"{attacker.name} DISARMED {target.name}: "
+            f"{weapon_lost} knocked away "
+            f"({attacker_successes} vs {target_successes})."
+        )
+    else:
+        outcome = "kept"
+        msg = (
+            f"{attacker.name} → {target.name}: disarm FAILED "
+            f"({attacker_successes} vs {target_successes}) — "
+            f"target retained their weapon."
+        )
+
+    # Spend the turn (no auto-advance).
+    attacker.acted_this_round = True
+    attacker.save(update_fields=["acted_this_round"])
+
+    _log(
+        encounter,
+        "disarm",
+        msg,
+        actor_participant_id=attacker.id,
+        target_participant_id=target.id,
+        attacker_pool=attacker_pool,
+        target_pool=target_pool,
+        attacker_successes=attacker_successes,
+        target_successes=target_successes,
+        attacker_dice=attacker_dice,
+        target_dice=target_dice,
+        attacker_skill=attacker_skill,
+        gm_modifier=gm_modifier_int,
+        outcome=outcome,
+        weapon_lost=weapon_lost,
+    )
+    return redirect("combat:detail", pk=encounter.pk)
+
+
+@login_required
+@_gm_or_owner("attacker_id")
+@csrf_protect
+@transaction.atomic
+def coup_de_grace(request, pk, attacker_id):
+    """POST — finishing blow on an incapacitated target.
+
+    v0.15.34 — mercy kill / execution. No roll required: the target
+    is helpless, so the strike auto-applies **3 aggravated damage**
+    via ``_apply_damage`` (the standard track-upgrade ladder still
+    fires on overflow). When the track was already full the damage
+    upgrades existing B / L boxes to A; the target stays / becomes
+    fully filled.
+
+    Marks ``acted_this_round=True`` (turn cost; no auto-advance — GM
+    clicks NEXT TURN to actually pass the turn).
+
+    Form fields:
+
+    * ``target_id`` — required; must already carry the
+                      ``incapacitated`` condition.
+
+    Rejected (flash + redirect) when:
+
+    * Encounter not active.
+    * Attacker not the active participant.
+    * Target missing / equals attacker.
+    * Target is not incapacitated (the action is mechanically
+      pointless against a still-fighting opponent — use ATTACK).
+    """
+    if request.method != "POST":
+        return HttpResponseNotAllowed(["POST"])
+
+    encounter = get_object_or_404(Encounter, pk=pk)
+    if encounter.status != "active":
+        messages.error(
+            request, "Cannot coup de grâce outside an active encounter.",
+        )
+        return redirect("combat:detail", pk=encounter.pk)
+
+    attacker = get_object_or_404(
+        Participant, pk=attacker_id, encounter=encounter
+    )
+    if encounter.active_participant_id != attacker.id:
+        messages.error(
+            request, "Coup de grâce must be on your own turn.",
+        )
+        return redirect("combat:detail", pk=encounter.pk)
+
+    target_id_raw = request.POST.get("target_id")
+    if not target_id_raw:
+        messages.error(request, "Pick a target.")
+        return redirect("combat:detail", pk=encounter.pk)
+    target = get_object_or_404(
+        Participant, pk=target_id_raw, encounter=encounter
+    )
+    if target.id == attacker.id:
+        messages.error(request, "Cannot coup de grâce self.")
+        return redirect("combat:detail", pk=encounter.pk)
+    if not _has_condition(target, "incapacitated"):
+        messages.error(
+            request,
+            f"{target.name} is not incapacitated — use ATTACK instead.",
+        )
+        return redirect("combat:detail", pk=encounter.pk)
+
+    before = {
+        "bashing": target.health_bashing,
+        "lethal": target.health_lethal,
+        "aggravated": target.health_aggravated,
+    }
+    applied, upgrades, overflow = _apply_damage(target, 3, "A")
+    after = {
+        "bashing": target.health_bashing,
+        "lethal": target.health_lethal,
+        "aggravated": target.health_aggravated,
+    }
+
+    attacker.acted_this_round = True
+    attacker.save(update_fields=["acted_this_round"])
+
+    _log(
+        encounter,
+        "coup_de_grace",
+        f"{attacker.name} delivers the coup de grâce to {target.name} — "
+        f"3 aggravated damage ({applied} applied, {upgrades} upgraded).",
+        actor_participant_id=attacker.id,
+        target_participant_id=target.id,
+        damage_applied=applied,
+        upgrades=upgrades,
+        overflow=overflow,
+        before=before,
+        after=after,
+    )
     return redirect("combat:detail", pk=encounter.pk)
 
 

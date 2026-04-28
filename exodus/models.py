@@ -29,6 +29,43 @@ def _clamp_again(value):
     return 10
 
 
+def _clamp_reach(value):
+    """Clamp the weapon ``reach`` integer to ``0..5``.
+
+    v0.15.34 — long melee weapons get +1 dice in melee against shorter
+    weapons when both attacker and target are at ``position_label =
+    "engaged"``. The catalogue stores the rating as a non-negative
+    integer; the resolver compares attacker vs target reach to decide
+    whether the attacker gets +1 dice.
+
+    Defaults / seeds:
+
+    * Knuckle Buster, Knife, Phone Book, Bottle, Taser, Hammer (handle
+      length only): 0
+    * Baton, Chair: 1
+    * (Sword, axe, machete would be 2 — none are in the seed catalogue
+      yet; the GM can tune via /settings/.)
+    * Firearms / thrown / grenades: 0 (no melee reach context)
+
+    Bad input (None, non-int strings, negative) collapses to ``0``;
+    values above 5 clamp down. Used by:
+
+    * ``SiteSettings.get_weapons`` to hydrate the read path.
+    * ``exodus.views`` weapons settings POST.
+    * ``combat.views._actor_total_pool`` reads the hydrated value
+      directly off the equipped-weapon snapshot.
+    """
+    try:
+        v = int(value)
+    except (TypeError, ValueError):
+        return 0
+    if v < 0:
+        return 0
+    if v > 5:
+        return 5
+    return v
+
+
 def _clamp_close_range_penalty(value):
     """Clamp the close_range_penalty integer to a sensible range.
 
@@ -381,24 +418,30 @@ class SiteSettings(models.Model):
         return [
             # ----- Melee --------------------------------------------------
             {"name": "Knuckle Buster", "category": "melee", "damage": "1B",
-             "range": "—", "capacity": "—", "notes": "Concealed under glove. Subdual-friendly."},
+             "range": "—", "capacity": "—", "reach": 0,
+             "notes": "Concealed under glove. Subdual-friendly."},
             {"name": "Knife", "category": "melee", "damage": "1L",
-             "range": "—", "capacity": "—", "notes": "Concealable. Throwable in a pinch."},
+             "range": "—", "capacity": "—", "reach": 0,
+             "notes": "Concealable. Throwable in a pinch."},
             {"name": "Baton", "category": "melee", "damage": "2B",
-             "range": "—", "capacity": "—", "notes": "Police standard. Telescopic variants extend +1 reach."},
+             "range": "—", "capacity": "—", "reach": 1,
+             "notes": "Police standard. Telescopic variants extend +1 reach."},
             {"name": "Taser (Contact)", "category": "melee", "damage": "1B",
-             "range": "—", "capacity": "1 charge",
+             "range": "—", "capacity": "1 charge", "reach": 0,
              "notes": "On hit: target rolls Stamina + Resolve or loses next action."},
             # ----- Improvised --------------------------------------------
             {"name": "Chair", "category": "improvised", "damage": "1B",
-             "range": "—", "capacity": "—", "notes": "−1 weapon mod. Breaks on 2+ successes."},
+             "range": "—", "capacity": "—", "reach": 1,
+             "notes": "−1 weapon mod. Breaks on 2+ successes."},
             {"name": "Bottle", "category": "improvised", "damage": "0B",
-             "range": "—", "capacity": "—",
+             "range": "—", "capacity": "—", "reach": 0,
              "notes": "Breaks on hit → broken neck = 1L improvised follow-up."},
             {"name": "Phone Book", "category": "improvised", "damage": "0B",
-             "range": "—", "capacity": "—", "notes": "Subdual-only. Spreads bashing across track without bruising."},
+             "range": "—", "capacity": "—", "reach": 0,
+             "notes": "Subdual-only. Spreads bashing across track without bruising."},
             {"name": "Hammer", "category": "improvised", "damage": "2B",
-             "range": "—", "capacity": "—", "notes": "Workshop tool. +1 dmg to construction-grade armour."},
+             "range": "—", "capacity": "—", "reach": 1,
+             "notes": "Workshop tool. +1 dmg to construction-grade armour."},
             # ----- Firearm ------------------------------------------------
             # ``auto_capable`` controls whether the attack form offers
             # burst-fire / autofire-spread modes for this weapon. Only
@@ -630,6 +673,14 @@ class SiteSettings(models.Model):
                 "close_range_penalty": _clamp_close_range_penalty(
                     w.get("close_range_penalty", 0)
                 ),
+                # v0.15.34 — reach. Non-negative integer (0..5) used by
+                # the combat resolver to grant +1 dice when an attacker
+                # at engaged range has more reach than the target's
+                # equipped weapon. Conceptually melee / improvised but
+                # hydrated on every row at 0 by default; firearms /
+                # thrown / grenades seed at 0. ``_clamp_reach`` bounds
+                # bad input to ``[0, 5]`` and collapses garbage to 0.
+                "reach": _clamp_reach(w.get("reach", 0)),
             })
         return hydrated
 

@@ -222,6 +222,38 @@ urlpatterns = [
         name="throw_grenade",
     ),
 
+    # v0.15.34 — Combat-rule completeness pass.
+    #
+    # ``extinguish``    — strip the burning tag (turn cost on own
+    #                     turn; free off-turn for GM bookkeeping).
+    # ``move_position`` — change the gridless position label
+    #                     (engaged / short / long). Player turn cost;
+    #                     GM moves are free narrative repositioning.
+    # ``disarm``        — WoD 2.0 contest to knock the target's main-
+    #                     hand weapon out of their grip.
+    # ``coup_de_grace`` — auto-aggravated finishing blow on an
+    #                     incapacitated target.
+    path(
+        "combat/<int:pk>/participants/<int:participant_id>/extinguish/",
+        views.extinguish,
+        name="extinguish",
+    ),
+    path(
+        "combat/<int:pk>/participants/<int:participant_id>/move/",
+        views.move_position,
+        name="move_position",
+    ),
+    path(
+        "combat/<int:pk>/participants/<int:attacker_id>/disarm/",
+        views.disarm,
+        name="disarm",
+    ),
+    path(
+        "combat/<int:pk>/participants/<int:attacker_id>/coup-de-grace/",
+        views.coup_de_grace,
+        name="coup_de_grace",
+    ),
+
     # ---------------------------------------------------------------
     # v0.15.7 — JSON API for the MCP server
     # ---------------------------------------------------------------

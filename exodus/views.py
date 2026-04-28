@@ -17,6 +17,7 @@ from .models import (
     SiteSettings,
     _clamp_again,
     _clamp_close_range_penalty,
+    _clamp_reach,
 )
 
 User = get_user_model()
@@ -274,6 +275,14 @@ def site_settings(request):
                 ranges = request.POST.getlist(f"weapons_{cat}_range")
                 capacities = request.POST.getlist(f"weapons_{cat}_capacity")
                 notes_list = request.POST.getlist(f"weapons_{cat}_notes")
+                # v0.15.34 — REACH parallel-array per category. Stored
+                # as a non-negative integer (0..5) on the JSONField. The
+                # combat resolver compares attacker vs target reach to
+                # grant +1 dice when both are at engaged range. Length-
+                # defensive: a partial POST collapses the missing entry
+                # to 0 (the no-bonus default) rather than raising
+                # IndexError, mirroring the close_range_penalty pattern.
+                reach_values = request.POST.getlist(f"weapons_{cat}_reach")
                 # Per-category counter for the grenade parallel arrays.
                 # Indexed independently of i (which iterates names per
                 # category) so the radius / duration arrays only consume
@@ -290,6 +299,13 @@ def site_settings(request):
                         "range": (ranges[i] if i < len(ranges) else "").strip()[:48],
                         "capacity": (capacities[i] if i < len(capacities) else "").strip()[:48],
                         "notes": (notes_list[i] if i < len(notes_list) else "").strip()[:240],
+                        # v0.15.34 — reach. Length-defensive on read;
+                        # missing entry collapses to 0 (no bonus) via
+                        # ``_clamp_reach``. Bounded ``[0, 5]`` server-
+                        # side; bad input also collapses to 0.
+                        "reach": _clamp_reach(
+                            reach_values[i] if i < len(reach_values) else 0
+                        ),
                     }
                     if cat == "firearm":
                         # v0.15.14 — read the parallel auto_capable

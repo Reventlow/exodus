@@ -446,6 +446,19 @@
                                 <th style="width: 17%;">RANGE</th>
                                 <th style="width: 10%;">CAPACITY</th>
                                 {% comment %}
+                                v0.15.34 — REACH column on every
+                                category. Drives the +1 dice melee
+                                bonus when the attacker's reach is
+                                higher than the target's at engaged
+                                range. Default seed: knife / knuckles
+                                / phone book / bottle / taser at 0;
+                                baton / chair / hammer at 1; firearms
+                                / thrown / grenades all 0 (no melee
+                                reach context). Bounded 0..5 server-
+                                side via ``_clamp_reach``.
+                                {% endcomment %}
+                                <th style="width: 5%; text-align: center;" title="Reach: integer 0-5 used by the +1 dice melee bonus when attacker reach exceeds target reach at engaged range. Firearms / thrown / grenades stay at 0.">REACH</th>
+                                {% comment %}
                                 v0.15.14 — AUTO column appears only for
                                 firearms. The header cell is conditional;
                                 the row cells below are also conditional
@@ -516,6 +529,23 @@
                                 <td><input type="text" name="weapons_{{ sec.cat }}_damage" value="{{ w.damage }}" maxlength="48"></td>
                                 <td><input type="text" name="weapons_{{ sec.cat }}_range" value="{{ w.range }}" maxlength="48"></td>
                                 <td><input type="text" name="weapons_{{ sec.cat }}_capacity" value="{{ w.capacity }}" maxlength="48"></td>
+                                {% comment %}
+                                v0.15.34 — REACH cell. Parallel-array
+                                ``weapons_{cat}_reach`` (one per
+                                category). Server clamps to 0..5 via
+                                ``_clamp_reach``. Field is editable
+                                on every category for symmetry; only
+                                melee / improvised weapons benefit
+                                from the bonus mechanically.
+                                {% endcomment %}
+                                <td style="text-align: center;">
+                                    <input type="number"
+                                           name="weapons_{{ sec.cat }}_reach"
+                                           value="{{ w.reach|default:0 }}"
+                                           min="0" max="5" step="1"
+                                           style="text-align: center;"
+                                           title="Reach (0-5). Drives the +1 dice melee bonus when attacker reach exceeds target reach at engaged range.">
+                                </td>
                                 {% if sec.cat == "firearm" %}
                                 {% comment %}
                                 v0.15.14 — auto_capable is persisted
@@ -780,12 +810,24 @@
                                          'title="Effect persistence in rounds. 0 = no auto-clear.">' +
                                 '</td>';
                         }
+                        // v0.15.34 — REACH cell. Always rendered
+                        // (every category gets one); new rows default
+                        // to 0. The clamp is server-side.
+                        var reachCell =
+                            '<td style="text-align: center;">' +
+                              '<input type="number" ' +
+                                     'name="weapons_' + cat + '_reach" ' +
+                                     'value="0" min="0" max="5" step="1" ' +
+                                     'style="text-align: center;" ' +
+                                     'title="Reach (0-5). Drives the +1 dice melee bonus when attacker reach exceeds target reach at engaged range.">' +
+                            '</td>';
                         var tr = document.createElement('tr');
                         tr.innerHTML =
                             '<td><input type="text" name="weapons_' + cat + '_name" maxlength="80" placeholder="NAME"></td>' +
                             '<td><input type="text" name="weapons_' + cat + '_damage" maxlength="48" placeholder="2L"></td>' +
                             '<td><input type="text" name="weapons_' + cat + '_range" maxlength="48" placeholder="—"></td>' +
                             '<td><input type="text" name="weapons_' + cat + '_capacity" maxlength="48" placeholder="—"></td>' +
+                            reachCell +
                             autoCell +
                             magCell +
                             againCell +

@@ -88,6 +88,14 @@ class NPC(models.Model):
     )
     flaws = models.JSONField(default=list)
     specialisations = models.JSONField(default=list)
+    # v0.15.34 — per-session merit-use tracking (mirrors
+    # Character.merit_uses). Keyed by merit name, value is the count of
+    # uses spent this session. Drives the Gun Fu auto-success spend on
+    # NPCs driven by the GM in combat (the NPC sheet otherwise has no
+    # session-state tracking — every other merit is rating-only). Reset
+    # via the same mechanism as characters (RESET MERIT USES on the
+    # underlying sheet, or via an admin / API write).
+    merit_uses = models.JSONField(default=dict, blank=True)
 
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
