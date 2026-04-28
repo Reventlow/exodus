@@ -1,5 +1,13 @@
 # Changelog
 
+## v0.15.25
+- **Combat race-condition hardening.** Every mutation view in `combat/` is now wrapped in `transaction.atomic()`. SQLite IMMEDIATE mode serializes writers at transaction-start, so two parallel attacks against the same target can no longer lose damage by overwriting each other's state. Two `next_turn` clicks can no longer race the pointer. Two `_log` writes can no longer collide on the unique `(encounter, sequence)` constraint
+- **`_log()` retry-on-IntegrityError** — defense in depth. The atomic block already prevents collisions on IMMEDIATE, but if a future backend change relaxes that, `_log` retries once on IntegrityError before re-raising. Broadcast happens AFTER commit so a Channels-layer failure can't roll back a log row
+- **No-op for normal play** — combat-paced clicks (one action per second per encounter) finish well under the SQLite busy-timeout. Lock contention is invisible at the table
+- **Read views unaffected** — the page-render path stays cheap; only mutation views pay the atomic cost
+- **`_apply_damage` and `_advance_turn_pointer` participate in the outer transaction** — both helpers are called from already-wrapped view functions; their `save()` calls flatten into the caller's transaction. Documented in the helper docstrings
+- **No model schema changes, no migrations, no new dependencies**
+
 ## v0.15.24
 - **Player-ready gate** — every Character participant must toggle READY before the GM can start combat. Stops the encounter from going live before players have chosen their starting layout (weapons, armor, cover, prone, etc.)
 - READY button per row, visible only during setup, on Character participants only, gated on `p.can_control` (player on own row, GM on any character). Read-only `READY` / `NOT READY` chip visible on rows the user can't control — everyone at the table sees the state

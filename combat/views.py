@@ -86,6 +86,7 @@ import secrets
 
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
+from django.db import IntegrityError, transaction
 from django.db.models import F, Max
 from django.http import (
     HttpResponseForbidden,
@@ -136,16 +137,46 @@ def _log(encounter, action_type, message, **data):
     layer lookup itself could fail in non-ASGI contexts (e.g. running
     ``manage.py shell`` or migrations). A broadcast hiccup must NEVER
     500 a REST mutation.
+
+    v0.15.25 — concurrent-safe: wraps the seq-compute + create in a
+    ``transaction.atomic`` block (SQLite IMMEDIATE mode serializes
+    writers at transaction-start), and retries once on
+    ``IntegrityError`` if a concurrent write somehow grabbed the same
+    sequence (defense in depth: the atomic block should already
+    prevent this on IMMEDIATE, but if a future backend change relaxes
+    that, the retry catches it). Most mutation views already wrap the
+    whole request in ``transaction.atomic``; Django flattens our
+    nested block into the outer transaction in that case.
+
+    The Channels broadcast happens AFTER the transaction commits, so
+    a channel-layer failure can't roll back the persisted log row.
     """
-    entry = CombatLog.objects.create(
-        encounter=encounter,
-        sequence=_next_sequence(encounter),
-        round_number=encounter.round_number,
-        action_type=action_type,
-        message=message,
-        data=data,
-    )
+    entry = None
+    for attempt in range(2):
+        try:
+            with transaction.atomic():
+                entry = CombatLog.objects.create(
+                    encounter=encounter,
+                    sequence=_next_sequence(encounter),
+                    round_number=encounter.round_number,
+                    action_type=action_type,
+                    message=message,
+                    data=data,
+                )
+            break
+        except IntegrityError:
+            if attempt == 1:
+                # Second collision = unrecoverable. Re-raise so the
+                # caller sees the 500 instead of silently corrupting.
+                raise
+            # First collision: another writer beat us to this
+            # sequence number. Loop and recompute via _next_sequence.
+            continue
+
     # ---- Real-time fan-out (v0.15.6) -------------------------------------
+    # Broadcast OUTSIDE the transaction. Channel-layer failure cannot
+    # 500 the REST request (helper swallows internally; belt-and-
+    # suspenders catch here too).
     try:
         broadcast_combat_event(
             encounter.id,
@@ -1086,6 +1117,11 @@ def _apply_damage(participant, amount, dtype):
     * ``overflow`` — points that fell off the right edge entirely
       (e.g. a B incoming on a full track, or an L incoming on a
       track full of L+).
+
+    v0.15.25 — assumes the caller has opened a
+    ``transaction.atomic()`` block. The ``participant.save()`` call
+    participates in the outer transaction; if any later step in the
+    caller raises, the damage roll-forward is rolled back atomically.
     """
     b = participant.health_bashing
     l = participant.health_lethal
@@ -2094,6 +2130,7 @@ def _resolve_story_idea(raw):
 @login_required
 @_gm_only
 @csrf_protect
+@transaction.atomic
 def encounter_create(request):
     """POST — create a new encounter and seed its log with a system row.
 
@@ -2122,6 +2159,7 @@ def encounter_create(request):
 @login_required
 @_gm_only
 @csrf_protect
+@transaction.atomic
 def encounter_update(request, pk):
     """POST — update an encounter's metadata (title / scene / location).
 
@@ -2154,6 +2192,7 @@ def encounter_update(request, pk):
 @login_required
 @_gm_only
 @csrf_protect
+@transaction.atomic
 def encounter_delete(request, pk):
     """POST — hard-delete an encounter.
 
@@ -2176,6 +2215,7 @@ def encounter_delete(request, pk):
 @login_required
 @_gm_only
 @csrf_protect
+@transaction.atomic
 def participant_add(request, pk):
     """POST — spawn a participant from one of three sources.
 
@@ -2335,6 +2375,7 @@ def participant_add(request, pk):
 @login_required
 @_gm_only
 @csrf_protect
+@transaction.atomic
 def participant_remove(request, pk, participant_id):
     """POST — drop a participant from the encounter.
 
@@ -2365,6 +2406,7 @@ def participant_remove(request, pk, participant_id):
 @login_required
 @_gm_or_owner()
 @csrf_protect
+@transaction.atomic
 def roll_initiative(request, pk, participant_id):
     """POST — roll initiative for a single participant.
 
@@ -2407,6 +2449,7 @@ def roll_initiative(request, pk, participant_id):
 @login_required
 @_gm_only
 @csrf_protect
+@transaction.atomic
 def roll_initiative_all(request, pk):
     """POST — roll initiative for every unrolled participant in one pass.
 
@@ -2467,6 +2510,7 @@ def roll_initiative_all(request, pk):
 @login_required
 @_gm_only
 @csrf_protect
+@transaction.atomic
 def clear_initiative(request, pk):
     """POST — wipe initiative rolls and reset the encounter to setup.
 
@@ -2515,6 +2559,7 @@ def clear_initiative(request, pk):
 @login_required
 @_gm_or_owner()
 @csrf_protect
+@transaction.atomic
 def toggle_ready(request, pk, participant_id):
     """POST — toggle the participant's READY flag during setup.
 
@@ -2566,6 +2611,7 @@ def toggle_ready(request, pk, participant_id):
 @login_required
 @_gm_only
 @csrf_protect
+@transaction.atomic
 def start_encounter(request, pk):
     """POST — transition the encounter from setup to active.
 
@@ -2722,6 +2768,13 @@ def _advance_turn_pointer(encounter):
 
     Pulled out of next_turn so pass_turn can reuse it after recording
     its own log message. Called only from inside an active encounter.
+
+    v0.15.25 — assumes the caller has already opened a
+    ``transaction.atomic()`` block. ``next_turn`` and ``pass_turn``
+    views are wrapped, so this helper participates in the outer
+    transaction without opening a nested one. ``_log()`` opens its
+    own nested ``transaction.atomic`` blocks per row write — Django
+    flattens those into the outer transaction.
     """
     order = list(encounter.initiative_order or [])
     if not order:
@@ -2808,6 +2861,7 @@ def _advance_turn_pointer(encounter):
 @login_required
 @_gm_only
 @csrf_protect
+@transaction.atomic
 def next_turn(request, pk):
     """POST — advance the active participant pointer.
 
@@ -2840,6 +2894,7 @@ def next_turn(request, pk):
 @login_required
 @_gm_or_owner()
 @csrf_protect
+@transaction.atomic
 def pass_turn(request, pk, participant_id):
     """POST — active participant voluntarily ends their turn.
 
@@ -2876,6 +2931,7 @@ def pass_turn(request, pk, participant_id):
 @login_required
 @_gm_or_owner()
 @csrf_protect
+@transaction.atomic
 def aim(request, pk, participant_id):
     """POST — active participant spends the turn aiming at a target.
 
@@ -2979,6 +3035,7 @@ def aim(request, pk, participant_id):
 @login_required
 @_gm_only
 @csrf_protect
+@transaction.atomic
 def end_encounter(request, pk):
     """POST — conclude the encounter.
 
@@ -3129,6 +3186,7 @@ def end_encounter(request, pk):
 @login_required
 @_gm_or_owner()
 @csrf_protect
+@transaction.atomic
 def equip_weapon(request, pk, participant_id):
     """POST — equip / unequip a weapon on a participant.
 
@@ -3274,6 +3332,7 @@ def equip_weapon(request, pk, participant_id):
 @login_required
 @_gm_or_owner()
 @csrf_protect
+@transaction.atomic
 def equip_offhand(request, pk, participant_id):
     """POST — equip / unequip an off-hand weapon on a participant.
 
@@ -3416,6 +3475,7 @@ def equip_offhand(request, pk, participant_id):
 @login_required
 @_gm_or_owner()
 @csrf_protect
+@transaction.atomic
 def equip_armor(request, pk, participant_id):
     """POST — equip / unequip armor on a participant.
 
@@ -3481,6 +3541,7 @@ def equip_armor(request, pk, participant_id):
 @login_required
 @_gm_or_owner()
 @csrf_protect
+@transaction.atomic
 def set_cover(request, pk, participant_id):
     """POST — update a participant's cover state.
 
@@ -3829,8 +3890,19 @@ def _resolve_single_attack(
 @login_required
 @_gm_or_owner("attacker_id")
 @csrf_protect
+@transaction.atomic
 def attack(request, pk, attacker_id):
     """POST — resolve a single attack from active participant → target.
+
+    v0.15.25 — wrapped in ``transaction.atomic``. The entire flow
+    (main hand + autofire spread + off-hand) runs in one transaction.
+    SQLite IMMEDIATE mode serializes against other writers; expected
+    lock-duration is sub-second per attack. ``_log()`` opens nested
+    atomic blocks for each row write — Django flattens these into the
+    outer transaction, so the write either fully commits or fully
+    rolls back. Side effect: if any step inside the attack view
+    raises, the whole transaction rolls back — no partial state where
+    the primary lands but the off-hand crashes mid-resolve.
 
     Guard rails:
 
@@ -4511,6 +4583,7 @@ def attack(request, pk, attacker_id):
 @login_required
 @_gm_or_owner()
 @csrf_protect
+@transaction.atomic
 def set_condition(request, pk, participant_id):
     """POST — append a non-stance condition tag to a participant.
 
@@ -4573,6 +4646,7 @@ def set_condition(request, pk, participant_id):
 @login_required
 @_gm_or_owner()
 @csrf_protect
+@transaction.atomic
 def clear_condition(request, pk, participant_id):
     """POST — strip a condition tag (and any ``tag:N`` variants).
 
@@ -4642,6 +4716,7 @@ def clear_condition(request, pk, participant_id):
 @login_required
 @_gm_or_owner()
 @csrf_protect
+@transaction.atomic
 def adjust_willpower(request, pk, participant_id):
     """POST — manually set ``willpower_current`` (clamped 0..max).
 
@@ -4695,6 +4770,7 @@ def adjust_willpower(request, pk, participant_id):
 @login_required
 @_gm_or_owner()
 @csrf_protect
+@transaction.atomic
 def full_defense(request, pk, participant_id):
     """POST — active participant burns their turn for FULL DEFENSE.
 
@@ -4756,6 +4832,7 @@ def full_defense(request, pk, participant_id):
 @login_required
 @_gm_or_owner()
 @csrf_protect
+@transaction.atomic
 def reload_weapon(request, pk, participant_id):
     """POST — reload the participant's equipped firearm to a full magazine.
 
@@ -4848,6 +4925,7 @@ def reload_weapon(request, pk, participant_id):
 @login_required
 @_gm_or_owner()
 @csrf_protect
+@transaction.atomic
 def dodge(request, pk, participant_id):
     """POST — roll a dodge pool and store it as a ``dodging:N`` tag.
 
@@ -5137,16 +5215,20 @@ def api_encounters(request):
         return JsonResponse({"error": "Invalid JSON."}, status=400)
 
     title = (body.get("title") or "").strip() or "Untitled Encounter"
-    encounter = Encounter.objects.create(
-        title=title[:200],
-        scene_description=(body.get("scene_description") or "").strip(),
-        location_text=(body.get("location_text") or "").strip()[:200],
-        gm=request.user,
-        status="setup",
-        round_number=0,
-        story_idea=_resolve_story_idea(body.get("story_idea_id")),
-    )
-    _log(encounter, "system", "Encounter created.")
+    # v0.15.25 — wrap the read-modify-write sequence in an atomic
+    # block. SQLite IMMEDIATE serializes writers; this keeps the
+    # encounter create + first log row in a single transaction.
+    with transaction.atomic():
+        encounter = Encounter.objects.create(
+            title=title[:200],
+            scene_description=(body.get("scene_description") or "").strip(),
+            location_text=(body.get("location_text") or "").strip()[:200],
+            gm=request.user,
+            status="setup",
+            round_number=0,
+            story_idea=_resolve_story_idea(body.get("story_idea_id")),
+        )
+        _log(encounter, "system", "Encounter created.")
     return JsonResponse(_serialize_encounter(encounter, with_log=True), status=201)
 
 
@@ -5178,6 +5260,7 @@ def api_encounter_detail(request, pk):
 @require_http_methods(["POST"])
 @login_required
 @_api_gm_only
+@transaction.atomic
 def api_encounter_lifecycle(request, pk):
     """POST — drive setup → active → concluded transitions.
 
@@ -5259,6 +5342,7 @@ def api_encounter_lifecycle(request, pk):
 @require_http_methods(["POST"])
 @login_required
 @_api_gm_only
+@transaction.atomic
 def api_encounter_initiative(request, pk):
     """POST — roll initiative for every unrolled participant.
 
@@ -5318,6 +5402,7 @@ def api_encounter_initiative(request, pk):
 @require_http_methods(["POST"])
 @login_required
 @_api_gm_only
+@transaction.atomic
 def api_encounter_turn(request, pk):
     """POST — advance to the next turn (or roll the round over).
 
@@ -5414,6 +5499,7 @@ def api_encounter_turn(request, pk):
 @require_http_methods(["POST"])
 @login_required
 @_api_gm_only
+@transaction.atomic
 def api_encounter_participants(request, pk):
     """POST — add a participant to an encounter.
 
@@ -5566,6 +5652,7 @@ def api_encounter_participants(request, pk):
 @require_http_methods(["DELETE"])
 @login_required
 @_api_gm_only
+@transaction.atomic
 def api_encounter_participant_detail(request, pk, participant_id):
     """DELETE — remove a participant from an encounter.
 
