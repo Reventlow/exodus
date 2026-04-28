@@ -1,5 +1,15 @@
 # Changelog
 
+## v0.15.31
+- **Emoji icons on grenade-effect condition pills** — at-a-glance reading of who's got what:
+  - 🔥 BURNING (phosphor)
+  - ☀️ BLINDED (flashbang / stun grenade)
+  - ☁️ SMOKE (smoke grenade)
+  - 🟢 TEAR GAS (tear gas grenade)
+- Implemented as a tag → emoji prefix lookup in the pill renderer; the `CONDITION_DEFS` label is unchanged so log payloads and timeline messages keep their plain ASCII (`f"{name}: SMOKE cleared"` etc.). Only the row pill carries the icon
+- Rules-page GRENADES table updated to mirror the icons
+- No code path changes, no schema changes — purely cosmetic
+
 ## v0.15.30
 - **Burning tick is now GM-driven, not auto-applied.** v0.15.29 ticked 1L automatically at round-roll. v0.15.30 replaces that with a per-burning-participant **🔥 TICK BURN** sub-form (GM-only) on the participant's row. GM picks dice (default 1) and damage type (default L) per round. **0 dice is a valid skip** — narrative reasons like "rolled on the floor" or "soaked by sprinkler" without extinguishing
 - **Round-roll roll-call** — at round-advance, the system writes a single log row naming every burning, non-incapacitated participant. Reminds the GM to tick each via their row sub-form. No automatic damage from this row

@@ -2243,6 +2243,15 @@ def encounter_page(request, pk):
 
         # Pills for the header — color-coded (red for incapacitated,
         # cyan for stances, amber for ordinary status conditions).
+        # v0.15.31 — prepend emoji icons for the persistent grenade
+        # effects so the row reads at a glance: 🔥 burning, ☀️ blinded,
+        # ☁️ smoke, 🟢 tear gas.
+        condition_icon = {
+            "burning":     "🔥",
+            "blinded":     "☀️",
+            "smoke_cloud": "☁️",
+            "tear_gas":    "🟢",
+        }
         pills = []
         for tag in (p.conditions or []):
             if tag == "incapacitated":
@@ -2258,7 +2267,11 @@ def encounter_page(request, pk):
                     n = 0
                 pills.append((tag, f"DODGING ({n})", "cyan"))
             elif tag in CONDITION_DEFS:
-                pills.append((tag, CONDITION_DEFS[tag]["label"], "amber"))
+                label = CONDITION_DEFS[tag]["label"]
+                icon = condition_icon.get(tag, "")
+                if icon:
+                    label = f"{icon} {label}"
+                pills.append((tag, label, "amber"))
             else:
                 # Unknown tag — render uppercased free-text.
                 pills.append((tag, tag.upper(), "amber"))
