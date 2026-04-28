@@ -1,5 +1,12 @@
 # Changelog
 
+## v0.15.32
+- **Initiative re-rolls every round.** Switched from canonical "roll once at scene start" (WoD 2.0) to the Storyteller variant where every round-roll re-rolls initiative for every participant and rebuilds the order
+- Behaviour: at the round-advance branch of `_advance_turn_pointer`, every participant re-rolls (`_compute_initiative`); `Encounter.initiative_order` rebuilds sorted desc by score (ties by id); active pointer resets to whoever rolled highest. The `round_advance` log row carries the full new ordering as a comma-list and a structured `rolled` payload key
+- Existing round-boundary cleanup (defensive stances, aim, persistent grenade effects, burning roll-call) still fires before the re-roll so the new round opens fresh
+- Rules explainer at `/rules/combat/` ROUND STRUCTURE updated — INITIATIVE bullet now reads "rolled at scene start AND re-rolled at every round boundary (Storyteller variant — chaos / momentum-driven combat)"
+- No new endpoints, no schema changes, no migrations
+
 ## v0.15.31
 - **Emoji icons on grenade-effect condition pills** — at-a-glance reading of who's got what:
   - 🔥 BURNING (phosphor)

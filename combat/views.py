@@ -3433,16 +3433,43 @@ def _advance_turn_pointer(encounter):
                 p.conditions = new_conds
                 p.save(update_fields=["conditions"])
                 cleared_any = True
-        next_id = order[0]
+
+        # v0.15.32 — re-roll initiative at round boundary. WoD 2.0
+        # canon is once-per-combat, but this campaign uses the
+        # Storyteller variant where every round shuffles the order.
+        # Logged per participant + a summary so the timeline shows
+        # the new ordering. Initiative_order is rebuilt and the
+        # active pointer resets to whoever rolled highest this round.
+        rolled_lines = []
+        for p in encounter.participants.all():
+            modifier, d10, score = _compute_initiative(p)
+            p.initiative_score = score
+            p.initiative_roll = d10
+            p.save(update_fields=["initiative_score", "initiative_roll"])
+            rolled_lines.append(f"{p.name} {score}")
+        new_order = list(
+            encounter.participants.filter(
+                initiative_score__isnull=False
+            ).order_by("-initiative_score", "id").values_list("id", flat=True)
+        )
+        encounter.initiative_order = new_order
+        next_id = new_order[0] if new_order else None
         encounter.active_participant_id = next_id
         encounter.save(
-            update_fields=["round_number", "active_participant_id", "updated_at"]
+            update_fields=[
+                "round_number",
+                "active_participant_id",
+                "initiative_order",
+                "updated_at",
+            ]
         )
         _log(
             encounter,
             "round_advance",
-            f"Round {encounter.round_number} begins.",
+            f"Round {encounter.round_number} begins. Initiative re-rolled — order: " + ", ".join(rolled_lines) + ".",
             round_number=encounter.round_number,
+            initiative_order=new_order,
+            rolled=rolled_lines,
         )
         if cleared_any:
             # Phrasing covers both stance and aim clears — the
