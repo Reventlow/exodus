@@ -199,30 +199,99 @@ def _roll_pool(n):
     die so a (vanishingly unlikely) infinite-tens streak cannot stall
     the request loop.
 
-    Returns ``(successes, raw_dice_list)``. ``raw_dice_list`` is the
-    full sequence of faces rolled including any exploded dice — useful
-    for surfacing the actual roll in the timeline payload.
+    v0.15.18 — returns ``(successes, dice)`` where ``dice`` is now a
+    list of dicts of shape::
+
+        [{"face": int, "kind": "base"|"explode",
+          "from_index": int|None, "success": bool}, ...]
+
+    'base' dice are the initial pool. 'explode' dice are re-rolls
+    triggered by a 10. ``from_index`` on an explode die points to the
+    PARENT die's position in the list (so the timeline renderer can
+    walk the chain). 'success' is True iff face >= 8 — both base and
+    explode dice may succeed.
+
+    The richer shape is what the v0.15.18 timeline renderer reads to
+    visually distinguish 10-again explosions from base rolls. Older
+    log rows persisted as a flat int list still parse via
+    ``_normalize_dice_payload`` (see below).
     """
     if n <= 0:
         return 0, []
     dice = []
     successes = 0
     for _ in range(n):
-        roll = _roll_d10()
-        dice.append(roll)
-        if roll >= 8:
+        base_idx = len(dice)
+        face = _roll_d10()
+        is_succ = face >= 8
+        dice.append({
+            "face": face,
+            "kind": "base",
+            "from_index": None,
+            "success": is_succ,
+        })
+        if is_succ:
             successes += 1
         # 10-again: keep rolling while we hit 10s, capped at 5 levels
         # of recursion so a pathological all-10s streak can't loop
-        # indefinitely.
+        # indefinitely. ``from_index`` chains each explode back to its
+        # immediate parent (which may itself be an explode die).
+        parent_idx = base_idx
+        parent_face = face
         depth = 0
-        while roll == 10 and depth < 5:
-            roll = _roll_d10()
-            dice.append(roll)
-            if roll >= 8:
+        while parent_face == 10 and depth < 5:
+            explode_face = _roll_d10()
+            explode_succ = explode_face >= 8
+            dice.append({
+                "face": explode_face,
+                "kind": "explode",
+                "from_index": parent_idx,
+                "success": explode_succ,
+            })
+            if explode_succ:
                 successes += 1
+            parent_idx = len(dice) - 1
+            parent_face = explode_face
             depth += 1
     return successes, dice
+
+
+def _normalize_dice_payload(dice_raw):
+    """Coerce a CombatLog ``data["dice"]`` payload to the structured shape.
+
+    Accepts both:
+
+      * v0.15.17 and earlier — flat list of ints, e.g. ``[10, 7, 8]``.
+        Every entry is marked ``kind="base"`` because the explosion
+        chain was not recorded at the time. The renderer cannot show
+        a parent → re-roll arrow on legacy rows; this is by design.
+
+      * v0.15.18+ — list of dicts already in the structured shape.
+        Re-coerces each dict's fields so a hand-edited or partially
+        populated payload still renders without raising.
+
+    Always returns a list — empty on garbage input or ``None``.
+    """
+    if not isinstance(dice_raw, list):
+        return []
+    out = []
+    for d in dice_raw:
+        if isinstance(d, int):
+            out.append({
+                "face": d,
+                "kind": "base",
+                "from_index": None,
+                "success": d >= 8,
+            })
+        elif isinstance(d, dict) and "face" in d:
+            face = int(d.get("face", 0))
+            out.append({
+                "face": face,
+                "kind": d.get("kind", "base"),
+                "from_index": d.get("from_index"),
+                "success": bool(d.get("success", face >= 8)),
+            })
+    return out
 
 
 # ---------------------------------------------------------------------------

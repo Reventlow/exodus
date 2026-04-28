@@ -1,5 +1,14 @@
 # Changelog
 
+## v0.15.18
+- **Dice rendered visually in the combat timeline.** Every attack / dodge / initiative log row now shows the actual dice faces below its message, with markup distinguishing successes (8+) from failures, 10-again explosions from base rolls, and Gun Fu auto-successes from rolled successes
+- Bold + glow on 10s (the trigger) · solid primary on 8/9 successes · muted dim on 1-7 failures · dashed border + ↳ arrow prefix on explosion re-rolls (so the chain is visible) · amber `+N GUN FU` chip after the dice when an auto-success was credited
+- `_roll_pool` now returns structured dice (`{face, kind, from_index, success}`) instead of a flat int list. Renderer accepts both shapes — legacy flat-list payloads from pre-v0.15.18 log rows still render (without explosion markers, because the chain wasn't recorded). Fully backwards-compatible
+- New template tag `render_combat_dice` in `combat/templatetags/combat_tags.py`
+- New helper `_normalize_dice_payload` in `combat/views.py` exported for the template tag's late-import use
+- Per-row `data` JSONField payload unchanged in name (`dice`, `gun_fu_bonus_successes`) — only the internal shape is richer
+- No schema changes, no migrations, no new dependencies
+
 ## v0.15.17
 - **Gun Fu merit** (soldier-only, 1-5 dots) now grants free auto-successes in firearm combat. Each dot = 1 free success per session, spent inside an attack action. Wires the merit into the combat resolver — soldiers paying for the dots now actually get a payoff in encounters
 - **GUN FU (+N SUCCESS) input** on the attack form. Player declares an integer total spend `N` (capped server-side at remaining session uses). Visible only when the actor is a soldier with the merit attached, has remaining uses, and the equipped main-hand weapon is a firearm

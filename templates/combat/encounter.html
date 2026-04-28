@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% load combat_tags %}
 
 {% block title %}ENCOUNTER #{{ encounter.id }} — {{ encounter.title|upper }}{% endblock %}
 
@@ -615,6 +616,66 @@ The END button also prompts for confirmation.
         vertical-align: top;
     }
     .log-table tr:last-child td { border-bottom: none; }
+
+    /* v0.15.18 — Combat dice timeline rendering.
+       Inline span cluster surfacing the actual dice faces beneath
+       each attack / dodge / initiative log row. Class semantics:
+         * .die-ten     — solid + glow on the 10-again trigger
+         * .die-succ    — solid primary on 8/9 successes
+         * .die-fail    — muted on 1..7 failures
+         * .die-explode — dashed border + ↳ prefix on re-rolls
+         * .combat-die-gunfu — amber pill for Gun Fu auto-successes
+       Falls back to literal #ffb454 for amber since the project does
+       not currently define a --accent-amber palette token. */
+    .combat-dice-row {
+        display: inline-flex;
+        flex-wrap: wrap;
+        gap: 0.3rem;
+        margin-top: 0.25rem;
+        align-items: center;
+    }
+    .combat-die {
+        display: inline-block;
+        min-width: 1.4rem;
+        text-align: center;
+        padding: 0 0.25rem;
+        font-family: var(--font-mono);
+        font-size: 0.78rem;
+        border: 1px solid var(--c-dim);
+        background: rgba(0, 0, 0, 0.25);
+    }
+    .combat-die.die-ten {
+        color: var(--c-primary);
+        border-color: var(--c-primary);
+        text-shadow: 0 0 6px var(--c-glow);
+        font-weight: 700;
+    }
+    .combat-die.die-succ {
+        color: var(--c-primary);
+        border-color: var(--c-primary);
+        font-weight: 600;
+    }
+    .combat-die.die-explode {
+        color: var(--c-primary);
+        border-color: var(--c-dim);
+        border-style: dashed;
+    }
+    .combat-die.die-fail {
+        color: var(--ink-mute);
+        border-color: var(--c-dim);
+        opacity: 0.6;
+    }
+    .combat-die-gunfu {
+        display: inline-block;
+        padding: 0 0.5rem;
+        font-family: var(--font-mono);
+        font-size: 0.72rem;
+        letter-spacing: 0.1em;
+        color: var(--accent-amber, #ffb454);
+        border: 1px solid var(--accent-amber, #ffb454);
+        background: rgba(0, 0, 0, 0.35);
+        text-shadow: 0 0 6px rgba(255, 180, 84, 0.45);
+    }
 </style>
 
 <div class="enc-page">
@@ -1086,7 +1147,20 @@ The END button also prompts for confirmation.
                         <td>#{{ entry.sequence }}</td>
                         <td>R{{ entry.round_number }}</td>
                         <td>{{ entry.action_type|upper }}</td>
-                        <td>{{ entry.message }}</td>
+                        <td>
+                            {{ entry.message }}
+                            {% comment %}
+                            v0.15.18 — surface the actual dice faces
+                            for any roll-bearing row. Tag returns ""
+                            for rows without a dice payload (system,
+                            condition_set, weapon_change, ...) so the
+                            action_type guard is a cheap pre-filter
+                            rather than a strict requirement.
+                            {% endcomment %}
+                            {% if entry.action_type == "attack" or entry.action_type == "dodge" or entry.action_type == "initiative" %}
+                                <br>{% render_combat_dice entry %}
+                            {% endif %}
+                        </td>
                         <td>{{ entry.created_at|date:"H:i:s" }}</td>
                     </tr>
                     {% endfor %}
