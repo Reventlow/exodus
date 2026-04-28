@@ -224,7 +224,7 @@
             </tbody>
         </table>
         <p style="margin: 0 0 0.4rem 0;"><span class="mono-text text-accent">▸ COMBINES WITH</span> &nbsp;— condition modifiers (prone, stunned, blinded, grappled). The participant row's <strong>MOD</strong> chip shows the combined wound + condition total at a glance; the row's <strong>WP</strong> chip shows wound alone.</p>
-        <p style="margin: 0;"><span class="mono-text text-accent">▸ MERITS</span> &nbsp;— <em>Increased Pain Threshold</em> reduces wound penalty by 1; <em>Pain Tolerance</em> ignores wound penalties entirely. Merits are not yet auto-detected by combat (planned for a later release) — the GM applies the adjustment by hand on hurt characters' rolls.</p>
+        <p style="margin: 0;"><span class="mono-text text-accent">▸ MERITS</span> &nbsp;— <strong>auto-detected as of v0.15.22</strong>. <em>Increased Pain Threshold</em> reduces the wound penalty by 1 toward zero (−1 → 0, −2 → −1, −3 → −2); <em>Pain Tolerance</em> short-circuits the penalty to 0 regardless of damage taken (and overrides Increased Pain Threshold when both are present). The participant row's <strong>WP</strong> chip and the attack pool breakdown reflect the reduced value automatically. Detection reads the canonical <code>merit_entries</code> M2M plus the legacy <code>merits_old</code> JSONField — case-insensitive name match. <em>Berserker</em>, <em>Concentration</em>, and <em>Daredevil</em> remain GM-applied via the GM modifier input on the attack form (their trigger conditions aren't derivable from game state).</p>
     </div>
 
     {% comment %}

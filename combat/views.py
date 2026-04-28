@@ -415,12 +415,58 @@ CONDITION_DEFS = {
 _STANCE_TAGS = {"defense_full", "dodging", "dodge_pending"}
 
 
+def _has_named_merit(actor, merit_name):
+    """Generic merit-presence check by name (case-insensitive).
+
+    Returns True when the actor's underlying Character or NPC has the
+    named merit attached. Mooks always False (no sheet). Checks the
+    canonical merit_entries M2M first, then falls back to the legacy
+    merits_old JSONField. Mirrors the lookup pattern from
+    _has_ambidextrous_merit but parameterised on the merit name.
+    """
+    if actor is None or getattr(actor, "participant_kind", None) == "mook":
+        return False
+    source = getattr(actor, "character", None) or getattr(actor, "npc", None)
+    if source is None:
+        return False
+    needle = (merit_name or "").strip().lower()
+    if not needle:
+        return False
+    try:
+        if source.merit_entries.filter(name__iexact=merit_name).exists():
+            return True
+    except Exception:
+        pass
+    legacy = getattr(source, "merits_old", None) or []
+    for entry in legacy:
+        if isinstance(entry, dict):
+            n = entry.get("name", "")
+        elif isinstance(entry, str):
+            n = entry
+        else:
+            n = ""
+        if isinstance(n, str) and n.strip().lower() == needle:
+            return True
+    return False
+
+
 def _wound_penalty(participant):
     """WoD 2.0 wound penalty based on the rightmost filled health box.
 
     The 3 rightmost boxes carry -1 / -2 / -3 penalties left → right.
     Returns a non-positive int (``0`` = no penalty). Used by the
     attack pool composition and surfaced as a small chip on the row.
+
+    v0.15.22 — two merits modify this:
+
+    * **Pain Tolerance** (5 dot, Physical) — short-circuits to 0
+      regardless of damage taken.
+    * **Increased Pain Threshold** (3 dot, Physical) — reduces the
+      penalty by 1 toward zero (-1 → 0, -2 → -1, -3 → -2).
+
+    Pain Tolerance overrides Increased Pain Threshold (they would
+    stack to the same effect anyway). Mooks have no merits and are
+    unaffected. NPC merits work identically to character merits.
     """
     total = (
         participant.health_bashing
@@ -429,12 +475,21 @@ def _wound_penalty(participant):
     )
     hm = participant.health_max
     if total >= hm:
-        return -3   # rightmost box filled (incapacitated)
-    if total == hm - 1:
-        return -2
-    if total == hm - 2:
-        return -1
-    return 0
+        raw = -3   # rightmost box filled (incapacitated)
+    elif total == hm - 1:
+        raw = -2
+    elif total == hm - 2:
+        raw = -1
+    else:
+        raw = 0
+
+    if raw == 0:
+        return 0
+    if _has_named_merit(participant, "Pain Tolerance"):
+        return 0
+    if _has_named_merit(participant, "Increased Pain Threshold"):
+        return raw + 1   # one step toward zero (-3 → -2, -2 → -1, -1 → 0)
+    return raw
 
 
 def _has_condition(participant, tag):
@@ -736,34 +791,11 @@ def _has_ambidextrous_merit(actor):
     development time (see the v0.15.16 release notes for the exact
     assertion).
     """
-    if actor.participant_kind == "mook":
-        return False
-    source = actor.character or actor.npc
-    if source is None:
-        return False
-    # Canonical: M2M filter against MeritDefinition.name. The M2M
-    # field's related_model is MeritDefinition (verified at dev time),
-    # so .filter(name__iexact=...) hits the catalogue's name column.
-    try:
-        if source.merit_entries.filter(name__iexact="Ambidextrous").exists():
-            return True
-    except Exception:
-        # Defensive: if the M2M manager somehow raises (mock instance,
-        # unsaved object, partial migration state), fall through to
-        # the legacy JSON layer rather than 500-ing the attack form.
-        pass
-    # Legacy JSON list: free-text entries with optional 'name' key.
-    legacy = getattr(source, "merits_old", None) or []
-    for entry in legacy:
-        if isinstance(entry, dict):
-            n = entry.get("name", "")
-        elif isinstance(entry, str):
-            n = entry
-        else:
-            n = ""
-        if isinstance(n, str) and n.strip().lower() == "ambidextrous":
-            return True
-    return False
+    # v0.15.22 — delegated to the generic _has_named_merit helper.
+    # The original two-layer lookup (canonical M2M + legacy JSON) is
+    # preserved by the helper; the docstring above still describes
+    # the full resolution model.
+    return _has_named_merit(actor, "Ambidextrous")
 
 
 # ---------------------------------------------------------------------------

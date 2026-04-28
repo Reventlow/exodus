@@ -1,5 +1,16 @@
 # Changelog
 
+## v0.15.22
+- **Wound-penalty merits now auto-applied in combat.** *Increased Pain Threshold* reduces the wound penalty by 1 toward zero at every tier (−1 → 0, −2 → −1, −3 → −2); *Pain Tolerance* short-circuits the penalty to 0 regardless of damage taken. Pain Tolerance overrides Increased Pain Threshold when both are present. The participant row's WP chip and the attack pool breakdown reflect the reduced value automatically — the GM no longer applies these by hand
+- **Merit description sweep** — five combat-relevant merit definitions updated in production via MCP to flag their integration status:
+  - **Increased Pain Threshold** (id 13) — auto-detected since v0.15.22
+  - **Pain Tolerance** (id 18) — auto-detected since v0.15.22
+  - **Berserker** (id 23) — explicitly flagged as **not yet auto-applied** (frenzy state is GM-tracked); points to the GM modifier input
+  - **Concentration** (id 27) — flagged as **not yet auto-applied** ("distracting circumstances" is GM-judgement-driven)
+  - **Daredevil** (id 5) — flagged as **not yet auto-applied** ("risky" is a GM ruling)
+- **Refactor** — extracted `_has_named_merit(actor, merit_name)` as a generic merit-presence helper. Mirrors the canonical-M2M-then-legacy-JSON resolution model from v0.15.16. `_has_ambidextrous_merit` now delegates to it (one-liner). `_wound_penalty` calls it twice (Pain Tolerance check first, then Increased Pain Threshold)
+- **Rules explainer** at `/rules/combat/` WOUND PENALTIES subsection updated — replaced the "GM applies by hand" note with the canonical "auto-detected as of v0.15.22" wording, the override semantics, and a callout that Berserker/Concentration/Daredevil remain manual
+
 ## v0.15.21
 - **Martial Arts and Fencing merits now auto-apply +rating dice in combat.** Martial Arts adds +rating to Brawl attacks (unarmed strikes, grapples, improvised-by-fist); Fencing adds +rating to Weaponry attacks (knives, batons, swords, hammers, axes, etc.). Detection runs on the canonical `Character.character_merits` (or `NPC.npc_merits` for NPC actors) M2M to `MeritDefinition` — case-insensitive `name__iexact` match — plus the through-row's `rating` int field
 - **The merit catalogue descriptions were updated in production via MCP earlier in this session:** both Martial Arts (id 17) and Fencing (id 8) now read "+rating dice when attacking with [Skill]" and reference v0.15.21+ auto-detection. Their `effects.skill_dice_bonus` field carries `{"Brawl": 1}` / `{"Weaponry": 1}` (the per-rating multiplier — currently unused, reserved for future tuning)
