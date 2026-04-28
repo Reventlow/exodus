@@ -974,6 +974,45 @@ dodge), ADD CONDITION, WILLPOWER.
                                 <button type="submit" title="Spend turn aiming. +1 dice on next attack against this target. Stackable to +3.">AIM</button>
                             </form>
                         </details>
+
+                        {% comment %}
+                        v0.15.29 — THROW GRENADE. Only rendered on the
+                        active row when the participant has at least
+                        one grenade in inventory. Mirrors the AIM
+                        sub-form layout: a <details> wrapper keeps the
+                        STANCE strip compact, and the form expands
+                        inline when opened. Targets are multi-select
+                        checkboxes — gridless model, so the GM picks
+                        who's in the blast.
+                        {% endcomment %}
+                        {% if p.grenade_inventory %}
+                        <details class="part-grenade-form" style="display: inline; margin-left: 0.5rem;">
+                            <summary style="cursor: pointer; color: var(--c-primary); display: inline;">THROW GRENADE</summary>
+                            <form method="post"
+                                  action="{% url 'combat:throw_grenade' encounter.id p.id %}"
+                                  style="margin-top: 0.4rem; display: block;">
+                                {% csrf_token %}
+                                <label for="gren-type-{{ p.id }}" style="font-size: 0.7rem;">TYPE</label>
+                                <select id="gren-type-{{ p.id }}" name="grenade_type" required>
+                                    {% for slug, count in p.grenade_inventory.items %}
+                                        <option value="{{ slug }}">{{ slug|upper }} ({{ count }} remaining)</option>
+                                    {% endfor %}
+                                </select>
+                                <label style="font-size: 0.7rem; margin-top: 0.4rem; display: block;">TARGETS IN BLAST (check all)</label>
+                                <div style="max-height: 8rem; overflow-y: auto; padding: 0.3rem 0.5rem; border: 1px dashed var(--c-dim);">
+                                    {% for other in participants %}
+                                        <label style="display: block; padding: 0.15rem 0; font-size: 0.78rem;">
+                                            <input type="checkbox" name="target_ids" value="{{ other.id }}">
+                                            {{ other.name }} ({{ other.faction|upper }})
+                                        </label>
+                                    {% endfor %}
+                                </div>
+                                <label for="gren-mod-{{ p.id }}" style="font-size: 0.7rem; margin-top: 0.4rem; display: block;">GM MODIFIER</label>
+                                <input id="gren-mod-{{ p.id }}" name="gm_modifier" type="number" value="0" step="1" class="field-input" style="max-width: 5rem;">
+                                <button type="submit" class="btn-primary" style="margin-top: 0.4rem;" title="Throw the grenade. Costs your turn (does not auto-advance). Cover applies on damage-dealing types; bypasses on stun/smoke/tear/EMP.">THROW &rarr;</button>
+                            </form>
+                        </details>
+                        {% endif %}
                     {% endif %}
                 </div>
             {% endif %}
@@ -1054,6 +1093,30 @@ dodge), ADD CONDITION, WILLPOWER.
                     TOGGLE ALERT
                 </button>
             </form>
+
+            {% comment %}
+            v0.15.29 — GIVE GRENADES (GM only). Sets the participant's
+            inventory tag for one grenade type. ``count=0`` removes the
+            entry. Type list is built from the live catalogue so a
+            settings-side rename / addition propagates here without a
+            template edit.
+            {% endcomment %}
+            {% if grenade_types %}
+            <form method="post"
+                  action="{% url 'combat:grenade_inventory' encounter.id p.id %}"
+                  class="part-mini-form">
+                {% csrf_token %}
+                <label>GIVE GRENADES</label>
+                <select name="grenade_type">
+                    {% for slug, label in grenade_types %}
+                        <option value="{{ slug }}">{{ label }}</option>
+                    {% endfor %}
+                </select>
+                <input name="count" type="number" value="1" min="0" max="20"
+                       class="field-input" style="max-width: 4rem;">
+                <button type="submit" title="Set the inventory count for this grenade type. 0 removes it from the participant's inventory.">SET</button>
+            </form>
+            {% endif %}
             {% endif %}
 
         </div>

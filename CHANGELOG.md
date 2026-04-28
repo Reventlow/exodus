@@ -1,5 +1,16 @@
 # Changelog
 
+## v0.15.29
+- **Grenades** — new `category="grenade"` weapon catalogue type. Seven default seeds: Frag, Concussion, Smoke, Stun (Flashbang), Phosphor, Tear Gas, EMP. Each has `radius` / `effect_tag` / `effect_duration_rounds` / `damage_dice` / `damage_type` / `cover_resists` fields
+- **Per-participant inventory** stored as `grenades:<type>:<count>` condition tags. GM gives grenades via the GIVE GRENADES sub-form on the participant action panel during setup
+- **THROW GRENADE action** — server resolves Dex+Athletics, multi-target blast, applies damage and effect tags. Cover applies on damage-dealing grenades; bypasses on stun/smoke/tear/EMP. EMP affects AI / cyber characters only (biological targets immune)
+- New CONDITION_DEFS entries: `burning`, `smoke_cloud`, `tear_gas`, `emp_disabled`. Persistent effects tracked via `<tag>_until:<round>` companion tags; cleared automatically at round_advance when expired
+- **Burning ticks** — 1L per round at round-start until extinguished. GM clears via the condition × button (no auto-extinguish; an EXTINGUISH action lands in v0.15.30)
+- New CombatLog action_type: `grenade_throw`. Per-target rows + system summary
+- Settings UI — weapons editor accepts grenade category with radius + duration columns. Other fields stay catalogue-fixed (admin / API for fine control)
+- Rules explainer at `/rules/combat/` ADVANCED ACTIONS gains a GRENADES subsection with the types table
+- No model schema changes, no migrations, no new dependencies. State lives in existing JSONFields (`SiteSettings.weapons`, `Participant.conditions`)
+
 ## v0.15.28
 - **Hidden encounters** for GM prep. New encounters default to `is_hidden=True` — only the GM can see them while preparing scene, participants, equipment, conditions. RELEASE TO PLAYERS button publishes; HIDE AGAIN re-hides (rare)
 - Players don't see hidden encounters in their `/combat/` list, can't access the detail page (403), and the WS consumer rejects their subscription (close 4404). Three independent gates so a tampered POST or direct URL access still bounces

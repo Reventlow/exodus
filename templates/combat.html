@@ -449,6 +449,96 @@
     </div>
 
     {% comment %}
+    v0.15.29 — GRENADES subsection. AOE area-effect throws. Cover
+    applies on damage-dealing types (frag, concussion, phosphor) and
+    bypasses on stun / smoke / tear gas / EMP. Persistent effects
+    track via ``<tag>_until:<round>`` companion tags cleared at the
+    round boundary. Burning ticks 1L per round and only clears via
+    explicit GM action.
+    {% endcomment %}
+    <h4 class="mono-text text-accent" style="font-size: 0.85rem; letter-spacing: 0.2em; margin: 1.2rem 0 0.4rem 0;">GRENADES</h4>
+    <div class="text-secondary" style="font-size: 0.85rem; line-height: 1.7; margin: 0 0 1rem 0;">
+        <p style="margin: 0 0 0.4rem 0;"><span class="mono-text text-accent">▸ AREA ATTACK</span> &nbsp;— grenades affect every target the GM picks in the blast (gridless model — narrative position drives blast inclusion). No defense roll for the throw itself; cover resists damage on damage-dealing types only.</p>
+        <p style="margin: 0 0 0.4rem 0;"><span class="mono-text text-accent">▸ POOL</span> &nbsp;— <strong>Dexterity + Athletics + GM modifier</strong>. Wound penalty and condition modifiers apply (a wounded thrower throws worse). Mooks throw with <code>mook_combat_pool / 2</code>.</p>
+        <p style="margin: 0 0 0.4rem 0;"><span class="mono-text text-accent">▸ INVENTORY</span> &nbsp;— per-participant tag <code>grenades:&lt;type&gt;:&lt;count&gt;</code>. The GM gives grenades via the <strong>GIVE GRENADES</strong> sub-form on the participant action panel during setup (or mid-fight via the same form). The THROW GRENADE button on the active row only renders when the participant has at least one grenade in inventory.</p>
+        <p style="margin: 0 0 0.4rem 0;"><span class="mono-text text-accent">▸ TURN COST</span> &nbsp;— costs the active actor's turn (<code>acted_this_round=True</code>) but does NOT auto-advance. The GM clicks NEXT TURN to actually pass the turn (same shape as ATTACK / AIM / FULL DEFENSE).</p>
+        <p style="margin: 0 0 0.4rem 0;"><span class="mono-text text-accent">▸ DAMAGE</span> &nbsp;— damage-dealing grenades apply <code>damage_dice + successes</code>, minus cover penalty (when <code>cover_resists=True</code>). Full cover with <code>cover_resists=True</code> blocks both damage AND effect.</p>
+        <p style="margin: 0 0 0.4rem 0;"><span class="mono-text text-accent">▸ PERSISTENT EFFECTS</span> &nbsp;— effects with <code>effect_duration_rounds &gt; 0</code> carry a companion <code>&lt;tag&gt;_until:&lt;round&gt;</code> marker. The round-boundary cleanup strips both the effect and its companion when the round counter reaches the expiry round.</p>
+        <p style="margin: 0 0 0.4rem 0;"><span class="mono-text text-accent">▸ BURNING</span> &nbsp;— phosphor's signature effect. Ticks <strong>1L per round</strong> at round-start. <em>No</em> auto-clear — the GM extinguishes via the condition × button (an explicit EXTINGUISH action lands in v0.15.30). Auto-incaps on track fill.</p>
+        <p style="margin: 0 0 0.4rem 0;"><span class="mono-text text-accent">▸ EMP</span> &nbsp;— affects AI / cyber-augmented characters only. Biological targets (player characters with non-AI class, NPCs with non-AI class, mooks) are immune; the throw still resolves but the EMP tag isn't applied. Logged as <em>"X immune to EMP — no electronic systems"</em>.</p>
+        <table class="mono-text" style="width: 100%; border-collapse: collapse; font-size: 0.78rem; margin: 0.6rem 0 0 0;">
+            <thead style="color: var(--ink-dim);">
+                <tr style="border-bottom: 1px solid var(--c-dim);">
+                    <th style="text-align: left; padding: 0.35rem 0.5rem; width: 22%;">NAME</th>
+                    <th style="text-align: left; padding: 0.35rem 0.5rem; width: 9%;">DAMAGE</th>
+                    <th style="text-align: left; padding: 0.35rem 0.5rem; width: 18%;">EFFECT</th>
+                    <th style="text-align: left; padding: 0.35rem 0.5rem; width: 12%;">DURATION</th>
+                    <th style="text-align: center; padding: 0.35rem 0.5rem; width: 9%;">COVER</th>
+                    <th style="text-align: left; padding: 0.35rem 0.5rem;">RADIUS</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr style="border-bottom: 1px dotted var(--c-dim);">
+                    <td style="padding: 0.35rem 0.5rem; color: var(--ink);">FRAG</td>
+                    <td style="padding: 0.35rem 0.5rem; color: var(--c-primary);">3L + successes</td>
+                    <td style="padding: 0.35rem 0.5rem; color: var(--ink-dim);">—</td>
+                    <td style="padding: 0.35rem 0.5rem; color: var(--ink-dim);">—</td>
+                    <td style="padding: 0.35rem 0.5rem; text-align: center; color: var(--c-primary);">RESISTS</td>
+                    <td style="padding: 0.35rem 0.5rem;">MEDIUM</td>
+                </tr>
+                <tr style="border-bottom: 1px dotted var(--c-dim);">
+                    <td style="padding: 0.35rem 0.5rem; color: var(--ink);">CONCUSSION</td>
+                    <td style="padding: 0.35rem 0.5rem; color: var(--c-primary);">2B + successes</td>
+                    <td style="padding: 0.35rem 0.5rem;">stunned</td>
+                    <td style="padding: 0.35rem 0.5rem;">1 round</td>
+                    <td style="padding: 0.35rem 0.5rem; text-align: center; color: var(--c-primary);">RESISTS</td>
+                    <td style="padding: 0.35rem 0.5rem;">CLOSE</td>
+                </tr>
+                <tr style="border-bottom: 1px dotted var(--c-dim);">
+                    <td style="padding: 0.35rem 0.5rem; color: var(--ink);">SMOKE</td>
+                    <td style="padding: 0.35rem 0.5rem; color: var(--ink-dim);">—</td>
+                    <td style="padding: 0.35rem 0.5rem;">smoke_cloud (light concealment)</td>
+                    <td style="padding: 0.35rem 0.5rem;">3 rounds</td>
+                    <td style="padding: 0.35rem 0.5rem; text-align: center; color: var(--accent-danger);">BYPASSES</td>
+                    <td style="padding: 0.35rem 0.5rem;">LARGE</td>
+                </tr>
+                <tr style="border-bottom: 1px dotted var(--c-dim);">
+                    <td style="padding: 0.35rem 0.5rem; color: var(--ink);">STUN (FLASHBANG)</td>
+                    <td style="padding: 0.35rem 0.5rem; color: var(--ink-dim);">—</td>
+                    <td style="padding: 0.35rem 0.5rem;">blinded</td>
+                    <td style="padding: 0.35rem 0.5rem;">1 round</td>
+                    <td style="padding: 0.35rem 0.5rem; text-align: center; color: var(--accent-danger);">BYPASSES</td>
+                    <td style="padding: 0.35rem 0.5rem;">MEDIUM</td>
+                </tr>
+                <tr style="border-bottom: 1px dotted var(--c-dim);">
+                    <td style="padding: 0.35rem 0.5rem; color: var(--ink);">PHOSPHOR</td>
+                    <td style="padding: 0.35rem 0.5rem; color: var(--c-primary);">4L + successes</td>
+                    <td style="padding: 0.35rem 0.5rem;">burning (1L/round, manual extinguish)</td>
+                    <td style="padding: 0.35rem 0.5rem;">until cleared</td>
+                    <td style="padding: 0.35rem 0.5rem; text-align: center; color: var(--c-primary);">RESISTS</td>
+                    <td style="padding: 0.35rem 0.5rem;">MEDIUM</td>
+                </tr>
+                <tr style="border-bottom: 1px dotted var(--c-dim);">
+                    <td style="padding: 0.35rem 0.5rem; color: var(--ink);">TEAR GAS</td>
+                    <td style="padding: 0.35rem 0.5rem; color: var(--ink-dim);">—</td>
+                    <td style="padding: 0.35rem 0.5rem;">tear_gas (-2 atk / -2 def)</td>
+                    <td style="padding: 0.35rem 0.5rem;">4 rounds</td>
+                    <td style="padding: 0.35rem 0.5rem; text-align: center; color: var(--accent-danger);">BYPASSES</td>
+                    <td style="padding: 0.35rem 0.5rem;">LARGE</td>
+                </tr>
+                <tr>
+                    <td style="padding: 0.35rem 0.5rem; color: var(--ink);">EMP</td>
+                    <td style="padding: 0.35rem 0.5rem; color: var(--ink-dim);">—</td>
+                    <td style="padding: 0.35rem 0.5rem;">emp_disabled (-3 all rolls; AI/cyber only)</td>
+                    <td style="padding: 0.35rem 0.5rem;">2 rounds</td>
+                    <td style="padding: 0.35rem 0.5rem; text-align: center; color: var(--accent-danger);">BYPASSES</td>
+                    <td style="padding: 0.35rem 0.5rem;">MEDIUM</td>
+                </tr>
+            </tbody>
+        </table>
+    </div>
+
+    {% comment %}
     v0.15.16 — DUAL-WIELDING subsection. Server enforces every rule
     here: off-hand presence gates the dual flag, ambidextrous merit
     waives the penalty, off-hand single-shot only, no aim / WP /

@@ -450,6 +450,39 @@ CONDITION_DEFS = {
         "def_mod": -99,
         "note": "+2 dice on attack, no defense until next round.",
     },
+    # v0.15.29 — grenade effect tags. Persistent area-effect tags
+    # tracked via companion ``<tag>_until:<round>`` markers. The
+    # round-boundary cleanup in ``_advance_turn_pointer`` decrements
+    # the companion and strips both tags when the duration expires.
+    # ``burning`` is the exception — no auto-clear, the GM must
+    # extinguish manually via the condition × button. The companion
+    # tag pattern keeps the persistence model uniform with how
+    # ``aiming_at:*`` and ``dodging:N`` already encode per-round state
+    # without a schema change.
+    "burning": {
+        "label": "BURNING",
+        "atk_mod": -2,
+        "def_mod": -2,
+        "note": "1L damage per round at round-start. Action required to extinguish (drop, roll, water).",
+    },
+    "smoke_cloud": {
+        "label": "SMOKE",
+        "atk_mod": -2,
+        "def_mod": 0,
+        "note": "Light concealment — attacker rolls suffer -2 against this target. Cleared automatically when the cloud expires.",
+    },
+    "tear_gas": {
+        "label": "TEAR GAS",
+        "atk_mod": -2,
+        "def_mod": -2,
+        "note": "Coughing, eyes streaming. -2 to attack and defense. Cleared automatically at duration end.",
+    },
+    "emp_disabled": {
+        "label": "EMP",
+        "atk_mod": -3,
+        "def_mod": -3,
+        "note": "Electronics offline. -3 to all rolls. AI / cyber-augmented targets only — biological targets are immune.",
+    },
 }
 
 # Stance tags are managed by the FULL DEFENSE / DODGE buttons rather
@@ -808,6 +841,178 @@ def _strip_offhand_ammo(participant):
         c for c in (participant.conditions or [])
         if not (isinstance(c, str) and c.startswith("offhand_ammo:"))
     ]
+
+
+# ---------------------------------------------------------------------------
+# v0.15.29 — Grenade inventory + AOE effect helpers
+# ---------------------------------------------------------------------------
+#
+# Grenades are stored as a fifth weapon catalogue category
+# (``category="grenade"``) on ``SiteSettings.weapons`` with a small
+# extension to the per-entry schema (radius / effect_tag /
+# effect_duration_rounds / damage_dice / damage_type / cover_resists).
+# Per-participant inventory is encoded as parameterised condition tags
+# of the form ``grenades:<type>:<count>`` — no schema change required.
+#
+# When a grenade is thrown, its effect_tag (if any) is appended to each
+# target in the blast. Persistent effects (effect_duration_rounds > 0)
+# carry a companion ``<tag>_until:<round>`` marker so the round-boundary
+# cleanup in ``_advance_turn_pointer`` knows when to strip them. The
+# ``burning`` tag is intentionally never auto-cleared — only the GM
+# (via the condition × button) extinguishes it. Round-boundary
+# processing also applies the 1L tick damage to every burning
+# participant.
+
+
+# Lowercase type slug derived from the catalogue entry's first word.
+# Maps the human-friendly name to a stable token used both for
+# inventory tagging and for the GIVE GRENADES form's ``grenade_type``
+# select. Examples:
+#
+#     "Frag Grenade"            → "frag"
+#     "Concussion Grenade"      → "concussion"
+#     "Stun Grenade (Flashbang)" → "stun"
+#     "Tear Gas Grenade"        → "tear"
+#     "EMP Grenade"             → "emp"
+def _grenade_slug(catalogue_entry_name):
+    """Return the lowercase first-word slug for a grenade catalogue name.
+
+    Trims whitespace and casts to lowercase. Returns an empty string for
+    blank / non-string input. The slug is the stable identifier used by
+    the inventory tag (``grenades:<slug>:<count>``) and the THROW form's
+    ``grenade_type`` field; catalogue renames don't break inventories
+    as long as the first word is preserved.
+    """
+    if not isinstance(catalogue_entry_name, str):
+        return ""
+    parts = catalogue_entry_name.strip().split()
+    if not parts:
+        return ""
+    return parts[0].lower()
+
+
+def _parse_grenade_tag(tag):
+    """Parse 'grenades:<type>:<count>' → (type_str, count_int).
+
+    Returns ``(None, 0)`` on malformed input — non-string, missing
+    prefix, wrong arity, or non-integer count. Defensive against legacy
+    / hand-edited conditions lists so a malformed tag never crashes the
+    row render.
+    """
+    if not isinstance(tag, str):
+        return None, 0
+    if not tag.startswith("grenades:"):
+        return None, 0
+    parts = tag.split(":")
+    if len(parts) != 3:
+        return None, 0
+    try:
+        return parts[1], int(parts[2])
+    except ValueError:
+        return None, 0
+
+
+def _get_grenade_inventory(participant):
+    """Return ``{type_slug: count_int}`` for the participant's grenades.
+
+    Iterates the conditions list and aggregates ``grenades:*`` tags by
+    slug. Two tags for the same slug are summed (defensive — there
+    should only ever be one tag per slug, but a hand-edited list could
+    duplicate). Returns an empty dict when no grenade tags are set.
+    """
+    inv = {}
+    for c in (participant.conditions or []):
+        gtype, count = _parse_grenade_tag(c)
+        if gtype is not None:
+            inv[gtype] = inv.get(gtype, 0) + count
+    return inv
+
+
+def _set_grenade_count(participant, gtype, count):
+    """Set inventory for a single grenade type. Caller saves.
+
+    Strips every existing ``grenades:<gtype>:*`` tag of this type (so a
+    duplicated row collapses cleanly), then appends a fresh
+    ``grenades:<gtype>:<count>`` tag iff count > 0. Idempotent — calling
+    twice with the same value yields the same end state. ``count <= 0``
+    removes the entry entirely.
+    """
+    participant.conditions = [
+        c for c in (participant.conditions or [])
+        if not (
+            isinstance(c, str)
+            and c.startswith("grenades:")
+            and _parse_grenade_tag(c)[0] == gtype
+        )
+    ]
+    if count > 0:
+        participant.conditions.append(f"grenades:{gtype}:{int(count)}")
+
+
+def _parse_until_tag(tag):
+    """Parse '<tag>_until:<round>' → (effect_tag, until_round_int).
+
+    Returns ``(None, None)`` on malformed input. The companion-tag
+    pattern lets the round-boundary cleanup look up the expiry round
+    for any persistent effect without consulting the catalogue — the
+    state lives on the participant, not the spec.
+    """
+    if not isinstance(tag, str):
+        return None, None
+    if "_until:" not in tag:
+        return None, None
+    head, _, tail = tag.partition("_until:")
+    if not head:
+        return None, None
+    try:
+        return head, int(tail)
+    except ValueError:
+        return None, None
+
+
+def _grenade_catalogue_by_slug(weapons_catalogue):
+    """Return ``{slug: entry_dict}`` for every category="grenade" entry.
+
+    The hydrated weapons list (output of ``SiteSettings.get_weapons``)
+    carries the slug-friendly first-word naming convention; collisions
+    are intentional and make GMs rename catalogue entries to avoid
+    confusion (e.g. "Frag Grenade" vs "Frag Mine" both slug to "frag").
+    Last entry wins on collision so a freshly-added override beats the
+    seed without a settings dance.
+    """
+    out = {}
+    for entry in (weapons_catalogue or []):
+        if not isinstance(entry, dict):
+            continue
+        if entry.get("category") != "grenade":
+            continue
+        slug = _grenade_slug(entry.get("name", ""))
+        if not slug:
+            continue
+        out[slug] = entry
+    return out
+
+
+def _emp_immune(target):
+    """Return True if the target is biologically immune to EMP effects.
+
+    Only AI characters / cyber participants take the ``emp_disabled``
+    condition. Mooks (no class info) and biological characters / NPCs
+    skip the tag entirely — the throw still resolves, just without an
+    effect on this target. Mirrors the pattern used by the knockdown
+    auto-trigger (skip on prone targets) so the resolver stays uniform.
+    """
+    if target is None:
+        return True
+    kind = getattr(target, "participant_kind", None)
+    if kind == "mook":
+        # No class info on mooks — treat as biological (immune).
+        return True
+    source = getattr(target, "character", None) or getattr(target, "npc", None)
+    if source is None:
+        return True
+    char_class = (getattr(source, "character_class", "") or "").strip().lower()
+    return char_class != "ai"
 
 
 def _has_ambidextrous_merit(actor):
@@ -1999,6 +2204,14 @@ def encounter_page(request, pk):
         p.gun_fu_rating = gf_rating
         p.gun_fu_used = gf_used
         p.gun_fu_remaining = gf_remaining
+
+        # v0.15.29 — grenade inventory annotation. Returns a dict
+        # ``{slug: count}`` derived from the participant's
+        # ``grenades:<type>:<count>`` tags. Empty dict when the
+        # participant has no grenades. Drives the THROW GRENADE
+        # sub-form's visibility (only rendered when non-empty) and
+        # populates the type select with remaining counts.
+        p.grenade_inventory = _get_grenade_inventory(p)
         # ``ammo_pct`` drives the colour tier of the indicator —
         # green ≥50%, amber 25–50%, red <25% / 0. Pre-computed in
         # Python so the template stays declarative.
@@ -2153,6 +2366,20 @@ def encounter_page(request, pk):
         tier = entry.get("tier", "other") or "other"
         cover_by_tier.setdefault(tier, []).append(entry)
 
+    # v0.15.29 — grenade catalogue. ``grenade_types`` is a list of
+    # ``(slug, label)`` tuples for the GIVE GRENADES <select>; the
+    # label is the catalogue entry's full name so GMs can tell
+    # variants apart. Sorted by slug for stable ordering.
+    grenade_types = []
+    for entry in weapon_choices:
+        if entry.get("category") != "grenade":
+            continue
+        slug = _grenade_slug(entry.get("name", ""))
+        if not slug:
+            continue
+        grenade_types.append((slug, entry.get("name", slug.upper())))
+    grenade_types.sort(key=lambda pair: pair[0])
+
     # Attack action gate — the per-row ATTACK form is only rendered
     # when the encounter is active and we know which participant is
     # currently up.
@@ -2213,6 +2440,9 @@ def encounter_page(request, pk):
             "armor_choices": armor_choices,
             "cover_choices": cover_choices,
             "cover_by_tier": cover_by_tier,
+            # v0.15.29 — grenade slug/label pairs for the GIVE
+            # GRENADES sub-form.
+            "grenade_types": grenade_types,
             "attack_eligible": attack_eligible,
             "story_ideas": story_ideas,
             # v0.15.8 — replace the binary ``read_only`` flag with a
@@ -3054,6 +3284,97 @@ def start_encounter(request, pk):
     return redirect("combat:detail", pk=encounter.pk)
 
 
+def _apply_round_boundary_effects(encounter):
+    """Apply persistent grenade effects at the round boundary.
+
+    Called from ``_advance_turn_pointer`` when the round rolls over.
+    Two responsibilities:
+
+    1. **Burning tick** — every participant carrying the ``burning``
+       tag takes 1L damage at round-start. There is no auto-clear; the
+       GM must extinguish manually via the condition × button. Damage
+       is applied through ``_apply_damage`` so the WoD 2.0 track-upgrade
+       rules apply (overflow eats bashing, etc.). Auto-incapacitates
+       the target if the tick fills the track.
+
+    2. **Persistent-effect expiry** — companion tags of the form
+       ``<effect>_until:<round>`` are scanned. When the encounter has
+       reached the expiry round, both the companion tag AND the matching
+       effect tag are stripped. Examples (when round_number == until):
+       ``smoke_cloud`` + ``smoke_cloud_until:5`` → both gone in round 5.
+
+    ``burning`` deliberately does NOT participate in the expiry path
+    (its companion tag, if any, is ignored at the round boundary so
+    the burn keeps ticking until the GM extinguishes it).
+
+    Logs every tick / expiry as a system row so the timeline reads
+    accurately. Assumes the caller has opened a transaction.
+    """
+    current_round = encounter.round_number
+    for p in encounter.participants.all():
+        conds = list(p.conditions or [])
+        # 1. Burning tick (1L per round). Skip the dead — incapacitated
+        #    targets shouldn't soak more damage from the burn (still
+        #    burning narratively but mechanically zero-effect).
+        if "burning" in conds and "incapacitated" not in conds:
+            _apply_damage(p, 1, "L")
+            _log(
+                encounter,
+                "system",
+                f"{p.name} burns — 1L damage from burning condition.",
+                target_participant_id=p.id,
+                effect_tag="burning",
+            )
+            # Re-fetch conditions because _apply_damage may have stripped
+            # an aim tag and re-saved the participant. Using the in-memory
+            # ``conds`` list below would otherwise drift from disk state.
+            p.refresh_from_db(fields=["conditions"])
+            conds = list(p.conditions or [])
+            # Auto-incap if the tick filled the track.
+            total_dmg = (
+                p.health_bashing + p.health_lethal + p.health_aggravated
+            )
+            if total_dmg >= p.health_max and "incapacitated" not in conds:
+                conds.append("incapacitated")
+                p.conditions = conds
+                p.save(update_fields=["conditions"])
+                _log(
+                    encounter,
+                    "condition_set",
+                    f"{p.name} is INCAPACITATED.",
+                    target_participant_id=p.id,
+                    condition="incapacitated",
+                )
+
+        # 2. Expiry sweep. Scan companion tags; strip both companion
+        #    and effect when round_number >= until_round.
+        new_conds = list(conds)
+        expired_effects = []
+        for tag in list(new_conds):
+            effect, until = _parse_until_tag(tag)
+            if effect is None:
+                continue
+            if effect == "burning":
+                # Burning has no auto-clear — ignore any companion tag.
+                # (We still leave the companion in place so the GM can
+                # see when the original effect was supposed to lapse.)
+                continue
+            if current_round >= until:
+                expired_effects.append(effect)
+                new_conds = [c for c in new_conds if c != tag and c != effect]
+        if expired_effects and new_conds != list(p.conditions or []):
+            p.conditions = new_conds
+            p.save(update_fields=["conditions"])
+            for eff in expired_effects:
+                _log(
+                    encounter,
+                    "condition_clear",
+                    f"{p.name}: {eff.upper()} cleared (effect expired).",
+                    target_participant_id=p.id,
+                    condition=eff,
+                )
+
+
 def _advance_turn_pointer(encounter):
     """Step the active pointer forward one slot, rolling the round
     over if we're at the end of initiative_order. Writes the
@@ -3123,6 +3444,12 @@ def _advance_turn_pointer(encounter):
             # Phrasing covers both stance and aim clears — the
             # template reader doesn't need to know which fired.
             _log(encounter, "system", "Defensive stances and aim cleared at round boundary.")
+        # v0.15.29 — apply persistent grenade effects (burning tick,
+        # smoke / tear gas / EMP / blinded expiry) at the round
+        # boundary. Lives after the stance/aim sweep so a participant
+        # whose ``defense_full`` got cleared earlier this housekeeping
+        # block doesn't carry a stale tag into the burning tick logs.
+        _apply_round_boundary_effects(encounter)
     else:
         next_id = order[idx + 1]
         encounter.active_participant_id = next_id
@@ -5594,6 +5921,380 @@ def adjust_hp(request, pk, participant_id):
             condition="incapacitated",
         )
 
+    return redirect("combat:detail", pk=encounter.pk)
+
+
+# ---------------------------------------------------------------------------
+# v0.15.29 — Grenade inventory + throw
+# ---------------------------------------------------------------------------
+
+
+@login_required
+@_gm_only
+@csrf_protect
+@transaction.atomic
+def grenade_inventory(request, pk, participant_id):
+    """POST — GM-only: set the participant's grenade inventory for one type.
+
+    v0.15.29 — Form fields:
+
+    * ``grenade_type`` — slug from the catalogue (lowercase first word
+      of the catalogue entry name, e.g. ``"frag"``, ``"smoke"``).
+    * ``count`` — non-negative int; ``0`` removes the inventory tag for
+      this type.
+
+    Server validates that the type exists in the live grenade catalogue;
+    a tampered POST with an unknown slug is rejected with a flash
+    message rather than silently writing junk into the conditions list.
+    The 0..20 cap mirrors the form input's ``max`` attribute. Logs a
+    ``system`` row on every change for the timeline.
+    """
+    if request.method != "POST":
+        return HttpResponseNotAllowed(["POST"])
+
+    encounter = get_object_or_404(Encounter, pk=pk)
+    participant = get_object_or_404(
+        Participant, pk=participant_id, encounter=encounter
+    )
+
+    gtype = (request.POST.get("grenade_type", "") or "").strip().lower()
+    if not gtype:
+        messages.error(request, "Pick a grenade type.")
+        return redirect("combat:detail", pk=encounter.pk)
+
+    # Validate against the live catalogue. Bad / unknown slug bounces.
+    settings_obj = SiteSettings.load()
+    catalogue = _grenade_catalogue_by_slug(settings_obj.get_weapons())
+    if gtype not in catalogue:
+        messages.error(
+            request, f"Unknown grenade type: {gtype}."
+        )
+        return redirect("combat:detail", pk=encounter.pk)
+
+    count = _safe_int(request.POST.get("count"), 0)
+    count = max(0, min(count, 20))
+
+    _set_grenade_count(participant, gtype, count)
+    participant.save(update_fields=["conditions"])
+
+    grenade_name = catalogue[gtype].get("name", gtype)
+    _log(
+        encounter,
+        "system",
+        f"{participant.name}: inventory set to {count} × {grenade_name}.",
+        target_participant_id=participant.id,
+        grenade_type=gtype,
+        count=count,
+    )
+    return redirect("combat:detail", pk=encounter.pk)
+
+
+@login_required
+@_gm_or_owner()
+@csrf_protect
+@transaction.atomic
+def throw_grenade(request, pk, participant_id):
+    """POST — active participant throws a grenade at one or more targets.
+
+    v0.15.29 — Form fields:
+
+    * ``grenade_type`` — slug from inventory (``frag`` / ``smoke`` / …).
+    * ``target_ids``  — list of participant ids in the blast (multi-
+                       checkbox). The GM picks; the resolver doesn't
+                       compute distance (gridless model).
+    * ``gm_modifier`` — signed int added to the throw pool.
+
+    Resolution:
+
+    1. Reject if encounter not active or thrower isn't the active
+       participant.
+    2. Reject if inventory count for the type is zero.
+    3. Look up the catalogue entry by slug. Missing → reject.
+    4. Build attack pool: ``Dex + Athletics + gm_modifier`` for
+       character / NPC; ``mook_combat_pool / 2`` for mooks. No defense
+       roll for the throw itself (it's an area attack); cover applies
+       to damage on damage-dealing types.
+    5. For each target id:
+        * If the grenade has ``damage_type != "none"``, apply
+          ``damage_dice + successes`` damage (minus cover penalty if
+          ``cover_resists``).
+        * If the grenade has an ``effect_tag``, append it to the
+          target's conditions and write the ``<tag>_until:<round>``
+          companion when ``effect_duration_rounds > 0``. EMP is
+          skipped for biological targets (logged as immune).
+    6. Decrement inventory by 1.
+    7. Mark thrower ``acted_this_round=True`` (consumes turn, no
+       auto-advance — same shape as ATTACK / AIM).
+    8. Log one ``grenade_throw`` row per target plus a ``system``
+       summary row.
+    """
+    if request.method != "POST":
+        return HttpResponseNotAllowed(["POST"])
+
+    encounter = get_object_or_404(Encounter, pk=pk)
+    if encounter.status != "active":
+        messages.error(request, "Cannot throw grenades outside an active encounter.")
+        return redirect("combat:detail", pk=encounter.pk)
+
+    thrower = get_object_or_404(
+        Participant, pk=participant_id, encounter=encounter
+    )
+
+    if encounter.active_participant_id != thrower.id:
+        messages.error(request, "Grenades can only be thrown on your own turn.")
+        return redirect("combat:detail", pk=encounter.pk)
+
+    gtype = (request.POST.get("grenade_type", "") or "").strip().lower()
+    if not gtype:
+        messages.error(request, "Pick a grenade type.")
+        return redirect("combat:detail", pk=encounter.pk)
+
+    # 1) Inventory check.
+    inv = _get_grenade_inventory(thrower)
+    if inv.get(gtype, 0) < 1:
+        messages.error(request, f"Out of {gtype} grenades.")
+        return redirect("combat:detail", pk=encounter.pk)
+
+    # 2) Catalogue lookup.
+    settings_obj = SiteSettings.load()
+    catalogue = _grenade_catalogue_by_slug(settings_obj.get_weapons())
+    if gtype not in catalogue:
+        messages.error(request, f"Unknown grenade type: {gtype}.")
+        return redirect("combat:detail", pk=encounter.pk)
+    entry = catalogue[gtype]
+    grenade_name = entry.get("name", gtype)
+    damage_type = (entry.get("damage_type", "") or "").strip().upper()
+    if damage_type not in ("B", "L", "A"):
+        damage_type = "NONE"
+    damage_dice = int(entry.get("damage_dice", 0) or 0)
+    cover_resists = bool(entry.get("cover_resists", True))
+    effect_tag = (entry.get("effect_tag", "") or "").strip()
+    effect_duration = int(entry.get("effect_duration_rounds", 0) or 0)
+
+    # 3) Target list — filter to participants in this encounter, drop
+    #    duplicates and self (you can't grenade yourself meaningfully —
+    #    if a GM wants splash on the thrower, they spawn a separate
+    #    log entry; mechanically self-targeting is an easy misclick).
+    raw_target_ids = request.POST.getlist("target_ids")
+    target_ids = []
+    seen = set()
+    for raw in raw_target_ids:
+        try:
+            tid = int(raw)
+        except (TypeError, ValueError):
+            continue
+        if tid in seen:
+            continue
+        seen.add(tid)
+        target_ids.append(tid)
+    if not target_ids:
+        messages.error(request, "Pick at least one target in the blast.")
+        return redirect("combat:detail", pk=encounter.pk)
+
+    targets = list(
+        encounter.participants.filter(pk__in=target_ids)
+    )
+    if not targets:
+        messages.error(request, "No valid targets in blast.")
+        return redirect("combat:detail", pk=encounter.pk)
+
+    # 4) Build the throw pool. Dex + Athletics + GM mod; mooks halve
+    #    their combat pool. Floor at zero before the roll.
+    gm_modifier = _safe_int(request.POST.get("gm_modifier"), 0)
+    if thrower.participant_kind == "mook":
+        base_pool = max(0, (thrower.mook_combat_pool or 0) // 2)
+    else:
+        source = thrower.character or thrower.npc
+        if source is None:
+            base_pool = 0
+        else:
+            try:
+                dex = int(source.attributes["finesse"]["physical"])
+                athletics = int(
+                    source.skills["physical"].get("Athletics", 0)
+                )
+                base_pool = dex + athletics
+            except (KeyError, TypeError, ValueError):
+                base_pool = 0
+    # Wound penalties + condition modifiers — same shape as the regular
+    # attack pool (a wounded thrower throws worse; a stunned thrower
+    # throws worse). Aim is intentionally NOT consulted — grenades are
+    # area attacks, not aimed shots.
+    wound_pen = _wound_penalty(thrower)
+    cond_atk = _condition_attack_modifier(thrower)
+    throw_pool = max(0, base_pool + gm_modifier + wound_pen + cond_atk)
+    successes, dice = _roll_pool(throw_pool)
+
+    # 5) Per-target resolution. Effects bypass cover when
+    #    cover_resists=False (stun / smoke / tear gas / EMP). Damage
+    #    grenades subtract cover_pen when cover_resists=True (frag,
+    #    concussion, phosphor).
+    hit_count = 0
+    summary_per_target = []
+    for target in targets:
+        per_target_payload = {
+            "grenade_type": gtype,
+            "grenade_name": grenade_name,
+            "target_id": target.id,
+            "hit_roll_successes": successes,
+            "damage_applied": 0,
+            "effect_applied": "",
+            "cover_state": target.cover_state,
+            "cover_resists": cover_resists,
+            "throw_pool": throw_pool,
+            "dice": dice,
+        }
+
+        # ---- Damage branch ---------------------------------------
+        damage_applied_int = 0
+        if damage_type in ("B", "L", "A") and damage_dice > 0:
+            cover_pen = _cover_penalty(target.cover_state)
+            if cover_resists and cover_pen == "BLOCKED":
+                # Full cover blocks the damage entirely. The effect can
+                # still apply iff cover_resists=False — but for a
+                # damage-only grenade with full-cover block we record
+                # the no-op and move on.
+                per_target_payload["damage_applied"] = 0
+                per_target_payload["blocked_by_cover"] = True
+            else:
+                effective_cover = (
+                    cover_pen if (cover_resists and isinstance(cover_pen, int)) else 0
+                )
+                raw_damage = damage_dice + successes
+                final_damage = max(0, raw_damage - effective_cover)
+                if final_damage > 0:
+                    _apply_damage(target, final_damage, damage_type)
+                    damage_applied_int = final_damage
+                    hit_count += 1
+                per_target_payload["damage_applied"] = final_damage
+                per_target_payload["raw_damage"] = raw_damage
+                per_target_payload["cover_pen"] = effective_cover
+
+        # ---- Effect branch ---------------------------------------
+        applied_effect = ""
+        if effect_tag:
+            if effect_tag == "emp_disabled" and _emp_immune(target):
+                # EMP bounces off biological targets — log per spec.
+                _log(
+                    encounter,
+                    "system",
+                    f"{target.name} immune to EMP — no electronic systems.",
+                    target_participant_id=target.id,
+                )
+            else:
+                # Damage-grenade with full cover + cover_resists True
+                # also blocks the effect: a frag grenade behind a
+                # concrete wall doesn't ignite the target. Pure-effect
+                # grenades (cover_resists=False) bypass cover entirely.
+                cover_pen_for_effect = _cover_penalty(target.cover_state)
+                if cover_resists and cover_pen_for_effect == "BLOCKED":
+                    pass  # blocked — no effect either
+                else:
+                    target_conds = list(target.conditions or [])
+                    if effect_tag not in target_conds:
+                        target_conds.append(effect_tag)
+                    if effect_duration > 0:
+                        # Companion ``<tag>_until:<round>`` marker. The
+                        # round-boundary cleanup decrements / strips on
+                        # round_advance. ``current_round +
+                        # effect_duration`` so a 1-round effect thrown
+                        # in round 3 expires at the start of round 4.
+                        until_round = encounter.round_number + effect_duration
+                        until_tag = f"{effect_tag}_until:{until_round}"
+                        # Strip any prior companion for the same effect
+                        # so re-applying refreshes the timer.
+                        target_conds = [
+                            c for c in target_conds
+                            if not c.startswith(f"{effect_tag}_until:")
+                        ]
+                        target_conds.append(until_tag)
+                    target.conditions = target_conds
+                    target.save(update_fields=["conditions"])
+                    applied_effect = effect_tag
+                    if damage_type == "NONE":
+                        hit_count += 1
+        per_target_payload["effect_applied"] = applied_effect
+        per_target_payload["damage_applied"] = damage_applied_int
+
+        # Auto-incap on full track.
+        if damage_applied_int > 0:
+            total_dmg = (
+                target.health_bashing
+                + target.health_lethal
+                + target.health_aggravated
+            )
+            if total_dmg >= target.health_max and "incapacitated" not in (
+                target.conditions or []
+            ):
+                new_conds = list(target.conditions or [])
+                new_conds.append("incapacitated")
+                target.conditions = new_conds
+                target.save(update_fields=["conditions"])
+                _log(
+                    encounter,
+                    "condition_set",
+                    f"{target.name} is INCAPACITATED.",
+                    target_participant_id=target.id,
+                    condition="incapacitated",
+                )
+
+        # Per-target log row.
+        type_label = {"B": "bashing", "L": "lethal", "A": "aggravated"}.get(
+            damage_type, ""
+        )
+        if damage_applied_int > 0 and applied_effect:
+            msg = (
+                f"{thrower.name} → {target.name}: {grenade_name} — "
+                f"{damage_applied_int} {type_label} damage + {applied_effect}."
+            )
+        elif damage_applied_int > 0:
+            msg = (
+                f"{thrower.name} → {target.name}: {grenade_name} — "
+                f"{damage_applied_int} {type_label} damage."
+            )
+        elif applied_effect:
+            msg = (
+                f"{thrower.name} → {target.name}: {grenade_name} — "
+                f"{applied_effect} applied."
+            )
+        else:
+            msg = (
+                f"{thrower.name} → {target.name}: {grenade_name} — no effect."
+            )
+        _log(
+            encounter,
+            "grenade_throw",
+            msg,
+            actor_participant_id=thrower.id,
+            target_participant_id=target.id,
+            **per_target_payload,
+        )
+        summary_per_target.append(target.name)
+
+    # 6) Decrement inventory.
+    new_count = inv.get(gtype, 0) - 1
+    _set_grenade_count(thrower, gtype, new_count)
+    # 7) Consume the turn.
+    thrower.acted_this_round = True
+    thrower.save(update_fields=["conditions", "acted_this_round"])
+
+    # 8) Summary row.
+    _log(
+        encounter,
+        "system",
+        (
+            f"{thrower.name} threw {grenade_name} — "
+            f"{len(targets)} target(s), {hit_count} hit "
+            f"({successes} successes on {throw_pool}d)."
+        ),
+        actor_participant_id=thrower.id,
+        grenade_type=gtype,
+        grenade_name=grenade_name,
+        targets=summary_per_target,
+        successes=successes,
+        throw_pool=throw_pool,
+        remaining_inventory=new_count,
+    )
     return redirect("combat:detail", pk=encounter.pk)
 
 

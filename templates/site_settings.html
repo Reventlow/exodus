@@ -481,6 +481,19 @@
                                 {% endcomment %}
                                 <th style="width: 5%; text-align: center;" title="Knockdown-capable: a successful hit auto-triggers a Strength + Stamina contest vs the attacker's successes. Failure drops the target prone.">KO</th>
                                 {% endif %}
+                                {% comment %}
+                                v0.15.29 — RADIUS / DUR columns appear
+                                only on grenade rows. Other grenade
+                                fields (effect_tag, damage_dice,
+                                damage_type, cover_resists) stay
+                                catalogue-fixed and round-trip via the
+                                name-lookup preserve path in the POST
+                                handler.
+                                {% endcomment %}
+                                {% if sec.cat == "grenade" %}
+                                <th style="width: 9%; text-align: center;" title="Blast radius (close / medium / large). Informational — the GM picks affected targets when the grenade is thrown.">RADIUS</th>
+                                <th style="width: 5%; text-align: center;" title="Effect persistence in rounds. 0 = no auto-clear (e.g. burning persists until manually extinguished).">DUR</th>
+                                {% endif %}
                                 <th>NOTES</th>
                                 <th style="width: 1%;"></th>
                             </tr>
@@ -568,6 +581,32 @@
                                            class="weap-ko-cb"
                                            {% if w.knockdown_capable %}checked{% endif %}
                                            title="Knockdown-capable: a successful hit auto-triggers a Strength + Stamina contest vs the attacker's successes. Failure drops the target prone.">
+                                </td>
+                                {% endif %}
+                                {% comment %}
+                                v0.15.29 — grenade-only cells. Parallel
+                                arrays ``weapons_grenade_radius`` and
+                                ``weapons_grenade_effect_duration`` pair
+                                row-for-row with the rest of the grenade
+                                columns. Other grenade fields stay
+                                catalogue-fixed and round-trip via the
+                                name-lookup preserve path.
+                                {% endcomment %}
+                                {% if sec.cat == "grenade" %}
+                                <td style="text-align: center;">
+                                    <select name="weapons_grenade_radius">
+                                        <option value="close" {% if w.radius == "close" %}selected{% endif %}>CLOSE</option>
+                                        <option value="medium" {% if w.radius == "medium" or not w.radius %}selected{% endif %}>MEDIUM</option>
+                                        <option value="large" {% if w.radius == "large" %}selected{% endif %}>LARGE</option>
+                                    </select>
+                                </td>
+                                <td style="text-align: center;">
+                                    <input type="number"
+                                           name="weapons_grenade_effect_duration"
+                                           value="{{ w.effect_duration_rounds|default_if_none:0 }}"
+                                           min="0" max="99" step="1"
+                                           style="text-align: center;"
+                                           title="Effect persistence in rounds. 0 = no auto-clear; the effect persists until manually cleared (e.g. burning).">
                                 </td>
                                 {% endif %}
                                 <td><input type="text" name="weapons_{{ sec.cat }}_notes" value="{{ w.notes }}" maxlength="240"></td>
@@ -673,6 +712,31 @@
                                          'title="Knockdown-capable: a successful hit auto-triggers a Strength + Stamina contest vs the attacker successes. Failure drops the target prone.">' +
                                 '</td>';
                         }
+                        // v0.15.29 — grenade-only cells. New rows
+                        // default to medium / 0 rounds (a fresh grenade
+                        // with no effect tag and no auto-clear); the GM
+                        // edits the JSON or admin to pick effect_tag /
+                        // damage_dice / cover_resists.
+                        var radiusCell = '';
+                        var durCell = '';
+                        if (cat === 'grenade') {
+                            radiusCell =
+                                '<td style="text-align: center;">' +
+                                  '<select name="weapons_grenade_radius">' +
+                                    '<option value="close">CLOSE</option>' +
+                                    '<option value="medium" selected>MEDIUM</option>' +
+                                    '<option value="large">LARGE</option>' +
+                                  '</select>' +
+                                '</td>';
+                            durCell =
+                                '<td style="text-align: center;">' +
+                                  '<input type="number" ' +
+                                         'name="weapons_grenade_effect_duration" ' +
+                                         'value="0" min="0" max="99" step="1" ' +
+                                         'style="text-align: center;" ' +
+                                         'title="Effect persistence in rounds. 0 = no auto-clear.">' +
+                                '</td>';
+                        }
                         var tr = document.createElement('tr');
                         tr.innerHTML =
                             '<td><input type="text" name="weapons_' + cat + '_name" maxlength="80" placeholder="NAME"></td>' +
@@ -683,6 +747,8 @@
                             magCell +
                             againCell +
                             koCell +
+                            radiusCell +
+                            durCell +
                             '<td><input type="text" name="weapons_' + cat + '_notes" maxlength="240" placeholder=""></td>' +
                             '<td><button type="button" class="weap-del" onclick="this.closest(\'tr\').remove()">×</button></td>';
                         tbody.appendChild(tr);

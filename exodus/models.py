@@ -208,6 +208,14 @@ class SiteSettings(models.Model):
     # Handheld weapons catalogue. List of {"name": str, "category": str}.
     # Categories: melee, improvised, firearm, thrown. Edited via
     # /settings/ → COMBAT → WEAPONS.
+    #
+    # v0.15.29 — adds "grenade" as a fifth category with extended
+    # per-entry fields (radius / effect_tag / effect_duration_rounds /
+    # damage_dice / damage_type / cover_resists). See
+    # ``SiteSettings.default_weapons()`` and ``SiteSettings.get_weapons()``
+    # for the full schema. The model-level help_text below is left
+    # intentionally unchanged from v0.15.19 so the v0.15.29 release
+    # ships without a Django migration (no schema diff, no SQL change).
     weapons = models.JSONField(
         default=list, blank=True,
         help_text=(
@@ -405,6 +413,57 @@ class SiteSettings(models.Model):
             {"name": "Throwing Axe", "category": "thrown", "damage": "2L",
              "range": "Str ×3 / ×6 / ×12 m", "capacity": "—",
              "notes": "Heavy — Str 2 minimum. Devastating at close range."},
+            # ----- Grenades (v0.15.29) ------------------------------------
+            # Grenades — AOE weapons with effect tags applied to every
+            # target in the blast radius. v0.15.29.
+            {"name": "Frag Grenade", "category": "grenade", "damage": "3L",
+             "damage_type": "L", "damage_dice": 3, "radius": "medium",
+             "effect_tag": "", "effect_duration_rounds": 0, "cover_resists": True,
+             "auto_capable": False, "magazine": 0, "again": 10,
+             "knockdown_capable": False,
+             "notes": "Standard fragmentation. Cover applies. Heavy ordnance ignores light cover."},
+
+            {"name": "Concussion Grenade", "category": "grenade", "damage": "2B",
+             "damage_type": "B", "damage_dice": 2, "radius": "close",
+             "effect_tag": "stunned", "effect_duration_rounds": 1, "cover_resists": True,
+             "auto_capable": False, "magazine": 0, "again": 10,
+             "knockdown_capable": False,
+             "notes": "Bashing damage + stunned for 1 round. Cover applies."},
+
+            {"name": "Smoke Grenade", "category": "grenade", "damage": "—",
+             "damage_type": "none", "damage_dice": 0, "radius": "large",
+             "effect_tag": "smoke_cloud", "effect_duration_rounds": 3, "cover_resists": False,
+             "auto_capable": False, "magazine": 0, "again": 10,
+             "knockdown_capable": False,
+             "notes": "No damage. Targets in blast gain smoke_cloud (acts as light concealment) for 3 rounds."},
+
+            {"name": "Stun Grenade (Flashbang)", "category": "grenade", "damage": "—",
+             "damage_type": "none", "damage_dice": 0, "radius": "medium",
+             "effect_tag": "blinded", "effect_duration_rounds": 1, "cover_resists": False,
+             "auto_capable": False, "magazine": 0, "again": 10,
+             "knockdown_capable": False,
+             "notes": "No damage. Blinded for 1 round. Bypasses cover (light/sound)."},
+
+            {"name": "Phosphor Grenade", "category": "grenade", "damage": "4L",
+             "damage_type": "L", "damage_dice": 4, "radius": "medium",
+             "effect_tag": "burning", "effect_duration_rounds": 0, "cover_resists": True,
+             "auto_capable": False, "magazine": 0, "again": 10,
+             "knockdown_capable": False,
+             "notes": "White phosphorus. 4L on detonation + burning condition (1L/round until extinguished). Brutal. Cover applies."},
+
+            {"name": "Tear Gas Grenade", "category": "grenade", "damage": "—",
+             "damage_type": "none", "damage_dice": 0, "radius": "large",
+             "effect_tag": "tear_gas", "effect_duration_rounds": 4, "cover_resists": False,
+             "auto_capable": False, "magazine": 0, "again": 10,
+             "knockdown_capable": False,
+             "notes": "No damage. tear_gas condition (-2 attack/-2 defense, coughing) for 4 rounds. Bypasses cover."},
+
+            {"name": "EMP Grenade", "category": "grenade", "damage": "—",
+             "damage_type": "none", "damage_dice": 0, "radius": "medium",
+             "effect_tag": "emp_disabled", "effect_duration_rounds": 2, "cover_resists": False,
+             "auto_capable": False, "magazine": 0, "again": 10,
+             "knockdown_capable": False,
+             "notes": "Disables electronics. emp_disabled condition (-3 to all rolls for AI / cyber characters) for 2 rounds. No effect on biological targets."},
         ]
 
     def get_weapons(self):
@@ -447,6 +506,32 @@ class SiteSettings(models.Model):
                 mag = 0
             if mag < 0:
                 mag = 0
+            # v0.15.29 — grenade fields. Hydrated uniformly across every
+            # entry so callers can read ``entry["radius"]`` etc. without
+            # KeyError on legacy / non-grenade rows. Defaults are the
+            # safe "no AOE effect" values:
+            #   * radius defaults to "" (informational only, no behaviour)
+            #   * effect_tag defaults to "" (no condition applied)
+            #   * effect_duration_rounds defaults to 0 (no expiry tag)
+            #   * damage_type defaults to "" (resolver re-parses from
+            #     the display ``damage`` field for non-grenade rows)
+            #   * damage_dice defaults to 0 (no extra base damage; the
+            #     attack pipeline reads damage from the display string
+            #     for non-grenades, so 0 here is benign)
+            #   * cover_resists defaults to True (legacy behaviour:
+            #     cover applies to damage)
+            try:
+                damage_dice = int(w.get("damage_dice", 0) or 0)
+            except (TypeError, ValueError):
+                damage_dice = 0
+            if damage_dice < 0:
+                damage_dice = 0
+            try:
+                effect_dur = int(w.get("effect_duration_rounds", 0) or 0)
+            except (TypeError, ValueError):
+                effect_dur = 0
+            if effect_dur < 0:
+                effect_dur = 0
             hydrated.append({
                 "name": w.get("name", ""),
                 "category": w.get("category", ""),
@@ -474,6 +559,15 @@ class SiteSettings(models.Model):
                 # entries default to False; a tampered non-bool value
                 # collapses via ``bool()``.
                 "knockdown_capable": bool(w.get("knockdown_capable", False)),
+                # v0.15.29 — grenade fields. Hydrated uniformly so
+                # legacy / non-grenade rows behave like the pre-v0.15.29
+                # code path (no effect, no AOE).
+                "radius": (w.get("radius", "") or "") or "",
+                "effect_tag": (w.get("effect_tag", "") or "") or "",
+                "effect_duration_rounds": effect_dur,
+                "damage_type": (w.get("damage_type", "") or "") or "",
+                "damage_dice": damage_dice,
+                "cover_resists": bool(w.get("cover_resists", True)),
             })
         return hydrated
 

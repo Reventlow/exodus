@@ -199,6 +199,21 @@ urlpatterns = [
         name="adjust_hp",
     ),
 
+    # v0.15.29 — Grenades. ``grenade_inventory`` is GM-only (sets the
+    # per-participant inventory tag for one grenade type during setup
+    # / mid-fight). ``throw_grenade`` is GM-or-owner; the active actor
+    # spends their turn on an AOE attack against one or more targets.
+    path(
+        "combat/<int:pk>/participants/<int:participant_id>/grenade-inventory/",
+        views.grenade_inventory,
+        name="grenade_inventory",
+    ),
+    path(
+        "combat/<int:pk>/participants/<int:participant_id>/throw-grenade/",
+        views.throw_grenade,
+        name="throw_grenade",
+    ),
+
     # ---------------------------------------------------------------
     # v0.15.7 — JSON API for the MCP server
     # ---------------------------------------------------------------

@@ -201,7 +201,13 @@ def site_settings(request):
         # always pairs with the i-th name regardless of how the rows
         # have been re-ordered or pruned in the editor.
         if "weapons_submitted" in request.POST:
-            categories = ("melee", "improvised", "firearm", "thrown")
+            # v0.15.29 — added "grenade" as a fifth category. Same
+            # parallel-array shape as the existing categories; grenades
+            # add radius / effect_duration_rounds via the editor (other
+            # grenade fields stay catalogue-fixed and are read at hydrate
+            # time only, so a settings round-trip preserves them
+            # unmodified).
+            categories = ("melee", "improvised", "firearm", "thrown", "grenade")
             firearm_auto_flags = request.POST.getlist(
                 "weapons_firearm_auto_capable_flag"
             )
@@ -225,6 +231,27 @@ def site_settings(request):
             firearm_knockdown_flags = request.POST.getlist(
                 "weapons_firearm_knockdown_flag"
             )
+            # v0.15.29 — grenade-specific parallel arrays. ``radius`` and
+            # ``effect_duration_rounds`` are the two GM-tweakable fields
+            # surfaced in the editor; the rest of the grenade fields
+            # (effect_tag, damage_dice, damage_type, cover_resists) stay
+            # catalogue-fixed and are preserved by name lookup against
+            # the previous saved entry. New rows added in the editor
+            # default to a benign no-effect grenade until the GM edits
+            # the JSON via the API / admin.
+            grenade_radii = request.POST.getlist(
+                "weapons_grenade_radius"
+            )
+            grenade_durations = request.POST.getlist(
+                "weapons_grenade_effect_duration"
+            )
+            # Index existing grenades by name so we can preserve the
+            # catalogue-fixed fields on a settings round-trip without
+            # exposing them in the editor.
+            existing_grenades_by_name = {}
+            for w in settings_obj.get_weapons():
+                if isinstance(w, dict) and w.get("category") == "grenade":
+                    existing_grenades_by_name[w.get("name", "")] = w
             new_weapons = []
             for cat in categories:
                 names = request.POST.getlist(f"weapons_{cat}_name")
@@ -232,6 +259,11 @@ def site_settings(request):
                 ranges = request.POST.getlist(f"weapons_{cat}_range")
                 capacities = request.POST.getlist(f"weapons_{cat}_capacity")
                 notes_list = request.POST.getlist(f"weapons_{cat}_notes")
+                # Per-category counter for the grenade parallel arrays.
+                # Indexed independently of i (which iterates names per
+                # category) so the radius / duration arrays only consume
+                # entries when cat == "grenade".
+                grenade_idx = 0
                 for i, raw_name in enumerate(names):
                     name = (raw_name or "").strip()[:80]
                     if not name:
@@ -296,6 +328,53 @@ def site_settings(request):
                             if i < len(firearm_knockdown_flags) else "0"
                         )
                         entry["knockdown_capable"] = (ko_raw == "1")
+                    if cat == "grenade":
+                        # v0.15.29 — preserve catalogue-fixed fields by
+                        # name lookup. New rows (no prior entry) get
+                        # safe defaults so a fresh add doesn't crash
+                        # the throw resolver.
+                        prev = existing_grenades_by_name.get(name, {})
+                        radius_raw = (
+                            grenade_radii[grenade_idx]
+                            if grenade_idx < len(grenade_radii) else ""
+                        )
+                        radius = (radius_raw or "").strip().lower()[:16]
+                        if radius not in ("close", "medium", "large"):
+                            radius = (prev.get("radius", "medium") or "medium")
+                        entry["radius"] = radius
+                        dur_raw = (
+                            grenade_durations[grenade_idx]
+                            if grenade_idx < len(grenade_durations) else "0"
+                        )
+                        try:
+                            dur_val = int(dur_raw)
+                        except (TypeError, ValueError):
+                            dur_val = 0
+                        if dur_val < 0:
+                            dur_val = 0
+                        if dur_val > 99:
+                            dur_val = 99
+                        entry["effect_duration_rounds"] = dur_val
+                        # Catalogue-fixed fields preserved verbatim from
+                        # the prior entry. Defaults apply only when the
+                        # editor adds a brand-new row.
+                        entry["effect_tag"] = (prev.get("effect_tag", "") or "")
+                        try:
+                            dd = int(prev.get("damage_dice", 0) or 0)
+                        except (TypeError, ValueError):
+                            dd = 0
+                        entry["damage_dice"] = max(0, dd)
+                        entry["damage_type"] = (prev.get("damage_type", "none") or "none")
+                        entry["cover_resists"] = bool(prev.get("cover_resists", True))
+                        # Match the firearm row in carrying inert flags
+                        # so other code that scans the catalogue (e.g.
+                        # the get_weapons hydrator) doesn't have to
+                        # special-case this category.
+                        entry.setdefault("auto_capable", False)
+                        entry.setdefault("magazine", 0)
+                        entry.setdefault("again", 10)
+                        entry.setdefault("knockdown_capable", False)
+                        grenade_idx += 1
                     new_weapons.append(entry)
             settings_obj.weapons = new_weapons
 
@@ -310,7 +389,14 @@ def site_settings(request):
     player_agencies = all_agencies.filter(is_player_agency=True)
     npc_agencies = all_agencies.filter(is_player_agency=False)
     # Pre-grouped weapons sections for the structured editor.
-    weapons_by_cat = {"melee": [], "improvised": [], "firearm": [], "thrown": []}
+    # v0.15.29 — added "grenade" as a fifth category. Edited fields:
+    # radius + effect_duration_rounds. Other grenade fields (effect_tag,
+    # damage_dice, damage_type, cover_resists) stay catalogue-fixed
+    # and round-trip via the name-lookup preserve path.
+    weapons_by_cat = {
+        "melee": [], "improvised": [], "firearm": [],
+        "thrown": [], "grenade": [],
+    }
     for w in settings_obj.get_weapons():
         if isinstance(w, dict) and w.get("category") in weapons_by_cat:
             weapons_by_cat[w["category"]].append(w)
@@ -327,6 +413,9 @@ def site_settings(request):
         {"cat": "thrown", "label": "THROWN",
          "hint": "Dexterity + Athletics · Strength × range",
          "rows": weapons_by_cat["thrown"]},
+        {"cat": "grenade", "label": "GRENADE",
+         "hint": "Dexterity + Athletics · AOE blast · effect tags applied to every target in radius",
+         "rows": weapons_by_cat["grenade"]},
     ]
 
     # Pre-grouped armor sections for the structured editor.
@@ -1102,7 +1191,10 @@ def combat_page(request):
     """RULES → COMBAT — quick reference for WoD 2.0 personal combat,
     plus the live weapons catalogue (rendered as a per-category table)."""
     settings_obj = SiteSettings.load()
-    weapons_by_cat = {"melee": [], "improvised": [], "firearm": [], "thrown": []}
+    weapons_by_cat = {
+        "melee": [], "improvised": [], "firearm": [],
+        "thrown": [], "grenade": [],
+    }
     for w in settings_obj.get_weapons():
         if isinstance(w, dict) and w.get("category") in weapons_by_cat:
             weapons_by_cat[w["category"]].append(w)
@@ -1119,6 +1211,10 @@ def combat_page(request):
         {"cat": "thrown", "label": "THROWN",
          "hint": "Dexterity + Athletics · Strength × range",
          "rows": weapons_by_cat["thrown"]},
+        # v0.15.29 — grenade catalogue.
+        {"cat": "grenade", "label": "GRENADE",
+         "hint": "Dexterity + Athletics · AOE · effect tags",
+         "rows": weapons_by_cat["grenade"]},
     ]
 
     armor_by_cat = {"light": [], "medium": [], "heavy": [], "vacuum": []}
