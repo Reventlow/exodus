@@ -3380,14 +3380,13 @@ def start_encounter(request, pk):
         request.user.is_superuser and request.POST.get("force_start") == "1"
     )
     if not force_start:
-        # JSONField __contains is supported on SQLite + PostgreSQL for
-        # whole-list match, but we re-check with ``_is_ready`` in
-        # Python as belt-and-suspenders so any backend quirk surfaces
-        # as a flash-message rather than a silent pass.
-        unready_qs = _participants_needing_ready(encounter).exclude(
-            conditions__contains=["ready"]
-        )
-        unready_names = [p.name for p in unready_qs if not _is_ready(p)]
+        # v0.15.35 — pure-Python check. SQLite's JSONField __contains
+        # support for whole-list match is finicky in some Django + SQLite
+        # version combos (NotSupportedError on certain versions), so we
+        # iterate the queryset and let _is_ready do the parsing. The
+        # set is small (player characters only) so this is cheap.
+        all_chars = list(_participants_needing_ready(encounter))
+        unready_names = [p.name for p in all_chars if not _is_ready(p)]
         if unready_names:
             messages.error(
                 request,
