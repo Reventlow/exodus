@@ -297,4 +297,54 @@ urlpatterns = [
         views.api_encounter_participant_detail,
         name="api_participant_detail",
     ),
+
+    # ---------------------------------------------------------------
+    # v0.15.36 — Combat MCP refresh: 9 prep-tier endpoints
+    # ---------------------------------------------------------------
+    # Visibility, equip (main / off-hand / armor), cover, grenade
+    # inventory, HP adjust, alert toggle, and the single-participant
+    # initiative roll + initiative clear lifecycle hooks. All
+    # GM-only, all behind the ``_api_gm_only`` Bearer-token gate. No
+    # combat actions (attack / dodge / aim / burst / condition /
+    # willpower / etc.) — those stay web-UI-only by design.
+    path(
+        "api/admin/combat/encounters/<int:pk>/visibility/",
+        views.api_encounter_visibility,
+        name="api_visibility",
+    ),
+    path(
+        "api/admin/combat/encounters/<int:pk>/initiative/clear/",
+        views.api_encounter_initiative_clear,
+        name="api_initiative_clear",
+    ),
+    path(
+        "api/admin/combat/encounters/<int:pk>/participants/<int:participant_id>/initiative/",
+        views.api_encounter_initiative_one,
+        name="api_initiative_one",
+    ),
+    path(
+        "api/admin/combat/encounters/<int:pk>/participants/<int:participant_id>/equip/",
+        views.api_participant_equip,
+        name="api_equip",
+    ),
+    path(
+        "api/admin/combat/encounters/<int:pk>/participants/<int:participant_id>/cover/",
+        views.api_participant_set_cover,
+        name="api_set_cover",
+    ),
+    path(
+        "api/admin/combat/encounters/<int:pk>/participants/<int:participant_id>/grenades/",
+        views.api_participant_grenade_inventory,
+        name="api_grenade_inventory",
+    ),
+    path(
+        "api/admin/combat/encounters/<int:pk>/participants/<int:participant_id>/adjust-hp/",
+        views.api_participant_adjust_hp,
+        name="api_adjust_hp",
+    ),
+    path(
+        "api/admin/combat/encounters/<int:pk>/participants/<int:participant_id>/alert/",
+        views.api_participant_toggle_alert,
+        name="api_toggle_alert",
+    ),
 ]

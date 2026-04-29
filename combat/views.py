@@ -7481,7 +7481,15 @@ def _serialize_participant(p):
     conditions list, and initiative state. The MCP client uses this
     directly so the GM-side LLM can reason about the live encounter
     state without a second round-trip.
+
+    v0.15.36 — payload expanded for the Combat MCP refresh. Adds
+    off-hand weapon snapshot, ammo state, grenade inventory map,
+    aim state tuple, derived ``is_ready`` flag, ``is_alert`` alias,
+    wound penalty, and the combined attack-modifier total
+    (wound_penalty + condition_attack_modifier). New fields are
+    additive — existing callers keep working.
     """
+    aim = _aim_state(p)
     return {
         "id": p.id,
         "encounter_id": p.encounter_id,
@@ -7527,6 +7535,27 @@ def _serialize_participant(p):
         "acted_this_round": p.acted_this_round,
         "defense_override": p.defense_override,
         "notes": p.notes,
+        # v0.15.36 — off-hand weapon snapshot (parallel to weapon).
+        "offhand_weapon_name": p.offhand_weapon_name,
+        "offhand_weapon_data": p.offhand_weapon_data or {},
+        # v0.15.36 — convenience alias for surprise_immune.
+        "is_alert": bool(p.surprise_immune),
+        # v0.15.36 — derived from the ``ready`` condition tag.
+        "is_ready": _is_ready(p),
+        # v0.15.36 — current aim {target_id, turns} or None.
+        "aim_state": (
+            {"target_id": aim[0], "turns": aim[1]} if aim else None
+        ),
+        # v0.15.36 — current rounds-in-magazine (None when no firearm).
+        "ammo_state": _ammo_state(p),
+        "offhand_ammo_state": _offhand_ammo_state(p),
+        # v0.15.36 — grenade inventory map (slug → count).
+        "grenade_inventory": _get_grenade_inventory(p),
+        # v0.15.36 — wound + condition attack modifier sums.
+        "wound_penalty": _wound_penalty(p),
+        "attack_modifier_total": (
+            _wound_penalty(p) + _condition_attack_modifier(p)
+        ),
     }
 
 
@@ -7538,6 +7567,11 @@ def _serialize_encounter(enc, with_log=False, log_limit=50):
     list and the most-recent ``log_limit`` log entries (newest
     first), which is what the detail endpoint serves.
     """
+    # v0.15.36 — surface ``is_hidden`` and ``metadata`` so MCP callers
+    # see publication state and surprise-round flag without a second
+    # round-trip. ``story_idea_id`` / ``story_idea_title`` were already
+    # in the payload; both are kept verbatim.
+    metadata = enc.metadata or {}
     out = {
         "id": enc.id,
         "title": enc.title,
@@ -7555,6 +7589,11 @@ def _serialize_encounter(enc, with_log=False, log_limit=50):
         "story_idea_id": enc.story_idea_id,
         "story_idea_title": enc.story_idea.title if enc.story_idea_id else None,
         "participant_count": enc.participants.count(),
+        # v0.15.36 — visibility + surprise-round metadata.
+        "is_hidden": bool(enc.is_hidden),
+        "metadata": {
+            "is_surprise_round": bool(metadata.get("is_surprise_round", False)),
+        },
     }
     if with_log:
         out["participants"] = [
@@ -8059,4 +8098,628 @@ def api_encounter_participant_detail(request, pk, participant_id):
         "deleted": True,
         "participant_id": captured_id,
         "name": name,
+    })
+
+
+# ---------------------------------------------------------------------------
+# v0.15.36 — Combat MCP refresh: prep-tier endpoints
+# ---------------------------------------------------------------------------
+#
+# Nine additional JSON endpoints under ``/api/admin/combat/`` exposing
+# the GM-prep workflows that the v0.15.7 baseline didn't cover —
+# visibility toggle, equipment loadout (main / off-hand / armor),
+# cover state, grenade inventory, HP adjust, alert toggle, and the
+# single-participant initiative roll + initiative clear lifecycle hooks.
+#
+# Combat actions (attack / dodge / aim / burst / condition / willpower)
+# remain web-UI-only by design — the MCP surface is for prep, not for
+# in-fight resolution. This split was chosen in v0.15.7 and is still
+# right: the GM-side LLM should not be making to-hit rolls.
+
+
+@csrf_exempt
+@require_http_methods(["POST"])
+@login_required
+@_api_gm_only
+@transaction.atomic
+def api_encounter_visibility(request, pk):
+    """POST — flip ``is_hidden`` on an encounter.
+
+    Body: ``{"action": "release" | "hide"}``. ``release`` clears the
+    flag (publish); ``hide`` sets it (rare — "I made a mistake"
+    recovery). Idempotent: re-calling on a no-op state still returns
+    200 with the current encounter payload but does NOT log a row
+    (matching the web-view behaviour).
+    """
+    try:
+        body = json.loads(request.body) if request.body else {}
+    except json.JSONDecodeError:
+        return JsonResponse({"error": "Invalid JSON."}, status=400)
+
+    action = (body.get("action") or "").strip().lower()
+    if action not in ("release", "hide"):
+        return JsonResponse({
+            "error": "Unknown action. Use 'release' or 'hide'.",
+        }, status=400)
+
+    encounter = get_object_or_404(Encounter, pk=pk)
+    target = (action == "hide")
+    if encounter.is_hidden != target:
+        encounter.is_hidden = target
+        encounter.save(update_fields=["is_hidden", "updated_at"])
+        _log(
+            encounter, "is_hidden_change",
+            (
+                "Encounter released — players can now see it."
+                if not target
+                else "Encounter hidden — players can no longer see it."
+            ),
+            is_hidden=target,
+        )
+    return JsonResponse({
+        "ok": True,
+        "is_hidden": encounter.is_hidden,
+        "encounter": _serialize_encounter(encounter),
+    })
+
+
+@csrf_exempt
+@require_http_methods(["POST"])
+@login_required
+@_api_gm_only
+@transaction.atomic
+def api_participant_equip(request, pk, participant_id):
+    """POST — equip / unequip a weapon (main / off-hand) or armor.
+
+    Body: ``{"slot": "main"|"offhand"|"armor", "name": str}``.
+    Empty ``name`` (or unknown catalogue match) clears the slot.
+
+    MCP equip is treated as **instant** — the v0.15.23 turn-cost
+    rule that applies during active combat in the web UI is bypassed
+    here. MCP is for GM prep / narrative loadout management, not
+    in-fight equip swaps. The ``acted_this_round`` flag is never
+    set by this endpoint.
+    """
+    try:
+        body = json.loads(request.body) if request.body else {}
+    except json.JSONDecodeError:
+        return JsonResponse({"error": "Invalid JSON."}, status=400)
+
+    slot = (body.get("slot") or "main").strip().lower()
+    if slot not in ("main", "offhand", "armor"):
+        return JsonResponse({
+            "error": "slot must be one of: main, offhand, armor.",
+        }, status=400)
+    name = (body.get("name") or "").strip()
+
+    encounter = get_object_or_404(Encounter, pk=pk)
+    participant = get_object_or_404(
+        Participant, pk=participant_id, encounter=encounter
+    )
+
+    settings_obj = SiteSettings.load()
+    action_cost = "instant"
+
+    if slot == "armor":
+        if not name:
+            participant.armor_name = ""
+            participant.armor_data = {}
+            participant.save(update_fields=["armor_name", "armor_data"])
+            _log(
+                encounter, "armor_change",
+                f"{participant.name} unequipped armor.",
+                participant_id=participant.pk,
+                armor_name="",
+                action_cost=action_cost,
+            )
+            return JsonResponse({
+                "ok": True,
+                "participant": _serialize_participant(participant),
+            })
+        armors = settings_obj.get_armor()
+        entry = next((a for a in armors if a.get("name") == name), None)
+        if entry is None:
+            participant.armor_name = ""
+            participant.armor_data = {}
+            participant.save(update_fields=["armor_name", "armor_data"])
+            _log(
+                encounter, "armor_change",
+                f"{participant.name} unequipped armor (unknown entry: {name}).",
+                participant_id=participant.pk,
+                armor_name="",
+                action_cost=action_cost,
+            )
+            return JsonResponse({
+                "ok": True,
+                "participant": _serialize_participant(participant),
+            })
+        participant.armor_name = entry.get("name", "")
+        participant.armor_data = dict(entry)
+        participant.save(update_fields=["armor_name", "armor_data"])
+        _log(
+            encounter, "armor_change",
+            f"{participant.name} equipped {participant.armor_name}.",
+            participant_id=participant.pk,
+            armor_name=participant.armor_name,
+            action_cost=action_cost,
+        )
+        return JsonResponse({
+            "ok": True,
+            "participant": _serialize_participant(participant),
+        })
+
+    # Weapon slots — main / offhand share most logic; the slot
+    # determines which fields and which ammo helpers are touched.
+    is_offhand = (slot == "offhand")
+    name_field = "offhand_weapon_name" if is_offhand else "weapon_name"
+    data_field = "offhand_weapon_data" if is_offhand else "weapon_data"
+    set_ammo = _set_offhand_ammo if is_offhand else _set_ammo
+    strip_ammo = _strip_offhand_ammo if is_offhand else _strip_ammo
+    offhand_payload = {"offhand": True} if is_offhand else {}
+
+    if not name:
+        setattr(participant, name_field, "")
+        setattr(participant, data_field, {})
+        strip_ammo(participant)
+        participant.save(update_fields=[name_field, data_field, "conditions"])
+        _log(
+            encounter, "weapon_change",
+            (
+                f"{participant.name} unequipped off-hand weapon."
+                if is_offhand
+                else f"{participant.name} unequipped weapon."
+            ),
+            participant_id=participant.pk,
+            weapon_name="",
+            magazine_full=False,
+            action_cost=action_cost,
+            **offhand_payload,
+        )
+        return JsonResponse({
+            "ok": True,
+            "participant": _serialize_participant(participant),
+        })
+
+    weapons = settings_obj.get_weapons()
+    entry = next((w for w in weapons if w.get("name") == name), None)
+    if entry is None:
+        setattr(participant, name_field, "")
+        setattr(participant, data_field, {})
+        strip_ammo(participant)
+        participant.save(update_fields=[name_field, data_field, "conditions"])
+        _log(
+            encounter, "weapon_change",
+            (
+                f"{participant.name} unequipped off-hand weapon "
+                f"(unknown entry: {name})."
+                if is_offhand
+                else f"{participant.name} unequipped weapon "
+                f"(unknown entry: {name})."
+            ),
+            participant_id=participant.pk,
+            weapon_name="",
+            magazine_full=False,
+            action_cost=action_cost,
+            **offhand_payload,
+        )
+        return JsonResponse({
+            "ok": True,
+            "participant": _serialize_participant(participant),
+        })
+
+    setattr(participant, name_field, entry.get("name", ""))
+    setattr(participant, data_field, dict(entry))
+    mag = 0
+    if entry.get("category") == "firearm":
+        try:
+            mag = int(entry.get("magazine", 0) or 0)
+        except (TypeError, ValueError):
+            mag = 0
+    if mag > 0:
+        set_ammo(participant, mag)
+        magazine_full = True
+    else:
+        strip_ammo(participant)
+        magazine_full = False
+
+    participant.save(update_fields=[name_field, data_field, "conditions"])
+    equipped_name = getattr(participant, name_field)
+    _log(
+        encounter, "weapon_change",
+        (
+            f"{participant.name} equipped {equipped_name} (off-hand)."
+            if is_offhand
+            else f"{participant.name} equipped {equipped_name}."
+        ),
+        participant_id=participant.pk,
+        weapon_name=equipped_name,
+        magazine=mag,
+        magazine_full=magazine_full,
+        action_cost=action_cost,
+        **offhand_payload,
+    )
+    return JsonResponse({
+        "ok": True,
+        "participant": _serialize_participant(participant),
+    })
+
+
+@csrf_exempt
+@require_http_methods(["POST"])
+@login_required
+@_api_gm_only
+@transaction.atomic
+def api_participant_set_cover(request, pk, participant_id):
+    """POST — update a participant's cover state.
+
+    Body: ``{"cover_state": "none"|"light"|"heavy"|"full",
+    "cover_entry_name": str (optional)}``. Mirrors the
+    :func:`set_cover` web view; the optional catalogue lookup
+    populates ``cover_durability`` and ``cover_health`` from the
+    matching SiteSettings cover entry.
+    """
+    try:
+        body = json.loads(request.body) if request.body else {}
+    except json.JSONDecodeError:
+        return JsonResponse({"error": "Invalid JSON."}, status=400)
+
+    valid_states = {"none", "light", "heavy", "full"}
+    state = (body.get("cover_state") or "none").strip().lower()
+    if state not in valid_states:
+        return JsonResponse({
+            "error": "cover_state must be one of: none, light, heavy, full.",
+        }, status=400)
+    entry_name = (body.get("cover_entry_name") or "").strip()
+
+    encounter = get_object_or_404(Encounter, pk=pk)
+    participant = get_object_or_404(
+        Participant, pk=participant_id, encounter=encounter
+    )
+
+    if state == "none":
+        participant.cover_state = "none"
+        participant.cover_entry_name = ""
+        participant.cover_durability = None
+        participant.cover_health = None
+        participant.save(update_fields=[
+            "cover_state",
+            "cover_entry_name",
+            "cover_durability",
+            "cover_health",
+        ])
+        _log(
+            encounter, "cover_change",
+            f"{participant.name} cleared cover.",
+            participant_id=participant.pk,
+            cover_state="none",
+        )
+        return JsonResponse({
+            "ok": True,
+            "participant": _serialize_participant(participant),
+        })
+
+    durability = None
+    health = None
+    if entry_name:
+        cover_catalogue = SiteSettings.load().get_cover()
+        entry = next(
+            (c for c in cover_catalogue if c.get("name") == entry_name),
+            None,
+        )
+        if entry is not None:
+            durability = _safe_int(entry.get("durability"), 0) or None
+            health = _safe_int(entry.get("health"), 0) or None
+
+    participant.cover_state = state
+    participant.cover_entry_name = entry_name
+    participant.cover_durability = durability
+    participant.cover_health = health
+    participant.save(update_fields=[
+        "cover_state",
+        "cover_entry_name",
+        "cover_durability",
+        "cover_health",
+    ])
+
+    label = (
+        f"{participant.name} entered {state} cover ({entry_name})."
+        if entry_name
+        else f"{participant.name} entered {state} cover."
+    )
+    _log(
+        encounter, "cover_change",
+        label,
+        participant_id=participant.pk,
+        cover_state=state,
+        cover_entry_name=entry_name,
+    )
+    return JsonResponse({
+        "ok": True,
+        "participant": _serialize_participant(participant),
+    })
+
+
+@csrf_exempt
+@require_http_methods(["POST"])
+@login_required
+@_api_gm_only
+@transaction.atomic
+def api_participant_grenade_inventory(request, pk, participant_id):
+    """POST — set a participant's grenade inventory for one type.
+
+    Body: ``{"grenade_type": str (slug), "count": int}``. The slug is
+    validated against the live grenade catalogue; an unknown slug is
+    rejected (400) rather than silently writing junk into the
+    conditions list. ``count`` is clamped to ``0..20`` (matching the
+    web form's ``max`` attribute); ``0`` removes the inventory tag.
+    """
+    try:
+        body = json.loads(request.body) if request.body else {}
+    except json.JSONDecodeError:
+        return JsonResponse({"error": "Invalid JSON."}, status=400)
+
+    gtype = (body.get("grenade_type") or "").strip().lower()
+    if not gtype:
+        return JsonResponse({
+            "error": "grenade_type is required.",
+        }, status=400)
+
+    encounter = get_object_or_404(Encounter, pk=pk)
+    participant = get_object_or_404(
+        Participant, pk=participant_id, encounter=encounter
+    )
+
+    settings_obj = SiteSettings.load()
+    catalogue = _grenade_catalogue_by_slug(settings_obj.get_weapons())
+    if gtype not in catalogue:
+        return JsonResponse({
+            "error": f"Unknown grenade type: {gtype}.",
+        }, status=400)
+
+    count = _safe_int(body.get("count"), 0)
+    count = max(0, min(count, 20))
+    _set_grenade_count(participant, gtype, count)
+    participant.save(update_fields=["conditions"])
+
+    grenade_name = catalogue[gtype].get("name", gtype)
+    _log(
+        encounter, "system",
+        f"{participant.name}: inventory set to {count} × {grenade_name}.",
+        target_participant_id=participant.id,
+        grenade_type=gtype,
+        count=count,
+    )
+    return JsonResponse({
+        "ok": True,
+        "participant": _serialize_participant(participant),
+        "grenade_inventory": _get_grenade_inventory(participant),
+    })
+
+
+@csrf_exempt
+@require_http_methods(["POST"])
+@login_required
+@_api_gm_only
+@transaction.atomic
+def api_participant_adjust_hp(request, pk, participant_id):
+    """POST — set explicit health-track values for a participant.
+
+    Body: ``{"health_bashing": int, "health_lethal": int,
+    "health_aggravated": int}``. Each track is clamped to
+    ``0..health_max``; the sum is also bounded. A submission that
+    would overflow the track total returns 409 (rather than silently
+    truncating, since the GM might not realise the constraint).
+
+    Auto-toggles the ``incapacitated`` condition based on the new
+    total — filling the track adds it, reducing below cap strips it.
+    """
+    try:
+        body = json.loads(request.body) if request.body else {}
+    except json.JSONDecodeError:
+        return JsonResponse({"error": "Invalid JSON."}, status=400)
+
+    encounter = get_object_or_404(Encounter, pk=pk)
+    participant = get_object_or_404(
+        Participant, pk=participant_id, encounter=encounter
+    )
+
+    hm = participant.health_max or 0
+    new_b = _safe_int(body.get("health_bashing"), participant.health_bashing)
+    new_l = _safe_int(body.get("health_lethal"), participant.health_lethal)
+    new_a = _safe_int(body.get("health_aggravated"), participant.health_aggravated)
+    new_b = max(0, min(hm, new_b))
+    new_l = max(0, min(hm, new_l))
+    new_a = max(0, min(hm, new_a))
+    if (new_b + new_l + new_a) > hm:
+        return JsonResponse({
+            "error": (
+                f"HP totals exceed health_max ({hm}). "
+                f"Submitted: B={new_b} L={new_l} A={new_a}."
+            ),
+        }, status=409)
+
+    old_b = participant.health_bashing
+    old_l = participant.health_lethal
+    old_a = participant.health_aggravated
+    before = {"bashing": old_b, "lethal": old_l, "aggravated": old_a}
+    after = {"bashing": new_b, "lethal": new_l, "aggravated": new_a}
+
+    if (new_b, new_l, new_a) == (old_b, old_l, old_a):
+        return JsonResponse({
+            "ok": True,
+            "participant": _serialize_participant(participant),
+            "before": before,
+            "after": after,
+        })
+
+    participant.health_bashing = new_b
+    participant.health_lethal = new_l
+    participant.health_aggravated = new_a
+    participant.save(update_fields=[
+        "health_bashing", "health_lethal", "health_aggravated",
+    ])
+    _log(
+        encounter, "health_adjust",
+        (
+            f"{participant.name}: HP {old_b}/{old_l}/{old_a} → "
+            f"{new_b}/{new_l}/{new_a} (GM adjust)."
+        ),
+        target_participant_id=participant.id,
+        before=before,
+        after=after,
+    )
+
+    new_total = new_b + new_l + new_a
+    has_incap = _has_condition(participant, "incapacitated")
+    if new_total >= hm and not has_incap:
+        new_conds = list(participant.conditions or [])
+        new_conds.append("incapacitated")
+        participant.conditions = new_conds
+        participant.save(update_fields=["conditions"])
+        _log(
+            encounter, "condition_set",
+            f"{participant.name} is INCAPACITATED.",
+            target_participant_id=participant.id,
+            condition="incapacitated",
+        )
+    elif new_total < hm and has_incap:
+        participant.conditions = [
+            c for c in (participant.conditions or []) if c != "incapacitated"
+        ]
+        participant.save(update_fields=["conditions"])
+        _log(
+            encounter, "condition_clear",
+            f"{participant.name} no longer INCAPACITATED.",
+            target_participant_id=participant.id,
+            condition="incapacitated",
+        )
+
+    return JsonResponse({
+        "ok": True,
+        "participant": _serialize_participant(participant),
+        "before": before,
+        "after": after,
+    })
+
+
+@csrf_exempt
+@require_http_methods(["POST"])
+@login_required
+@_api_gm_only
+@transaction.atomic
+def api_participant_toggle_alert(request, pk, participant_id):
+    """POST — toggle (or set) the participant's ``surprise_immune``.
+
+    Body: ``{}`` to flip current state, or
+    ``{"surprise_immune": bool}`` to set explicitly. Round-1 of a
+    surprise encounter zeroes Defense for non-immune defenders;
+    alert participants stay defended.
+    """
+    try:
+        body = json.loads(request.body) if request.body else {}
+    except json.JSONDecodeError:
+        return JsonResponse({"error": "Invalid JSON."}, status=400)
+
+    encounter = get_object_or_404(Encounter, pk=pk)
+    participant = get_object_or_404(
+        Participant, pk=participant_id, encounter=encounter
+    )
+    if "surprise_immune" in body:
+        new_state = bool(body.get("surprise_immune"))
+    else:
+        new_state = not bool(participant.surprise_immune)
+    participant.surprise_immune = new_state
+    participant.save(update_fields=["surprise_immune"])
+    label = "ALERT" if new_state else "ALERT cleared"
+    _log(
+        encounter, "system",
+        f"{participant.name}: {label}.",
+        participant_id=participant.pk,
+        surprise_immune=new_state,
+    )
+    return JsonResponse({
+        "ok": True,
+        "participant": _serialize_participant(participant),
+        "surprise_immune": new_state,
+    })
+
+
+@csrf_exempt
+@require_http_methods(["POST"])
+@login_required
+@_api_gm_only
+@transaction.atomic
+def api_encounter_initiative_one(request, pk, participant_id):
+    """POST — roll initiative for a single participant.
+
+    Mirror of the web view :func:`roll_initiative`. No body required.
+    Refuses to act on a concluded encounter (409).
+    """
+    encounter = get_object_or_404(Encounter, pk=pk)
+    if encounter.status == "concluded":
+        return JsonResponse({
+            "error": "Cannot roll initiative on a concluded encounter.",
+        }, status=409)
+    participant = get_object_or_404(
+        Participant, pk=participant_id, encounter=encounter
+    )
+    modifier, d10, score = _compute_initiative(participant)
+    participant.initiative_roll = d10
+    participant.initiative_score = score
+    participant.save(update_fields=["initiative_roll", "initiative_score"])
+    _log(
+        encounter, "initiative",
+        f"{participant.name} rolled initiative: {modifier} + {d10} = {score}.",
+        participant_id=participant.pk,
+        modifier=modifier, d10=d10, score=score,
+    )
+    return JsonResponse({
+        "ok": True,
+        "modifier": modifier,
+        "d10": d10,
+        "score": score,
+        "participant": _serialize_participant(participant),
+    })
+
+
+@csrf_exempt
+@require_http_methods(["POST"])
+@login_required
+@_api_gm_only
+@transaction.atomic
+def api_encounter_initiative_clear(request, pk):
+    """POST — wipe initiative scores and reset the encounter to setup.
+
+    Mirror of :func:`clear_initiative`. Bulk-clears
+    ``initiative_score`` / ``initiative_roll`` /
+    ``acted_this_round`` on every participant, drops the order
+    pointer, and (if the encounter was active) reverts ``status``
+    to ``setup`` with ``round_number=0``.
+    """
+    encounter = get_object_or_404(Encounter, pk=pk)
+    encounter.participants.update(
+        initiative_score=None,
+        initiative_roll=None,
+        acted_this_round=False,
+    )
+    encounter.initiative_order = []
+    encounter.active_participant_id = None
+    if encounter.status == "active":
+        encounter.status = "setup"
+        encounter.round_number = 0
+        encounter.started_at = None
+        encounter.ended_at = None
+    encounter.save(update_fields=[
+        "initiative_order",
+        "active_participant_id",
+        "status",
+        "round_number",
+        "started_at",
+        "ended_at",
+        "updated_at",
+    ])
+    _log(encounter, "system", "Initiative cleared. Encounter reset to setup.")
+    return JsonResponse({
+        "ok": True,
+        "encounter": _serialize_encounter(encounter, with_log=True),
     })
