@@ -1,5 +1,10 @@
 # Changelog
 
+## v0.15.37
+- **List-page hover no longer shakes — it highlights.** The `.glitch-hover` effect (shared by the Dispatch/news, Characters, Agencies, and NPCs list pages) previously ran the `glitch` keyframe animation on hover, jittering the card with a `translate(±2px)` shake. Replaced with a smooth highlight: danger-colored border, a 1px ring + soft glow, and the accent text color, eased over `0.15s`
+- The glow derives from `--accent-danger` via `color-mix`, so it tracks the active theme (`#ff4d5e` / `#dc2626`) instead of a hardcoded value
+- `@keyframes glitch` is left intact (no longer referenced) in case it's reused later. CSS-only change — no templates, models, migrations, or dependencies touched
+
 ## v0.15.36
 - **Combat MCP refresh — 9 new tools for GM prep workflows that the v0.15.7 baseline didn't cover.** Total combat tools 11 → 20; project tool count 107 → 116
 - New MCP tools: `release_encounter`, `hide_encounter`, `equip_participant_weapon`, `set_participant_cover`, `give_participant_grenades`, `adjust_participant_hp`, `toggle_participant_alert`, `roll_initiative_for_participant`, `clear_encounter_initiative`. The existing 11 (list / get / create / lifecycle / participants / initiative / turn) are unchanged

@@ -303,8 +303,13 @@ body {
     100% { transform: translate(0) }
 }
 
+.glitch-hover {
+    transition: border-color 0.15s ease, box-shadow 0.15s ease, background-color 0.15s ease;
+}
+
 .glitch-hover:hover {
-    animation: glitch 0.2s cubic-bezier(.25, .46, .45, .94) both infinite;
+    border-color: var(--accent-danger);
+    box-shadow: 0 0 0 1px var(--accent-danger), 0 0 12px color-mix(in srgb, var(--accent-danger) 30%, transparent);
     color: var(--accent-danger);
 }
 
