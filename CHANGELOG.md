@@ -1,5 +1,10 @@
 # Changelog
 
+## v0.15.38
+- **Topbar / nav now readable in light mode.** The header strip, footer strip, subsystem nav rail, and OPERATIONS dropdown all hardcoded a near-black green background (`rgba(2,12,8,…)`). In light mode the page text flips to dark navy, leaving dark-on-dark, unreadable chrome. Repointed all four at the existing theme-aware `--nav-bg` / `--nav-bg-mobile` tokens (dark in dark mode, pale `#f8fafc` in light mode), so the bars follow the active theme and text stays legible in both
+- **New favicon that fits the theme.** Recolored the `EX` monogram from off-theme cyan to phosphor emerald (`#39ff7a` E, dimmer `#0d8f3e` X for depth) on a dark void panel with a thin emerald border and a CRT-style Gaussian glow filter — matching the clearance-gate aesthetic. SVG-only; browsers cache favicons aggressively, so a hard refresh may be needed
+- CSS- and SVG-only changes — no templates, models, migrations, or dependencies touched
+
 ## v0.15.37
 - **List-page hover no longer shakes — it highlights.** The `.glitch-hover` effect (shared by the Dispatch/news, Characters, Agencies, and NPCs list pages) previously ran the `glitch` keyframe animation on hover, jittering the card with a `translate(±2px)` shake. Replaced with a smooth highlight: danger-colored border, a 1px ring + soft glow, and the accent text color, eased over `0.15s`
 - The glow derives from `--accent-danger` via `color-mix`, so it tracks the active theme (`#ff4d5e` / `#dc2626`) instead of a hardcoded value

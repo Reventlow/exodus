@@ -348,7 +348,7 @@ body {
     font-size: 11px;
     letter-spacing: 0.18em;
     border-bottom: 1px solid var(--c-dim);
-    background: rgba(2, 12, 8, 0.7);
+    background: var(--nav-bg);
     backdrop-filter: blur(2px);
     text-transform: uppercase;
     font-family: var(--font-mono);
@@ -378,7 +378,7 @@ body {
     font-size: 10px;
     letter-spacing: 0.22em;
     border-top: 1px solid var(--c-dim);
-    background: rgba(2, 12, 8, 0.7);
+    background: var(--nav-bg);
     backdrop-filter: blur(2px);
     min-height: 32px;
     text-transform: uppercase;
@@ -410,7 +410,7 @@ body {
     flex-wrap: wrap;
     padding: 0.4rem 1.25rem 0.5rem;
     border-bottom: 1px solid var(--c-dim);
-    background: rgba(2, 12, 8, 0.55);
+    background: var(--nav-bg);
     backdrop-filter: blur(2px);
     font-family: var(--font-mono);
     text-transform: uppercase;
@@ -484,7 +484,7 @@ body {
     right: 0;
     min-width: 9rem;
     flex-direction: column;
-    background: rgba(2, 12, 8, 0.97);
+    background: var(--nav-bg-mobile);
     border: 1px solid var(--c-dim);
     box-shadow:
         0 0 0 1px rgba(0, 0, 0, 0.6),

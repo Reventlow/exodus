@@ -1,15 +1,32 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
-  <rect width="64" height="64" rx="8" fill="#0f172a"/>
-  <!-- E in white — shifted right so it overlaps with X -->
-  <g fill="none" stroke="#e2e8f0" stroke-width="4.5" stroke-linecap="round" stroke-linejoin="round">
-    <line x1="12" y1="14" x2="12" y2="50"/>
-    <line x1="12" y1="14" x2="32" y2="14"/>
-    <line x1="12" y1="32" x2="28" y2="32"/>
-    <line x1="12" y1="50" x2="32" y2="50"/>
-  </g>
-  <!-- X in cyan — shifted left to overlap with E -->
-  <g fill="none" stroke="#38bdf8" stroke-width="4.5" stroke-linecap="round" stroke-linejoin="round">
-    <line x1="28" y1="14" x2="52" y2="50"/>
-    <line x1="52" y1="14" x2="28" y2="50"/>
+  <defs>
+    <!-- CRT phosphor glow -->
+    <filter id="glow" x="-40%" y="-40%" width="180%" height="180%">
+      <feGaussianBlur stdDeviation="1.6" result="blur"/>
+      <feMerge>
+        <feMergeNode in="blur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+  </defs>
+
+  <!-- dark void panel -->
+  <rect width="64" height="64" rx="8" fill="#02080a"/>
+  <rect x="1.25" y="1.25" width="61.5" height="61.5" rx="7"
+        fill="none" stroke="#0e3a1f" stroke-width="1.5"/>
+
+  <g filter="url(#glow)" stroke-linecap="round" stroke-linejoin="round" fill="none">
+    <!-- E in bright emerald — shifted right so it overlaps with X -->
+    <g stroke="#39ff7a" stroke-width="4.5">
+      <line x1="12" y1="14" x2="12" y2="50"/>
+      <line x1="12" y1="14" x2="32" y2="14"/>
+      <line x1="12" y1="32" x2="28" y2="32"/>
+      <line x1="12" y1="50" x2="32" y2="50"/>
+    </g>
+    <!-- X in dimmer emerald — shifted left to overlap with E, adds depth -->
+    <g stroke="#0d8f3e" stroke-width="4.5">
+      <line x1="28" y1="14" x2="52" y2="50"/>
+      <line x1="52" y1="14" x2="28" y2="50"/>
+    </g>
   </g>
 </svg>
