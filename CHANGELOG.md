@@ -1,5 +1,10 @@
 # Changelog
 
+## v0.15.39
+- **HOTFIX: pinned `@babel/standalone` to v7 — every React/JSX page was broken.** The CDN tag was unpinned (`@babel/standalone/babel.min.js`) and floated up to **Babel 8.0.0**, whose `preset-react` defaults to the *automatic* JSX runtime. That injects `import { jsx } from "react/jsx-runtime"` into the compiled output, which Babel appends as a classic `<script>` — throwing `Uncaught SyntaxError: Failed to execute 'appendChild' on 'Node': Cannot use import statement outside a module` and leaving every `text/babel` page stuck on its loading screen (Dispatch, Characters, Agencies, Council, maps, etc.). No deploy on our side caused it; the CDN version drifted 7.x → 8.0.0 overnight
+- Fix: load `https://unpkg.com/@babel/standalone@7/babel.min.js` (major-locked to v7, matching how React is pinned to `react@18`). v7 keeps the classic runtime (`React.createElement`), so no `import` is emitted
+- Follow-up worth doing later: `lucide@latest` is still floating in `base.html` — same overnight-break risk. Left as-is for this hotfix to keep the change surgical
+
 ## v0.15.38
 - **Topbar / nav now readable in light mode.** The header strip, footer strip, subsystem nav rail, and OPERATIONS dropdown all hardcoded a near-black green background (`rgba(2,12,8,…)`). In light mode the page text flips to dark navy, leaving dark-on-dark, unreadable chrome. Repointed all four at the existing theme-aware `--nav-bg` / `--nav-bg-mobile` tokens (dark in dark mode, pale `#f8fafc` in light mode), so the bars follow the active theme and text stays legible in both
 - **New favicon that fits the theme.** Recolored the `EX` monogram from off-theme cyan to phosphor emerald (`#39ff7a` E, dimmer `#0d8f3e` X for depth) on a dark void panel with a thin emerald border and a CRT-style Gaussian glow filter — matching the clearance-gate aesthetic. SVG-only; browsers cache favicons aggressively, so a hard refresh may be needed
