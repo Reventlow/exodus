@@ -288,6 +288,27 @@
                 <span class="text-muted mono-text" style="font-size: 0.7rem; display: block; margin-top: 0.5rem; padding-left: 2.75rem;">
                     Controls which maps and pages are visible to players in the nav bar. Staff always sees everything.
                 </span>
+
+                {# Star-map tech gates — features players unlock in-game. Hidden
+                   marker lets the save handler tell this form apart from the
+                   weapons/armor/etc. forms that hit the same view. #}
+                <input type="hidden" name="map_vis_submitted" value="1">
+                <div class="mono-text text-muted" style="font-size: 0.7rem; margin: 1.1rem 0 0.5rem; letter-spacing: 1px;">STAR MAP — TECH GATES</div>
+                <label style="display: flex; align-items: center; gap: 0.75rem; cursor: pointer; margin-bottom: 0.5rem;">
+                    <input type="checkbox" name="show_ftl_route_planning" {% if settings_obj.show_ftl_route_planning %}checked{% endif %}
+                        style="width: 20px; height: 20px; accent-color: var(--c-primary);">
+                    <span class="mono-text" style="font-size: 0.9rem; color: var(--ink);">FTL ROUTE PLANNING</span>
+                    <span class="status-pill {% if settings_obj.show_ftl_route_planning %}s-active{% else %}s-inactive{% endif %}" style="margin-left:auto;">{% if settings_obj.show_ftl_route_planning %}ENABLED{% else %}DISABLED{% endif %}</span>
+                </label>
+                <label style="display: flex; align-items: center; gap: 0.75rem; cursor: pointer;">
+                    <input type="checkbox" name="show_exotic_matter" {% if settings_obj.show_exotic_matter %}checked{% endif %}
+                        style="width: 20px; height: 20px; accent-color: var(--c-primary);">
+                    <span class="mono-text" style="font-size: 0.9rem; color: var(--ink);">EXOTIC MATTER DETECTION</span>
+                    <span class="status-pill {% if settings_obj.show_exotic_matter %}s-active{% else %}s-inactive{% endif %}" style="margin-left:auto;">{% if settings_obj.show_exotic_matter %}ENABLED{% else %}DISABLED{% endif %}</span>
+                </label>
+                <span class="text-muted mono-text" style="font-size: 0.7rem; display: block; margin-top: 0.5rem; padding-left: 2.75rem;">
+                    Off until the players discover these in-game. Enabling reveals the FTL route-planning panel / Exotic Matter resource on the star map for everyone.
+                </span>
             </div>
             <button type="submit" class="btn-primary" style="width: 100%;">SAVE</button>
         </div>

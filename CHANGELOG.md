@@ -1,5 +1,11 @@
 # Changelog
 
+## v0.15.43
+- **Star-map tech gates are now GM-toggled instead of hardcoded.** FTL route planning and Exotic Matter are hidden *until the players discover them in-game*, then revealed by ticking a box in Settings — no deploy needed. Replaces the v0.15.42 code-level hide
+- Two new `SiteSettings` booleans (`show_ftl_route_planning`, `show_exotic_matter`, both default **False** = hidden), surfaced as a **STAR MAP — TECH GATES** block under Settings → Map Visibility with ENABLED/DISABLED pills. Guarded by a hidden `map_vis_submitted` marker so saves from other settings forms (weapons/armor/etc., which hit the same view) can't reset them — same pattern as the class-unlock toggles
+- `starmap/views.py` passes the flags into `demo.html`; the FTL panel's `display:none`, the "CLICK: add to route" hint, and the `exotic` resource filter (`HIDDEN_RESOURCE_KEYS`) are now driven by the flags. Defaults match the prior hidden state, so nothing changes for players until the GM enables it. Per-system exotic data remains untouched in the DB
+- Migration `0022` adds the two fields (also reconciles a stray pre-existing `weapons` help_text drift — JSON field, no column change)
+
 ## v0.15.42
 - **Star map: hid FTL route planning and Exotic Matter** — both represent tech the players haven't invented yet, so they're suppressed from the UI (data untouched, easy to re-enable)
 - **FTL Route Planning panel** (`#drive-panel` — displacement drive / route / nav-difficulty) is now `display: none`. Kept in the DOM rather than deleted so the JS that populates `#drive-buttons` / `#route-info` / clear-route doesn't hit null. Also dropped the "CLICK: add to route" control hint. Re-enable by deleting the one `display: none` line

@@ -40,13 +40,17 @@ def _get_user_agency(user):
 @login_required
 def starmap_page(request):
     """3D star map page. Visible to staff or when enabled in settings."""
+    from exodus.models import SiteSettings
+    settings_obj = SiteSettings.load()
     if not request.user.is_staff:
-        from exodus.models import SiteSettings
-        settings_obj = SiteSettings.load()
         if not settings_obj.show_star_map:
             from django.http import HttpResponseForbidden
             return HttpResponseForbidden("ACCESS DENIED. Star map not yet available.")
-    return render(request, "starmap/demo.html")
+    # Tech gates — default off until the players discover them in-game.
+    return render(request, "starmap/demo.html", {
+        "SHOW_FTL_ROUTE_PLANNING": settings_obj.show_ftl_route_planning,
+        "SHOW_EXOTIC_MATTER": settings_obj.show_exotic_matter,
+    })
 
 
 # ---------------------------------------------------------------------------

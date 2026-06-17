@@ -216,6 +216,16 @@ class SiteSettings(models.Model):
         default=False,
         help_text="Show STARSHIPS link in navigation and let players open the /starships/ page.",
     )
+    # Star-map "tech gates" — features the players unlock in-game. Default off
+    # (hidden) until the GM flips them on after the relevant discovery.
+    show_ftl_route_planning = models.BooleanField(
+        default=False,
+        help_text="Show the FTL ROUTE PLANNING panel on the star map. Enable once players invent FTL route planning.",
+    )
+    show_exotic_matter = models.BooleanField(
+        default=False,
+        help_text="Show Exotic Matter in star-map system resource readouts. Enable once players can detect exotic matter.",
+    )
     show_council = models.BooleanField(
         default=True,
         help_text="Show COUNCIL link in navigation.",

@@ -45,6 +45,12 @@ def site_settings(request):
         settings_obj.show_world_map = "show_world_map" in request.POST
         settings_obj.show_star_map = "show_star_map" in request.POST
         settings_obj.show_starships = "show_starships" in request.POST
+        # Star-map tech gates. Guarded by a hidden marker (like class_unlock
+        # below) so a POST from a different settings form — weapons, armor,
+        # etc., which all hit this same view — can't silently reset them.
+        if "map_vis_submitted" in request.POST:
+            settings_obj.show_ftl_route_planning = "show_ftl_route_planning" in request.POST
+            settings_obj.show_exotic_matter = "show_exotic_matter" in request.POST
         settings_obj.show_council = "show_council" in request.POST
         settings_obj.council_mode = request.POST.get("council_mode", "agency")
         settings_obj.enforce_ship_slot_budget = "enforce_ship_slot_budget" in request.POST

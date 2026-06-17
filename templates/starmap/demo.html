@@ -148,13 +148,13 @@
         </div>
 
         <!-- FTL ROUTE PLANNING panel — top-right.
-             HIDDEN (v0.15.42): the players have not invented FTL route
-             planning yet. Kept in the DOM (display:none) rather than removed
-             so the JS that populates #drive-buttons / #route-info / the
-             clear-route button doesn't hit null. Delete the `display: none`
-             line below to re-enable once they unlock it. -->
+             Gated by SiteSettings.show_ftl_route_planning (Settings > Map
+             Visibility > Star Map Tech Gates). Default off until the players
+             invent FTL route planning. Kept in the DOM (display:none) rather
+             than removed so the JS that populates #drive-buttons / #route-info
+             / the clear-route button never hits null. -->
         <div id="drive-panel" style="
-            display: none;
+            {% if not SHOW_FTL_ROUTE_PLANNING %}display: none;{% endif %}
             position: absolute; top: 1rem; right: 1rem; z-index: 10;
             font-family: var(--font-mono, 'Courier New', monospace);
             font-size: 0.8rem; color: var(--text-primary, #e0e0e0);
@@ -189,7 +189,7 @@
         </div>
 
         <div id="controls-hint">
-            ORBIT: left-drag &middot; ZOOM: scroll &middot; PAN: right-drag
+            ORBIT: left-drag &middot; ZOOM: scroll &middot; PAN: right-drag{% if SHOW_FTL_ROUTE_PLANNING %} &middot; CLICK: add to route{% endif %}
         </div>
 
         <div id="hover-label"></div>
@@ -789,9 +789,10 @@
         exotic: { name: "Exotic Matter", color: "#ef4444", icon: "\u2736" },
     };
     // Resource keys the players have NOT invented the tech to detect yet, so
-    // they're filtered out of every resource readout. Re-enable a resource by
-    // removing its key here (v0.15.42 — "exotic" / Exotic Matter hidden).
-    var HIDDEN_RESOURCE_KEYS = ["exotic"];
+    // they're filtered out of every resource readout. Driven by the GM toggle
+    // SiteSettings.show_exotic_matter (Settings > Map Visibility > Star Map
+    // Tech Gates): off → exotic hidden; on → list is empty so exotic shows.
+    var HIDDEN_RESOURCE_KEYS = [{% if not SHOW_EXOTIC_MATTER %}"exotic"{% endif %}];
 
     // Ordered list of resource keys for rendering. Replaced with the
     // ResourceType catalogue (ordered by `order` field) once the API
