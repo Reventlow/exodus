@@ -29,6 +29,7 @@ urlpatterns = [
     path("api/admin/combat-npcs/<str:name>/", views.api_combat_npc_detail, name="api-admin-combat-npc-detail"),
     path("rules/", views.rules_page, name="rules-page"),
     path("rules/combat/", views.combat_page, name="combat-page"),
+    path("rules/bases/", views.base_building_page, name="base-building-page"),
     path("rules/merits/", views.merits_page, name="merits-page"),
     path("rules/pulling-strings/", views.pulling_strings_page, name="pulling-strings-page"),
     # Legacy aliases — keep old URLs working for bookmarks / external links.

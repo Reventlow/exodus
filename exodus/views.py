@@ -721,6 +721,114 @@ def rules_page(request):
     })
 
 
+@login_required
+def base_building_page(request):
+    """RULES → BASE BUILDING — player-facing reference for how facilities,
+    equipment, location types, and living conditions drive each department's
+    thrive score.
+
+    Every table here is generated from the live thrive constants in
+    ``agencies.serializers`` (the same maps ``compute_base_thrive`` uses) plus
+    the editable ``BaseConfig`` names — so the page can never drift out of sync
+    with the actual scoring. The GLOBAL CONDITIONS section is prose that mirrors
+    the hardcoded thresholds in ``compute_base_thrive``; keep the two together
+    when those thresholds change.
+    """
+    from agencies.serializers import (
+        FACILITY_DEPT_BONUSES,
+        EQUIPMENT_DEPT_BONUSES,
+        LOCATION_THRIVE_PENALTIES,
+        MILITARY_FACILITY_KEYS,
+        SCIENCE_FACILITY_KEYS,
+        DIPLOMATIC_FACILITY_KEYS,
+        ENGINEERING_FACILITY_KEYS,
+    )
+    from agencies.models import BaseConfig, BASE_DEPARTMENTS, THRIVE_LABELS
+
+    cfg = BaseConfig.load()
+    fac_names = {f["key"]: f.get("name", f["key"]) for f in (cfg.facility_types or [])}
+    eq_names = {e["key"]: e.get("name", e["key"]) for e in (cfg.equipment_types or [])}
+    loc_names = {l["key"]: l.get("name", l["key"]) for l in (cfg.location_types or [])}
+    dept_names = {d["key"]: d["name"] for d in BASE_DEPARTMENTS}
+
+    # Departments that participate in base thrive, in the order compute uses.
+    dept_order = [
+        "military", "intelligence", "engineering_ops",
+        "science_ops", "diplomatic_corps", "admin",
+    ]
+
+    def fmt_effects(mapping):
+        items = sorted(
+            mapping.items(),
+            key=lambda kv: dept_order.index(kv[0]) if kv[0] in dept_order else 99,
+        )
+        return [
+            {
+                "dept": dept_names.get(k, k.replace("_", " ").title()),
+                "bonus": v,
+                "positive": v > 0,
+            }
+            for k, v in items
+        ]
+
+    def pretty(key, lookup):
+        return lookup.get(key, key.replace("_", " ").title())
+
+    facility_rows = sorted(
+        (
+            {"name": pretty(key, fac_names), "effects": fmt_effects(mapping)}
+            for key, mapping in FACILITY_DEPT_BONUSES.items()
+        ),
+        key=lambda r: r["name"].lower(),
+    )
+    equipment_rows = sorted(
+        (
+            {"name": pretty(key, eq_names), "effects": fmt_effects(mapping)}
+            for key, mapping in EQUIPMENT_DEPT_BONUSES.items()
+        ),
+        key=lambda r: r["name"].lower(),
+    )
+    location_rows = sorted(
+        (
+            {
+                "name": pretty(key, loc_names),
+                "penalties": fmt_effects(conf.get("penalty_per_facility", {})),
+                "bonuses": fmt_effects(conf.get("bonus", {})),
+            }
+            for key, conf in LOCATION_THRIVE_PENALTIES.items()
+        ),
+        key=lambda r: r["name"].lower(),
+    )
+
+    def names_for(keyset):
+        return sorted(pretty(k, fac_names) for k in keyset)
+
+    penalty_groups = [
+        {"label": "Military", "facilities": names_for(MILITARY_FACILITY_KEYS)},
+        {"label": "Science", "facilities": names_for(SCIENCE_FACILITY_KEYS)},
+        {"label": "Diplomatic", "facilities": names_for(DIPLOMATIC_FACILITY_KEYS)},
+        {"label": "Engineering", "facilities": names_for(ENGINEERING_FACILITY_KEYS)},
+    ]
+
+    thrive_scale = [
+        {
+            "score": s,
+            "label": THRIVE_LABELS[s],
+            "mod": (lambda m: f"+{m}" if m > 0 else (str(m) if m < 0 else "0"))((s - 5) // 2),
+        }
+        for s in range(1, 11)
+    ]
+
+    return render(request, "base_building.html", {
+        "departments": [dept_names[k] for k in dept_order],
+        "facility_rows": facility_rows,
+        "equipment_rows": equipment_rows,
+        "location_rows": location_rows,
+        "penalty_groups": penalty_groups,
+        "thrive_scale": thrive_scale,
+    })
+
+
 @require_http_methods(["GET", "POST"])
 def api_cover(request):
     """List or create cover entries.

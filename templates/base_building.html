@@ -1,0 +1,159 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}Base Building — Rules — Exodus{% endblock %}
+
+{% block content %}
+<div class="brackets" style="position: relative; padding: 32px 36px; max-width: 960px; margin: 0 auto;">
+    <span class="bk tl"></span><span class="bk tr"></span>
+    <span class="bk bl"></span><span class="bk br"></span>
+
+    <div class="kicker" style="margin-bottom: 0.4rem;">
+        <a href="{% url 'rules-page' %}" class="crumb" style="margin-right: 0.6rem;">RULES</a>
+        // QUICK REFERENCE — BASE BUILDING
+    </div>
+    <h1 class="title" style="margin: 0 0 0.4rem 0;">BASE BUILDING</h1>
+    <div class="sub" style="margin-bottom: 2rem;">
+        THRIVE = 1 + FACILITY/EQUIPMENT BONUSES + GLOBAL CONDITIONS · CLAMPED 1–10 · DICE MOD = (THRIVE − 5) ÷ 2
+    </div>
+
+    {# === HOW THRIVE WORKS ============================================== #}
+    <header class="block-head"><span class="block-bullet">■</span><h3>HOW THRIVE WORKS</h3><span class="block-line"></span></header>
+    <div class="text-secondary" style="font-size: 0.9rem; line-height: 1.7; margin: 0.6rem 0 1.2rem 0;">
+        <p style="margin: 0 0 0.5rem 0;">Each base runs a set of <strong>departments</strong>. Every department has a <strong>thrive score</strong> from 1 to 10 that starts at <strong>1</strong> and is raised or lowered by the facilities you build, the equipment you install, the location type, and the base's living conditions. The final score is clamped to the 1–10 range.</p>
+        <p style="margin: 0 0 0.5rem 0;">A department only exists on a base if something on the base contributes to it (otherwise it isn't shown). The thrive score converts to a <strong>dice modifier</strong> applied to that department's downtime rolls.</p>
+        <p style="margin: 0;"><span class="mono-text text-accent">▸ KEY POINT</span> &nbsp;— facility and equipment bonuses hit <strong>specific</strong> departments, but <strong>GLOBAL CONDITIONS</strong> (housing, medical, amenities, power, fringe) move <strong>every</strong> department on the base at once. That's how housing, medical, and recreation "lift the whole base."</p>
+    </div>
+
+    <div style="display: flex; flex-wrap: wrap; gap: 0.4rem; margin: 0 0 1.6rem 0;">
+        {% for d in departments %}
+        <span class="mono-text" style="border: 1px solid var(--c-dim); padding: 0.25rem 0.6rem; font-size: 0.75rem; letter-spacing: 0.08em;">{{ d|upper }}</span>
+        {% endfor %}
+    </div>
+
+    {# === THRIVE SCALE ================================================== #}
+    <header class="block-head"><span class="block-bullet">■</span><h3>THRIVE SCALE</h3><span class="block-line"></span></header>
+    <table class="rules-table" style="width: 100%; border-collapse: collapse; margin: 0.6rem 0 1.8rem 0; font-size: 0.85rem;">
+        <thead>
+            <tr style="text-align: left; border-bottom: 1px solid var(--c-dim);">
+                <th style="padding: 0.4rem 0.6rem;">SCORE</th>
+                <th style="padding: 0.4rem 0.6rem;">STATE</th>
+                <th style="padding: 0.4rem 0.6rem;">DICE MOD</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for t in thrive_scale %}
+            <tr style="border-bottom: 1px solid rgba(127,127,127,0.12);">
+                <td class="mono-text" style="padding: 0.35rem 0.6rem;">{{ t.score }}</td>
+                <td style="padding: 0.35rem 0.6rem;">{{ t.label }}</td>
+                <td class="mono-text text-accent" style="padding: 0.35rem 0.6rem;">{{ t.mod }}</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+
+    {# === FACILITY BONUSES ============================================= #}
+    <header class="block-head"><span class="block-bullet">■</span><h3>FACILITY BONUSES</h3><span class="block-line"></span></header>
+    <div class="text-secondary" style="font-size: 0.85rem; line-height: 1.6; margin: 0.6rem 0;">
+        Applied per facility built. Stack the same facility to stack the bonus.
+    </div>
+    <table class="rules-table" style="width: 100%; border-collapse: collapse; margin: 0.4rem 0 1.8rem 0; font-size: 0.85rem;">
+        <thead>
+            <tr style="text-align: left; border-bottom: 1px solid var(--c-dim);">
+                <th style="padding: 0.4rem 0.6rem; width: 40%;">FACILITY</th>
+                <th style="padding: 0.4rem 0.6rem;">DEPARTMENT EFFECTS</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for row in facility_rows %}
+            <tr style="border-bottom: 1px solid rgba(127,127,127,0.12);">
+                <td class="mono-text" style="padding: 0.35rem 0.6rem;">{{ row.name }}</td>
+                <td style="padding: 0.35rem 0.6rem;">
+                    {% for eff in row.effects %}<span class="mono-text" style="margin-right: 0.9rem; color: {% if eff.positive %}var(--accent-success){% else %}var(--accent-danger){% endif %};">{% if eff.bonus > 0 %}+{% endif %}{{ eff.bonus }} {{ eff.dept }}</span>{% endfor %}
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+
+    {# === EQUIPMENT BONUSES ============================================ #}
+    <header class="block-head"><span class="block-bullet">■</span><h3>EQUIPMENT BONUSES</h3><span class="block-line"></span></header>
+    <table class="rules-table" style="width: 100%; border-collapse: collapse; margin: 0.6rem 0 1.8rem 0; font-size: 0.85rem;">
+        <thead>
+            <tr style="text-align: left; border-bottom: 1px solid var(--c-dim);">
+                <th style="padding: 0.4rem 0.6rem; width: 40%;">EQUIPMENT</th>
+                <th style="padding: 0.4rem 0.6rem;">DEPARTMENT EFFECTS</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for row in equipment_rows %}
+            <tr style="border-bottom: 1px solid rgba(127,127,127,0.12);">
+                <td class="mono-text" style="padding: 0.35rem 0.6rem;">{{ row.name }}</td>
+                <td style="padding: 0.35rem 0.6rem;">
+                    {% for eff in row.effects %}<span class="mono-text" style="margin-right: 0.9rem; color: {% if eff.positive %}var(--accent-success){% else %}var(--accent-danger){% endif %};">{% if eff.bonus > 0 %}+{% endif %}{{ eff.bonus }} {{ eff.dept }}</span>{% endfor %}
+                </td>
+            </tr>
+            {% empty %}
+            <tr><td colspan="2" class="text-muted" style="padding: 0.5rem 0.6rem;">No equipment thrive bonuses configured.</td></tr>
+            {% endfor %}
+        </tbody>
+    </table>
+
+    {# === LOCATION TYPES =============================================== #}
+    <header class="block-head"><span class="block-bullet">■</span><h3>LOCATION TYPES</h3><span class="block-line"></span></header>
+    <div class="text-secondary" style="font-size: 0.85rem; line-height: 1.6; margin: 0.6rem 0;">
+        Some location types penalise off-theme facilities (applied <em>per</em> matching facility) and/or grant a flat bonus. Location types not listed here are neutral.
+    </div>
+    <table class="rules-table" style="width: 100%; border-collapse: collapse; margin: 0.4rem 0 1.2rem 0; font-size: 0.85rem;">
+        <thead>
+            <tr style="text-align: left; border-bottom: 1px solid var(--c-dim);">
+                <th style="padding: 0.4rem 0.6rem; width: 34%;">LOCATION</th>
+                <th style="padding: 0.4rem 0.6rem;">PENALTY / FACILITY</th>
+                <th style="padding: 0.4rem 0.6rem;">FLAT BONUS</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for row in location_rows %}
+            <tr style="border-bottom: 1px solid rgba(127,127,127,0.12);">
+                <td class="mono-text" style="padding: 0.35rem 0.6rem;">{{ row.name }}</td>
+                <td style="padding: 0.35rem 0.6rem;">
+                    {% for eff in row.penalties %}<span class="mono-text" style="margin-right: 0.8rem; color: var(--accent-danger);">{{ eff.bonus }} {{ eff.dept }}</span>{% empty %}<span class="text-muted">—</span>{% endfor %}
+                </td>
+                <td style="padding: 0.35rem 0.6rem;">
+                    {% for eff in row.bonuses %}<span class="mono-text" style="margin-right: 0.8rem; color: var(--accent-success);">+{{ eff.bonus }} {{ eff.dept }}</span>{% empty %}<span class="text-muted">—</span>{% endfor %}
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+    <div class="text-secondary" style="font-size: 0.82rem; line-height: 1.6; margin: 0 0 1.8rem 0;">
+        <strong>Which facilities trigger a location penalty:</strong>
+        <ul style="margin: 0.4rem 0 0 1.1rem; padding: 0;">
+            {% for g in penalty_groups %}
+            <li style="margin: 0 0 0.3rem 0;"><span class="mono-text text-accent">{{ g.label }}</span> — {{ g.facilities|join:", " }}</li>
+            {% endfor %}
+        </ul>
+    </div>
+
+    {# === GLOBAL CONDITIONS ============================================ #}
+    <header class="block-head"><span class="block-bullet">■</span><h3>GLOBAL CONDITIONS &mdash; AFFECT EVERY DEPARTMENT</h3><span class="block-line"></span></header>
+    <div class="text-secondary" style="font-size: 0.9rem; line-height: 1.7; margin: 0.6rem 0 1.6rem 0;">
+        <p style="margin: 0 0 0.6rem 0;">These modifiers are added to <strong>every</strong> department's thrive score on the base. This is the only way to lift the whole base at once.</p>
+
+        <p style="margin: 0 0 0.5rem 0;"><span class="mono-text text-accent">▸ HOUSING</span> &nbsp;— only matters once a base exceeds <strong>12 space</strong> and has at least <strong>5</strong> facilities/workspaces. Scored from the highest Living quality built: <strong>none</strong> = −1 (−2 on bases of 11+ facilities); <strong>Basic</strong> = −1; <strong>Nice</strong> = neutral; <strong>Luxury</strong> = +1.</p>
+
+        <p style="margin: 0 0 0.5rem 0;"><span class="mono-text text-accent">▸ MEDICAL</span> &nbsp;— a base with <strong>8+</strong> facilities and <strong>no</strong> medical facility takes <strong>−1</strong>.</p>
+
+        <p style="margin: 0 0 0.5rem 0;"><span class="mono-text text-accent">▸ AMENITIES</span> &nbsp;— on bases of <strong>6+</strong> facilities, the share that are <strong>General areas + Recreation</strong> is measured: under <strong>10%</strong> gives <strong>−1</strong> (poor amenities); <strong>20%+</strong> gives <strong>+1</strong> (good amenities). Between the two is neutral.</p>
+
+        <p style="margin: 0 0 0.5rem 0;"><span class="mono-text text-accent">▸ POWER</span> &nbsp;— an <strong>isolated</strong> base (underwater, orbital, or mobile) with <strong>no</strong> power plant takes <strong>−1</strong>.</p>
+
+        <p style="margin: 0;"><span class="mono-text text-accent">▸ FRINGE PROJECTS</span> &nbsp;— each active fringe project hosted on the base is <strong>−1</strong>, with an additional <strong>−1</strong> per assigned child prodigy. Fringe research is powerful but destabilises the base.</p>
+    </div>
+
+    {# Recreation call-out — the question this page was written to answer. #}
+    <div class="text-secondary" style="font-size: 0.85rem; line-height: 1.6; border: 1px solid var(--c-dim); padding: 0.9rem 1.1rem; margin: 0 0 1rem 0;">
+        <span class="mono-text text-accent">EXAMPLE — RECREATION:</span> a Recreation facility gives a direct <span class="mono-text" style="color: var(--accent-success);">+2 Admin</span>. It does <em>not</em> directly buff the other departments — but it counts toward the <strong>amenities</strong> share above, so keeping General + Recreation at 20%+ of your facilities grants <span class="mono-text" style="color: var(--accent-success);">+1 to every department</span>. That global lift is why building recreation early helps the whole base.
+    </div>
+</div>
+{% endblock %}

@@ -1,5 +1,11 @@
 # Changelog
 
+## v0.15.41
+- **New RULES → BASE BUILDING reference page.** Documents how facilities, equipment, location types, and living conditions drive each department's thrive score — the first player-facing write-up of the base-building maths (previously only visible as inline hints inside the base editor). Reachable from a new card on the `/rules/` hub and at `/rules/bases/`; login-gated like the other rules pages
+- **Tables are generated from the live thrive constants**, not hardcoded: facility/equipment/location bonus tables are built from `FACILITY_DEPT_BONUSES`, `EQUIPMENT_DEPT_BONUSES`, and `LOCATION_THRIVE_PENALTIES` (the same maps `compute_base_thrive` uses) plus the editable `BaseConfig` names, so the page can't drift out of sync with the actual scoring. Missing names fall back to the titleized key
+- Sections: How Thrive Works · Thrive Scale (1–10 → dice mod `(thrive−5)//2`) · Facility Bonuses · Equipment Bonuses · Location Types (with which facilities trigger each penalty) · **Global Conditions** (housing / medical / amenities / power / fringe — the modifiers that move every department at once). Includes a Recreation call-out: direct +2 Admin, plus +1 to all departments only via the 20% amenities threshold
+- Plain Django template (no React/Babel), styled to match the COMBAT quick-reference page. New view `base_building_page`; no models, migrations, or dependencies touched
+
 ## v0.15.40
 - **Moved "Configure Bases" into Site Settings.** Base configuration is superuser-only (same clearance as Site Settings), so its entry point now lives in the Settings sidebar under the **BASES** group as a **Base Config ↗** link (next to Class Access), opening the existing `/agencies/base-config/` page. The green **CONFIGURE BASES** button has been removed from the Agencies list's superuser button cluster
 - The base-config page itself, its view, and the `/api/base-config/` endpoint are unchanged — this only relocates the entry point. No access change (still superuser-only). Template-only; no models, migrations, or dependencies touched
