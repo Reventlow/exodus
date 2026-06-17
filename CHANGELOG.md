@@ -1,5 +1,9 @@
 # Changelog
 
+## v0.15.40
+- **Moved "Configure Bases" into Site Settings.** Base configuration is superuser-only (same clearance as Site Settings), so its entry point now lives in the Settings sidebar under the **BASES** group as a **Base Config ↗** link (next to Class Access), opening the existing `/agencies/base-config/` page. The green **CONFIGURE BASES** button has been removed from the Agencies list's superuser button cluster
+- The base-config page itself, its view, and the `/api/base-config/` endpoint are unchanged — this only relocates the entry point. No access change (still superuser-only). Template-only; no models, migrations, or dependencies touched
+
 ## v0.15.39
 - **HOTFIX: pinned `@babel/standalone` to v7 — every React/JSX page was broken.** The CDN tag was unpinned (`@babel/standalone/babel.min.js`) and floated up to **Babel 8.0.0**, whose `preset-react` defaults to the *automatic* JSX runtime. That injects `import { jsx } from "react/jsx-runtime"` into the compiled output, which Babel appends as a classic `<script>` — throwing `Uncaught SyntaxError: Failed to execute 'appendChild' on 'Node': Cannot use import statement outside a module` and leaving every `text/babel` page stuck on its loading screen (Dispatch, Characters, Agencies, Council, maps, etc.). No deploy on our side caused it; the CDN version drifted 7.x → 8.0.0 overnight
 - Fix: load `https://unpkg.com/@babel/standalone@7/babel.min.js` (major-locked to v7, matching how React is pinned to `react@18`). v7 keeps the classic runtime (`React.createElement`), so no `import` is emitted
