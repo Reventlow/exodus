@@ -1,5 +1,11 @@
 # Changelog
 
+## v0.15.42
+- **Star map: hid FTL route planning and Exotic Matter** — both represent tech the players haven't invented yet, so they're suppressed from the UI (data untouched, easy to re-enable)
+- **FTL Route Planning panel** (`#drive-panel` — displacement drive / route / nav-difficulty) is now `display: none`. Kept in the DOM rather than deleted so the JS that populates `#drive-buttons` / `#route-info` / clear-route doesn't hit null. Also dropped the "CLICK: add to route" control hint. Re-enable by deleting the one `display: none` line
+- **Exotic Matter** removed from every system's resource readout via a new `HIDDEN_RESOURCE_KEYS = ["exotic"]` filter, applied to both the fallback resource list and the `/api/starmap/resource-types/` API override — so it stays hidden regardless of GM Star Map config. Underlying per-system exotic values are left in the DB. Re-enable by removing `"exotic"` from `HIDDEN_RESOURCE_KEYS`
+- Template-only change (`templates/starmap/demo.html`); no models, migrations, views, or dependencies touched
+
 ## v0.15.41
 - **New RULES → BASE BUILDING reference page.** Documents how facilities, equipment, location types, and living conditions drive each department's thrive score — the first player-facing write-up of the base-building maths (previously only visible as inline hints inside the base editor). Reachable from a new card on the `/rules/` hub and at `/rules/bases/`; login-gated like the other rules pages
 - **Tables are generated from the live thrive constants**, not hardcoded: facility/equipment/location bonus tables are built from `FACILITY_DEPT_BONUSES`, `EQUIPMENT_DEPT_BONUSES`, and `LOCATION_THRIVE_PENALTIES` (the same maps `compute_base_thrive` uses) plus the editable `BaseConfig` names, so the page can't drift out of sync with the actual scoring. Missing names fall back to the titleized key

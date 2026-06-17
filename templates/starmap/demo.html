@@ -147,8 +147,14 @@
             </div>
         </div>
 
-        <!-- FTL ROUTE PLANNING panel — top-right -->
+        <!-- FTL ROUTE PLANNING panel — top-right.
+             HIDDEN (v0.15.42): the players have not invented FTL route
+             planning yet. Kept in the DOM (display:none) rather than removed
+             so the JS that populates #drive-buttons / #route-info / the
+             clear-route button doesn't hit null. Delete the `display: none`
+             line below to re-enable once they unlock it. -->
         <div id="drive-panel" style="
+            display: none;
             position: absolute; top: 1rem; right: 1rem; z-index: 10;
             font-family: var(--font-mono, 'Courier New', monospace);
             font-size: 0.8rem; color: var(--text-primary, #e0e0e0);
@@ -183,7 +189,7 @@
         </div>
 
         <div id="controls-hint">
-            ORBIT: left-drag &middot; ZOOM: scroll &middot; PAN: right-drag &middot; CLICK: add to route
+            ORBIT: left-drag &middot; ZOOM: scroll &middot; PAN: right-drag
         </div>
 
         <div id="hover-label"></div>
@@ -782,17 +788,25 @@
         hydrocarbons: { name: "Hydrocarbons", color: "#f97316", icon: "\u25C6" },
         exotic: { name: "Exotic Matter", color: "#ef4444", icon: "\u2736" },
     };
+    // Resource keys the players have NOT invented the tech to detect yet, so
+    // they're filtered out of every resource readout. Re-enable a resource by
+    // removing its key here (v0.15.42 — "exotic" / Exotic Matter hidden).
+    var HIDDEN_RESOURCE_KEYS = ["exotic"];
+
     // Ordered list of resource keys for rendering. Replaced with the
     // ResourceType catalogue (ordered by `order` field) once the API
     // responds, so GM changes in Settings > Star Map show up here too.
-    var RESOURCE_KEYS = ["ice", "metals", "rareEarth", "helium3", "hydrocarbons", "exotic"];
+    // HIDDEN_RESOURCE_KEYS are stripped from both sources below.
+    var RESOURCE_KEYS = ["ice", "metals", "rareEarth", "helium3", "hydrocarbons", "exotic"]
+        .filter(function(k) { return HIDDEN_RESOURCE_KEYS.indexOf(k) === -1; });
 
     fetch('/api/starmap/resource-types/').then(function(r) {
         if (r.ok) return r.json();
         return null;
     }).then(function(types) {
         if (!types || !types.length) return;
-        RESOURCE_KEYS = types.map(function(t) { return t.key; });
+        RESOURCE_KEYS = types.map(function(t) { return t.key; })
+            .filter(function(k) { return HIDDEN_RESOURCE_KEYS.indexOf(k) === -1; });
         types.forEach(function(t) {
             RESOURCE_LABELS[t.key] = {
                 name: t.name,
