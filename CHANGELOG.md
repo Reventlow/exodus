@@ -1,5 +1,11 @@
 # Changelog
 
+## v0.15.54
+- **New PUBLIC STAR MAP** (`/starmap/public/`, nav link next to STAR MAP) — a read-only shared 3D map of the public star-intel record, with **no jump-route planning** (FTL panels are off in this mode)
+- Each system's info panel shows the **PUBLIC RECORD**: every agency's published contribution (name, stated uncertainty, approximate resources, livable flag). A **FILTER SOURCES** panel (top-right) lists every contributing agency as a toggle chip — click to strike out and hide that agency's contributions (e.g. to ignore a suspected disinformation source). Filtering is client-side and presentational
+- New `GET /api/starmap/public-record/` returns the board grouped by system; `is_false` is exposed only to the GM (players can't distinguish disinformation, consistent with the agency-sheet board)
+- The public map reuses the existing star-map renderer in a `PUBLIC_MAP` mode (FTL route/drive/jump panels suppressed, ship loading skipped). 3 new tests (grouping, is_false GM-only, page renders). No migration
+
 ## v0.15.53
 - **Star-intel uncertainty curve retuned:** **25% per success short** (was 10%), **uncapped** (can read well over 100% — e.g. 15 short = 375% — to honestly convey "no idea"), and the **livable-planet flag now reveals at ≤60% uncertainty** (was 40%, so it's readable earlier on the harsher curve)
 - `scan_uncertainty` = `max(0, (target − accumulated) × 25)` with no upper cap; `approx_resources` lets the fuzz window keep widening past the base bracket (frac > 1.0). New `UNCERTAINTY_PER_SUCCESS` constant; `LIVABLE_REVEAL_UNCERTAINTY` = 60 (both threaded through the scan/publish endpoints + GM oversight, no more hardcoded 40s)

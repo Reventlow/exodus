@@ -38,6 +38,45 @@ def _get_user_agency(user):
 # ---------------------------------------------------------------------------
 
 @login_required
+@require_http_methods(["GET"])
+def api_public_record(request):
+    """The shared public star-intel record, grouped by system id:
+    { "<systemId>": [{agencyId, agencyName, uncertainty, payload}] }.
+    is_false is exposed only to the GM."""
+    from .models import PublicScanRecord
+    is_gm = request.user.is_superuser
+    out = {}
+    for r in PublicScanRecord.objects.select_related("agency"):
+        row = {
+            "agencyId": r.agency_id,
+            "agencyName": r.agency.name if r.agency else "",
+            "uncertainty": r.uncertainty,
+            "payload": r.payload,
+        }
+        if is_gm:
+            row["isFalse"] = r.is_false
+        out.setdefault(str(r.star_system_id), []).append(row)
+    return JsonResponse(out)
+
+
+@login_required
+def public_starmap_page(request):
+    """Public star map — read-only shared map of the public star-intel record,
+    with per-agency contribution filtering and NO jump-route planning."""
+    from exodus.models import SiteSettings
+    settings_obj = SiteSettings.load()
+    if not request.user.is_staff and not settings_obj.show_star_map:
+        from django.http import HttpResponseForbidden
+        return HttpResponseForbidden("STAR MAP ACCESS DISABLED")
+    return render(request, "starmap/demo.html", {
+        "SHOW_FTL_ROUTE_PLANNING": False,   # no jump route on the public map
+        "SHOW_FTL_JUMPS": False,
+        "SHOW_EXOTIC_MATTER": settings_obj.show_exotic_matter,
+        "PUBLIC_MAP": True,
+    })
+
+
+@login_required
 def starmap_page(request):
     """3D star map page. Visible to staff or when enabled in settings."""
     from exodus.models import SiteSettings

@@ -145,6 +145,23 @@
                 <div class="label" style="margin-bottom: 0.3rem;">RESOURCE PROBABILITY</div>
                 <div id="resource-bars"></div>
             </div>
+            <!-- Public-map mode: shared public-record contributions for the system. -->
+            <div id="info-public" style="margin-top: 0.5rem; display: none;">
+                <div class="label" style="margin-bottom: 0.3rem;">PUBLIC RECORD</div>
+                <div id="public-rows"></div>
+            </div>
+        </div>
+
+        <!-- Public-map agency filter (top-right). Shown only on the public map. -->
+        <div id="public-filter" style="
+            display: none; position: absolute; top: 1rem; right: 1rem; z-index: 10;
+            font-family: var(--font-mono, monospace); font-size: 0.72rem;
+            color: var(--text-primary, #e0e0e0); background: var(--bg-panel-translucent);
+            border: 1px solid var(--border-color, #333); padding: 0.75rem 1rem;
+            min-width: 200px; max-height: 60vh; overflow-y: auto; backdrop-filter: blur(6px);">
+            <header class="block-head"><span class="block-bullet">■</span><h3>FILTER SOURCES</h3><span class="block-line"></span></header>
+            <div style="color: var(--text-muted, #666); font-size: 0.6rem; text-transform: uppercase; letter-spacing: 1.5px; margin: 0.3rem 0;">Hide an agency's contributions</div>
+            <div id="public-filter-chips"></div>
         </div>
 
         <!-- FTL ROUTE PLANNING panel — top-right.
@@ -210,9 +227,57 @@
     var SHOW_FTL_JUMPS = {{ SHOW_FTL_JUMPS|yesno:"true,false" }};
     var MY_SHIPS = [];  // FTL-capable active ships visible to the user
 
+    // Public-map mode: a read-only shared star map (no jump routes) showing the
+    // public star-intel record, where the viewer can filter out agencies.
+    var PUBLIC_MAP = {{ PUBLIC_MAP|yesno:"true,false" }};
+    var PUBLIC_RECORD = {};       // { systemId: [{agencyId, agencyName, uncertainty, payload}] }
+    var PUBLIC_HIDDEN = {};       // { agencyId: true } = filtered out
+
     function csrfToken() {
         var m = document.cookie.match(/csrftoken=([^;]+)/);
         return m ? m[1] : "";
+    }
+
+    function escHtml(s) {
+        return String(s == null ? "" : s).replace(/[&<>"']/g, function (c) {
+            return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c];
+        });
+    }
+
+    function renderPublicFilter() {
+        var seen = {};
+        Object.keys(PUBLIC_RECORD).forEach(function (sid) {
+            PUBLIC_RECORD[sid].forEach(function (c) { seen[c.agencyId] = c.agencyName; });
+        });
+        var box = document.getElementById("public-filter-chips");
+        var html = Object.keys(seen).map(function (id) {
+            var hidden = PUBLIC_HIDDEN[id];
+            return '<button data-aid="' + id + '" style="display:block;width:100%;text-align:left;margin:2px 0;' +
+                'font-family:var(--font-mono);font-size:0.7rem;padding:0.2rem 0.4rem;cursor:pointer;border-radius:0;' +
+                'background:transparent;border:1px solid ' + (hidden ? 'var(--border-color,#333)' : '#7fdcff') + ';' +
+                'color:' + (hidden ? 'var(--text-muted,#666)' : '#7fdcff') + ';' +
+                (hidden ? 'text-decoration:line-through;' : '') + '">' + escHtml(seen[id]) + '</button>';
+        }).join("") || '<span style="color:var(--text-muted,#666);font-size:0.65rem;">No contributions yet.</span>';
+        box.innerHTML = html;
+        box.querySelectorAll("button[data-aid]").forEach(function (b) {
+            b.onclick = function () {
+                var id = b.getAttribute("data-aid");
+                PUBLIC_HIDDEN[id] = !PUBLIC_HIDDEN[id];
+                renderPublicFilter();
+                if (hoveredStar) updateInfoPanel(hoveredStar);
+            };
+        });
+    }
+
+    if (PUBLIC_MAP) {
+        document.getElementById("public-filter").style.display = "block";
+        fetch("/api/starmap/public-record/").then(function (r) {
+            return r.ok ? r.json() : {};
+        }).then(function (data) {
+            PUBLIC_RECORD = data || {};
+            renderPublicFilter();
+            if (typeof hoveredStar !== "undefined" && hoveredStar) updateInfoPanel(hoveredStar);
+        }).catch(function () {});
     }
     // Load ships so the route panel can offer an EXECUTE JUMP with one of them.
     if (SHOW_FTL_JUMPS) {
@@ -921,6 +986,37 @@
         if (typeof hoveredStar !== "undefined" && hoveredStar) updateInfoPanel(hoveredStar);
     }).catch(function() {});
 
+    function renderPublicForStar(star) {
+        var resEl = document.getElementById("info-resources");
+        if (resEl) resEl.style.display = "none";
+        var pubDiv = document.getElementById("info-public");
+        var rowsDiv = document.getElementById("public-rows");
+        pubDiv.style.display = "block";
+        var all = PUBLIC_RECORD[star.id] || PUBLIC_RECORD[String(star.id)] || [];
+        var contribs = all.filter(function (c) { return !PUBLIC_HIDDEN[c.agencyId]; });
+        if (!contribs.length) {
+            rowsDiv.innerHTML = '<span style="color:var(--text-muted,#666);font-size:0.7rem;">No public data' +
+                (all.length ? ' (all sources filtered out).' : '.') + '</span>';
+            return;
+        }
+        rowsDiv.innerHTML = contribs.map(function (c) {
+            var p = c.payload || {};
+            var res = p.resources || {};
+            var resStr = Object.keys(res).map(function (k) {
+                var v = res[k];
+                var val = (v && typeof v === "object") ? (v.min === v.max ? v.min : v.min + "–" + v.max) : v;
+                return k + ": " + val;
+            }).join("  ·  ");
+            var liv = (p.livable === true) ? " · LIVABLE" : (p.livable === false ? " · no livable" : "");
+            var falseTag = c.isFalse ? ' <span style="color:#ef4444;">[FALSE]</span>' : "";
+            return '<div style="border-top:1px solid var(--border-color,#333);padding:0.35rem 0;">' +
+                '<div style="font-size:0.72rem;color:#7fdcff;">' + escHtml(c.agencyName) + falseTag +
+                ' <span style="color:var(--text-muted,#888);">(' + c.uncertainty + '% uncert' + liv + ')</span></div>' +
+                (resStr ? '<div style="font-size:0.62rem;color:var(--text-muted,#aaa);margin-top:0.15rem;">' + escHtml(resStr) + '</div>' : '') +
+                '</div>';
+        }).join("");
+    }
+
     function updateInfoPanel(star) {
         document.getElementById("info-name").textContent = star.isEndgame
             ? "SIGNAL SOURCE OMEGA" : star.name;
@@ -996,6 +1092,13 @@
             });
         } else {
             planetListDiv.style.display = "none";
+        }
+
+        // Public map: show the shared public record (filtered) instead of the
+        // viewer's own scan resources.
+        if (PUBLIC_MAP) {
+            renderPublicForStar(star);
+            return;
         }
 
         var resDiv = document.getElementById("info-resources");

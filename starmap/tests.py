@@ -304,3 +304,38 @@ class FalseDataDifficultyTests(TestCase):
             data=json.dumps({"baseId": self.base.id, "starSystemId": self.star.id}),
             content_type="application/json")
         self.assertEqual(r1.json()["target"], 21)  # 15 + 2*3
+
+
+class PublicMapTests(TestCase):
+    """Public star map — read-only board + the public-record endpoint."""
+
+    def setUp(self):
+        User = get_user_model()
+        self.gm = User.objects.create_superuser("gm6", "gm6@example.com", "pw")
+        self.player = User.objects.create_user("pmplayer", "pm@example.com", "pw")
+        self.agency = Agency.objects.create(name="Board Agency", is_player_agency=True)
+        self.star = StarSystem.objects.create(
+            name="Board Sys", x=1, y=1, z=1, distance=4, spectral_type="K",
+            discovered=True, resources={})
+        from starmap.models import PublicScanRecord
+        PublicScanRecord.objects.create(
+            agency=self.agency, star_system=self.star, is_false=True,
+            uncertainty=10, payload={"resources": {}, "livable": True})
+
+    def test_public_record_grouped_by_system(self):
+        c = Client(); c.force_login(self.gm)
+        d = c.get("/api/starmap/public-record/").json()
+        self.assertIn(str(self.star.id), d)
+        self.assertEqual(d[str(self.star.id)][0]["agencyName"], "Board Agency")
+
+    def test_is_false_hidden_from_players(self):
+        c = Client(); c.force_login(self.player)
+        d = c.get("/api/starmap/public-record/").json()
+        self.assertNotIn("isFalse", d[str(self.star.id)][0])   # players can't tell
+        c2 = Client(); c2.force_login(self.gm)
+        d2 = c2.get("/api/starmap/public-record/").json()
+        self.assertTrue(d2[str(self.star.id)][0]["isFalse"])    # GM sees it
+
+    def test_public_map_page_renders(self):
+        c = Client(); c.force_login(self.gm)
+        self.assertEqual(c.get("/starmap/public/").status_code, 200)
