@@ -461,8 +461,8 @@ def api_observatory_scan(request, pk):
         return JsonResponse({"error": "starSystemId and baseId required"}, status=400)
 
     star = get_object_or_404(StarSystem, pk=star_id)
-    if not star.discovered and not request.user.is_superuser:
-        return JsonResponse({"error": "System has not been discovered yet."}, status=400)
+    # Players may scan any system; the scan itself is the discovery ("scanned at
+    # least once to retrieve data"). The first scan flips star.discovered below.
 
     # Resolve the declared observatory and its dice (must belong to the agency).
     observatories = {o["baseId"]: o for o in list_agency_observatories(agency)}
@@ -514,6 +514,11 @@ def api_observatory_scan(request, pk):
         scan.base_id = base_id
         scan.base_name = obs["baseName"]
         scan.save()
+
+        # First scan discovers the system (satisfies "scanned at least once").
+        if not star.discovered:
+            star.discovered = True
+            star.save(update_fields=["discovered"])
 
         usage[str(base_id)] = used + 1
         agency.scan_usage = usage

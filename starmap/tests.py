@@ -161,12 +161,13 @@ class ScanGateTests(TestCase):
         self.assertEqual(r.status_code, 400)
         self.assertIn("no scans remaining", r.json()["error"].lower())
 
-    def test_undiscovered_blocks(self):
+    def test_first_scan_discovers_system(self):
         self.star.discovered = False
         self.star.save()
         r = self._scan()
-        self.assertEqual(r.status_code, 400)
-        self.assertIn("discovered", r.json()["error"].lower())
+        self.assertEqual(r.status_code, 200)        # scannable even if undiscovered
+        self.star.refresh_from_db()
+        self.assertTrue(self.star.discovered)       # first scan discovered it
 
     def test_observatory_exhausts_grant(self):
         # grant of 2 -> two scans OK, third blocked

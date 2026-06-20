@@ -1,5 +1,11 @@
 # Changelog
 
+## v0.15.52
+- **Fix: granted players couldn't pick a system to scan.** The scan dropdown only listed GM-`discovered` systems, so until the GM hand-marked systems there was nothing to choose. Changed to match the original intent — *the scan is the discovery*
+- Players can now scan **any** system (the dropdown lists all systems, nearest first, excluding unreachable endgame beacons). A system's **first scan auto-marks it `discovered`**, satisfying "scanned at least once to retrieve data" — no GM pre-discovery step needed
+- The `discovered` prerequisite was removed from the observatory-scan endpoint; the GM `discovered` admin field still works (now also auto-set on first scan) and the GM oversight page continues to list scanned systems
+- Test updated (first scan of an undiscovered system succeeds and flips `discovered`). No migration
+
 ## v0.15.51
 - **Star-intel scanning — roll model changed to GM grants (like project rolls).** Replaces the open/close scanning-turn + once-per-observatory rule with a per-agency GM grant: the GM gives an agency **N scans per observatory**, and each observatory may then scan N times
 - New `Agency.scan_grant` (scans allowed per observatory) + `Agency.scan_usage` ({baseId: count}). The GM grants from a control on the agency's **STAR INTEL** panel (GM-only) — a number + GRANT button; granting resets usage so every observatory gets a fresh allowance. Set via the agency PUT (`scanGrant`), mirroring `projectRolls`

@@ -71,8 +71,11 @@ const StarIntelModule = ({ observatories = [], scanGrant = 0, starScans = [], pu
     };
 
     useEffect(() => {
+        // Any system can be scanned — the first scan discovers it. Exclude only
+        // unreachable endgame beacons.
         fetch('/api/starmap/systems/').then(r => (r.ok ? r.json() : []))
-            .then(data => setSystems((data || []).filter(s => s.discovered)))
+            .then(data => setSystems((data || []).filter(s => !s.isEndgame)
+                .sort((a, b) => (a.dist || 0) - (b.dist || 0))))
             .catch(() => {});
     }, []);
 
