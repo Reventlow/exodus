@@ -3,15 +3,30 @@
 // STAR INTEL — agency star-database scanning panel (Phase 1b).
 // Lists the agency's observatories (one scan each per open scanning turn) and
 // the accumulated private scan database with uncertainty% + approximate readout.
-const StarIntelModule = ({ observatories = [], scanningTurn = {}, starScans = [], publicRecord = [], publishedSystemIds = [], agencyId, fetchAgency }) => {
+const StarIntelModule = ({ observatories = [], scanGrant = 0, starScans = [], publicRecord = [], publishedSystemIds = [], agencyId, fetchAgency }) => {
     const { useState, useEffect } = React;
     const { getCookie } = window;
     const ACCENT = '#7fdcff';
+    const isGM = (typeof IS_ADMIN !== 'undefined') && IS_ADMIN;
 
     const [systems, setSystems] = useState([]);
     const [picks, setPicks] = useState({});   // { baseId: starSystemId }
     const [msg, setMsg] = useState('');
     const [busy, setBusy] = useState(false);
+    const [grantInput, setGrantInput] = useState(scanGrant);
+
+    const grantScans = () => {
+        const n = Math.max(0, parseInt(grantInput, 10) || 0);
+        fetch(`/api/agencies/${agencyId}/`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json', 'X-CSRFToken': getCookie('csrftoken') },
+            body: JSON.stringify({ scanGrant: n }),
+        }).then(r => r.json().then(d => ({ ok: r.ok, d }))).then(({ ok, d }) => {
+            if (!ok) { setMsg((d && d.error) || 'Grant failed.'); return; }
+            setMsg(`Granted ${n} scan${n === 1 ? '' : 's'} per observatory.`);
+            if (fetchAgency) fetchAgency();
+        });
+    };
     const [hiddenAgencies, setHiddenAgencies] = useState({});  // { agencyId: true } = filtered out
     const [falsifyPick, setFalsifyPick] = useState('');
     const [falsifyUnc, setFalsifyUnc] = useState(0);
@@ -61,8 +76,6 @@ const StarIntelModule = ({ observatories = [], scanningTurn = {}, starScans = []
             .catch(() => {});
     }, []);
 
-    const turnOpen = !!scanningTurn.open;
-
     const scan = (baseId) => {
         const starId = picks[baseId];
         if (!starId) { setMsg('Pick a system to scan first.'); return; }
@@ -86,41 +99,57 @@ const StarIntelModule = ({ observatories = [], scanningTurn = {}, starScans = []
                 <span className="block-bullet">■</span>
                 <h3>STAR INTEL</h3>
                 <span className="block-line"></span>
-                <span className="block-badge" style={{ color: turnOpen ? '#22c55e' : 'var(--text-muted)' }}>
-                    {turnOpen ? `TURN ${scanningTurn.number} OPEN` : 'TURN CLOSED'}
-                </span>
+                <span className="block-badge">{scanGrant} / OBS</span>
             </header>
 
-            {/* Observatories — one scan each per turn */}
+            {/* GM grant — give the agency N scans per observatory (like project rolls) */}
+            {isGM && (
+                <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'flex-end', marginBottom: '0.8rem', flexWrap: 'wrap' }}>
+                    <div style={{ display: 'flex', flexDirection: 'column' }}>
+                        <label className="text-muted mono-text" style={{ fontSize: '0.55rem' }}>GRANT SCANS / OBSERVATORY</label>
+                        <input type="number" min="0" value={grantInput} onChange={e => setGrantInput(e.target.value)} className="mono-input" style={{ width: '90px' }} />
+                    </div>
+                    <button onClick={grantScans} className="mono-text"
+                        style={{ background: 'transparent', border: `1px solid var(--accent-primary)`, color: 'var(--accent-primary)', padding: '0.3rem 0.7rem', cursor: 'pointer', borderRadius: 0 }}>
+                        GRANT
+                    </button>
+                    <span className="text-muted mono-text" style={{ fontSize: '0.62rem', alignSelf: 'center' }}>Resets usage — each observatory gets a fresh allowance.</span>
+                </div>
+            )}
+
+            {/* Observatories — each may scan scan_grant times */}
             <div className="mono-text text-muted" style={{ fontSize: '0.65rem', letterSpacing: '1px', marginBottom: '0.45rem' }}>OBSERVATORIES</div>
             {observatories.length === 0 && (
                 <div className="text-muted" style={{ fontSize: '0.8rem', marginBottom: '0.75rem' }}>
                     No observatories. Build an Observatory facility on a base (Ground Telescope = +5, Deep-Space Tracking = +5 dice).
                 </div>
             )}
-            {observatories.map(o => (
-                <div key={o.baseId} style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', marginBottom: '0.4rem', flexWrap: 'wrap' }}>
-                    <span className="mono-text" style={{ fontSize: '0.8rem', flex: '1 1 150px' }}>
-                        {o.baseName} <span className="text-muted">({o.dice}d)</span>
-                    </span>
-                    <select
-                        value={picks[o.baseId] || ''}
-                        disabled={!turnOpen || o.usedThisTurn}
-                        onChange={e => setPicks({ ...picks, [o.baseId]: e.target.value ? parseInt(e.target.value, 10) : null })}
-                        className="mono-input" style={{ flex: '1 1 170px' }}>
-                        <option value="">— system —</option>
-                        {systems.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
-                    </select>
-                    <button onClick={() => scan(o.baseId)} disabled={busy || !turnOpen || o.usedThisTurn}
-                        className="mono-text"
-                        style={{ background: 'transparent', border: `1px solid ${ACCENT}`, color: ACCENT, padding: '0.3rem 0.7rem', cursor: 'pointer', borderRadius: 0, opacity: (!turnOpen || o.usedThisTurn) ? 0.4 : 1 }}>
-                        {o.usedThisTurn ? 'USED' : 'SCAN'}
-                    </button>
-                </div>
-            ))}
+            {observatories.map(o => {
+                const out = (o.remaining || 0) <= 0;
+                return (
+                    <div key={o.baseId} style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', marginBottom: '0.4rem', flexWrap: 'wrap' }}>
+                        <span className="mono-text" style={{ fontSize: '0.8rem', flex: '1 1 150px' }}>
+                            {o.baseName} <span className="text-muted">({o.dice}d · {o.remaining}/{scanGrant} left)</span>
+                        </span>
+                        <select
+                            value={picks[o.baseId] || ''}
+                            disabled={out}
+                            onChange={e => setPicks({ ...picks, [o.baseId]: e.target.value ? parseInt(e.target.value, 10) : null })}
+                            className="mono-input" style={{ flex: '1 1 170px' }}>
+                            <option value="">— system —</option>
+                            {systems.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+                        </select>
+                        <button onClick={() => scan(o.baseId)} disabled={busy || out}
+                            className="mono-text"
+                            style={{ background: 'transparent', border: `1px solid ${ACCENT}`, color: ACCENT, padding: '0.3rem 0.7rem', cursor: 'pointer', borderRadius: 0, opacity: out ? 0.4 : 1 }}>
+                            {out ? 'NO SCANS' : 'SCAN'}
+                        </button>
+                    </div>
+                );
+            })}
             {msg && <div className="mono-text" style={{ fontSize: '0.7rem', marginTop: '0.35rem', color: ACCENT }}>{msg}</div>}
-            {!turnOpen && observatories.length > 0 && (
-                <div className="text-muted" style={{ fontSize: '0.7rem', marginTop: '0.35rem' }}>Scanning turn is closed — the GM opens it in Site Settings.</div>
+            {scanGrant <= 0 && observatories.length > 0 && (
+                <div className="text-muted" style={{ fontSize: '0.7rem', marginTop: '0.35rem' }}>No scans granted yet — the GM grants scans above.</div>
             )}
 
             {/* Star database — accumulated private readouts */}

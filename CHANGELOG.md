@@ -1,5 +1,12 @@
 # Changelog
 
+## v0.15.51
+- **Star-intel scanning — roll model changed to GM grants (like project rolls).** Replaces the open/close scanning-turn + once-per-observatory rule with a per-agency GM grant: the GM gives an agency **N scans per observatory**, and each observatory may then scan N times
+- New `Agency.scan_grant` (scans allowed per observatory) + `Agency.scan_usage` ({baseId: count}). The GM grants from a control on the agency's **STAR INTEL** panel (GM-only) — a number + GRANT button; granting resets usage so every observatory gets a fresh allowance. Set via the agency PUT (`scanGrant`), mirroring `projectRolls`
+- Each observatory now shows **"(dice · remaining/grant left)"**; the SCAN button is enabled while scans remain and reads NO SCANS when exhausted. The app still rolls the dice and accumulates uncertainty exactly as before — only the gate changed
+- The scan endpoint gates on `scan_usage[baseId] < scan_grant` (superuser bypasses) instead of the scanning turn; removed the now-dead SCANNING TURN toggle from Site Settings. `SiteSettings.scanning_turn_*` and `Agency.scan_turn_usage` columns left vestigial (no destructive migration)
+- Tests reworked for the grant model (grant gates scanning, observatory exhausts its grant, re-grant resets usage). Migration: `agencies/0038`
+
 ## v0.15.50
 - **Star-intel scanning — Phase 3 (disinformation + filtering): the system is now complete.** Agencies can plant false data and players can filter the public board by source
 - **Disinformation:** a new DISINFORMATION control on the STAR INTEL panel publishes a false public record for a chosen system (player sets the fake "stated uncertainty"). Each active false record raises that system's **effective scan target** for everyone (+3 each, capped +15), forcing more rolls to reach certainty — the `_count_false_records` hook stubbed in Phase 1a now activates against the real `PublicScanRecord` model. False records are indistinguishable from real ones to players (only the GM oversight page flags `[FALSE]`)

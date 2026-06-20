@@ -70,10 +70,8 @@ class ObservatoryScanTests(TestCase):
             discovered=True, difficulty_mod=0, has_livable_planet=True,
             resources={"helium3": 40},
         )
-        s = SiteSettings.load()
-        s.scanning_turn_open = True
-        s.scanning_turn_number = 1
-        s.save()
+        self.agency.scan_grant = 5
+        self.agency.save()
 
     def _scan(self, base_id=None, star_id=None):
         return self.client.post(
@@ -104,14 +102,14 @@ class ObservatoryScanTests(TestCase):
         self.assertEqual(scan.required_successes, 15)
 
     def test_accumulation_is_monotonic(self):
-        a = self._scan().json()["accumulated"]   # superuser bypasses once-only
+        a = self._scan().json()["accumulated"]
         b = self._scan().json()["accumulated"]
         self.assertGreaterEqual(b, a)             # never reset
 
     def test_usage_recorded(self):
         self._scan()
         self.agency.refresh_from_db()
-        self.assertEqual(self.agency.scan_turn_usage["1"][str(self.base.id)], self.star.id)
+        self.assertEqual(self.agency.scan_usage[str(self.base.id)], 1)
 
     def test_unknown_observatory_rejected(self):
         r = self._scan(base_id=999999)
@@ -138,10 +136,8 @@ class ScanGateTests(TestCase):
         )
         self.client = Client()
         self.client.force_login(self.user)
-        s = SiteSettings.load()
-        s.scanning_turn_open = True
-        s.scanning_turn_number = 1
-        s.save()
+        self.agency.scan_grant = 2  # GM grant: 2 scans per observatory
+        self.agency.save()
 
     def _scan(self, base_id=None, star_id=None):
         return self.client.post(
@@ -153,18 +149,17 @@ class ScanGateTests(TestCase):
             content_type="application/json",
         )
 
-    def test_player_can_scan_own_agency(self):
+    def test_player_can_scan_with_grant(self):
         r = self._scan()
         self.assertEqual(r.status_code, 200)
         self.assertEqual(r.json()["pool"], 10)  # level 1 = 10 dice
 
-    def test_turn_closed_blocks(self):
-        s = SiteSettings.load()
-        s.scanning_turn_open = False
-        s.save()
+    def test_no_grant_blocks(self):
+        self.agency.scan_grant = 0
+        self.agency.save()
         r = self._scan()
         self.assertEqual(r.status_code, 400)
-        self.assertIn("scanning turn", r.json()["error"].lower())
+        self.assertIn("no scans remaining", r.json()["error"].lower())
 
     def test_undiscovered_blocks(self):
         self.star.discovered = False
@@ -173,17 +168,20 @@ class ScanGateTests(TestCase):
         self.assertEqual(r.status_code, 400)
         self.assertIn("discovered", r.json()["error"].lower())
 
-    def test_once_per_observatory_per_turn(self):
+    def test_observatory_exhausts_grant(self):
+        # grant of 2 -> two scans OK, third blocked
         self.assertEqual(self._scan().status_code, 200)
-        r2 = self._scan()
-        self.assertEqual(r2.status_code, 400)
-        self.assertIn("already scanned", r2.json()["error"].lower())
+        self.assertEqual(self._scan().status_code, 200)
+        r3 = self._scan()
+        self.assertEqual(r3.status_code, 400)
+        self.assertIn("no scans remaining", r3.json()["error"].lower())
 
-    def test_new_turn_clears_once_only(self):
-        self._scan()
-        s = SiteSettings.load()
-        s.scanning_turn_number = 2
-        s.save()
+    def test_regrant_resets_usage(self):
+        self._scan(); self._scan()                  # exhaust the grant of 2
+        self.assertEqual(self._scan().status_code, 400)
+        self.agency.scan_grant = 1                   # GM re-grants (resets usage)
+        self.agency.scan_usage = {}
+        self.agency.save()
         self.assertEqual(self._scan().status_code, 200)  # observatory free again
 
     def test_other_agency_forbidden(self):

@@ -85,12 +85,22 @@ class Agency(models.Model):
         default=0,
         help_text="FTL spares stockpile. Spent on jumps; refilled by extracting spares resources at claimed systems.",
     )
-    # Star-intel: which observatory scanned which system in which turn, to
-    # enforce one scan per observatory per scanning turn.
-    # Shape: {"<turnNumber>": {"<baseId>": <starSystemId>}}.
+    # Star-intel: which observatory scanned which system in which turn (legacy
+    # turn model). Vestigial — superseded by scan_grant / scan_usage.
     scan_turn_usage = models.JSONField(
         default=dict, blank=True,
-        help_text="Per-turn observatory scan usage: {turnNumber: {baseId: starSystemId}}.",
+        help_text="Legacy per-turn observatory scan usage (vestigial).",
+    )
+    # Star-intel roll grant — GM gives the agency N scans PER OBSERVATORY (like
+    # project rolls). Each observatory may scan scan_grant times; scan_usage
+    # counts scans done per observatory against the current grant.
+    scan_grant = models.IntegerField(
+        default=0,
+        help_text="Scans allowed per observatory (GM grant). Each observatory may scan this many times.",
+    )
+    scan_usage = models.JSONField(
+        default=dict, blank=True,
+        help_text="Scans used per observatory against the current grant: {baseId: count}.",
     )
     is_nuclear_power = models.BooleanField(
         default=False,

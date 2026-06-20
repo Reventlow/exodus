@@ -356,6 +356,14 @@ def api_agency_detail(request, pk):
             agency.history = data["history"]
         if "projectRolls" in data:
             agency.project_rolls = data["projectRolls"]
+        if "scanGrant" in data:
+            # GM grants N scans per observatory; a fresh grant resets per-
+            # observatory usage so every observatory gets the full allowance.
+            try:
+                agency.scan_grant = max(0, int(data["scanGrant"]))
+            except (TypeError, ValueError):
+                agency.scan_grant = 0
+            agency.scan_usage = {}
         if "isHidden" in data:
             agency.is_hidden = bool(data["isHidden"])
         if "mapColor" in data:

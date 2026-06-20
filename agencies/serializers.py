@@ -642,16 +642,16 @@ def redact_value(value):
 
 def _agency_observatories(agency):
     """The agency's scannable observatories (star-intel). One per base with an
-    Observatory facility; dice = 5/10/15 by upgrade level."""
+    Observatory facility; dice = 5/10/15 by upgrade level. Each observatory may
+    scan ``scan_grant`` times; ``remaining`` is what's left of the GM grant."""
     from starmap.serializers import list_agency_observatories
     obs = list_agency_observatories(agency)
-    # Annotate which ones have already scanned this turn.
-    from exodus.models import SiteSettings
-    turn = str(SiteSettings.load().scanning_turn_number)
-    used = (agency.scan_turn_usage or {}).get(turn, {})
+    grant = agency.scan_grant or 0
+    usage = agency.scan_usage or {}
     for o in obs:
-        o["usedThisTurn"] = str(o["baseId"]) in used
-        o["scannedSystemId"] = used.get(str(o["baseId"]))
+        used = int(usage.get(str(o["baseId"]), 0) or 0)
+        o["used"] = used
+        o["remaining"] = max(0, grant - used)
     return obs
 
 
@@ -745,7 +745,7 @@ def serialize_agency(agency, user):
         "ftlFuel": agency.ftl_fuel,
         "ftlSpares": agency.ftl_spares,
         "observatories": _agency_observatories(agency),
-        "scanningTurn": _scanning_turn_state(),
+        "scanGrant": agency.scan_grant,
         "starScans": _agency_star_scans(agency),
         "publicRecord": _public_record(user),
         "publishedSystemIds": list(

@@ -430,19 +430,18 @@ def _count_false_records(star):
 @login_required
 @require_http_methods(["POST"])
 def api_observatory_scan(request, pk):
-    """Star-intel scan: one declared observatory scans one discovered system.
+    """Star-intel scan: a declared observatory scans a discovered system.
 
-    Body: {starSystemId, baseId}. Gated on an open scanning turn (superuser
-    bypass), the system being discovered, the observatory belonging to the
-    agency, and that observatory not having scanned yet this turn. Rolls the
-    observatory's dice (5/10/15), accumulates successes monotonically toward
-    the system target (15 + difficulty_mod + disinformation), and recomputes
-    uncertainty% + the approximate readout. No project-roll / mental-load cost.
+    Body: {starSystemId, baseId}. Gated (like project rolls) on the GM having
+    granted the agency scans: each observatory may scan ``Agency.scan_grant``
+    times, tracked in ``Agency.scan_usage`` {baseId: count}. Also requires the
+    system discovered and the observatory belonging to the agency. Rolls the
+    observatory's dice (5/10/15), accumulates successes toward the system
+    target, and recomputes uncertainty% + the approximate readout.
     """
     from django.db import transaction
     from agencies.models import Agency
     from characters.models import Character
-    from exodus.models import SiteSettings
     from .serializers import (
         effective_scan_target, scan_uncertainty, approx_resources,
         list_agency_observatories,
@@ -451,11 +450,6 @@ def api_observatory_scan(request, pk):
     agency = get_object_or_404(Agency, pk=pk)
     if not request.user.is_superuser and _get_user_agency(request.user) != agency:
         return JsonResponse({"error": "Permission denied"}, status=403)
-
-    settings_obj = SiteSettings.load()
-    if not settings_obj.scanning_turn_open and not request.user.is_superuser:
-        return JsonResponse({"error": "No scanning turn is open."}, status=400)
-    turn = settings_obj.scanning_turn_number
 
     try:
         body = json.loads(request.body)
@@ -476,12 +470,14 @@ def api_observatory_scan(request, pk):
     if not obs:
         return JsonResponse({"error": "That base has no observatory for this agency."}, status=400)
 
-    # One scan per observatory per turn.
-    usage = agency.scan_turn_usage or {}
-    turn_key = str(turn)
-    turn_usage = usage.get(turn_key, {})
-    if str(base_id) in turn_usage and not request.user.is_superuser:
-        return JsonResponse({"error": "That observatory has already scanned this turn."}, status=400)
+    # Roll allowance — each observatory may scan scan_grant times (GM grant).
+    usage = agency.scan_usage or {}
+    used = int(usage.get(str(base_id), 0) or 0)
+    if used >= (agency.scan_grant or 0) and not request.user.is_superuser:
+        return JsonResponse(
+            {"error": "No scans remaining for this observatory. Ask the GM for a scan grant."},
+            status=400,
+        )
 
     # Roll the observatory's dice — WoD d10, 8+ success, 10 explodes.
     pool = int(obs["dice"])
@@ -519,10 +515,9 @@ def api_observatory_scan(request, pk):
         scan.base_name = obs["baseName"]
         scan.save()
 
-        turn_usage[str(base_id)] = star.id
-        usage[turn_key] = turn_usage
-        agency.scan_turn_usage = usage
-        agency.save(update_fields=["scan_turn_usage"])
+        usage[str(base_id)] = used + 1
+        agency.scan_usage = usage
+        agency.save(update_fields=["scan_usage"])
 
         msg = (f"{obs['baseName']} observatory ({pool} dice) → {successes} successes. "
                f"{scan.current_successes}/{target} ({uncertainty}% uncertainty).")

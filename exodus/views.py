@@ -69,13 +69,6 @@ def site_settings(request):
             je["resupply_amount"] = max(0, _je_num("jump_resupply_amount", je["resupply_amount"], int))
             je["max_jump_ly"] = max(0, _je_num("jump_max_ly", je["max_jump_ly"], int))
             settings_obj.jump_economy_config = je
-        # Scanning turn — opening a fresh turn (False->True) bumps the turn
-        # number, which clears the per-observatory once-only constraint.
-        if "scanning_turn_submitted" in request.POST:
-            want_open = "scanning_turn_open" in request.POST
-            if want_open and not settings_obj.scanning_turn_open:
-                settings_obj.scanning_turn_number = (settings_obj.scanning_turn_number or 0) + 1
-            settings_obj.scanning_turn_open = want_open
         settings_obj.show_council = "show_council" in request.POST
         settings_obj.council_mode = request.POST.get("council_mode", "agency")
         settings_obj.enforce_ship_slot_budget = "enforce_ship_slot_budget" in request.POST
