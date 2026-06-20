@@ -867,6 +867,30 @@ def _can_edit_ship(user, ship):
     return agency is not None and agency.id == ship.agency_id
 
 
+def _ship_extractable(ship):
+    """{resource_key: available_qty} the ship's agency may extract at the ship's
+    current location. Requires: configured fuel/spares keys, the system claimed
+    by the ship's agency, and that agency scanned to the extract threshold.
+    Cheap-checks the claim first so non-parked ships incur no extra queries."""
+    loc = ship.location
+    if loc is None or loc.claimed_by_id != ship.agency_id:
+        return {}
+    from exodus.models import SiteSettings
+    from starmap.models import AgencyScan
+    cfg = SiteSettings.load().get_jump_economy()
+    keys = list(cfg.get("fuel_keys") or []) + list(cfg.get("spares_keys") or [])
+    if not keys:
+        return {}
+    need = int(cfg.get("extract_scan_level", 2))
+    scanned = AgencyScan.objects.filter(
+        agency_id=ship.agency_id, star_system_id=loc.id, scan_level__gte=need,
+    ).exists()
+    if not scanned:
+        return {}
+    res = loc.resources or {}
+    return {k: int(res.get(k, 0) or 0) for k in keys if int(res.get(k, 0) or 0) > 0}
+
+
 def _serialize_ship(ship):
     cls = ship.starship_class
     stats = compute_class_stats(cls)
@@ -887,6 +911,10 @@ def _serialize_ship(ship):
         "location_claimed": bool(
             ship.location_id and ship.location.claimed_by_id == ship.agency_id
         ),
+        # Phase 2 — agency fuel/spares stockpile + what's extractable here.
+        "agency_ftl_fuel": ship.agency.ftl_fuel if ship.agency else 0,
+        "agency_ftl_spares": ship.agency.ftl_spares if ship.agency else 0,
+        "extractable": _ship_extractable(ship),
         "current_successes": ship.current_successes,
         "build_required_successes": cls.build_required_successes,
         "starship_class_id": cls.id,
@@ -1183,25 +1211,71 @@ def api_ship_jump(request, pk):
             status=400,
         )
 
-    # --- Cost (flat) ---
-    maint = max(1, int(stats["maintenance"]))
-    wear = max(1, round(maint * float(cfg.get("maint_wear_per_jump", 1.0))))
+    # --- Cost ---
+    # Phase-1 (condition-only) unless the fuel economy is active, which is the
+    # case as soon as a jump would cost any fuel or spares (base_* or per-ly
+    # rates configured). When active, condition wear drops to a small tick and
+    # the real cost is the agency fuel/spares stockpile.
+    import math
+    from django.db.models import F
+    from agencies.models import Agency
 
-    # --- Affordability: fail-closed, no partial mutation ---
+    maint = max(1, int(stats["maintenance"]))
+    fuel_cost = max(0, math.ceil(
+        float(cfg.get("base_fuel", 0)) + maint * dist_ly * float(cfg.get("fuel_per_maint_ly", 0.0))
+    ))
+    spares_cost = max(0, math.ceil(
+        float(cfg.get("base_spares", 0)) + maint * dist_ly * float(cfg.get("spares_per_maint_ly", 0.0))
+    ))
+    economy_active = fuel_cost > 0 or spares_cost > 0
+    if economy_active:
+        wear = max(0, int(cfg.get("wear_tick", 1)))
+    else:
+        wear = max(1, round(maint * float(cfg.get("maint_wear_per_jump", 1.0))))
+
+    agency = ship.agency
+
+    # --- Affordability: fail-closed, all-or-nothing ---
     if ship.maintenance_state - wear < 0:
         return JsonResponse({
             "error": "Insufficient maintenance to jump.",
             "required": wear, "available": ship.maintenance_state,
         }, status=400)
+    if economy_active and (agency.ftl_fuel < fuel_cost or agency.ftl_spares < spares_cost):
+        return JsonResponse({
+            "error": "Insufficient FTL resources to jump.",
+            "need": {"fuel": fuel_cost, "spares": spares_cost},
+            "have": {"fuel": agency.ftl_fuel, "spares": agency.ftl_spares},
+        }, status=400)
 
+    costs = {"fuel": fuel_cost, "spares": spares_cost} if economy_active else {}
     with transaction.atomic():
+        if economy_active and (fuel_cost or spares_cost):
+            # Concurrency-safe debit: the conditional UPDATE only succeeds while
+            # the stockpile still covers the cost, so two near-simultaneous
+            # jumps from the same agency can't drive a pool negative (the
+            # pre-check above is just fast UX). Zero rows => insufficient now.
+            debited = Agency.objects.filter(
+                pk=agency.pk, ftl_fuel__gte=fuel_cost, ftl_spares__gte=spares_cost,
+            ).update(
+                ftl_fuel=F("ftl_fuel") - fuel_cost,
+                ftl_spares=F("ftl_spares") - spares_cost,
+            )
+            if not debited:
+                agency.refresh_from_db(fields=["ftl_fuel", "ftl_spares"])
+                return JsonResponse({
+                    "error": "Insufficient FTL resources to jump.",
+                    "need": {"fuel": fuel_cost, "spares": spares_cost},
+                    "have": {"fuel": agency.ftl_fuel, "spares": agency.ftl_spares},
+                }, status=400)
+            agency.refresh_from_db(fields=["ftl_fuel", "ftl_spares"])
         ship.maintenance_state = max(0, min(100, ship.maintenance_state - wear))
         ship.location = target
         ship.save(update_fields=["maintenance_state", "location", "updated_at"])
         JumpLog.objects.create(
-            ship=ship, agency=ship.agency, kind="jump",
+            ship=ship, agency=agency, kind="jump",
             from_system_name=origin.name, to_system_name=target.name,
-            distance_ly=dist_ly, maintenance_basis=maint, wear=wear,
+            distance_ly=dist_ly, maintenance_basis=maint, wear=wear, costs=costs,
             reason=f"{ship.name} jumped {origin.name} -> {target.name}",
         )
 
@@ -1209,6 +1283,7 @@ def api_ship_jump(request, pk):
         "ship": _serialize_ship(ship),
         "distance_ly": round(dist_ly, 2),
         "wear": wear,
+        "costs": costs,
     })
 
 
@@ -1426,7 +1501,11 @@ def starships_page(request):
     if not request.user.is_staff:
         if not settings_obj.show_starships:
             return HttpResponseForbidden("STARSHIPS ACCESS DISABLED")
+    _je = settings_obj.get_jump_economy()
     return render(request, "starships/page.html", {
         "is_superuser": request.user.is_superuser,
         "show_ftl_jumps": settings_obj.show_ftl_jumps,
+        # Phase 2 fuel/spares economy is "active" once fuel or spares keys are
+        # configured; drives the fuel pills + extract UI in the ship editor.
+        "jump_economy_active": bool((_je.get("fuel_keys") or []) or (_je.get("spares_keys") or [])),
     })

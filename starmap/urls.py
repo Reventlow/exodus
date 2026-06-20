@@ -26,6 +26,7 @@ urlpatterns = [
 
     # Claims
     path("api/starmap/systems/<int:pk>/claim/", views.api_claim_system, name="api-claim"),
+    path("api/starmap/systems/<int:pk>/extract/", views.api_extract_resource, name="api-extract"),
 
     # Resource types
     path("api/starmap/resource-types/", views.api_resource_types, name="api-resource-types"),

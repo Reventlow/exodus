@@ -202,3 +202,122 @@ class JumpEconomyConfigTests(TestCase):
         self.assertEqual(cfg["maint_wear_per_jump"], 2.5)   # override preserved
         self.assertEqual(cfg["resupply_amount"], 100)        # default filled in
         self.assertIn("fuel_keys", cfg)                      # phase-2 keys present
+
+
+class JumpFuelEconomyTests(TestCase):
+    """Phase 2 — jump debits the agency fuel/spares stockpile; extraction
+    refills it from system resources."""
+
+    def setUp(self):
+        User = get_user_model()
+        self.gm = User.objects.create_superuser("gm2", "gm2@example.com", "pw")
+        self.client = Client()
+        self.client.force_login(self.gm)
+
+        self.agency = Agency.objects.create(name="Fuel Agency", ftl_fuel=10, ftl_spares=10)
+        self.stype = ShipType.objects.create(
+            key="jt_cruiser2", name="Cruiser", base_maintenance=10, min_size=1, max_size=10,
+        )
+        self.section = ShipModuleSection.objects.create(key="jt_drive2", name="Drive", order=1)
+        self.ftl_mod = ShipModule.objects.create(
+            key="jt_ftl2", name="FTL Drive", section=self.section, provides_ftl=True,
+        )
+        self.cls = StarshipClass.objects.create(
+            name="FTL Cruiser 2", ship_type=self.stype, size=5, created_by=self.agency,
+        )
+        ClassModule.objects.create(starship_class=self.cls, module=self.ftl_mod, quantity=1)
+
+        self.sol = StarSystem.objects.create(
+            name="Sol", x=0, y=0, z=0, distance=0, spectral_type="G2V",
+            is_sol=True, claimed_by=self.agency, resources={"helium3": 50, "metals": 30},
+        )
+        self.tau = StarSystem.objects.create(
+            name="Tau Ceti", x=-7.17, y=-3.13, z=-8.06, distance=11.89, spectral_type="G8.5V",
+        )
+        self.ship = Starship.objects.create(
+            name="Endeavour", starship_class=self.cls, agency=self.agency,
+            status="active", maintenance_state=100, location=self.sol,
+        )
+
+        s = SiteSettings.load()
+        s.show_ftl_jumps = True
+        # Flat fuel economy: 5 fuel + 2 spares per jump, condition tick 1.
+        s.jump_economy_config = {
+            "base_fuel": 5, "base_spares": 2, "wear_tick": 1,
+            "fuel_keys": ["helium3"], "spares_keys": ["metals"],
+            "extract_scan_level": 2,
+        }
+        s.save()
+
+    def _jump(self, target_id):
+        return self.client.post(
+            f"/api/starships/ships/{self.ship.id}/jump/",
+            data=json.dumps({"target_system_id": target_id}),
+            content_type="application/json",
+        )
+
+    def _extract(self, key, amount, system=None, agency=None):
+        return self.client.post(
+            f"/api/starmap/systems/{(system or self.sol).id}/extract/",
+            data=json.dumps({
+                "agencyId": (agency or self.agency).id, "resourceKey": key, "amount": amount,
+            }),
+            content_type="application/json",
+        )
+
+    def test_jump_debits_fuel_and_spares_not_big_condition(self):
+        r = self._jump(self.tau.id)
+        self.assertEqual(r.status_code, 200)
+        d = r.json()
+        self.assertEqual(d["costs"], {"fuel": 5, "spares": 2})
+        self.agency.refresh_from_db()
+        self.assertEqual(self.agency.ftl_fuel, 5)    # 10 - 5
+        self.assertEqual(self.agency.ftl_spares, 8)  # 10 - 2
+        self.ship.refresh_from_db()
+        self.assertEqual(self.ship.maintenance_state, 99)  # only the 1% wear tick
+        self.assertEqual(self.ship.location_id, self.tau.id)
+        log = JumpLog.objects.get(kind="jump")
+        self.assertEqual(log.costs, {"fuel": 5, "spares": 2})
+
+    def test_insufficient_fuel_blocks_jump_no_op(self):
+        self.agency.ftl_fuel = 3  # < fuel cost of 5
+        self.agency.save()
+        r = self._jump(self.tau.id)
+        self.assertEqual(r.status_code, 400)
+        self.assertEqual(r.json()["need"]["fuel"], 5)
+        self.assertEqual(r.json()["have"]["fuel"], 3)
+        self.agency.refresh_from_db()
+        self.assertEqual(self.agency.ftl_fuel, 3)     # untouched
+        self.assertEqual(self.agency.ftl_spares, 10)
+        self.ship.refresh_from_db()
+        self.assertEqual(self.ship.location_id, self.sol.id)  # did not move
+        self.assertEqual(JumpLog.objects.count(), 0)
+
+    def test_extract_moves_resource_into_pool(self):
+        r = self._extract("helium3", 20)
+        self.assertEqual(r.status_code, 200)
+        self.assertEqual(r.json()["pool"], "ftl_fuel")
+        self.sol.refresh_from_db()
+        self.assertEqual(self.sol.resources["helium3"], 30)  # 50 - 20
+        self.agency.refresh_from_db()
+        self.assertEqual(self.agency.ftl_fuel, 30)  # 10 + 20
+        self.assertTrue(JumpLog.objects.filter(kind="extract").exists())
+
+    def test_extract_clamps_to_available(self):
+        r = self._extract("helium3", 999)
+        self.assertEqual(r.status_code, 200)
+        self.assertEqual(r.json()["extracted"]["helium3"], 50)  # clamped to what's there
+        self.sol.refresh_from_db()
+        self.assertEqual(self.sol.resources["helium3"], 0)
+
+    def test_extract_unconfigured_resource_rejected(self):
+        r = self._extract("ice", 5)  # not in fuel_keys/spares_keys
+        self.assertEqual(r.status_code, 400)
+        self.assertIn("fuel or spares", r.json()["error"])
+
+    def test_extract_spares_key_routes_to_spares_pool(self):
+        r = self._extract("metals", 10)
+        self.assertEqual(r.status_code, 200)
+        self.assertEqual(r.json()["pool"], "ftl_spares")
+        self.agency.refresh_from_db()
+        self.assertEqual(self.agency.ftl_spares, 20)  # 10 + 10

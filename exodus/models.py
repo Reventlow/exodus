@@ -418,16 +418,20 @@ class SiteSettings(models.Model):
         scale a resource cost by class maintenance and jump distance.
         """
         return {
-            # --- Phase 1 (live) ---
+            # --- Phase 1 (condition-only costing) ---
             "maint_wear_per_jump": 1.0,   # multiplier on class maintenance -> condition % lost
             "resupply_amount": 100,       # condition % restored per resupply (clamped to 100)
             "max_jump_ly": 0,             # 0 = no range cap; >0 rejects longer jumps
-            # --- Phase 2 (inert until agency stockpile is built) ---
+            # --- Phase 2 (fuel/spares economy; active once a jump costs
+            #     fuel or spares, i.e. any of base_fuel/per_maint rates > 0).
+            #     When active, condition wear drops to wear_tick and the real
+            #     cost is the agency fuel/spares stockpile. ---
+            "wear_tick": 1,               # condition % lost per jump once the fuel economy is active
             "distance_divisor": 10.0,     # reserved for distance-scaled costing
-            "fuel_keys": [],              # ResourceType keys that pay the fuel cost
-            "spares_keys": [],            # ResourceType keys that pay the spares cost
-            "fuel_per_maint_ly": 0.0,
-            "spares_per_maint_ly": 0.0,
+            "fuel_keys": [],              # ResourceType keys extractable into Agency.ftl_fuel
+            "spares_keys": [],            # ResourceType keys extractable into Agency.ftl_spares
+            "fuel_per_maint_ly": 0.0,     # fuel cost = ceil(base_fuel + maint * dist_ly * this)
+            "spares_per_maint_ly": 0.0,   # spares cost = ceil(base_spares + maint * dist_ly * this)
             "base_fuel": 0,
             "base_spares": 0,
             "extract_scan_level": 2,      # min scan level to extract resources from a system

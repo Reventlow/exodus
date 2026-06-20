@@ -421,6 +421,7 @@ class JumpLog(models.Model):
     KIND_CHOICES = [
         ("jump", "Jump"),
         ("resupply", "Resupply"),
+        ("extract", "Extract"),
         ("gm_adjust", "GM Adjust"),
     ]
 

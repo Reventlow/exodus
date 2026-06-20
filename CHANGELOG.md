@@ -1,5 +1,13 @@
 # Changelog
 
+## v0.15.45
+- **FTL jumps — Phase 2: the fuel/spares economy.** Jumps can now consume an **agency stockpile** (`Agency.ftl_fuel` / `ftl_spares`) instead of overloading hull condition, and the stockpile is refilled by **extracting system resources** at claimed systems. Fully additive over Phase 1 — inert until the GM configures it
+- **Activation:** the economy turns on as soon as a jump would cost fuel or spares (set `base_fuel`/`base_spares` or `fuel_per_maint_ly`/`spares_per_maint_ly` in `jump_economy_config`). When active: `fuel_cost = ceil(base_fuel + class_maintenance × dist_ly × fuel_per_maint_ly)` (spares likewise), condition wear drops to a small `wear_tick`, and the jump debits `ftl_fuel`/`ftl_spares`. When unconfigured, jumps stay Phase-1 condition-only
+- **Extraction:** new `POST /api/starmap/systems/<id>/extract/` {agencyId, resourceKey, amount} — decrements `StarSystem.resources` in place and credits the agency pool via `F()`. `fuel_keys`/`spares_keys` map which of the 6 system resources feed which pool (default helium3→fuel, metals→spares); gated on the system being claimed by the agency and scanned to `extract_scan_level` (default 2; superuser bypasses). New `JumpLog` kind `extract`
+- **Affordability is concurrency-safe**: the fuel/spares debit is a guarded conditional `UPDATE` inside the jump transaction, so two of an agency's ships jumping at once can't drive a pool negative. Insufficient resources ⇒ clean 400 with need/have, nothing mutated
+- **UI:** ship editor jump panel now shows agency **FUEL / SPARES** pills (when the economy is active), an **EXTRACT** control when the ship is parked at its agency's claimed+scanned system (refuel on-site, then jump), and per-resource cost/shortfall feedback. Agency serializer exposes `ftlFuel`/`ftlSpares`
+- 6 new tests (fuel/spares debit, insufficient-fuel no-op, extraction into the correct pool, clamp-to-available, unconfigured-resource rejection). Migrations: `agencies/0036`, `starships/0012`
+
 ## v0.15.44
 - **FTL jumps — Phase 1: ships now move between systems via a costed jump action.** Previously a ship's location was set by an unvalidated dropdown and the class "maintenance" stat / "No FTL drive" warning were purely cosmetic. Now there's a real jump that finally gives both teeth. Gated behind a new **Settings → Map Visibility → FTL JUMPS** tech toggle (default off; GMs always see the controls)
 - **Cost:** a jump spends hull condition — `wear = max(1, round(class_maintenance × maint_wear_per_jump))`, debited from `Starship.maintenance_state` (the same 0–100 field combat uses). **Flat per jump** (distance is logged but not charged this phase). Insufficient condition / ineligible ⇒ clean 400, nothing moves (atomic, fail-closed)

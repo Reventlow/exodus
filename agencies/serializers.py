@@ -686,6 +686,8 @@ def serialize_agency(agency, user):
         "zeroDayPool": agency.zero_day_pool if is_admin else None,
         "isNuclearPower": agency.is_nuclear_power,
         "sweepPool": agency.sweep_pool,
+        "ftlFuel": agency.ftl_fuel,
+        "ftlSpares": agency.ftl_spares,
         "sweepInfo": _get_sweep_info(agency, user),
         "fringeInfo": _get_fringe_info(agency, user),
         "projectRolls": agency.project_rolls if is_admin else _get_player_rolls(agency, user),

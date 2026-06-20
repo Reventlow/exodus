@@ -495,6 +495,94 @@ def api_claim_system(request, pk):
     return JsonResponse(serialize_star_system(star, user=request.user))
 
 
+@login_required
+@require_http_methods(["POST"])
+def api_extract_resource(request, pk):
+    """Extract a system resource into the claiming agency's FTL fuel/spares pool.
+
+    Body: {agencyId, resourceKey, amount}. Requires the system claimed by the
+    agency and scanned to ``extract_scan_level`` (superuser bypasses both). The
+    resource must be configured as a fuel or spares key in jump_economy_config.
+    Decrements StarSystem.resources in place and credits the pool via F().
+    """
+    from django.db import transaction
+    from django.db.models import F
+    from agencies.models import Agency
+    from exodus.models import SiteSettings
+    from starships.models import JumpLog
+
+    star = get_object_or_404(StarSystem, pk=pk)
+    try:
+        body = json.loads(request.body)
+    except json.JSONDecodeError:
+        return JsonResponse({"error": "Invalid JSON"}, status=400)
+
+    agency_id = body.get("agencyId")
+    resource_key = body.get("resourceKey")
+    try:
+        amount = int(body.get("amount", 0))
+    except (TypeError, ValueError):
+        return JsonResponse({"error": "amount must be an integer"}, status=400)
+    if not agency_id or not resource_key:
+        return JsonResponse({"error": "agencyId and resourceKey required"}, status=400)
+    if amount <= 0:
+        return JsonResponse({"error": "amount must be positive"}, status=400)
+
+    agency = get_object_or_404(Agency, pk=agency_id)
+    if not request.user.is_superuser and _get_user_agency(request.user) != agency:
+        return JsonResponse({"error": "Permission denied"}, status=403)
+
+    cfg = SiteSettings.load().get_jump_economy()
+    fuel_keys = cfg.get("fuel_keys") or []
+    spares_keys = cfg.get("spares_keys") or []
+    if resource_key in fuel_keys:
+        pool = "ftl_fuel"
+    elif resource_key in spares_keys:
+        pool = "ftl_spares"
+    else:
+        return JsonResponse(
+            {"error": "Resource is not configured as fuel or spares."}, status=400,
+        )
+
+    if not request.user.is_superuser:
+        if star.claimed_by_id != agency.id:
+            return JsonResponse({"error": "Claim the system before extracting."}, status=400)
+        need = int(cfg.get("extract_scan_level", 2))
+        has_scan = AgencyScan.objects.filter(
+            agency=agency, star_system=star, scan_level__gte=need,
+        ).exists()
+        if not has_scan:
+            return JsonResponse(
+                {"error": f"Requires scan level {need} to extract."}, status=400,
+            )
+
+    resources = dict(star.resources or {})
+    available = int(resources.get(resource_key, 0) or 0)
+    if available <= 0:
+        return JsonResponse({"error": "No such resource available here."}, status=400)
+    moved = min(amount, available)
+
+    with transaction.atomic():
+        resources[resource_key] = available - moved
+        star.resources = resources
+        star.save(update_fields=["resources", "updated_at"])
+        Agency.objects.filter(pk=agency.id).update(**{pool: F(pool) + moved})
+        agency.refresh_from_db(fields=["ftl_fuel", "ftl_spares"])
+        JumpLog.objects.create(
+            agency=agency, kind="extract",
+            from_system_name=star.name, to_system_name=star.name,
+            distance_ly=0, maintenance_basis=0, wear=0,
+            costs={resource_key: -moved, pool: moved},  # negative resource = credit
+            reason=f"Extracted {moved} {resource_key} -> {pool} at {star.name}",
+        )
+
+    return JsonResponse({
+        "extracted": {resource_key: moved},
+        "pool": pool,
+        "agency": {"ftlFuel": agency.ftl_fuel, "ftlSpares": agency.ftl_spares},
+    })
+
+
 # ---------------------------------------------------------------------------
 # Scan data sharing
 # ---------------------------------------------------------------------------

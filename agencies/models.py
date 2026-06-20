@@ -74,6 +74,17 @@ class Agency(models.Model):
         default=0,
         help_text="Shared Sweep & Clear pool — GM allocates, anyone with Computer skill can use to clear conditions.",
     )
+    # FTL jump economy (Phase 2) — stockpiles spent on jumps, refilled by
+    # extracting system resources at claimed systems. See SiteSettings
+    # jump_economy_config (fuel_keys / spares_keys map system resources here).
+    ftl_fuel = models.IntegerField(
+        default=0,
+        help_text="FTL fuel stockpile. Spent on jumps; refilled by extracting fuel resources at claimed systems.",
+    )
+    ftl_spares = models.IntegerField(
+        default=0,
+        help_text="FTL spares stockpile. Spent on jumps; refilled by extracting spares resources at claimed systems.",
+    )
     is_nuclear_power = models.BooleanField(
         default=False,
         help_text="Agency has council approval to build nuclear reactors.",

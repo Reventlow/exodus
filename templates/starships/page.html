@@ -108,9 +108,12 @@
 const IS_SUPERUSER = {{ is_superuser|yesno:"true,false" }};
 // FTL jumps tech gate; GMs always see the controls even when off for players.
 const SHOW_FTL_JUMPS = {{ show_ftl_jumps|yesno:"true,false" }} || IS_SUPERUSER;
+// Phase 2 fuel/spares economy active (fuel/spares keys configured).
+const ECONOMY_ACTIVE = {{ jump_economy_active|yesno:"true,false" }};
 var CURRENT_TAB = 'classes';
 var CURRENT_CLASS_ID = null;
 var CURRENT_SHIP_ID = null;
+var CURRENT_SHIP = null;  // full serialized ship for the open editor (jump/extract read it)
 var CURRENT_FLEET_ID = null;
 var CLASSES_CACHE = [];
 var SHIPS_CACHE = [];
@@ -275,6 +278,7 @@ function renderShipEditor(ship) {
             '<div class="mono-text text-muted" style="font-size: 0.85rem; text-align: center; padding: 3rem 1rem;">Select a ship from the sidebar.</div>';
         return;
     }
+    CURRENT_SHIP = ship;
     var readOnly = !IS_SUPERUSER && false;  // players can edit their own agency's ships
     var statusColor = STATUS_COLORS[ship.status] || 'var(--text-muted)';
     var html = '';
@@ -381,11 +385,17 @@ function renderShipEditor(ship) {
     html += '</div>';
     html += '</div>';
 
-    // FTL JUMP (Phase 1) — costed move + free resupply at a claimed system.
-    // Gated by the show_ftl_jumps tech gate (GMs always see it).
+    // FTL JUMP — costed move + free resupply (Phase 1); fuel/spares stockpile +
+    // on-site extraction (Phase 2). Gated by the show_ftl_jumps tech gate.
     if (SHOW_FTL_JUMPS && ship.status === 'active') {
         html += '<div style="border-top: 1px solid var(--c-dim); padding-top: 0.7rem; margin-bottom: 0.5rem;">';
-        html += '<div class="mono-text text-muted" style="font-size: 0.6rem; letter-spacing: 1px; margin-bottom: 0.4rem;">FTL JUMP</div>';
+        html += '<div style="display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.4rem;">';
+        html += '<span class="mono-text text-muted" style="font-size: 0.6rem; letter-spacing: 1px;">FTL JUMP</span>';
+        if (ECONOMY_ACTIVE) {
+            html += '<span class="stat-pill" style="font-size: 0.58rem;"><span class="mono-text text-muted">FUEL</span> ' + ship.agency_ftl_fuel + '</span>';
+            html += '<span class="stat-pill" style="font-size: 0.58rem;"><span class="mono-text text-muted">SPARES</span> ' + ship.agency_ftl_spares + '</span>';
+        }
+        html += '</div>';
         if (!ship.has_ftl) {
             html += '<div class="mono-text text-muted" style="font-size: 0.7rem;">No FTL drive — this class cannot jump systems.</div>';
         } else if (!ship.location_id) {
@@ -406,7 +416,29 @@ function renderShipEditor(ship) {
                 html += '<button onclick="resupplyShip()" class="mono-text" style="background: transparent; border: 1px solid var(--c-primary); color: var(--c-primary); padding: 0.3rem 0.7rem; cursor: pointer; border-radius: 0;">RESUPPLY</button>';
             }
             html += '</div>';
-            html += '<div class="mono-text text-muted" style="font-size: 0.62rem; margin-top: 0.35rem;">Jump spends hull condition scaled by class maintenance (' + ship.class_maintenance + '). Ship is at ' + ship.maintenance_state + '%.</div>';
+            if (ECONOMY_ACTIVE) {
+                html += '<div class="mono-text text-muted" style="font-size: 0.62rem; margin-top: 0.35rem;">Jump spends agency FUEL / SPARES, scaled by class maintenance (' + ship.class_maintenance + ') and distance. Condition at ' + ship.maintenance_state + '%.</div>';
+            } else {
+                html += '<div class="mono-text text-muted" style="font-size: 0.62rem; margin-top: 0.35rem;">Jump spends hull condition scaled by class maintenance (' + ship.class_maintenance + '). Ship is at ' + ship.maintenance_state + '%.</div>';
+            }
+            // EXTRACT — refuel by mining the current (claimed + scanned) system.
+            var exKeys = Object.keys(ship.extractable || {});
+            if (exKeys.length) {
+                html += '<div style="display: flex; gap: 0.5rem; align-items: flex-end; flex-wrap: wrap; margin-top: 0.5rem;">';
+                html += '<div style="display: flex; flex-direction: column; gap: 0.15rem; flex: 1 1 160px;">';
+                html += '<label class="text-muted mono-text" style="font-size: 0.58rem;">EXTRACT HERE</label>';
+                html += '<select id="extract-key" class="mono-input">';
+                exKeys.forEach(function(k) {
+                    html += '<option value="' + escapeHtml(k) + '">' + escapeHtml(k) + ' (' + ship.extractable[k] + ' avail)</option>';
+                });
+                html += '</select></div>';
+                html += '<div style="display: flex; flex-direction: column; gap: 0.15rem;">';
+                html += '<label class="text-muted mono-text" style="font-size: 0.58rem;">AMOUNT</label>';
+                html += '<input type="number" id="extract-amount" value="1" min="1" class="mono-input" style="width: 90px;">';
+                html += '</div>';
+                html += '<button onclick="extractHere()" class="mono-text" style="background: transparent; border: 1px solid var(--accent-warning); color: var(--accent-warning); padding: 0.3rem 0.7rem; cursor: pointer; border-radius: 0;">EXTRACT</button>';
+                html += '</div>';
+            }
         }
         html += '<div id="jump-msg" class="mono-text" style="font-size: 0.7rem; margin-top: 0.35rem;"></div>';
         html += '</div>';
@@ -427,12 +459,41 @@ function jumpShip() {
         if (d && d.error) {
             var t = d.error;
             if (d.required != null) t += ' (needs ' + d.required + '%, have ' + d.available + '%)';
+            if (d.need) t += ' (needs fuel ' + d.need.fuel + ' / spares ' + d.need.spares + ', have fuel ' + d.have.fuel + ' / spares ' + d.have.spares + ')';
             if (msg) { msg.textContent = t; msg.style.color = 'var(--accent-danger)'; }
             return;
         }
-        if (msg) { msg.textContent = 'Jumped ' + d.distance_ly + ' ly · −' + d.wear + '% condition'; msg.style.color = 'var(--accent-success)'; }
+        var line = 'Jumped ' + d.distance_ly + ' ly';
+        if (d.costs && (d.costs.fuel || d.costs.spares)) line += ' · −fuel ' + d.costs.fuel + ' / spares ' + d.costs.spares;
+        else line += ' · −' + d.wear + '% condition';
+        if (msg) { msg.textContent = line; msg.style.color = 'var(--accent-success)'; }
         renderShipEditor(d.ship);
         loadShips();
+    });
+}
+
+function extractHere() {
+    if (!CURRENT_SHIP || !CURRENT_SHIP.location_id) return;
+    var keyEl = document.getElementById('extract-key');
+    var amtEl = document.getElementById('extract-amount');
+    if (!keyEl || !keyEl.value) return;
+    var amount = parseInt(amtEl.value, 10) || 0;
+    if (amount <= 0) return;
+    var msg = document.getElementById('jump-msg');
+    if (msg) msg.textContent = '';
+    api('/api/starmap/systems/' + CURRENT_SHIP.location_id + '/extract/', {
+        method: 'POST', allowError: true,
+        body: JSON.stringify({
+            agencyId: CURRENT_SHIP.agency_id,
+            resourceKey: keyEl.value,
+            amount: amount,
+        }),
+    }).then(function(d) {
+        if (d && d.error) { if (msg) { msg.textContent = d.error; msg.style.color = 'var(--accent-danger)'; } return; }
+        var k = Object.keys(d.extracted)[0];
+        if (msg) { msg.textContent = 'Extracted ' + d.extracted[k] + ' ' + k + ' → ' + d.pool + ' (fuel ' + d.agency.ftlFuel + ' / spares ' + d.agency.ftlSpares + ')'; msg.style.color = 'var(--accent-success)'; }
+        // Re-fetch the ship so its extractable amounts + agency pools refresh.
+        api('/api/starships/ships/' + CURRENT_SHIP_ID + '/').then(function(ship) { renderShipEditor(ship); });
     });
 }
 
