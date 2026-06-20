@@ -661,6 +661,15 @@ def _scanning_turn_state():
     return {"open": s.scanning_turn_open, "number": s.scanning_turn_number}
 
 
+def _agency_star_scans(agency):
+    """The agency's private star database — its AgencyScan rows with the new
+    accumulated/target/uncertainty fields (most-progressed first)."""
+    from starmap.serializers import serialize_agency_scan
+    scans = (agency.star_scans.select_related("star_system")
+             .filter(current_successes__gt=0).order_by("-current_successes"))
+    return [serialize_agency_scan(s) for s in scans]
+
+
 def serialize_agency(agency, user):
     """Full agency data for API responses.
 
@@ -711,6 +720,7 @@ def serialize_agency(agency, user):
         "ftlSpares": agency.ftl_spares,
         "observatories": _agency_observatories(agency),
         "scanningTurn": _scanning_turn_state(),
+        "starScans": _agency_star_scans(agency),
         "sweepInfo": _get_sweep_info(agency, user),
         "fringeInfo": _get_fringe_info(agency, user),
         "projectRolls": agency.project_rolls if is_admin else _get_player_rolls(agency, user),

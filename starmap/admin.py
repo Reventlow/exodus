@@ -15,8 +15,9 @@ class PlanetInline(admin.TabularInline):
 
 @admin.register(StarSystem)
 class StarSystemAdmin(admin.ModelAdmin):
-    list_display = ["name", "distance", "spectral_type", "planets", "claimed_by", "scan_level_truth"]
-    list_filter = ["spectral_type", "is_sol", "is_endgame"]
+    list_display = ["name", "distance", "spectral_type", "discovered", "has_livable_planet", "difficulty_mod", "claimed_by"]
+    list_editable = ["discovered", "has_livable_planet", "difficulty_mod"]
+    list_filter = ["discovered", "has_livable_planet", "spectral_type", "is_sol", "is_endgame"]
     search_fields = ["name"]
     inlines = [StarSystemCivilisationInline, PlanetInline]
 

@@ -1,0 +1,113 @@
+{% verbatim %}
+<script type="text/babel">
+// STAR INTEL — agency star-database scanning panel (Phase 1b).
+// Lists the agency's observatories (one scan each per open scanning turn) and
+// the accumulated private scan database with uncertainty% + approximate readout.
+const StarIntelModule = ({ observatories = [], scanningTurn = {}, starScans = [], agencyId, fetchAgency }) => {
+    const { useState, useEffect } = React;
+    const { getCookie } = window;
+    const ACCENT = '#7fdcff';
+
+    const [systems, setSystems] = useState([]);
+    const [picks, setPicks] = useState({});   // { baseId: starSystemId }
+    const [msg, setMsg] = useState('');
+    const [busy, setBusy] = useState(false);
+
+    useEffect(() => {
+        fetch('/api/starmap/systems/').then(r => (r.ok ? r.json() : []))
+            .then(data => setSystems((data || []).filter(s => s.discovered)))
+            .catch(() => {});
+    }, []);
+
+    const turnOpen = !!scanningTurn.open;
+
+    const scan = (baseId) => {
+        const starId = picks[baseId];
+        if (!starId) { setMsg('Pick a system to scan first.'); return; }
+        setBusy(true); setMsg('');
+        fetch(`/api/agencies/${agencyId}/observatory-scan/`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'X-CSRFToken': getCookie('csrftoken') },
+            body: JSON.stringify({ baseId, starSystemId: starId }),
+        }).then(r => r.json().then(d => ({ ok: r.ok, d })))
+          .then(({ ok, d }) => {
+              setBusy(false);
+              if (!ok) { setMsg(d.error || 'Scan failed.'); return; }
+              setMsg(`${d.pool} dice → ${d.successes} successes · now ${d.uncertainty}% uncertain (${d.accumulated}/${d.target}).`);
+              if (fetchAgency) fetchAgency();
+          }).catch(() => { setBusy(false); setMsg('Network error.'); });
+    };
+
+    return (
+        <div className="glass-panel" style={{ padding: '1.5rem', marginBottom: '1rem' }}>
+            <header className="block-head" style={{ marginBottom: '1rem' }}>
+                <span className="block-bullet">■</span>
+                <h3>STAR INTEL</h3>
+                <span className="block-line"></span>
+                <span className="block-badge" style={{ color: turnOpen ? '#22c55e' : 'var(--text-muted)' }}>
+                    {turnOpen ? `TURN ${scanningTurn.number} OPEN` : 'TURN CLOSED'}
+                </span>
+            </header>
+
+            {/* Observatories — one scan each per turn */}
+            <div className="mono-text text-muted" style={{ fontSize: '0.65rem', letterSpacing: '1px', marginBottom: '0.45rem' }}>OBSERVATORIES</div>
+            {observatories.length === 0 && (
+                <div className="text-muted" style={{ fontSize: '0.8rem', marginBottom: '0.75rem' }}>
+                    No observatories. Build an Observatory facility on a base (Ground Telescope = +5, Deep-Space Tracking = +5 dice).
+                </div>
+            )}
+            {observatories.map(o => (
+                <div key={o.baseId} style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', marginBottom: '0.4rem', flexWrap: 'wrap' }}>
+                    <span className="mono-text" style={{ fontSize: '0.8rem', flex: '1 1 150px' }}>
+                        {o.baseName} <span className="text-muted">({o.dice}d)</span>
+                    </span>
+                    <select
+                        value={picks[o.baseId] || ''}
+                        disabled={!turnOpen || o.usedThisTurn}
+                        onChange={e => setPicks({ ...picks, [o.baseId]: e.target.value ? parseInt(e.target.value, 10) : null })}
+                        className="mono-input" style={{ flex: '1 1 170px' }}>
+                        <option value="">— system —</option>
+                        {systems.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+                    </select>
+                    <button onClick={() => scan(o.baseId)} disabled={busy || !turnOpen || o.usedThisTurn}
+                        className="mono-text"
+                        style={{ background: 'transparent', border: `1px solid ${ACCENT}`, color: ACCENT, padding: '0.3rem 0.7rem', cursor: 'pointer', borderRadius: 0, opacity: (!turnOpen || o.usedThisTurn) ? 0.4 : 1 }}>
+                        {o.usedThisTurn ? 'USED' : 'SCAN'}
+                    </button>
+                </div>
+            ))}
+            {msg && <div className="mono-text" style={{ fontSize: '0.7rem', marginTop: '0.35rem', color: ACCENT }}>{msg}</div>}
+            {!turnOpen && observatories.length > 0 && (
+                <div className="text-muted" style={{ fontSize: '0.7rem', marginTop: '0.35rem' }}>Scanning turn is closed — the GM opens it in Site Settings.</div>
+            )}
+
+            {/* Star database — accumulated private readouts */}
+            <div className="mono-text text-muted" style={{ fontSize: '0.65rem', letterSpacing: '1px', margin: '1rem 0 0.45rem' }}>STAR DATABASE</div>
+            {starScans.length === 0 && <div className="text-muted" style={{ fontSize: '0.8rem' }}>No scan data yet.</div>}
+            {starScans.map(sc => {
+                const u = sc.uncertainty;
+                const col = u <= 0 ? '#22c55e' : (u <= 40 ? '#f59e0b' : '#ef4444');
+                const res = sc.scannedResources || {};
+                return (
+                    <div key={sc.id} style={{ borderTop: '1px solid var(--c-dim)', padding: '0.5rem 0' }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '0.5rem' }}>
+                            <span className="mono-text" style={{ fontSize: '0.85rem' }}>{sc.starSystemName}</span>
+                            <span className="mono-text" style={{ fontSize: '0.7rem', color: col }}>{u}% uncertain · {sc.accumulated}/{sc.target}</span>
+                        </div>
+                        <div style={{ height: '4px', background: 'var(--bg-input)', marginTop: '0.3rem' }}>
+                            <div style={{ height: '100%', width: `${100 - u}%`, background: col }}></div>
+                        </div>
+                        {Object.keys(res).length > 0 && (
+                            <div className="text-muted" style={{ fontSize: '0.65rem', marginTop: '0.3rem' }}>
+                                {Object.entries(res).map(([k, v]) => `${k}: ${v.min}–${v.max}`).join('  ·  ')}
+                            </div>
+                        )}
+                    </div>
+                );
+            })}
+        </div>
+    );
+};
+window.StarIntelModule = StarIntelModule;
+</script>
+{% endverbatim %}

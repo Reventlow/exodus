@@ -1,5 +1,12 @@
 # Changelog
 
+## v0.15.48
+- **Star-intel scanning — Phase 1b (player panel + GM editing).** The scanning engine now has a UI: a new **STAR INTEL** panel on the agency sheet (`templates/agencies/components/_star_intel.html`)
+- Panel shows the scanning-turn status, the agency's **observatories** (each with its dice and whether it's been used this turn), a per-observatory **system picker + SCAN button** (disabled when the turn is closed or that observatory already scanned), and the agency's **STAR DATABASE** — each scanned system with an uncertainty% bar (green ≤0, amber ≤40, red above) and the approximate resource readout
+- `serialize_agency` now emits `starScans` (the agency's private scan rows with accumulated/target/uncertainty); the panel POSTs to the Phase-1a observatory-scan endpoint and re-fetches on success
+- **GM editing:** the StarSystem admin now surfaces `discovered`, `has_livable_planet`, and `difficulty_mod` as inline-editable list columns with filters, so the GM can mark systems discovered / set the livable truth / tune difficulty in bulk from `/admin/starmap/starsystem/`
+- Template + serializer only (no migration). Next: Phase 2 (public record + GM oversight), Phase 3 (false data + filtering)
+
 ## v0.15.47
 - **Star-intel scanning system — Phase 1a (engine + GM controls).** Reworks the dormant scan system into the new agency intelligence game: a single source of truth per system, observatory-driven rolls, and accumulating-uncertainty data. Backend + GM controls now; the player-facing agency-sheet panel lands in 1b
 - **Single source of truth on `StarSystem`:** new `discovered` (GM gate — must be discovered to scan), `has_livable_planet` (the truth scans approximate), and `difficulty_mod` (−10…+10 → target successes = `15 + mod`, clamped 5–25). Settable by the GM via the system PUT endpoint

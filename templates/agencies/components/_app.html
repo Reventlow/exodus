@@ -12,6 +12,7 @@ const {
     TableModule, FTLProjectsModule, FTL_ACCENT,
     ChangeRequestPanel,
     BaseNotesModule, BasesModule, BASE_ACCENT,
+    StarIntelModule,
 } = window;
 
     // --- DICE ROLLER ---
@@ -909,6 +910,14 @@ const {
                     bases={agency.bases || []}
                     npcs={agency.assignableNpcs || []}
                     projectRolls={agency.projectRolls || {}}
+                    fetchAgency={fetchAgency}
+                />
+
+                <StarIntelModule
+                    observatories={agency.observatories || []}
+                    scanningTurn={agency.scanningTurn || {}}
+                    starScans={agency.starScans || []}
+                    agencyId={AGENCY_ID}
                     fetchAgency={fetchAgency}
                 />
 
