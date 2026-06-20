@@ -1,5 +1,14 @@
 # Changelog
 
+## v0.15.44
+- **FTL jumps — Phase 1: ships now move between systems via a costed jump action.** Previously a ship's location was set by an unvalidated dropdown and the class "maintenance" stat / "No FTL drive" warning were purely cosmetic. Now there's a real jump that finally gives both teeth. Gated behind a new **Settings → Map Visibility → FTL JUMPS** tech toggle (default off; GMs always see the controls)
+- **Cost:** a jump spends hull condition — `wear = max(1, round(class_maintenance × maint_wear_per_jump))`, debited from `Starship.maintenance_state` (the same 0–100 field combat uses). **Flat per jump** (distance is logged but not charged this phase). Insufficient condition / ineligible ⇒ clean 400, nothing moves (atomic, fail-closed)
+- **Eligibility:** ship must be `active`, its class must have an FTL drive (`provides_ftl` module), have a current location, and the target must not be the current system or an endgame beacon. Optional `max_jump_ly` range cap (0 = unlimited)
+- **Resupply:** free + instant restore of condition at a system the ship's agency has claimed (`POST .../resupply/`)
+- New endpoints `POST /api/starships/ships/<id>/jump/` and `/resupply/`, a `JumpLog` audit model (one row per jump/resupply; survives ship deletion; `costs` JSON reserved for Phase 2), and a **JUMP / RESUPPLY** block in the ship editor (`templates/starships/page.html`) with inline cost/error feedback
+- **GM tuning** lives in `SiteSettings.jump_economy_config` (JSON, no migration to retune): `maint_wear_per_jump`, `resupply_amount`, `max_jump_ly` exposed as inputs in Settings; the remaining keys (fuel/spares mapping to the 6 system resources) are inert scaffolding for **Phase 2** (agency fuel stockpile + resource extraction), which bolts on with no rework
+- 14 new tests (`starships/tests.py`) covering cost, flat-distance, fail-closed no-ops, eligibility gates, range cap, resupply, and config merge. Migrations: `exodus/0023`, `starships/0011`
+
 ## v0.15.43
 - **Star-map tech gates are now GM-toggled instead of hardcoded.** FTL route planning and Exotic Matter are hidden *until the players discover them in-game*, then revealed by ticking a box in Settings — no deploy needed. Replaces the v0.15.42 code-level hide
 - Two new `SiteSettings` booleans (`show_ftl_route_planning`, `show_exotic_matter`, both default **False** = hidden), surfaced as a **STAR MAP — TECH GATES** block under Settings → Map Visibility with ENABLED/DISABLED pills. Guarded by a hidden `map_vis_submitted` marker so saves from other settings forms (weapons/armor/etc., which hit the same view) can't reset them — same pattern as the class-unlock toggles

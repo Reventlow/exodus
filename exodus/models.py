@@ -226,6 +226,10 @@ class SiteSettings(models.Model):
         default=False,
         help_text="Show Exotic Matter in star-map system resource readouts. Enable once players can detect exotic matter.",
     )
+    show_ftl_jumps = models.BooleanField(
+        default=False,
+        help_text="Enable FTL jumps: ships move between systems via a costed jump action that spends hull condition. Enable once players have FTL travel.",
+    )
     show_council = models.BooleanField(
         default=True,
         help_text="Show COUNCIL link in navigation.",
@@ -255,6 +259,16 @@ class SiteSettings(models.Model):
             "all characters. Use when the campaign has no character of that "
             "class so the mechanics are not inaccessible."
         ),
+    )
+
+    # FTL jump economy — all tunable numbers live here as JSON so balance
+    # changes ship with no migration. Phase-1 uses maint_wear_per_jump +
+    # resupply_amount; the remaining keys are inert until the Phase-2 agency
+    # fuel/spares stockpile is built (cost formula + JumpLog.costs are already
+    # wired for them). See SiteSettings.default_jump_economy().
+    jump_economy_config = models.JSONField(
+        default=dict, blank=True,
+        help_text="Tunable FTL-jump economy coefficients (see default_jump_economy()).",
     )
 
     # Nav bar label customisation
@@ -387,6 +401,44 @@ class SiteSettings(models.Model):
         merged = self.default_tweaks()
         if isinstance(self.tweaks, dict):
             merged.update({k: v for k, v in self.tweaks.items() if k in merged})
+        return merged
+
+    @staticmethod
+    def default_jump_economy():
+        """Canonical FTL-jump economy coefficients.
+
+        Phase-1 (active): a jump costs hull condition only —
+        ``cost = max(1, round(class_maintenance * maint_wear_per_jump))`` —
+        debited from ``Starship.maintenance_state``; ``resupply_amount`` is
+        restored (capped at 100) when refuelling at a claimed system. Cost is
+        FLAT per jump (distance is logged but not charged).
+
+        Phase-2 (inert until the agency fuel/spares stockpile exists): the
+        remaining keys map system ResourceType keys to fuel/spares pools and
+        scale a resource cost by class maintenance and jump distance.
+        """
+        return {
+            # --- Phase 1 (live) ---
+            "maint_wear_per_jump": 1.0,   # multiplier on class maintenance -> condition % lost
+            "resupply_amount": 100,       # condition % restored per resupply (clamped to 100)
+            "max_jump_ly": 0,             # 0 = no range cap; >0 rejects longer jumps
+            # --- Phase 2 (inert until agency stockpile is built) ---
+            "distance_divisor": 10.0,     # reserved for distance-scaled costing
+            "fuel_keys": [],              # ResourceType keys that pay the fuel cost
+            "spares_keys": [],            # ResourceType keys that pay the spares cost
+            "fuel_per_maint_ly": 0.0,
+            "spares_per_maint_ly": 0.0,
+            "base_fuel": 0,
+            "base_spares": 0,
+            "extract_scan_level": 2,      # min scan level to extract resources from a system
+        }
+
+    def get_jump_economy(self):
+        """Saved jump-economy config merged over defaults so partial saves
+        never leak missing keys to the jump endpoint."""
+        merged = self.default_jump_economy()
+        if isinstance(self.jump_economy_config, dict):
+            merged.update({k: v for k, v in self.jump_economy_config.items() if k in merged})
         return merged
 
     @staticmethod

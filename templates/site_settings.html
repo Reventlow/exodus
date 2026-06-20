@@ -300,15 +300,42 @@
                     <span class="mono-text" style="font-size: 0.9rem; color: var(--ink);">FTL ROUTE PLANNING</span>
                     <span class="status-pill {% if settings_obj.show_ftl_route_planning %}s-active{% else %}s-inactive{% endif %}" style="margin-left:auto;">{% if settings_obj.show_ftl_route_planning %}ENABLED{% else %}DISABLED{% endif %}</span>
                 </label>
-                <label style="display: flex; align-items: center; gap: 0.75rem; cursor: pointer;">
+                <label style="display: flex; align-items: center; gap: 0.75rem; cursor: pointer; margin-bottom: 0.5rem;">
                     <input type="checkbox" name="show_exotic_matter" {% if settings_obj.show_exotic_matter %}checked{% endif %}
                         style="width: 20px; height: 20px; accent-color: var(--c-primary);">
                     <span class="mono-text" style="font-size: 0.9rem; color: var(--ink);">EXOTIC MATTER DETECTION</span>
                     <span class="status-pill {% if settings_obj.show_exotic_matter %}s-active{% else %}s-inactive{% endif %}" style="margin-left:auto;">{% if settings_obj.show_exotic_matter %}ENABLED{% else %}DISABLED{% endif %}</span>
                 </label>
+                <label style="display: flex; align-items: center; gap: 0.75rem; cursor: pointer;">
+                    <input type="checkbox" name="show_ftl_jumps" {% if settings_obj.show_ftl_jumps %}checked{% endif %}
+                        style="width: 20px; height: 20px; accent-color: var(--c-primary);">
+                    <span class="mono-text" style="font-size: 0.9rem; color: var(--ink);">FTL JUMPS</span>
+                    <span class="status-pill {% if settings_obj.show_ftl_jumps %}s-active{% else %}s-inactive{% endif %}" style="margin-left:auto;">{% if settings_obj.show_ftl_jumps %}ENABLED{% else %}DISABLED{% endif %}</span>
+                </label>
                 <span class="text-muted mono-text" style="font-size: 0.7rem; display: block; margin-top: 0.5rem; padding-left: 2.75rem;">
-                    Off until the players discover these in-game. Enabling reveals the FTL route-planning panel / Exotic Matter resource on the star map for everyone.
+                    Off until the players discover these in-game. FTL ROUTE PLANNING / EXOTIC MATTER reveal star-map features; FTL JUMPS enables the costed jump + resupply actions in the ship editor.
                 </span>
+
+                {% with je=settings_obj.get_jump_economy %}
+                <div class="mono-text text-muted" style="font-size: 0.7rem; margin: 1.1rem 0 0.5rem; letter-spacing: 1px;">FTL JUMP ECONOMY (TUNING)</div>
+                <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 0.5rem;">
+                    <div style="display: flex; flex-direction: column; gap: 0.15rem;">
+                        <label class="text-muted mono-text" style="font-size: 0.58rem;">WEAR / JUMP (× maint)</label>
+                        <input type="number" step="0.1" min="0" name="jump_maint_wear" value="{{ je.maint_wear_per_jump }}" class="ss-input" style="padding: 0.4rem;">
+                    </div>
+                    <div style="display: flex; flex-direction: column; gap: 0.15rem;">
+                        <label class="text-muted mono-text" style="font-size: 0.58rem;">RESUPPLY % RESTORED</label>
+                        <input type="number" step="1" min="0" name="jump_resupply_amount" value="{{ je.resupply_amount }}" class="ss-input" style="padding: 0.4rem;">
+                    </div>
+                    <div style="display: flex; flex-direction: column; gap: 0.15rem;">
+                        <label class="text-muted mono-text" style="font-size: 0.58rem;">MAX JUMP LY (0=∞)</label>
+                        <input type="number" step="1" min="0" name="jump_max_ly" value="{{ je.max_jump_ly }}" class="ss-input" style="padding: 0.4rem;">
+                    </div>
+                </div>
+                <span class="text-muted mono-text" style="font-size: 0.7rem; display: block; margin-top: 0.4rem;">
+                    Jump cost = max(1, round(class maintenance × wear/jump)) condition %, debited from the ship. Resupply is free at a claimed system. Distance is logged but not charged.
+                </span>
+                {% endwith %}
             </div>
             <button type="submit" class="btn-primary" style="width: 100%;">SAVE</button>
         </div>

@@ -406,3 +406,53 @@ class Starship(models.Model):
 
     def __str__(self):
         return f"{self.name} ({self.starship_class.name})"
+
+
+class JumpLog(models.Model):
+    """Audit ledger for FTL jumps and resupplies (Phase 1).
+
+    One row per jump or resupply action. Cloned in shape from
+    ``agencies.BaseXpLog`` — denormalised system names so history stays
+    readable after systems are renamed/deleted, and ``ship`` is SET_NULL so a
+    row survives hull deletion. ``costs`` is empty in Phase 1 and carries the
+    per-resource spend once the agency fuel/spares stockpile exists.
+    """
+
+    KIND_CHOICES = [
+        ("jump", "Jump"),
+        ("resupply", "Resupply"),
+        ("gm_adjust", "GM Adjust"),
+    ]
+
+    ship = models.ForeignKey(
+        "Starship",
+        on_delete=models.SET_NULL,
+        null=True, blank=True, related_name="jump_logs",
+    )
+    agency = models.ForeignKey(
+        "agencies.Agency",
+        on_delete=models.CASCADE,
+        related_name="jump_logs",
+    )
+    kind = models.CharField(max_length=20, choices=KIND_CHOICES, default="jump")
+    from_system_name = models.CharField(max_length=200, blank=True, default="")
+    to_system_name = models.CharField(max_length=200, blank=True, default="")
+    distance_ly = models.FloatField(default=0)
+    maintenance_basis = models.IntegerField(
+        default=0, help_text="Class maintenance value at action time (cost basis).",
+    )
+    wear = models.IntegerField(
+        default=0, help_text="Condition % lost (jump) or restored (resupply, negative).",
+    )
+    costs = models.JSONField(
+        default=dict, blank=True,
+        help_text="Per-resource spend {resource_key: qty}. Empty in Phase 1.",
+    )
+    reason = models.CharField(max_length=300, blank=True, default="")
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+
+    def __str__(self):
+        return f"{self.kind}: {self.from_system_name} -> {self.to_system_name}"

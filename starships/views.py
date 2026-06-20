@@ -15,6 +15,7 @@ from django.views.decorators.http import require_GET, require_http_methods
 from .models import (
     ClassModule,
     Fleet,
+    JumpLog,
     ShipModule,
     ShipModuleSection,
     ShipType,
@@ -878,6 +879,14 @@ def _serialize_ship(ship):
         "current_crew": ship.current_crew,
         "required_crew": stats["required_crew"],
         "maintenance_state": ship.maintenance_state,
+        # FTL-jump support (Phase 1): the class's derived maintenance is the
+        # jump cost basis; has_ftl gates eligibility; location_claimed gates
+        # free resupply.
+        "has_ftl": stats["has_ftl"],
+        "class_maintenance": stats["maintenance"],
+        "location_claimed": bool(
+            ship.location_id and ship.location.claimed_by_id == ship.agency_id
+        ),
         "current_successes": ship.current_successes,
         "build_required_successes": cls.build_required_successes,
         "starship_class_id": cls.id,
@@ -1105,6 +1114,144 @@ def api_ship_construction_roll(request, pk):
     })
 
 
+def _system_distance_ly(a, b):
+    """Euclidean light-year distance between two StarSystems (matches the
+    star map's client-side distBetween in templates/starmap/demo.html)."""
+    import math
+    return math.sqrt((a.x - b.x) ** 2 + (a.y - b.y) ** 2 + (a.z - b.z) ** 2)
+
+
+@login_required
+@require_http_methods(["POST"])
+def api_ship_jump(request, pk):
+    """Execute an FTL jump to a target StarSystem (Phase 1).
+
+    Cost is FLAT per jump: ``wear = max(1, round(class_maintenance *
+    maint_wear_per_jump))`` (distance is logged but not charged), debited from
+    ``Starship.maintenance_state``. Fail-closed: any ineligibility or
+    insufficient condition returns 400 and NOTHING is mutated.
+    """
+    from django.db import transaction
+    from exodus.models import SiteSettings
+    from starmap.models import StarSystem
+
+    ship = get_object_or_404(
+        Starship.objects.select_related(
+            "starship_class", "starship_class__ship_type", "agency", "location",
+        ),
+        pk=pk,
+    )
+    if not _can_edit_ship(request.user, ship):
+        return JsonResponse({"error": "Permission denied"}, status=403)
+
+    settings_obj = SiteSettings.load()
+    if not settings_obj.show_ftl_jumps and not request.user.is_superuser:
+        return JsonResponse({"error": "FTL jumps are not enabled."}, status=403)
+    cfg = settings_obj.get_jump_economy()
+
+    # --- Eligibility ---
+    if ship.status != "active":
+        return JsonResponse({"error": "Only active ships can jump."}, status=400)
+    stats = compute_class_stats(ship.starship_class)
+    if not stats["has_ftl"]:
+        return JsonResponse({"error": "No FTL drive — cannot jump systems."}, status=400)
+    if ship.location_id is None:
+        return JsonResponse({"error": "Ship has no current location to jump from."}, status=400)
+
+    try:
+        body = json.loads(request.body)
+    except json.JSONDecodeError:
+        return JsonResponse({"error": "Invalid JSON"}, status=400)
+    target_id = body.get("target_system_id")
+    if not target_id:
+        return JsonResponse({"error": "target_system_id required"}, status=400)
+    try:
+        target = StarSystem.objects.get(pk=target_id)
+    except StarSystem.DoesNotExist:
+        return JsonResponse({"error": "target system not found"}, status=400)
+    if target.id == ship.location_id:
+        return JsonResponse({"error": "Ship is already at that system."}, status=400)
+    if target.is_endgame:
+        return JsonResponse({"error": "Beyond displacement range."}, status=400)
+
+    origin = ship.location
+    dist_ly = _system_distance_ly(origin, target)
+    max_ly = cfg.get("max_jump_ly") or 0
+    if max_ly and dist_ly > max_ly:
+        return JsonResponse(
+            {"error": f"Beyond drive range ({dist_ly:.1f} ly > {max_ly} ly)."},
+            status=400,
+        )
+
+    # --- Cost (flat) ---
+    maint = max(1, int(stats["maintenance"]))
+    wear = max(1, round(maint * float(cfg.get("maint_wear_per_jump", 1.0))))
+
+    # --- Affordability: fail-closed, no partial mutation ---
+    if ship.maintenance_state - wear < 0:
+        return JsonResponse({
+            "error": "Insufficient maintenance to jump.",
+            "required": wear, "available": ship.maintenance_state,
+        }, status=400)
+
+    with transaction.atomic():
+        ship.maintenance_state = max(0, min(100, ship.maintenance_state - wear))
+        ship.location = target
+        ship.save(update_fields=["maintenance_state", "location", "updated_at"])
+        JumpLog.objects.create(
+            ship=ship, agency=ship.agency, kind="jump",
+            from_system_name=origin.name, to_system_name=target.name,
+            distance_ly=dist_ly, maintenance_basis=maint, wear=wear,
+            reason=f"{ship.name} jumped {origin.name} -> {target.name}",
+        )
+
+    return JsonResponse({
+        "ship": _serialize_ship(ship),
+        "distance_ly": round(dist_ly, 2),
+        "wear": wear,
+    })
+
+
+@login_required
+@require_http_methods(["POST"])
+def api_ship_resupply(request, pk):
+    """Restore hull condition (free + instant) at a system the ship's agency
+    has claimed. Phase 1 resupply; gated behind show_ftl_jumps."""
+    from exodus.models import SiteSettings
+
+    ship = get_object_or_404(
+        Starship.objects.select_related("agency", "location"), pk=pk,
+    )
+    if not _can_edit_ship(request.user, ship):
+        return JsonResponse({"error": "Permission denied"}, status=403)
+
+    settings_obj = SiteSettings.load()
+    if not settings_obj.show_ftl_jumps and not request.user.is_superuser:
+        return JsonResponse({"error": "FTL jumps are not enabled."}, status=403)
+    cfg = settings_obj.get_jump_economy()
+
+    if ship.location_id is None or ship.location.claimed_by_id != ship.agency_id:
+        return JsonResponse(
+            {"error": "Resupply requires being at a system your agency has claimed."},
+            status=400,
+        )
+    if ship.maintenance_state >= 100:
+        return JsonResponse({"error": "Ship is already at full condition."}, status=400)
+
+    before = ship.maintenance_state
+    restore = int(cfg.get("resupply_amount", 100))
+    ship.maintenance_state = max(0, min(100, ship.maintenance_state + restore))
+    ship.save(update_fields=["maintenance_state", "updated_at"])
+    JumpLog.objects.create(
+        ship=ship, agency=ship.agency, kind="resupply",
+        from_system_name=ship.location.name, to_system_name=ship.location.name,
+        distance_ly=0, maintenance_basis=0,
+        wear=-(ship.maintenance_state - before),
+        reason=f"{ship.name} resupplied at {ship.location.name}",
+    )
+    return JsonResponse({"ship": _serialize_ship(ship)})
+
+
 # ---------------------------------------------------------------------------
 # Fleets (Release E)
 # ---------------------------------------------------------------------------
@@ -1274,11 +1421,12 @@ def starships_page(request):
     Staff always see it; players only when SiteSettings.show_starships
     is toggled on from Settings > Map Visibility.
     """
+    from exodus.models import SiteSettings
+    settings_obj = SiteSettings.load()
     if not request.user.is_staff:
-        from exodus.models import SiteSettings
-        settings_obj = SiteSettings.load()
         if not settings_obj.show_starships:
             return HttpResponseForbidden("STARSHIPS ACCESS DISABLED")
     return render(request, "starships/page.html", {
         "is_superuser": request.user.is_superuser,
+        "show_ftl_jumps": settings_obj.show_ftl_jumps,
     })

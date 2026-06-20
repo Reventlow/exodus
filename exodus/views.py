@@ -51,6 +51,24 @@ def site_settings(request):
         if "map_vis_submitted" in request.POST:
             settings_obj.show_ftl_route_planning = "show_ftl_route_planning" in request.POST
             settings_obj.show_exotic_matter = "show_exotic_matter" in request.POST
+            settings_obj.show_ftl_jumps = "show_ftl_jumps" in request.POST
+            # FTL-jump economy tuning. Merge over current config so keys not on
+            # the form (the Phase-2 coefficients) are preserved.
+            je = settings_obj.get_jump_economy()
+
+            def _je_num(name, default, cast):
+                raw = request.POST.get(name, "").strip()
+                if raw == "":
+                    return default
+                try:
+                    return cast(raw)
+                except (TypeError, ValueError):
+                    return default
+
+            je["maint_wear_per_jump"] = max(0.0, _je_num("jump_maint_wear", je["maint_wear_per_jump"], float))
+            je["resupply_amount"] = max(0, _je_num("jump_resupply_amount", je["resupply_amount"], int))
+            je["max_jump_ly"] = max(0, _je_num("jump_max_ly", je["max_jump_ly"], int))
+            settings_obj.jump_economy_config = je
         settings_obj.show_council = "show_council" in request.POST
         settings_obj.council_mode = request.POST.get("council_mode", "agency")
         settings_obj.enforce_ship_slot_budget = "enforce_ship_slot_budget" in request.POST

@@ -106,6 +106,8 @@
 
 <script>
 const IS_SUPERUSER = {{ is_superuser|yesno:"true,false" }};
+// FTL jumps tech gate; GMs always see the controls even when off for players.
+const SHOW_FTL_JUMPS = {{ show_ftl_jumps|yesno:"true,false" }} || IS_SUPERUSER;
 var CURRENT_TAB = 'classes';
 var CURRENT_CLASS_ID = null;
 var CURRENT_SHIP_ID = null;
@@ -379,7 +381,72 @@ function renderShipEditor(ship) {
     html += '</div>';
     html += '</div>';
 
+    // FTL JUMP (Phase 1) — costed move + free resupply at a claimed system.
+    // Gated by the show_ftl_jumps tech gate (GMs always see it).
+    if (SHOW_FTL_JUMPS && ship.status === 'active') {
+        html += '<div style="border-top: 1px solid var(--c-dim); padding-top: 0.7rem; margin-bottom: 0.5rem;">';
+        html += '<div class="mono-text text-muted" style="font-size: 0.6rem; letter-spacing: 1px; margin-bottom: 0.4rem;">FTL JUMP</div>';
+        if (!ship.has_ftl) {
+            html += '<div class="mono-text text-muted" style="font-size: 0.7rem;">No FTL drive — this class cannot jump systems.</div>';
+        } else if (!ship.location_id) {
+            html += '<div class="mono-text text-muted" style="font-size: 0.7rem;">Set a current location before jumping.</div>';
+        } else {
+            html += '<div style="display: flex; gap: 0.5rem; align-items: flex-end; flex-wrap: wrap;">';
+            html += '<div style="display: flex; flex-direction: column; gap: 0.15rem; flex: 1 1 200px;">';
+            html += '<label class="text-muted mono-text" style="font-size: 0.58rem;">DESTINATION</label>';
+            html += '<select id="jump-target" class="mono-input">';
+            html += '<option value="">— select system —</option>';
+            (STAR_SYSTEMS_CACHE || []).forEach(function(sys) {
+                if (sys.id === ship.location_id) return;
+                html += '<option value="' + sys.id + '">' + escapeHtml(sys.name) + '</option>';
+            });
+            html += '</select></div>';
+            html += '<button onclick="jumpShip()" class="btn-primary">JUMP</button>';
+            if (ship.location_claimed && ship.maintenance_state < 100) {
+                html += '<button onclick="resupplyShip()" class="mono-text" style="background: transparent; border: 1px solid var(--c-primary); color: var(--c-primary); padding: 0.3rem 0.7rem; cursor: pointer; border-radius: 0;">RESUPPLY</button>';
+            }
+            html += '</div>';
+            html += '<div class="mono-text text-muted" style="font-size: 0.62rem; margin-top: 0.35rem;">Jump spends hull condition scaled by class maintenance (' + ship.class_maintenance + '). Ship is at ' + ship.maintenance_state + '%.</div>';
+        }
+        html += '<div id="jump-msg" class="mono-text" style="font-size: 0.7rem; margin-top: 0.35rem;"></div>';
+        html += '</div>';
+    }
+
     document.getElementById('ship-editor').innerHTML = html;
+}
+
+function jumpShip() {
+    var sel = document.getElementById('jump-target');
+    if (!sel || !sel.value) return;
+    var msg = document.getElementById('jump-msg');
+    if (msg) msg.textContent = '';
+    api('/api/starships/ships/' + CURRENT_SHIP_ID + '/jump/', {
+        method: 'POST', allowError: true,
+        body: JSON.stringify({ target_system_id: parseInt(sel.value, 10) }),
+    }).then(function(d) {
+        if (d && d.error) {
+            var t = d.error;
+            if (d.required != null) t += ' (needs ' + d.required + '%, have ' + d.available + '%)';
+            if (msg) { msg.textContent = t; msg.style.color = 'var(--accent-danger)'; }
+            return;
+        }
+        if (msg) { msg.textContent = 'Jumped ' + d.distance_ly + ' ly · −' + d.wear + '% condition'; msg.style.color = 'var(--accent-success)'; }
+        renderShipEditor(d.ship);
+        loadShips();
+    });
+}
+
+function resupplyShip() {
+    var msg = document.getElementById('jump-msg');
+    if (msg) msg.textContent = '';
+    api('/api/starships/ships/' + CURRENT_SHIP_ID + '/resupply/', {
+        method: 'POST', allowError: true,
+    }).then(function(d) {
+        if (d && d.error) { if (msg) { msg.textContent = d.error; msg.style.color = 'var(--accent-danger)'; } return; }
+        if (msg) { msg.textContent = 'Resupplied to ' + d.ship.maintenance_state + '%'; msg.style.color = 'var(--accent-success)'; }
+        renderShipEditor(d.ship);
+        loadShips();
+    });
 }
 
 function saveShipHeader() {
