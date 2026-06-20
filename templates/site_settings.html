@@ -336,6 +336,20 @@
                     Jump cost = max(1, round(class maintenance × wear/jump)) condition %, debited from the ship. Resupply is free at a claimed system. Distance is logged but not charged.
                 </span>
                 {% endwith %}
+
+                {# Scanning turn — opening (off->on) bumps the turn number, which
+                   resets the per-observatory once-only constraint. #}
+                <input type="hidden" name="scanning_turn_submitted" value="1">
+                <div class="mono-text text-muted" style="font-size: 0.7rem; margin: 1.1rem 0 0.5rem; letter-spacing: 1px;">STAR-INTEL SCANNING TURN</div>
+                <label style="display: flex; align-items: center; gap: 0.75rem; cursor: pointer;">
+                    <input type="checkbox" name="scanning_turn_open" {% if settings_obj.scanning_turn_open %}checked{% endif %}
+                        style="width: 20px; height: 20px; accent-color: var(--c-primary);">
+                    <span class="mono-text" style="font-size: 0.9rem; color: var(--ink);">SCANNING TURN OPEN</span>
+                    <span class="status-pill {% if settings_obj.scanning_turn_open %}s-active{% else %}s-inactive{% endif %}" style="margin-left:auto;">{% if settings_obj.scanning_turn_open %}OPEN (turn {{ settings_obj.scanning_turn_number }}){% else %}CLOSED{% endif %}</span>
+                </label>
+                <span class="text-muted mono-text" style="font-size: 0.7rem; display: block; margin-top: 0.5rem; padding-left: 2.75rem;">
+                    While open, each agency may scan one discovered system per observatory it owns; an observatory can't scan twice in a turn. Opening a closed turn starts a fresh turn (current: {{ settings_obj.scanning_turn_number }}).
+                </span>
             </div>
             <button type="submit" class="btn-primary" style="width: 100%;">SAVE</button>
         </div>

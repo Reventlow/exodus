@@ -20,6 +20,7 @@ urlpatterns = [
     path("api/agencies/<int:pk>/scans/", views.api_agency_scan_list, name="api-scan-list"),
     path("api/agencies/<int:pk>/scans/<int:scan_id>/", views.api_agency_scan_detail, name="api-scan-detail"),
     path("api/agencies/<int:pk>/scans/<int:scan_id>/roll/", views.api_scan_roll, name="api-scan-roll"),
+    path("api/agencies/<int:pk>/observatory-scan/", views.api_observatory_scan, name="api-observatory-scan"),
     path("api/agencies/<int:pk>/scans/<int:scan_id>/roll-log/", views.api_scan_roll_log, name="api-scan-roll-log"),
     path("api/agencies/<int:pk>/scans/<int:scan_id>/meta/", views.api_scan_meta, name="api-scan-meta"),
     path("api/agencies/<int:pk>/scans/<int:scan_id>/share/", views.api_share_scan, name="api-share-scan"),

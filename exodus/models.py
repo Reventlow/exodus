@@ -230,6 +230,16 @@ class SiteSettings(models.Model):
         default=False,
         help_text="Enable FTL jumps: ships move between systems via a costed jump action that spends hull condition. Enable once players have FTL travel.",
     )
+    # Star-intel scanning turn — GM opens a turn; each agency may scan one
+    # system per observatory it owns; an observatory can't scan twice per turn.
+    scanning_turn_open = models.BooleanField(
+        default=False,
+        help_text="When open, agencies may scan discovered systems (one per observatory). GM opens/closes turns.",
+    )
+    scanning_turn_number = models.IntegerField(
+        default=0,
+        help_text="Increments each time the GM opens a scanning turn; the per-observatory once-only key.",
+    )
     show_council = models.BooleanField(
         default=True,
         help_text="Show COUNCIL link in navigation.",

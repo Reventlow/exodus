@@ -125,6 +125,16 @@ def api_star_system_detail(request, pk):
         star.resources = cleaned
     if "scanLevelTruth" in body:
         star.scan_level_truth = body["scanLevelTruth"]
+    # Star-intel single source of truth (GM-set).
+    if "discovered" in body:
+        star.discovered = bool(body["discovered"])
+    if "hasLivablePlanet" in body:
+        star.has_livable_planet = bool(body["hasLivablePlanet"])
+    if "difficultyMod" in body:
+        try:
+            star.difficulty_mod = max(-10, min(10, int(body["difficultyMod"])))
+        except (TypeError, ValueError):
+            return JsonResponse({"error": "difficultyMod must be an integer"}, status=400)
     star.save()
     return JsonResponse(serialize_star_system(star, user=request.user))
 
@@ -403,6 +413,138 @@ def api_scan_roll(request, pk, scan_id):
         "currentSuccesses": scan.current_successes,
         "requiredSuccesses": scan.required_successes,
         "scannedResources": scan.scanned_resources if new_level > old_level else None,
+        "message": msg,
+    })
+
+
+def _count_false_records(star):
+    """Active false public records for a system (raises the scan target).
+    Returns 0 until the public-record model exists (Phase 3)."""
+    try:
+        from .models import PublicScanRecord
+    except ImportError:
+        return 0
+    return PublicScanRecord.objects.filter(star_system=star, is_false=True).count()
+
+
+@login_required
+@require_http_methods(["POST"])
+def api_observatory_scan(request, pk):
+    """Star-intel scan: one declared observatory scans one discovered system.
+
+    Body: {starSystemId, baseId}. Gated on an open scanning turn (superuser
+    bypass), the system being discovered, the observatory belonging to the
+    agency, and that observatory not having scanned yet this turn. Rolls the
+    observatory's dice (5/10/15), accumulates successes monotonically toward
+    the system target (15 + difficulty_mod + disinformation), and recomputes
+    uncertainty% + the approximate readout. No project-roll / mental-load cost.
+    """
+    from django.db import transaction
+    from agencies.models import Agency
+    from characters.models import Character
+    from exodus.models import SiteSettings
+    from .serializers import (
+        effective_scan_target, scan_uncertainty, approx_resources,
+        list_agency_observatories,
+    )
+
+    agency = get_object_or_404(Agency, pk=pk)
+    if not request.user.is_superuser and _get_user_agency(request.user) != agency:
+        return JsonResponse({"error": "Permission denied"}, status=403)
+
+    settings_obj = SiteSettings.load()
+    if not settings_obj.scanning_turn_open and not request.user.is_superuser:
+        return JsonResponse({"error": "No scanning turn is open."}, status=400)
+    turn = settings_obj.scanning_turn_number
+
+    try:
+        body = json.loads(request.body)
+    except json.JSONDecodeError:
+        return JsonResponse({"error": "Invalid JSON"}, status=400)
+    star_id = body.get("starSystemId")
+    base_id = body.get("baseId")
+    if not star_id or not base_id:
+        return JsonResponse({"error": "starSystemId and baseId required"}, status=400)
+
+    star = get_object_or_404(StarSystem, pk=star_id)
+    if not star.discovered and not request.user.is_superuser:
+        return JsonResponse({"error": "System has not been discovered yet."}, status=400)
+
+    # Resolve the declared observatory and its dice (must belong to the agency).
+    observatories = {o["baseId"]: o for o in list_agency_observatories(agency)}
+    obs = observatories.get(int(base_id))
+    if not obs:
+        return JsonResponse({"error": "That base has no observatory for this agency."}, status=400)
+
+    # One scan per observatory per turn.
+    usage = agency.scan_turn_usage or {}
+    turn_key = str(turn)
+    turn_usage = usage.get(turn_key, {})
+    if str(base_id) in turn_usage and not request.user.is_superuser:
+        return JsonResponse({"error": "That observatory has already scanned this turn."}, status=400)
+
+    # Roll the observatory's dice — WoD d10, 8+ success, 10 explodes.
+    pool = int(obs["dice"])
+    successes = 0
+    rolls = []
+    dice_left = pool
+    while dice_left > 0:
+        explosions = 0
+        for _ in range(dice_left):
+            die = random.randint(1, 10)
+            rolls.append(die)
+            if die >= 8:
+                successes += 1
+            if die >= 10:
+                explosions += 1
+        dice_left = explosions
+
+    char = Character.objects.filter(owner=request.user).first()
+    char_name = char.name if char else "GM"
+
+    with transaction.atomic():
+        scan, _ = AgencyScan.objects.get_or_create(
+            agency=agency, star_system=star,
+            defaults={"base_id": base_id, "base_name": obs["baseName"]},
+        )
+        before = scan.current_successes
+        scan.current_successes = before + successes  # monotonic, never reset
+
+        target = effective_scan_target(star, _count_false_records(star))
+        scan.required_successes = target
+        uncertainty = scan_uncertainty(scan.current_successes, target)
+        seed = scan.agency_id * 10000 + scan.star_system_id
+        scan.scanned_resources = approx_resources(star.resources, uncertainty, seed)
+        scan.base_id = base_id
+        scan.base_name = obs["baseName"]
+        scan.save()
+
+        turn_usage[str(base_id)] = star.id
+        usage[turn_key] = turn_usage
+        agency.scan_turn_usage = usage
+        agency.save(update_fields=["scan_turn_usage"])
+
+        msg = (f"{obs['baseName']} observatory ({pool} dice) → {successes} successes. "
+               f"{scan.current_successes}/{target} ({uncertainty}% uncertainty).")
+        try:
+            ScanRollLog.objects.create(
+                agency=agency, scan=scan, star_system_name=star.name,
+                character_name=char_name, roll_type="observatory",
+                pool=pool, rolls=rolls, successes=successes,
+                old_level=before, new_level=scan.current_successes, message=msg,
+            )
+        except Exception:
+            pass
+
+    return JsonResponse({
+        "pool": pool,
+        "rolls": rolls,
+        "successes": successes,
+        "accumulated": scan.current_successes,
+        "target": target,
+        "uncertainty": uncertainty,
+        "scannedResources": scan.scanned_resources,
+        "hasLivablePlanet": (star.has_livable_planet if uncertainty <= 40 else None),
         "message": msg,
     })
 

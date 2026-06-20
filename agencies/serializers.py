@@ -640,6 +640,27 @@ def redact_value(value):
     return CLASSIFIED
 
 
+def _agency_observatories(agency):
+    """The agency's scannable observatories (star-intel). One per base with an
+    Observatory facility; dice = 5/10/15 by upgrade level."""
+    from starmap.serializers import list_agency_observatories
+    obs = list_agency_observatories(agency)
+    # Annotate which ones have already scanned this turn.
+    from exodus.models import SiteSettings
+    turn = str(SiteSettings.load().scanning_turn_number)
+    used = (agency.scan_turn_usage or {}).get(turn, {})
+    for o in obs:
+        o["usedThisTurn"] = str(o["baseId"]) in used
+        o["scannedSystemId"] = used.get(str(o["baseId"]))
+    return obs
+
+
+def _scanning_turn_state():
+    from exodus.models import SiteSettings
+    s = SiteSettings.load()
+    return {"open": s.scanning_turn_open, "number": s.scanning_turn_number}
+
+
 def serialize_agency(agency, user):
     """Full agency data for API responses.
 
@@ -688,6 +709,8 @@ def serialize_agency(agency, user):
         "sweepPool": agency.sweep_pool,
         "ftlFuel": agency.ftl_fuel,
         "ftlSpares": agency.ftl_spares,
+        "observatories": _agency_observatories(agency),
+        "scanningTurn": _scanning_turn_state(),
         "sweepInfo": _get_sweep_info(agency, user),
         "fringeInfo": _get_fringe_info(agency, user),
         "projectRolls": agency.project_rolls if is_admin else _get_player_rolls(agency, user),

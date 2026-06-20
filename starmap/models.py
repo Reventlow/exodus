@@ -26,7 +26,20 @@ class StarSystem(models.Model):
     )
     scan_level_truth = models.IntegerField(
         default=0,
-        help_text="GM's true scan level. 0=unscanned, 1=survey, 2=focused, 3=deep.",
+        help_text="Vestigial (legacy scan-level system). Superseded by the uncertainty model.",
+    )
+    # --- Star-intel scanning system (single source of truth) ---
+    discovered = models.BooleanField(
+        default=False,
+        help_text="GM gate: a system must be discovered before agencies can scan or retrieve data.",
+    )
+    has_livable_planet = models.BooleanField(
+        default=False,
+        help_text="Single truth: does this system have a livable planet? Scanning approximates it.",
+    )
+    difficulty_mod = models.IntegerField(
+        default=0,
+        help_text="Scan difficulty modifier -10..+10. Target successes = 15 + this (clamped 5..25).",
     )
 
     # Claim

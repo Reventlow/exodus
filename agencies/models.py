@@ -85,6 +85,13 @@ class Agency(models.Model):
         default=0,
         help_text="FTL spares stockpile. Spent on jumps; refilled by extracting spares resources at claimed systems.",
     )
+    # Star-intel: which observatory scanned which system in which turn, to
+    # enforce one scan per observatory per scanning turn.
+    # Shape: {"<turnNumber>": {"<baseId>": <starSystemId>}}.
+    scan_turn_usage = models.JSONField(
+        default=dict, blank=True,
+        help_text="Per-turn observatory scan usage: {turnNumber: {baseId: starSystemId}}.",
+    )
     is_nuclear_power = models.BooleanField(
         default=False,
         help_text="Agency has council approval to build nuclear reactors.",

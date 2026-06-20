@@ -1,8 +1,82 @@
 """Serializers for the starmap application."""
 
 
-# Scan level thresholds: successes needed to reach each level
+# Scan level thresholds: successes needed to reach each level (LEGACY — the
+# active system uses the difficulty-target + uncertainty model below).
 SCAN_THRESHOLDS = {0: 3, 1: 5, 2: 8}  # current_level: successes_needed_for_next
+
+# --- Star-intel scanning math (single source of truth) ---
+SCAN_BASE_DIFFICULTY = 15        # base target successes for a perfect (0% uncertainty) read
+FALSE_DATA_PENALTY = 3           # each active false public record adds this to the target
+FALSE_DATA_PENALTY_CAP = 15      # max total disinformation penalty per system
+LIVABLE_REVEAL_UNCERTAINTY = 40  # at/below this uncertainty%, the livable flag is revealed
+
+
+def base_scan_target(star):
+    """Per-system base target successes = 15 + difficulty_mod, clamped 5..25."""
+    return max(5, min(25, SCAN_BASE_DIFFICULTY + int(getattr(star, "difficulty_mod", 0) or 0)))
+
+
+def effective_scan_target(star, false_count=0):
+    """Base target plus disinformation penalty (capped). false_count = number of
+    active false public records for the system."""
+    penalty = min(FALSE_DATA_PENALTY_CAP, max(0, int(false_count)) * FALSE_DATA_PENALTY)
+    return base_scan_target(star) + penalty
+
+
+def scan_uncertainty(accumulated, target):
+    """Uncertainty% = clamp((target - accumulated) * 10, 0, 100). 0 = perfect."""
+    return max(0, min(100, (int(target) - int(accumulated)) * 10))
+
+
+def observatory_dice(level):
+    """Dice for one observatory: 5 base + 5 (Ground Telescope, level>=1)
+    + 5 (Deep-Space Tracking, level>=2). 5/10/15."""
+    lvl = int(level or 0)
+    return 5 + (5 if lvl >= 1 else 0) + (5 if lvl >= 2 else 0)
+
+
+def list_agency_observatories(agency):
+    """One scannable observatory per base that has an Observatory facility.
+    A base's stacked observatory (Ground Telescope + Deep-Space Tracking) is a
+    single observatory whose dice come from its highest observatory level.
+    Returns [{baseId, baseName, level, dice}]."""
+    out = []
+    for base in agency.bases.all():
+        levels = [int(f.get("level", 0) or 0) for f in (base.facilities or [])
+                  if f.get("key") == "observatory"]
+        if not levels:
+            continue
+        lvl = max(levels)
+        out.append({
+            "baseId": base.id,
+            "baseName": base.name,
+            "level": lvl,
+            "dice": observatory_dice(lvl),
+        })
+    return out
+
+
+def approx_resources(resources, uncertainty, seed, rt_map=None):
+    """Player-facing approximate readout: ground truth fuzzed by uncertainty%.
+    At 0% uncertainty lo=hi=truth (exact); higher uncertainty widens a
+    deterministic ± window so the same (agency, system) reads consistently."""
+    rt_map = rt_map if rt_map is not None else _resource_type_map()
+    out = {}
+    s = seed
+    frac = max(0, min(100, int(uncertainty))) / 100.0
+    for key, rt in rt_map.items():
+        base = int(resources.get(key, 0) or 0)
+        if frac <= 0:
+            out[key] = {"min": base, "max": base, "unit": rt.unit_label}
+            continue
+        window = max(1, int(round((rt.scan_bracket_wide or 40) * frac)))
+        s = (s * 9301 + 49297) % 233280
+        offset = int(((s / 233280) - 0.5) * window)
+        lo = max(0, base - window + offset)
+        hi = max(lo, base + window + offset)
+        out[key] = {"min": lo, "max": hi, "unit": rt.unit_label}
+    return out
 
 
 def _resource_type_map():
@@ -68,6 +142,8 @@ def serialize_star_system(star, agency=None, user=None, agency_scans=None, resou
         "spectral": star.spectral_type,
         "isSol": star.is_sol,
         "isEndgame": star.is_endgame,
+        "discovered": star.discovered,
+        "scanTarget": base_scan_target(star),
     }
 
     # Claim info — visible to all
@@ -77,22 +153,31 @@ def serialize_star_system(star, agency=None, user=None, agency_scans=None, resou
             "agencyName": star.claimed_by.name if star.claimed_by else None,
         }
 
-    # GM sees ground truth
+    # GM sees ground truth (incl. the single-source-of-truth star-intel fields)
     if is_gm:
         data["scanLevelTruth"] = star.scan_level_truth
         data["resources"] = _serialize_resources_gm(star.resources or {}, rt_map)
         data["planets"] = star.planets
+        data["hasLivablePlanet"] = star.has_livable_planet
+        data["difficultyMod"] = star.difficulty_mod
 
-    # Agency-specific scan data
+    # Agency-specific scan data (the agency's private, approximate readout)
     scan = None
     if agency_scans is not None:
         scan = agency_scans.get(star.id)
     elif agency:
         scan = star.agency_scans.filter(agency=agency).first()
 
-    if scan and scan.scan_level > 0:
-        data["scanLevel"] = scan.scan_level
+    if scan and scan.current_successes > 0:
+        target = scan.required_successes or base_scan_target(star)
+        uncertainty = scan_uncertainty(scan.current_successes, target)
+        data["scanAccumulated"] = scan.current_successes
+        data["scanTarget"] = target
+        data["scanUncertainty"] = uncertainty
         data["scannedResources"] = scan.scanned_resources
+        data["scanLevel"] = scan.scan_level  # vestigial, kept for legacy callers
+        if uncertainty <= LIVABLE_REVEAL_UNCERTAINTY:
+            data["hasLivablePlanet"] = star.has_livable_planet
         data["planets"] = star.planets
     elif not is_gm:
         data["scanLevel"] = 0
@@ -102,6 +187,7 @@ def serialize_star_system(star, agency=None, user=None, agency_scans=None, resou
 
 def serialize_agency_scan(scan):
     """Serialize an AgencyScan for the agency's scan project list."""
+    target = scan.required_successes or (base_scan_target(scan.star_system) if scan.star_system else SCAN_BASE_DIFFICULTY)
     return {
         "id": scan.id,
         "starSystemId": scan.star_system_id,
@@ -110,6 +196,9 @@ def serialize_agency_scan(scan):
         "scannedResources": scan.scanned_resources,
         "currentSuccesses": scan.current_successes,
         "requiredSuccesses": scan.required_successes,
+        "accumulated": scan.current_successes,
+        "target": target,
+        "uncertainty": scan_uncertainty(scan.current_successes, target),
         "player": scan.player,
         "baseId": scan.base_id,
         "baseName": scan.base_name,

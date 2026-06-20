@@ -1,5 +1,13 @@
 # Changelog
 
+## v0.15.47
+- **Star-intel scanning system — Phase 1a (engine + GM controls).** Reworks the dormant scan system into the new agency intelligence game: a single source of truth per system, observatory-driven rolls, and accumulating-uncertainty data. Backend + GM controls now; the player-facing agency-sheet panel lands in 1b
+- **Single source of truth on `StarSystem`:** new `discovered` (GM gate — must be discovered to scan), `has_livable_planet` (the truth scans approximate), and `difficulty_mod` (−10…+10 → target successes = `15 + mod`, clamped 5–25). Settable by the GM via the system PUT endpoint
+- **Scanning math:** uncertainty% = `clamp((target − accumulated) × 10, 0, 100)` (0 short = perfect, 10+ short = no data). The agency's readout is the truth fuzzed by its current uncertainty; the livable flag reveals at ≤40% uncertainty. `AgencyScan` reworked — `current_successes` is now a monotonic accumulator (no more 0–3 levels / resets)
+- **Observatory dice:** new `POST /api/agencies/<id>/observatory-scan/` {baseId, starSystemId} — one declared observatory scans one discovered system, rolling `5 + 5(Ground Telescope, lvl≥1) + 5(Deep-Space Tracking, lvl≥2)` = 5/10/15 dice (WoD 8+/10-again). A base's stacked observatory counts as one. No project-roll / mental-load cost
+- **Scanning turn:** GM opens/closes a turn in Settings → Map Visibility (opening bumps a turn counter); while open, each agency scans one system per observatory, and an observatory can't scan twice per turn (`Agency.scan_turn_usage`). Serializers expose the agency's observatories + turn state
+- 15 new tests (dice, target clamp, uncertainty, false-penalty math, accumulation, turn/discovery/once-only gates with a real player). Migrations: `starmap/0008`, `exodus/0024`, `agencies/0037`. The legacy scan-level endpoint/columns are left intact (vestigial) for a later cleanup. Phases ahead: 1b player panel · 2 public record + GM oversight · 3 false data + filtering
+
 ## v0.15.46
 - **FTL jumps — Phase 3: execute jumps from the star map.** The FTL ROUTE PLANNING panel can now fly a real ship along a planned route. When FTL jumps are enabled and you've plotted a 2+ node route on API systems, the panel shows an **EXECUTE WITH SHIP** picker (your active, FTL-capable ships parked at the route's origin) and an **EXECUTE JUMP (N)** button
 - Execution runs **one costed leg at a time** against the real jump endpoint, updating a live status line ("Jumping to … 2/3"), and **stops at the first leg the ship can't afford** — surfacing the shortfall (condition % or fuel/spares need-vs-have). Ship positions reload afterward
