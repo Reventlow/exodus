@@ -1,5 +1,11 @@
 # Changelog
 
+## v0.15.50
+- **Star-intel scanning — Phase 3 (disinformation + filtering): the system is now complete.** Agencies can plant false data and players can filter the public board by source
+- **Disinformation:** a new DISINFORMATION control on the STAR INTEL panel publishes a false public record for a chosen system (player sets the fake "stated uncertainty"). Each active false record raises that system's **effective scan target** for everyone (+3 each, capped +15), forcing more rolls to reach certainty — the `_count_false_records` hook stubbed in Phase 1a now activates against the real `PublicScanRecord` model. False records are indistinguishable from real ones to players (only the GM oversight page flags `[FALSE]`)
+- **Per-agency filtering:** the PUBLIC RECORD board gets per-contributor filter chips — click an agency to strike out and hide its contributions (e.g. to ignore a suspected disinformation source). Purely presentational; doesn't change the global difficulty penalty
+- Verified end-to-end: a test confirms two false records raise a scan's target from 15 → 21. Frontend-only over the Phase-1a/2 backend (no migration). **Completes the scanning arc** (1a engine v0.15.47 · 1b panel v0.15.48 · 2 public record v0.15.49 · 3 disinformation v0.15.50)
+
 ## v0.15.49
 - **Star-intel scanning — Phase 2 (public record + GM oversight).** Agencies can now publish their scan readouts to a shared public board, keep data private, and the GM gets a full oversight page
 - New `PublicScanRecord` model (one row per agency/system). `POST /api/agencies/<id>/publish-scan/` snapshots the agency's current readout + uncertainty to the board (update_or_create — republishing updates, never duplicates); `POST .../unpublish-scan/` removes it (keep-private = no row). The endpoint already accepts `isFalse` + a custom payload (wired for Phase 3)

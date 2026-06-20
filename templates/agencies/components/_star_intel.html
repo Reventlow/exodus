@@ -12,7 +12,18 @@ const StarIntelModule = ({ observatories = [], scanningTurn = {}, starScans = []
     const [picks, setPicks] = useState({});   // { baseId: starSystemId }
     const [msg, setMsg] = useState('');
     const [busy, setBusy] = useState(false);
+    const [hiddenAgencies, setHiddenAgencies] = useState({});  // { agencyId: true } = filtered out
+    const [falsifyPick, setFalsifyPick] = useState('');
+    const [falsifyUnc, setFalsifyUnc] = useState(0);
     const publishedSet = new Set(publishedSystemIds);
+
+    // Distinct contributor agencies on the board (for the filter chips).
+    const contributors = (() => {
+        const m = {};
+        publicRecord.forEach(sys => sys.contributions.forEach(c => { m[c.agencyId] = c.agencyName; }));
+        return Object.entries(m).map(([id, name]) => ({ id: parseInt(id, 10), name }));
+    })();
+    const toggleAgency = (id) => setHiddenAgencies({ ...hiddenAgencies, [id]: !hiddenAgencies[id] });
 
     const post = (url, body) => fetch(url, {
         method: 'POST',
@@ -25,6 +36,21 @@ const StarIntelModule = ({ observatories = [], scanningTurn = {}, starScans = []
         post(url, { starSystemId }).then(({ ok, d }) => {
             if (!ok) { setMsg(d.error || 'Failed.'); return; }
             setMsg(unpublish ? 'Removed from public record.' : 'Published to public record.');
+            if (fetchAgency) fetchAgency();
+        });
+    };
+
+    const falsify = () => {
+        if (!falsifyPick) { setMsg('Pick a system to falsify.'); return; }
+        const sys = systems.find(s => s.id === parseInt(falsifyPick, 10));
+        post(`/api/agencies/${agencyId}/publish-scan/`, {
+            starSystemId: parseInt(falsifyPick, 10),
+            isFalse: true,
+            uncertainty: Math.max(0, Math.min(100, parseInt(falsifyUnc, 10) || 0)),
+            payload: { resources: {}, livable: null, label: sys ? sys.name : '' },
+        }).then(({ ok, d }) => {
+            if (!ok) { setMsg(d.error || 'Failed.'); return; }
+            setMsg('False data planted — scan difficulty raised for that system.');
             if (fetchAgency) fetchAgency();
         });
     };
@@ -129,20 +155,53 @@ const StarIntelModule = ({ observatories = [], scanningTurn = {}, starScans = []
                 );
             })}
 
-            {/* Public record — every agency's contributions (Phase 2) */}
+            {/* Disinformation — plant false data to raise a system's difficulty */}
+            <div className="mono-text text-muted" style={{ fontSize: '0.65rem', letterSpacing: '1px', margin: '1rem 0 0.45rem' }}>DISINFORMATION</div>
+            <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'flex-end', flexWrap: 'wrap' }}>
+                <select value={falsifyPick} onChange={e => setFalsifyPick(e.target.value)} className="mono-input" style={{ flex: '1 1 160px' }}>
+                    <option value="">— system to falsify —</option>
+                    {systems.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+                </select>
+                <div style={{ display: 'flex', flexDirection: 'column' }}>
+                    <label className="text-muted mono-text" style={{ fontSize: '0.55rem' }}>STATED %</label>
+                    <input type="number" min="0" max="100" value={falsifyUnc} onChange={e => setFalsifyUnc(e.target.value)} className="mono-input" style={{ width: '70px' }} />
+                </div>
+                <button onClick={falsify} className="mono-text" style={{ background: 'transparent', border: '1px solid #ef4444', color: '#ef4444', padding: '0.3rem 0.7rem', cursor: 'pointer', borderRadius: 0 }}>FALSIFY</button>
+            </div>
+            <div className="text-muted" style={{ fontSize: '0.62rem', marginTop: '0.25rem' }}>Plants a false public record. Raises that system's scan difficulty for everyone. Looks authentic to other players.</div>
+
+            {/* Public record — every agency's contributions, with per-agency filter */}
             <div className="mono-text text-muted" style={{ fontSize: '0.65rem', letterSpacing: '1px', margin: '1rem 0 0.45rem' }}>PUBLIC RECORD</div>
-            {publicRecord.length === 0 && <div className="text-muted" style={{ fontSize: '0.8rem' }}>The public board is empty.</div>}
-            {publicRecord.map(sys => (
-                <div key={sys.starSystemId} style={{ borderTop: '1px solid var(--c-dim)', padding: '0.5rem 0' }}>
-                    <div className="mono-text" style={{ fontSize: '0.8rem', marginBottom: '0.2rem' }}>{sys.starSystemName}</div>
-                    {sys.contributions.map((c, i) => (
-                        <div key={i} className="mono-text text-muted" style={{ fontSize: '0.68rem', display: 'flex', justifyContent: 'space-between', gap: '0.5rem', paddingLeft: '0.5rem' }}>
-                            <span>{c.agencyName}{c.isFalse ? <span style={{ color: '#ef4444' }}> [FALSE]</span> : null}</span>
-                            <span>stated {c.uncertainty}% uncertain</span>
-                        </div>
+            {contributors.length > 0 && (
+                <div style={{ display: 'flex', gap: '0.3rem', flexWrap: 'wrap', marginBottom: '0.5rem' }}>
+                    <span className="text-muted mono-text" style={{ fontSize: '0.6rem', alignSelf: 'center' }}>FILTER:</span>
+                    {contributors.map(a => (
+                        <button key={a.id} onClick={() => toggleAgency(a.id)} className="mono-text"
+                            style={{ fontSize: '0.6rem', padding: '0.1rem 0.4rem', cursor: 'pointer', borderRadius: 0,
+                                     border: `1px solid ${hiddenAgencies[a.id] ? 'var(--c-dim)' : ACCENT}`,
+                                     background: 'transparent', color: hiddenAgencies[a.id] ? 'var(--text-muted)' : ACCENT,
+                                     textDecoration: hiddenAgencies[a.id] ? 'line-through' : 'none' }}>
+                            {a.name}
+                        </button>
                     ))}
                 </div>
-            ))}
+            )}
+            {publicRecord.length === 0 && <div className="text-muted" style={{ fontSize: '0.8rem' }}>The public board is empty.</div>}
+            {publicRecord.map(sys => {
+                const visible = sys.contributions.filter(c => !hiddenAgencies[c.agencyId]);
+                if (visible.length === 0) return null;
+                return (
+                    <div key={sys.starSystemId} style={{ borderTop: '1px solid var(--c-dim)', padding: '0.5rem 0' }}>
+                        <div className="mono-text" style={{ fontSize: '0.8rem', marginBottom: '0.2rem' }}>{sys.starSystemName}</div>
+                        {visible.map((c, i) => (
+                            <div key={i} className="mono-text text-muted" style={{ fontSize: '0.68rem', display: 'flex', justifyContent: 'space-between', gap: '0.5rem', paddingLeft: '0.5rem' }}>
+                                <span>{c.agencyName}{c.isFalse ? <span style={{ color: '#ef4444' }}> [FALSE]</span> : null}</span>
+                                <span>stated {c.uncertainty}% uncertain</span>
+                            </div>
+                        ))}
+                    </div>
+                );
+            })}
         </div>
     );
 };

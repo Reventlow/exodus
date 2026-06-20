@@ -267,3 +267,41 @@ class PublicRecordTests(TestCase):
         self.assertEqual(r.status_code, 200)
         self.assertContains(r, "Wolf 359")
         self.assertContains(r, "FALSE")  # disinformation exposed to GM
+
+
+class FalseDataDifficultyTests(TestCase):
+    """Phase 3 — a false public record raises the effective scan target."""
+
+    def setUp(self):
+        User = get_user_model()
+        self.gm = User.objects.create_superuser("gm5", "gm5@example.com", "pw")
+        self.client = Client()
+        self.client.force_login(self.gm)
+        self.agency = Agency.objects.create(name="Scanner", is_player_agency=True)
+        self.base = Base.objects.create(
+            agency=self.agency, name="Obs",
+            facilities=[{"key": "observatory", "level": 2}])
+        self.other = Agency.objects.create(name="Liar", is_player_agency=True)
+        self.star = StarSystem.objects.create(
+            name="Disinfo Sys", x=1, y=1, z=1, distance=4, spectral_type="K",
+            discovered=True, difficulty_mod=0, resources={})
+        s = SiteSettings.load()
+        s.scanning_turn_open = True
+        s.scanning_turn_number = 1
+        s.save()
+
+    def test_false_record_raises_target(self):
+        # Baseline target is 15.
+        r0 = self.client.post(
+            f"/api/agencies/{self.agency.id}/observatory-scan/",
+            data=json.dumps({"baseId": self.base.id, "starSystemId": self.star.id}),
+            content_type="application/json")
+        self.assertEqual(r0.json()["target"], 15)
+        # A rival plants two false records -> target rises by 2*3.
+        PublicScanRecord.objects.create(agency=self.other, star_system=self.star, is_false=True, uncertainty=0, payload={})
+        PublicScanRecord.objects.create(agency=self.agency, star_system=self.star, is_false=True, uncertainty=0, payload={})
+        r1 = self.client.post(
+            f"/api/agencies/{self.agency.id}/observatory-scan/",
+            data=json.dumps({"baseId": self.base.id, "starSystemId": self.star.id}),
+            content_type="application/json")
+        self.assertEqual(r1.json()["target"], 21)  # 15 + 2*3
