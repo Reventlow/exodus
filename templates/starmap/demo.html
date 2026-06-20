@@ -206,6 +206,25 @@
 (function () {
     "use strict";
 
+    // Phase 3 — execute real ship jumps from the route panel.
+    var SHOW_FTL_JUMPS = {{ SHOW_FTL_JUMPS|yesno:"true,false" }};
+    var MY_SHIPS = [];  // FTL-capable active ships visible to the user
+
+    function csrfToken() {
+        var m = document.cookie.match(/csrftoken=([^;]+)/);
+        return m ? m[1] : "";
+    }
+    // Load ships so the route panel can offer an EXECUTE JUMP with one of them.
+    if (SHOW_FTL_JUMPS) {
+        fetch("/api/starships/ships/").then(function (r) {
+            return r.ok ? r.json() : [];
+        }).then(function (ships) {
+            MY_SHIPS = (ships || []).filter(function (s) {
+                return s.status === "active" && s.has_ftl && s.location_id != null;
+            });
+        }).catch(function () {});
+    }
+
     // ── Star catalog (loaded from API) ──────────────────────────────
     const SCAN_LABELS = ["UNSCANNED", "SURVEY (HIGH)", "FOCUSED (MEDIUM)", "DEEP (LOW)"];
 
@@ -683,7 +702,90 @@
         html += '<div style="color: ' + statusColor + '; font-weight: bold;">' + statusText + '</div>';
         html += '</div>';
 
+        // EXECUTE JUMP (Phase 3) — fly a real ship along the route, one costed
+        // leg at a time. Needs FTL jumps enabled, a 2+ leg route, and API stars
+        // (every node must carry a DB id; fallback demo stars don't).
+        var allHaveIds = route.every(function (s) { return s.id != null; });
+        if (SHOW_FTL_JUMPS && totalJumps >= 1 && allHaveIds) {
+            var atOrigin = MY_SHIPS.filter(function (s) { return s.location_id === route[0].id; });
+            html += '<div style="margin-top: 0.5rem; border-top: 1px solid var(--border-color, #333); padding-top: 0.5rem;">';
+            if (!atOrigin.length) {
+                html += '<div style="color: var(--text-muted, #666); font-size: 0.62rem;">No active FTL ship of yours is at ' + route[0].name + '.</div>';
+            } else {
+                html += '<div style="color: var(--text-muted, #666); font-size: 0.6rem; letter-spacing: 1px; margin-bottom: 0.3rem;">EXECUTE WITH SHIP</div>';
+                html += '<select id="route-ship" style="width: 100%; font-family: var(--font-mono); font-size: 0.7rem; background: var(--bg-input, #000); color: var(--text-primary, #e0e0e0); border: 1px solid var(--border-color, #333); padding: 0.25rem; border-radius: 0;">';
+                atOrigin.forEach(function (s) {
+                    html += '<option value="' + s.id + '">' + s.name + ' (' + s.maintenance_state + '%)</option>';
+                });
+                html += '</select>';
+                html += '<button id="btn-execute-route" style="width: 100%; margin-top: 0.3rem; font-family: var(--font-mono); font-size: 0.7rem; letter-spacing: 1px; padding: 0.3rem; cursor: pointer; background: transparent; border: 1px solid #22c55e; color: #22c55e; border-radius: 0;">EXECUTE JUMP (' + totalJumps + ')</button>';
+            }
+            html += '<div id="route-exec-msg" style="font-size: 0.62rem; margin-top: 0.3rem; line-height: 1.4;"></div>';
+            html += '</div>';
+        }
+
         infoDiv.innerHTML = html;
+
+        var execBtn = document.getElementById("btn-execute-route");
+        if (execBtn) {
+            execBtn.onclick = function () {
+                var sel = document.getElementById("route-ship");
+                if (sel && sel.value) executeJumpRoute(parseInt(sel.value, 10));
+            };
+        }
+    }
+
+    function reloadMyShips() {
+        return fetch("/api/starships/ships/").then(function (r) {
+            return r.ok ? r.json() : [];
+        }).then(function (ships) {
+            MY_SHIPS = (ships || []).filter(function (s) {
+                return s.status === "active" && s.has_ftl && s.location_id != null;
+            });
+        }).catch(function () {});
+    }
+
+    // Fly the selected ship through the route's legs sequentially, stopping at
+    // the first leg the ship can't afford. The server uses each ship's current
+    // location as the origin, so route[0] is the ship's start and route[1..]
+    // are successive jump targets.
+    function executeJumpRoute(shipId) {
+        var msgEl = document.getElementById("route-exec-msg");
+        var targets = route.slice(1);
+        var i = 0;
+        function step() {
+            if (i >= targets.length) {
+                if (msgEl) { msgEl.textContent = "Route complete."; msgEl.style.color = "#22c55e"; }
+                reloadMyShips();
+                return;
+            }
+            var target = targets[i];
+            if (msgEl) {
+                msgEl.textContent = "Jumping to " + target.name + "… (" + (i + 1) + "/" + targets.length + ")";
+                msgEl.style.color = "var(--text-muted, #888)";
+            }
+            fetch("/api/starships/ships/" + shipId + "/jump/", {
+                method: "POST",
+                headers: { "Content-Type": "application/json", "X-CSRFToken": csrfToken() },
+                body: JSON.stringify({ target_system_id: target.id }),
+            }).then(function (r) {
+                return r.json().then(function (d) { return { ok: r.ok, d: d }; });
+            }).then(function (res) {
+                if (!res.ok) {
+                    var t = (res.d && res.d.error) || "Jump failed";
+                    if (res.d && res.d.required != null) t += " (needs " + res.d.required + "%, have " + res.d.available + "%)";
+                    if (res.d && res.d.need) t += " (needs fuel " + res.d.need.fuel + " / spares " + res.d.need.spares + ")";
+                    if (msgEl) { msgEl.textContent = "Stopped at leg " + (i + 1) + ": " + t; msgEl.style.color = "#ef4444"; }
+                    reloadMyShips();
+                    return;
+                }
+                i++;
+                step();
+            }).catch(function () {
+                if (msgEl) { msgEl.textContent = "Network error during jump."; msgEl.style.color = "#ef4444"; }
+            });
+        }
+        step();
     }
 
     // Build drive buttons

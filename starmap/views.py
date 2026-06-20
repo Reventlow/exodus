@@ -50,6 +50,7 @@ def starmap_page(request):
     return render(request, "starmap/demo.html", {
         "SHOW_FTL_ROUTE_PLANNING": settings_obj.show_ftl_route_planning,
         "SHOW_EXOTIC_MATTER": settings_obj.show_exotic_matter,
+        "SHOW_FTL_JUMPS": settings_obj.show_ftl_jumps or request.user.is_superuser,
     })
 
 

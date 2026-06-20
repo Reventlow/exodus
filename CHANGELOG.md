@@ -1,5 +1,12 @@
 # Changelog
 
+## v0.15.46
+- **FTL jumps — Phase 3: execute jumps from the star map.** The FTL ROUTE PLANNING panel can now fly a real ship along a planned route. When FTL jumps are enabled and you've plotted a 2+ node route on API systems, the panel shows an **EXECUTE WITH SHIP** picker (your active, FTL-capable ships parked at the route's origin) and an **EXECUTE JUMP (N)** button
+- Execution runs **one costed leg at a time** against the real jump endpoint, updating a live status line ("Jumping to … 2/3"), and **stops at the first leg the ship can't afford** — surfacing the shortfall (condition % or fuel/spares need-vs-have). Ship positions reload afterward
+- Star map now loads the user's ships and does CSRF-authenticated POSTs; guarded so it only appears for routes whose every node is a real database system (the hardcoded fallback demo stars carry no id and are skipped). Gated by `show_ftl_jumps` (superuser always)
+- Deferred as explicitly-optional (need new modelling/infra, not built): per-FTL-module drive-tier range caps, and time-based resource regeneration. The flat `max_jump_ly` cap from Phase 1 remains available
+- Frontend-only over the Phase-1 jump endpoint (already tested); template + one context flag. Completes the FTL jump arc (Phase 1 v0.15.44 · Phase 2 v0.15.45 · Phase 3 v0.15.46)
+
 ## v0.15.45
 - **FTL jumps — Phase 2: the fuel/spares economy.** Jumps can now consume an **agency stockpile** (`Agency.ftl_fuel` / `ftl_spares`) instead of overloading hull condition, and the stockpile is refilled by **extracting system resources** at claimed systems. Fully additive over Phase 1 — inert until the GM configures it
 - **Activation:** the economy turns on as soon as a jump would cost fuel or spares (set `base_fuel`/`base_spares` or `fuel_per_maint_ly`/`spares_per_maint_ly` in `jump_economy_config`). When active: `fuel_cost = ceil(base_fuel + class_maintenance × dist_ly × fuel_per_maint_ly)` (spares likewise), condition wear drops to a small `wear_tick`, and the jump debits `ftl_fuel`/`ftl_spares`. When unconfigured, jumps stay Phase-1 condition-only
