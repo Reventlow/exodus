@@ -37,7 +37,7 @@
                         {% for sc in s.scans %}
                         <div class="mono-text" style="font-size: 0.72rem; display: flex; justify-content: space-between; gap: 0.5rem;">
                             <span>{{ sc.agency }}</span>
-                            <span style="color: {% if sc.uncertainty <= 0 %}#22c55e{% elif sc.uncertainty <= 40 %}#f59e0b{% else %}#ef4444{% endif %};">{{ sc.uncertainty }}% · {{ sc.accumulated }}/{{ sc.target }}</span>
+                            <span style="color: {% if sc.uncertainty <= 0 %}#22c55e{% elif sc.uncertainty <= 60 %}#f59e0b{% else %}#ef4444{% endif %};">{{ sc.uncertainty }}% · {{ sc.accumulated }}/{{ sc.target }}</span>
                         </div>
                         {% empty %}
                         <div class="text-muted" style="font-size: 0.72rem;">No agency has scanned this.</div>

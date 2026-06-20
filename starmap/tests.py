@@ -41,8 +41,8 @@ class ScanMathTests(TestCase):
 
     def test_uncertainty(self):
         self.assertEqual(scan_uncertainty(15, 15), 0)    # perfect
-        self.assertEqual(scan_uncertainty(12, 15), 30)   # 3 short
-        self.assertEqual(scan_uncertainty(0, 15), 100)   # capped at 100
+        self.assertEqual(scan_uncertainty(12, 15), 75)   # 3 short * 25
+        self.assertEqual(scan_uncertainty(0, 15), 375)   # uncapped (15 short * 25)
         self.assertEqual(scan_uncertainty(20, 15), 0)    # over target = perfect
 
     def test_effective_target_false_penalty(self):
@@ -96,7 +96,7 @@ class ObservatoryScanTests(TestCase):
         self.assertEqual(d["pool"], 15)
         self.assertEqual(d["target"], 15)
         self.assertEqual(d["accumulated"], d["successes"])
-        self.assertEqual(d["uncertainty"], max(0, min(100, (15 - d["successes"]) * 10)))
+        self.assertEqual(d["uncertainty"], max(0, (15 - d["successes"]) * 25))
         scan = AgencyScan.objects.get(agency=self.agency, star_system=self.star)
         self.assertEqual(scan.current_successes, d["successes"])
         self.assertEqual(scan.required_successes, 15)
@@ -228,7 +228,7 @@ class PublicRecordTests(TestCase):
         self.assertEqual(r.status_code, 200)
         rec = PublicScanRecord.objects.get(agency=self.agency, star_system=self.star)
         self.assertFalse(rec.is_false)
-        self.assertEqual(rec.uncertainty, 30)  # (15-12)*10
+        self.assertEqual(rec.uncertainty, 75)  # (15-12)*25
         self.assertIn("resources", rec.payload)
 
     def test_publish_requires_scan_data(self):

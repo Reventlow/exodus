@@ -444,7 +444,7 @@ def api_observatory_scan(request, pk):
     from characters.models import Character
     from .serializers import (
         effective_scan_target, scan_uncertainty, approx_resources,
-        list_agency_observatories,
+        list_agency_observatories, LIVABLE_REVEAL_UNCERTAINTY,
     )
 
     agency = get_object_or_404(Agency, pk=pk)
@@ -544,7 +544,7 @@ def api_observatory_scan(request, pk):
         "target": target,
         "uncertainty": uncertainty,
         "scannedResources": scan.scanned_resources,
-        "hasLivablePlanet": (star.has_livable_planet if uncertainty <= 40 else None),
+        "hasLivablePlanet": (star.has_livable_planet if uncertainty <= LIVABLE_REVEAL_UNCERTAINTY else None),
         "message": msg,
     })
 
@@ -560,7 +560,7 @@ def api_publish_scan(request, pk):
     """
     from agencies.models import Agency
     from .models import PublicScanRecord
-    from .serializers import effective_scan_target, scan_uncertainty
+    from .serializers import effective_scan_target, scan_uncertainty, LIVABLE_REVEAL_UNCERTAINTY
 
     agency = get_object_or_404(Agency, pk=pk)
     if not request.user.is_superuser and _get_user_agency(request.user) != agency:
@@ -583,7 +583,7 @@ def api_publish_scan(request, pk):
         uncertainty = scan_uncertainty(scan.current_successes, target)
         payload = {
             "resources": scan.scanned_resources,
-            "livable": (star.has_livable_planet if uncertainty <= 40 else None),
+            "livable": (star.has_livable_planet if uncertainty <= LIVABLE_REVEAL_UNCERTAINTY else None),
         }
 
     rec, _ = PublicScanRecord.objects.update_or_create(

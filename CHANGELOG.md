@@ -1,5 +1,11 @@
 # Changelog
 
+## v0.15.53
+- **Star-intel uncertainty curve retuned:** **25% per success short** (was 10%), **uncapped** (can read well over 100% — e.g. 15 short = 375% — to honestly convey "no idea"), and the **livable-planet flag now reveals at ≤60% uncertainty** (was 40%, so it's readable earlier on the harsher curve)
+- `scan_uncertainty` = `max(0, (target − accumulated) × 25)` with no upper cap; `approx_resources` lets the fuzz window keep widening past the base bracket (frac > 1.0). New `UNCERTAINTY_PER_SUCCESS` constant; `LIVABLE_REVEAL_UNCERTAINTY` = 60 (both threaded through the scan/publish endpoints + GM oversight, no more hardcoded 40s)
+- UI: the agency-sheet uncertainty bar clamps at 0 width for >100% readings, and amber now spans ≤60% (aligned with the livable reveal). Successes remain cumulative across scans/sessions, unchanged
+- Tests updated for the new curve. No migration
+
 ## v0.15.52
 - **Fix: granted players couldn't pick a system to scan.** The scan dropdown only listed GM-`discovered` systems, so until the GM hand-marked systems there was nothing to choose. Changed to match the original intent — *the scan is the discovery*
 - Players can now scan **any** system (the dropdown lists all systems, nearest first, excluding unreachable endgame beacons). A system's **first scan auto-marks it `discovered`**, satisfying "scanned at least once to retrieve data" — no GM pre-discovery step needed

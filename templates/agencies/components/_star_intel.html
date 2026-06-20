@@ -160,7 +160,8 @@ const StarIntelModule = ({ observatories = [], scanGrant = 0, starScans = [], pu
             {starScans.length === 0 && <div className="text-muted" style={{ fontSize: '0.8rem' }}>No scan data yet.</div>}
             {starScans.map(sc => {
                 const u = sc.uncertainty;
-                const col = u <= 0 ? '#22c55e' : (u <= 40 ? '#f59e0b' : '#ef4444');
+                const col = u <= 0 ? '#22c55e' : (u <= 60 ? '#f59e0b' : '#ef4444');
+                const barW = Math.max(0, 100 - u);  // uncertainty can exceed 100%
                 const res = sc.scannedResources || {};
                 return (
                     <div key={sc.id} style={{ borderTop: '1px solid var(--c-dim)', padding: '0.5rem 0' }}>
@@ -176,7 +177,7 @@ const StarIntelModule = ({ observatories = [], scanGrant = 0, starScans = [], pu
                             </span>
                         </div>
                         <div style={{ height: '4px', background: 'var(--bg-input)', marginTop: '0.3rem' }}>
-                            <div style={{ height: '100%', width: `${100 - u}%`, background: col }}></div>
+                            <div style={{ height: '100%', width: `${barW}%`, background: col }}></div>
                         </div>
                         {Object.keys(res).length > 0 && (
                             <div className="text-muted" style={{ fontSize: '0.65rem', marginTop: '0.3rem' }}>

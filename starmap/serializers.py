@@ -7,9 +7,10 @@ SCAN_THRESHOLDS = {0: 3, 1: 5, 2: 8}  # current_level: successes_needed_for_next
 
 # --- Star-intel scanning math (single source of truth) ---
 SCAN_BASE_DIFFICULTY = 15        # base target successes for a perfect (0% uncertainty) read
+UNCERTAINTY_PER_SUCCESS = 25     # uncertainty% added per success short of target (UNCAPPED — can exceed 100%)
 FALSE_DATA_PENALTY = 3           # each active false public record adds this to the target
 FALSE_DATA_PENALTY_CAP = 15      # max total disinformation penalty per system
-LIVABLE_REVEAL_UNCERTAINTY = 40  # at/below this uncertainty%, the livable flag is revealed
+LIVABLE_REVEAL_UNCERTAINTY = 60  # at/below this uncertainty%, the livable flag is revealed
 
 
 def base_scan_target(star):
@@ -25,8 +26,10 @@ def effective_scan_target(star, false_count=0):
 
 
 def scan_uncertainty(accumulated, target):
-    """Uncertainty% = clamp((target - accumulated) * 10, 0, 100). 0 = perfect."""
-    return max(0, min(100, (int(target) - int(accumulated)) * 10))
+    """Uncertainty% = max(0, (target - accumulated) * UNCERTAINTY_PER_SUCCESS).
+    0 = perfect (at/over target); UNCAPPED above, so being far off can read
+    well over 100% ("no idea")."""
+    return max(0, (int(target) - int(accumulated)) * UNCERTAINTY_PER_SUCCESS)
 
 
 def observatory_dice(level):
@@ -64,7 +67,8 @@ def approx_resources(resources, uncertainty, seed, rt_map=None):
     rt_map = rt_map if rt_map is not None else _resource_type_map()
     out = {}
     s = seed
-    frac = max(0, min(100, int(uncertainty))) / 100.0
+    # Uncapped: frac can exceed 1.0, widening the window past the base bracket.
+    frac = max(0, int(uncertainty)) / 100.0
     for key, rt in rt_map.items():
         base = int(resources.get(key, 0) or 0)
         if frac <= 0:
