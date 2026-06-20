@@ -550,6 +550,70 @@ def api_observatory_scan(request, pk):
 
 
 @login_required
+@require_http_methods(["POST"])
+def api_publish_scan(request, pk):
+    """Publish an agency's scan readout for a system to the public record, or
+    publish FALSE data. Body: {starSystemId, isFalse?, payload?, uncertainty?}.
+
+    Real publish snapshots the agency's current AgencyScan readout + uncertainty.
+    A false publish takes a GM/player-authored payload + a (faked) uncertainty.
+    """
+    from agencies.models import Agency
+    from .models import PublicScanRecord
+    from .serializers import effective_scan_target, scan_uncertainty
+
+    agency = get_object_or_404(Agency, pk=pk)
+    if not request.user.is_superuser and _get_user_agency(request.user) != agency:
+        return JsonResponse({"error": "Permission denied"}, status=403)
+    try:
+        body = json.loads(request.body)
+    except json.JSONDecodeError:
+        return JsonResponse({"error": "Invalid JSON"}, status=400)
+    star = get_object_or_404(StarSystem, pk=body.get("starSystemId"))
+    is_false = bool(body.get("isFalse", False))
+
+    if is_false:
+        payload = body.get("payload") or {}
+        uncertainty = int(body.get("uncertainty", 0))
+    else:
+        scan = AgencyScan.objects.filter(agency=agency, star_system=star).first()
+        if not scan or scan.current_successes <= 0:
+            return JsonResponse({"error": "No scan data to publish for this system."}, status=400)
+        target = scan.required_successes or effective_scan_target(star)
+        uncertainty = scan_uncertainty(scan.current_successes, target)
+        payload = {
+            "resources": scan.scanned_resources,
+            "livable": (star.has_livable_planet if uncertainty <= 40 else None),
+        }
+
+    rec, _ = PublicScanRecord.objects.update_or_create(
+        agency=agency, star_system=star,
+        defaults={"is_false": is_false, "uncertainty": uncertainty, "payload": payload},
+    )
+    return JsonResponse({"ok": True, "isFalse": rec.is_false, "uncertainty": rec.uncertainty})
+
+
+@login_required
+@require_http_methods(["POST"])
+def api_unpublish_scan(request, pk):
+    """Remove an agency's public record for a system (keep it private)."""
+    from agencies.models import Agency
+    from .models import PublicScanRecord
+
+    agency = get_object_or_404(Agency, pk=pk)
+    if not request.user.is_superuser and _get_user_agency(request.user) != agency:
+        return JsonResponse({"error": "Permission denied"}, status=403)
+    try:
+        body = json.loads(request.body)
+    except json.JSONDecodeError:
+        return JsonResponse({"error": "Invalid JSON"}, status=400)
+    PublicScanRecord.objects.filter(
+        agency=agency, star_system_id=body.get("starSystemId"),
+    ).delete()
+    return JsonResponse({"ok": True})
+
+
+@login_required
 @require_http_methods(["GET"])
 def api_scan_roll_log(request, pk, scan_id):
     """Get roll log for a scan project."""

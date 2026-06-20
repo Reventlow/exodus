@@ -22,6 +22,9 @@ urlpatterns = [
     path("api/gm/campaign-log/", views.api_campaign_sessions_list, name="api-sessions-list"),
     path("api/gm/campaign-log/<int:pk>/", views.api_campaign_sessions_detail, name="api-sessions-detail"),
 
+    # GM-only — star-intel oversight
+    path("gm/star-intel/", views.star_intel_page, name="star-intel-page"),
+
     # Player-facing briefs
     path("my-briefs/", views.briefs_page, name="briefs-page"),
     path("api/my-briefs/", views.api_briefs_list, name="api-briefs-list"),

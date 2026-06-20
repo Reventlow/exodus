@@ -394,3 +394,39 @@ class CityMapMarker(models.Model):
 
     def __str__(self):
         return f"{self.label} ({self.marker_type})"
+
+
+class PublicScanRecord(models.Model):
+    """An agency's contribution to the shared public star record for a system.
+
+    One row per (agency, system). Republishing update_or_creates; keeping data
+    private = no row. ``is_false`` marks disinformation (GM-only visibility);
+    each active false record raises the system's effective scan target for
+    everyone. ``payload`` is the published approximate readout snapshot.
+    """
+
+    agency = models.ForeignKey(
+        "agencies.Agency", on_delete=models.CASCADE, related_name="public_scan_records",
+    )
+    star_system = models.ForeignKey(
+        "StarSystem", on_delete=models.CASCADE, related_name="public_records",
+    )
+    is_false = models.BooleanField(
+        default=False, help_text="Disinformation (GM-only). Raises the system's scan difficulty.",
+    )
+    uncertainty = models.IntegerField(
+        default=100, help_text="Stated uncertainty% of the published data (faked for false records).",
+    )
+    payload = models.JSONField(
+        default=dict, help_text="Published approximate readout snapshot {resources, livable}.",
+    )
+    published_at = models.DateTimeField(auto_now=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        unique_together = ["agency", "star_system"]
+        ordering = ["star_system", "agency"]
+
+    def __str__(self):
+        tag = " (FALSE)" if self.is_false else ""
+        return f"{self.agency_id} -> {self.star_system_id}{tag}"

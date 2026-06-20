@@ -368,3 +368,53 @@ def api_campaign_sessions_detail(request, pk):
     session.save()
 
     return JsonResponse(serialize_campaign_session(session))
+
+
+@login_required
+def star_intel_page(request):
+    """GM oversight of the star-intel scanning system: ground truth + every
+    agency's real accuracy + public records (with disinformation exposed).
+    Superuser only."""
+    if not request.user.is_superuser:
+        return HttpResponseForbidden("Forbidden")
+
+    from starmap.models import StarSystem, PublicScanRecord
+    from starmap.serializers import (
+        base_scan_target, effective_scan_target, scan_uncertainty, _resource_type_map,
+    )
+
+    rt_map = _resource_type_map()
+    systems = []
+    qs = (StarSystem.objects.filter(discovered=True)
+          .prefetch_related("agency_scans__agency", "public_records__agency")
+          .order_by("distance", "name"))
+    for star in qs:
+        false_count = sum(1 for r in star.public_records.all() if r.is_false)
+        eff = effective_scan_target(star, false_count)
+        scans = [{
+            "agency": sc.agency.name if sc.agency else "?",
+            "accumulated": sc.current_successes,
+            "target": sc.required_successes or eff,
+            "uncertainty": scan_uncertainty(sc.current_successes, sc.required_successes or eff),
+        } for sc in star.agency_scans.all() if sc.current_successes > 0]
+        records = [{
+            "agency": r.agency.name if r.agency else "?",
+            "is_false": r.is_false,
+            "uncertainty": r.uncertainty,
+        } for r in star.public_records.all()]
+        truth = ", ".join(
+            f"{rt.name}: {int((star.resources or {}).get(k, 0) or 0)}"
+            for k, rt in rt_map.items()
+        )
+        systems.append({
+            "star": star,
+            "truth": truth,
+            "base_target": base_scan_target(star),
+            "effective_target": eff,
+            "false_count": false_count,
+            "scans": sorted(scans, key=lambda s: s["uncertainty"]),
+            "records": records,
+        })
+    return render(request, "gm_workspace/star_intel.html", {
+        "systems": systems, "active_tool": "star_intel",
+    })

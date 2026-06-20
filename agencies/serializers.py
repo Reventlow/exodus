@@ -670,6 +670,32 @@ def _agency_star_scans(agency):
     return [serialize_agency_scan(s) for s in scans]
 
 
+def _public_record(user):
+    """The shared public star board — every agency's contributions grouped by
+    system. is_false is exposed ONLY to the GM (players can't tell real from
+    disinformation)."""
+    from starmap.models import PublicScanRecord
+    is_gm = bool(user and user.is_superuser)
+    by_system = {}
+    rows = PublicScanRecord.objects.select_related("agency", "star_system")
+    for r in rows:
+        entry = by_system.setdefault(r.star_system_id, {
+            "starSystemId": r.star_system_id,
+            "starSystemName": r.star_system.name if r.star_system else "",
+            "contributions": [],
+        })
+        c = {
+            "agencyId": r.agency_id,
+            "agencyName": r.agency.name if r.agency else "",
+            "uncertainty": r.uncertainty,
+            "payload": r.payload,
+        }
+        if is_gm:
+            c["isFalse"] = r.is_false
+        entry["contributions"].append(c)
+    return list(by_system.values())
+
+
 def serialize_agency(agency, user):
     """Full agency data for API responses.
 
@@ -721,6 +747,10 @@ def serialize_agency(agency, user):
         "observatories": _agency_observatories(agency),
         "scanningTurn": _scanning_turn_state(),
         "starScans": _agency_star_scans(agency),
+        "publicRecord": _public_record(user),
+        "publishedSystemIds": list(
+            agency.public_scan_records.values_list("star_system_id", flat=True)
+        ),
         "sweepInfo": _get_sweep_info(agency, user),
         "fringeInfo": _get_fringe_info(agency, user),
         "projectRolls": agency.project_rolls if is_admin else _get_player_rolls(agency, user),

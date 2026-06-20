@@ -1,5 +1,12 @@
 # Changelog
 
+## v0.15.49
+- **Star-intel scanning — Phase 2 (public record + GM oversight).** Agencies can now publish their scan readouts to a shared public board, keep data private, and the GM gets a full oversight page
+- New `PublicScanRecord` model (one row per agency/system). `POST /api/agencies/<id>/publish-scan/` snapshots the agency's current readout + uncertainty to the board (update_or_create — republishing updates, never duplicates); `POST .../unpublish-scan/` removes it (keep-private = no row). The endpoint already accepts `isFalse` + a custom payload (wired for Phase 3)
+- **Agency sheet:** the STAR INTEL panel gained a **PUBLISH/UNPUBLISH** button per scanned system and a **PUBLIC RECORD** section listing every agency's contributions (contributor + stated uncertainty). `serialize_agency` emits `publicRecord` (the global board) + `publishedSystemIds`
+- **GM oversight page** at **/gm/star-intel/** (sidebar link added): per discovered system — ground-truth resources, base vs effective target (with false-record penalty count), every agency's real accuracy (accumulated/target + true uncertainty%), and the public records with **disinformation flagged `[FALSE]`** (GM-only). Server-rendered, superuser-gated
+- 6 new tests (publish/unpublish, requires-data, false publish, republish-idempotent, GM page renders + exposes FALSE). Migration: `starmap/0009`. Next: Phase 3 (player false-data affordance + per-agency filtering)
+
 ## v0.15.48
 - **Star-intel scanning — Phase 1b (player panel + GM editing).** The scanning engine now has a UI: a new **STAR INTEL** panel on the agency sheet (`templates/agencies/components/_star_intel.html`)
 - Panel shows the scanning-turn status, the agency's **observatories** (each with its dice and whether it's been used this turn), a per-observatory **system picker + SCAN button** (disabled when the turn is closed or that observatory already scanned), and the agency's **STAR DATABASE** — each scanned system with an uncertainty% bar (green ≤0, amber ≤40, red above) and the approximate resource readout

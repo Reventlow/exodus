@@ -13,7 +13,7 @@ from django.test import Client, TestCase
 from agencies.models import Agency, Base
 from characters.models import Character
 from exodus.models import SiteSettings
-from starmap.models import AgencyScan, StarSystem
+from starmap.models import AgencyScan, PublicScanRecord, StarSystem
 from starmap.serializers import (
     base_scan_target, effective_scan_target, list_agency_observatories,
     observatory_dice, scan_uncertainty,
@@ -194,3 +194,76 @@ class ScanGateTests(TestCase):
             content_type="application/json",
         )
         self.assertEqual(r.status_code, 403)
+
+
+class PublicRecordTests(TestCase):
+    """Phase 2 — publish/keep-private to the shared board + GM oversight."""
+
+    def setUp(self):
+        User = get_user_model()
+        self.gm = User.objects.create_superuser("gm4", "gm4@example.com", "pw")
+        self.client = Client()
+        self.client.force_login(self.gm)
+        self.agency = Agency.objects.create(name="Pub Agency", is_player_agency=True)
+        self.star = StarSystem.objects.create(
+            name="Wolf 359", x=1, y=1, z=1, distance=7.8, spectral_type="M6",
+            discovered=True, difficulty_mod=0, has_livable_planet=True,
+            resources={"helium3": 40},
+        )
+        # Pre-existing accumulated scan so there's data to publish.
+        self.scan = AgencyScan.objects.create(
+            agency=self.agency, star_system=self.star,
+            current_successes=12, required_successes=15,
+            scanned_resources={"helium3": {"min": 30, "max": 50, "unit": "loads"}},
+        )
+
+    def _publish(self, **body):
+        b = {"starSystemId": self.star.id}
+        b.update(body)
+        return self.client.post(
+            f"/api/agencies/{self.agency.id}/publish-scan/",
+            data=json.dumps(b), content_type="application/json")
+
+    def test_publish_creates_record(self):
+        r = self._publish()
+        self.assertEqual(r.status_code, 200)
+        rec = PublicScanRecord.objects.get(agency=self.agency, star_system=self.star)
+        self.assertFalse(rec.is_false)
+        self.assertEqual(rec.uncertainty, 30)  # (15-12)*10
+        self.assertIn("resources", rec.payload)
+
+    def test_publish_requires_scan_data(self):
+        other = StarSystem.objects.create(
+            name="Empty", x=2, y=2, z=2, distance=3, spectral_type="K", discovered=True)
+        r = self._publish(starSystemId=other.id)
+        self.assertEqual(r.status_code, 400)
+
+    def test_unpublish_deletes(self):
+        self._publish()
+        r = self.client.post(
+            f"/api/agencies/{self.agency.id}/unpublish-scan/",
+            data=json.dumps({"starSystemId": self.star.id}),
+            content_type="application/json")
+        self.assertEqual(r.status_code, 200)
+        self.assertFalse(PublicScanRecord.objects.filter(
+            agency=self.agency, star_system=self.star).exists())
+
+    def test_publish_false_data(self):
+        r = self._publish(isFalse=True, payload={"resources": {}, "livable": True}, uncertainty=5)
+        self.assertEqual(r.status_code, 200)
+        rec = PublicScanRecord.objects.get(agency=self.agency, star_system=self.star)
+        self.assertTrue(rec.is_false)
+        self.assertEqual(rec.uncertainty, 5)  # faked low to look authoritative
+
+    def test_republish_updates_not_duplicates(self):
+        self._publish()
+        self._publish()
+        self.assertEqual(PublicScanRecord.objects.filter(
+            agency=self.agency, star_system=self.star).count(), 1)
+
+    def test_gm_oversight_page_renders(self):
+        self._publish(isFalse=True, payload={}, uncertainty=5)
+        r = self.client.get("/gm/star-intel/")
+        self.assertEqual(r.status_code, 200)
+        self.assertContains(r, "Wolf 359")
+        self.assertContains(r, "FALSE")  # disinformation exposed to GM

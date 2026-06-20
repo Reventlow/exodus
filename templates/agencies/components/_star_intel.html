@@ -3,7 +3,7 @@
 // STAR INTEL — agency star-database scanning panel (Phase 1b).
 // Lists the agency's observatories (one scan each per open scanning turn) and
 // the accumulated private scan database with uncertainty% + approximate readout.
-const StarIntelModule = ({ observatories = [], scanningTurn = {}, starScans = [], agencyId, fetchAgency }) => {
+const StarIntelModule = ({ observatories = [], scanningTurn = {}, starScans = [], publicRecord = [], publishedSystemIds = [], agencyId, fetchAgency }) => {
     const { useState, useEffect } = React;
     const { getCookie } = window;
     const ACCENT = '#7fdcff';
@@ -12,6 +12,22 @@ const StarIntelModule = ({ observatories = [], scanningTurn = {}, starScans = []
     const [picks, setPicks] = useState({});   // { baseId: starSystemId }
     const [msg, setMsg] = useState('');
     const [busy, setBusy] = useState(false);
+    const publishedSet = new Set(publishedSystemIds);
+
+    const post = (url, body) => fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'X-CSRFToken': getCookie('csrftoken') },
+        body: JSON.stringify(body),
+    }).then(r => r.json().then(d => ({ ok: r.ok, d })));
+
+    const publish = (starSystemId, unpublish) => {
+        const url = `/api/agencies/${agencyId}/${unpublish ? 'unpublish-scan' : 'publish-scan'}/`;
+        post(url, { starSystemId }).then(({ ok, d }) => {
+            if (!ok) { setMsg(d.error || 'Failed.'); return; }
+            setMsg(unpublish ? 'Removed from public record.' : 'Published to public record.');
+            if (fetchAgency) fetchAgency();
+        });
+    };
 
     useEffect(() => {
         fetch('/api/starmap/systems/').then(r => (r.ok ? r.json() : []))
@@ -92,7 +108,14 @@ const StarIntelModule = ({ observatories = [], scanningTurn = {}, starScans = []
                     <div key={sc.id} style={{ borderTop: '1px solid var(--c-dim)', padding: '0.5rem 0' }}>
                         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '0.5rem' }}>
                             <span className="mono-text" style={{ fontSize: '0.85rem' }}>{sc.starSystemName}</span>
-                            <span className="mono-text" style={{ fontSize: '0.7rem', color: col }}>{u}% uncertain · {sc.accumulated}/{sc.target}</span>
+                            <span style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                                <span className="mono-text" style={{ fontSize: '0.7rem', color: col }}>{u}% uncertain · {sc.accumulated}/{sc.target}</span>
+                                <button onClick={() => publish(sc.starSystemId, publishedSet.has(sc.starSystemId))}
+                                    className="mono-text"
+                                    style={{ background: 'transparent', border: `1px solid ${publishedSet.has(sc.starSystemId) ? 'var(--accent-warning)' : ACCENT}`, color: publishedSet.has(sc.starSystemId) ? 'var(--accent-warning)' : ACCENT, padding: '0.15rem 0.45rem', cursor: 'pointer', borderRadius: 0, fontSize: '0.6rem' }}>
+                                    {publishedSet.has(sc.starSystemId) ? 'UNPUBLISH' : 'PUBLISH'}
+                                </button>
+                            </span>
                         </div>
                         <div style={{ height: '4px', background: 'var(--bg-input)', marginTop: '0.3rem' }}>
                             <div style={{ height: '100%', width: `${100 - u}%`, background: col }}></div>
@@ -105,6 +128,21 @@ const StarIntelModule = ({ observatories = [], scanningTurn = {}, starScans = []
                     </div>
                 );
             })}
+
+            {/* Public record — every agency's contributions (Phase 2) */}
+            <div className="mono-text text-muted" style={{ fontSize: '0.65rem', letterSpacing: '1px', margin: '1rem 0 0.45rem' }}>PUBLIC RECORD</div>
+            {publicRecord.length === 0 && <div className="text-muted" style={{ fontSize: '0.8rem' }}>The public board is empty.</div>}
+            {publicRecord.map(sys => (
+                <div key={sys.starSystemId} style={{ borderTop: '1px solid var(--c-dim)', padding: '0.5rem 0' }}>
+                    <div className="mono-text" style={{ fontSize: '0.8rem', marginBottom: '0.2rem' }}>{sys.starSystemName}</div>
+                    {sys.contributions.map((c, i) => (
+                        <div key={i} className="mono-text text-muted" style={{ fontSize: '0.68rem', display: 'flex', justifyContent: 'space-between', gap: '0.5rem', paddingLeft: '0.5rem' }}>
+                            <span>{c.agencyName}{c.isFalse ? <span style={{ color: '#ef4444' }}> [FALSE]</span> : null}</span>
+                            <span>stated {c.uncertainty}% uncertain</span>
+                        </div>
+                    ))}
+                </div>
+            ))}
         </div>
     );
 };

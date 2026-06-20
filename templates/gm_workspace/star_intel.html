@@ -1,0 +1,65 @@
+{% extends "base.html" %}
+{% load static %}
+{% block title %}STAR INTEL // GM // EXODUS{% endblock %}
+{% block body_class %}surface-splash{% endblock %}
+
+{% block content %}
+<div class="gm-shell-wrap" style="max-width: 1500px; margin: 1.5rem auto; padding: 0 1rem;">
+    <div class="gm-shell brackets" style="display: flex; gap: 1.5rem; padding: 24px; position: relative;">
+        <span class="bk tl"></span><span class="bk tr"></span>
+        <span class="bk bl"></span><span class="bk br"></span>
+
+        {% include "gm_workspace/_sidebar.html" %}
+
+        <div style="flex: 1; min-width: 0;">
+            <div class="kicker" style="margin-bottom: 0.3rem;">GM OVERSIGHT</div>
+            <h1 class="title" style="margin: 0 0 0.3rem 0;">STAR INTEL</h1>
+            <div class="sub" style="margin-bottom: 1.5rem;">
+                Ground truth · every agency's real accuracy · public records (disinformation exposed). Discovered systems only.
+            </div>
+
+            {% for s in systems %}
+            <div class="glass-panel" style="padding: 1rem 1.2rem; margin-bottom: 1rem;">
+                <header class="block-head" style="margin-bottom: 0.6rem;">
+                    <span class="block-bullet">■</span>
+                    <h3>{{ s.star.name }}</h3>
+                    <span class="block-line"></span>
+                    <span class="block-badge">target {{ s.base_target }}{% if s.false_count %} → {{ s.effective_target }} (+{{ s.false_count }} false){% endif %}</span>
+                    {% if s.star.has_livable_planet %}<span class="status-pill s-active" style="margin-left:0.4rem;">LIVABLE</span>{% endif %}
+                </header>
+                <div class="text-secondary" style="font-size: 0.78rem; margin-bottom: 0.6rem;">
+                    <span class="mono-text text-muted">TRUTH:</span> {{ s.truth|default:"—" }}
+                </div>
+
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem;">
+                    <div>
+                        <div class="mono-text text-muted" style="font-size: 0.62rem; letter-spacing: 1px; margin-bottom: 0.3rem;">AGENCY ACCURACY</div>
+                        {% for sc in s.scans %}
+                        <div class="mono-text" style="font-size: 0.72rem; display: flex; justify-content: space-between; gap: 0.5rem;">
+                            <span>{{ sc.agency }}</span>
+                            <span style="color: {% if sc.uncertainty <= 0 %}#22c55e{% elif sc.uncertainty <= 40 %}#f59e0b{% else %}#ef4444{% endif %};">{{ sc.uncertainty }}% · {{ sc.accumulated }}/{{ sc.target }}</span>
+                        </div>
+                        {% empty %}
+                        <div class="text-muted" style="font-size: 0.72rem;">No agency has scanned this.</div>
+                        {% endfor %}
+                    </div>
+                    <div>
+                        <div class="mono-text text-muted" style="font-size: 0.62rem; letter-spacing: 1px; margin-bottom: 0.3rem;">PUBLIC RECORD</div>
+                        {% for r in s.records %}
+                        <div class="mono-text" style="font-size: 0.72rem; display: flex; justify-content: space-between; gap: 0.5rem;">
+                            <span>{{ r.agency }} {% if r.is_false %}<span style="color: #ef4444;">[FALSE]</span>{% endif %}</span>
+                            <span class="text-muted">stated {{ r.uncertainty }}%</span>
+                        </div>
+                        {% empty %}
+                        <div class="text-muted" style="font-size: 0.72rem;">No public contributions.</div>
+                        {% endfor %}
+                    </div>
+                </div>
+            </div>
+            {% empty %}
+            <div class="text-muted" style="padding: 2rem; text-align: center;">No discovered systems yet. Mark systems <span class="mono-text">discovered</span> in the StarSystem admin.</div>
+            {% endfor %}
+        </div>
+    </div>
+</div>
+{% endblock %}
