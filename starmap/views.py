@@ -60,6 +60,19 @@ def api_public_record(request):
 
 
 @login_required
+@require_http_methods(["GET"])
+def api_star_intel(request):
+    """GM star-intel oversight as JSON (superuser / MCP only): per discovered
+    system — ground truth, base vs effective target, every agency's real
+    accuracy, and public records with disinformation exposed."""
+    if not request.user.is_superuser:
+        return JsonResponse({"error": "Superuser required"}, status=403)
+    from .serializers import gather_star_intel
+    systems = gather_star_intel()
+    return JsonResponse({"count": len(systems), "systems": systems})
+
+
+@login_required
 def public_starmap_page(request):
     """Public star map — read-only shared map of the public star-intel record,
     with per-agency contribution filtering and NO jump-route planning."""

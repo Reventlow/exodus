@@ -1,5 +1,10 @@
 # Changelog
 
+## v0.15.57
+- **New GM star-intel JSON endpoint for the MCP.** `GET /api/starmap/star-intel/` (superuser/MCP only) returns the full oversight as JSON — per discovered system: ground-truth resources, base vs effective scan target (with the disinformation penalty), every agency's real accuracy (accumulated/target/uncertainty%), and public records with `is_false` exposed
+- Refactored the `/gm/star-intel/` page and the new endpoint to share one `gather_star_intel()` data function (DRY) — no behaviour change to the page
+- **Companion MCP tools** (in the local `exodus-mcp` server, v0.2.0): `list_star_systems` (answers "which systems have a livable planet" etc.), `get_star_system`, `update_star_system` (set discovered / hasLivablePlanet / difficultyMod / resources), and `get_star_intel` (this endpoint). The first three already worked against the existing GM-serialized `/api/starmap/systems/` endpoints; this release ships the backend for `get_star_intel`. Restart the MCP server to pick up the new tools
+
 ## v0.15.56
 - **Public star map now has its own GM visibility toggle.** New **PUBLIC MAP** checkbox in Settings → Map Visibility (`SiteSettings.show_public_star_map`, default off) — independent of the main STAR MAP gate
 - The **PUBLIC MAP** nav link now appears for players only when this toggle is on (staff always see it); the `/starmap/public/` page gates on the same flag (403 "PUBLIC MAP ACCESS DISABLED" when off for non-staff). Surfaced via a new `SHOW_PUBLIC_STAR_MAP` context flag, mirroring `SHOW_STAR_MAP`

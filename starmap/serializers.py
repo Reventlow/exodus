@@ -209,3 +209,46 @@ def serialize_agency_scan(scan):
         "metadata": scan.metadata,
         "scannedAt": scan.scanned_at.isoformat() if scan.scanned_at else None,
     }
+
+def gather_star_intel():
+    """GM oversight data for the star-intel system, as JSON-serializable dicts.
+    Per discovered system: ground truth, base vs effective target (incl. the
+    disinformation penalty), every agency's real accuracy, and the public
+    records (with is_false exposed). Shared by the /gm/star-intel/ page and the
+    MCP API endpoint."""
+    from .models import StarSystem
+    rt_map = _resource_type_map()
+    out = []
+    qs = (StarSystem.objects.filter(discovered=True)
+          .prefetch_related("agency_scans__agency", "public_records__agency")
+          .order_by("distance", "name"))
+    for star in qs:
+        false_count = sum(1 for r in star.public_records.all() if r.is_false)
+        eff = effective_scan_target(star, false_count)
+        scans = [{
+            "agency": sc.agency.name if sc.agency else "?",
+            "accumulated": sc.current_successes,
+            "target": sc.required_successes or eff,
+            "uncertainty": scan_uncertainty(sc.current_successes, sc.required_successes or eff),
+        } for sc in star.agency_scans.all() if sc.current_successes > 0]
+        records = [{
+            "agency": r.agency.name if r.agency else "?",
+            "is_false": r.is_false,
+            "uncertainty": r.uncertainty,
+        } for r in star.public_records.all()]
+        out.append({
+            "id": star.id,
+            "name": star.name,
+            "discovered": star.discovered,
+            "has_livable_planet": star.has_livable_planet,
+            "difficulty_mod": star.difficulty_mod,
+            "base_target": base_scan_target(star),
+            "effective_target": eff,
+            "false_count": false_count,
+            "resources": {k: int((star.resources or {}).get(k, 0) or 0) for k in rt_map},
+            "truth": ", ".join(f"{rt.name}: {int((star.resources or {}).get(k, 0) or 0)}"
+                               for k, rt in rt_map.items()),
+            "scans": sorted(scans, key=lambda s: s["uncertainty"]),
+            "records": records,
+        })
+    return out

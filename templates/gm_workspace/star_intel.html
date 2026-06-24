@@ -22,10 +22,10 @@
             <div class="glass-panel" style="padding: 1rem 1.2rem; margin-bottom: 1rem;">
                 <header class="block-head" style="margin-bottom: 0.6rem;">
                     <span class="block-bullet">■</span>
-                    <h3>{{ s.star.name }}</h3>
+                    <h3>{{ s.name }}</h3>
                     <span class="block-line"></span>
                     <span class="block-badge">target {{ s.base_target }}{% if s.false_count %} → {{ s.effective_target }} (+{{ s.false_count }} false){% endif %}</span>
-                    {% if s.star.has_livable_planet %}<span class="status-pill s-active" style="margin-left:0.4rem;">LIVABLE</span>{% endif %}
+                    {% if s.has_livable_planet %}<span class="status-pill s-active" style="margin-left:0.4rem;">LIVABLE</span>{% endif %}
                 </header>
                 <div class="text-secondary" style="font-size: 0.78rem; margin-bottom: 0.6rem;">
                     <span class="mono-text text-muted">TRUTH:</span> {{ s.truth|default:"—" }}

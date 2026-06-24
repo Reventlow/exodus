@@ -11,6 +11,7 @@ urlpatterns = [
     path("starmap/", views.starmap_page, name="page"),
     path("starmap/public/", views.public_starmap_page, name="public-page"),
     path("api/starmap/public-record/", views.api_public_record, name="api-public-record"),
+    path("api/starmap/star-intel/", views.api_star_intel, name="api-star-intel"),
 
     # Star systems API
     path("api/starmap/systems/", views.api_star_systems, name="api-systems"),

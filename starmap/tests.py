@@ -339,3 +339,39 @@ class PublicMapTests(TestCase):
     def test_public_map_page_renders(self):
         c = Client(); c.force_login(self.gm)
         self.assertEqual(c.get("/starmap/public/").status_code, 200)
+
+
+class StarIntelApiTests(TestCase):
+    """The GM star-intel JSON endpoint (MCP-facing)."""
+
+    def setUp(self):
+        User = get_user_model()
+        self.gm = User.objects.create_superuser("gm7", "gm7@example.com", "pw")
+        self.player = User.objects.create_user("siplayer", "si@example.com", "pw")
+        self.agency = Agency.objects.create(name="Intel Agency", is_player_agency=True)
+        self.star = StarSystem.objects.create(
+            name="Intel Sys", x=1, y=1, z=1, distance=6, spectral_type="K",
+            discovered=True, has_livable_planet=True, difficulty_mod=2,
+            resources={"helium3": 30})
+        AgencyScan.objects.create(
+            agency=self.agency, star_system=self.star,
+            current_successes=10, required_successes=17, scanned_resources={})
+        PublicScanRecord.objects.create(
+            agency=self.agency, star_system=self.star, is_false=True,
+            uncertainty=5, payload={})
+
+    def test_endpoint_returns_oversight(self):
+        c = Client(); c.force_login(self.gm)
+        d = c.get("/api/starmap/star-intel/").json()
+        self.assertEqual(d["count"], 1)
+        sys = d["systems"][0]
+        self.assertEqual(sys["name"], "Intel Sys")
+        self.assertTrue(sys["has_livable_planet"])
+        self.assertEqual(sys["base_target"], 17)        # 15 + 2
+        self.assertEqual(sys["effective_target"], 20)   # + 1 false * 3
+        self.assertEqual(sys["scans"][0]["uncertainty"], 175)  # (17-10)*25
+        self.assertTrue(sys["records"][0]["is_false"])  # disinformation exposed
+
+    def test_non_superuser_forbidden(self):
+        c = Client(); c.force_login(self.player)
+        self.assertEqual(c.get("/api/starmap/star-intel/").status_code, 403)
