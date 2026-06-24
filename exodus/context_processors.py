@@ -156,10 +156,12 @@ def map_visibility(request):
         settings_obj = SiteSettings.objects.filter(pk=1).first()
         show_world = settings_obj.show_world_map if settings_obj else True
         show_star = settings_obj.show_star_map if settings_obj else False
+        show_public_star = settings_obj.show_public_star_map if settings_obj else False
         show_starships = settings_obj.show_starships if settings_obj else False
     except Exception:
         show_world = True
         show_star = False
+        show_public_star = False
         show_starships = False
 
     # City maps visible to this user
@@ -198,6 +200,7 @@ def map_visibility(request):
     return {
         "SHOW_WORLD_MAP": show_world,
         "SHOW_STAR_MAP": show_star,
+        "SHOW_PUBLIC_STAR_MAP": show_public_star,
         "SHOW_STARSHIPS": show_starships,
         "CITY_MAPS": city_maps,
         **labels,

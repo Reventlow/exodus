@@ -44,6 +44,7 @@ def site_settings(request):
         settings_obj.lock_comms = "lock_comms" not in request.POST
         settings_obj.show_world_map = "show_world_map" in request.POST
         settings_obj.show_star_map = "show_star_map" in request.POST
+        settings_obj.show_public_star_map = "show_public_star_map" in request.POST
         settings_obj.show_starships = "show_starships" in request.POST
         # Star-map tech gates. Guarded by a hidden marker (like class_unlock
         # below) so a POST from a different settings form — weapons, armor,

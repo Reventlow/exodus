@@ -1,5 +1,16 @@
 # Changelog
 
+## v0.15.56
+- **Public star map now has its own GM visibility toggle.** New **PUBLIC MAP** checkbox in Settings → Map Visibility (`SiteSettings.show_public_star_map`, default off) — independent of the main STAR MAP gate
+- The **PUBLIC MAP** nav link now appears for players only when this toggle is on (staff always see it); the `/starmap/public/` page gates on the same flag (403 "PUBLIC MAP ACCESS DISABLED" when off for non-staff). Surfaced via a new `SHOW_PUBLIC_STAR_MAP` context flag, mirroring `SHOW_STAR_MAP`
+- Lets the GM reveal the read-only public star-intel map to players on its own schedule, separate from the interactive STAR MAP. Migration: `exodus/0025`
+
+## v0.15.55
+- **New SUB-CHARACTERS ("tactical units")** — a player can now run a secondary soldier sheet while their main character is otherwise engaged. Kasper, Rasmus and Christian each get one **Bifrost Union** unit, seeded with **25 EARNED XP** to spend on a standard WoD 2.0 build. The sheet carries a `TACTICAL UNIT · Bifrost Union` badge (and a `UNIT` badge in the character roster)
+- Sub-characters are **walled off from the agency XP economy**: they **cannot transfer XP to an agency** (the transfer panel is hidden and the API returns 403), **cannot be assigned to agency projects** (excluded from the project dice-pool / workspace assignment picker), and **never earn XP from agency study/downtime rolls**. Their EARNED XP is GM-controlled — owner edits to it are ignored server-side
+- Fixes a latent **character-hijack bug**: every "acting player's character" lookup across agency, project, base, downtime and FTL code now resolves through `Character.main_for(user)`, which only ever returns the player's **main** (non-sub) character. Previously the `-updated_at` ordering meant that editing any second character would silently re-route the player's agency actions onto it
+- New `Character.is_sub_character` flag + optional `agency` link (migration `0013`); the three units are seeded idempotently by data migration `0014`. 6 new tests. **Requires migrate on deploy** (the seed runs there)
+
 ## v0.15.54
 - **New PUBLIC STAR MAP** (`/starmap/public/`, nav link next to STAR MAP) — a read-only shared 3D map of the public star-intel record, with **no jump-route planning** (FTL panels are off in this mode)
 - Each system's info panel shows the **PUBLIC RECORD**: every agency's published contribution (name, stated uncertainty, approximate resources, livable flag). A **FILTER SOURCES** panel (top-right) lists every contributing agency as a toggle chip — click to strike out and hide that agency's contributions (e.g. to ignore a suspected disinformation source). Filtering is client-side and presentational

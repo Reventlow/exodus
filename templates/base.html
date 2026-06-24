@@ -172,6 +172,8 @@
             {% endif %}
             {% if SHOW_STAR_MAP or user.is_staff %}
                 <a href="{% url 'starmap:page' %}">STAR MAP</a>
+            {% endif %}
+            {% if SHOW_PUBLIC_STAR_MAP or user.is_staff %}
                 <a href="{% url 'starmap:public-page' %}">PUBLIC MAP</a>
             {% endif %}
             {% if SHOW_STARSHIPS or user.is_staff %}

@@ -280,6 +280,12 @@
                     <span class="status-pill {% if settings_obj.show_star_map %}s-active{% else %}s-inactive{% endif %}" style="margin-left:auto;">{% if settings_obj.show_star_map %}ENABLED{% else %}DISABLED{% endif %}</span>
                 </label>
                 <label style="display: flex; align-items: center; gap: 0.75rem; cursor: pointer; margin-top: 0.5rem;">
+                    <input type="checkbox" name="show_public_star_map" {% if settings_obj.show_public_star_map %}checked{% endif %}
+                        style="width: 20px; height: 20px; accent-color: var(--c-primary);">
+                    <span class="mono-text" style="font-size: 0.9rem; color: var(--ink);">PUBLIC MAP</span>
+                    <span class="status-pill {% if settings_obj.show_public_star_map %}s-active{% else %}s-inactive{% endif %}" style="margin-left:auto;">{% if settings_obj.show_public_star_map %}ENABLED{% else %}DISABLED{% endif %}</span>
+                </label>
+                <label style="display: flex; align-items: center; gap: 0.75rem; cursor: pointer; margin-top: 0.5rem;">
                     <input type="checkbox" name="show_starships" {% if settings_obj.show_starships %}checked{% endif %}
                         style="width: 20px; height: 20px; accent-color: var(--c-primary);">
                     <span class="mono-text" style="font-size: 0.9rem; color: var(--ink);">STARSHIPS</span>

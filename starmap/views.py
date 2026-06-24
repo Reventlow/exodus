@@ -65,9 +65,9 @@ def public_starmap_page(request):
     with per-agency contribution filtering and NO jump-route planning."""
     from exodus.models import SiteSettings
     settings_obj = SiteSettings.load()
-    if not request.user.is_staff and not settings_obj.show_star_map:
+    if not request.user.is_staff and not settings_obj.show_public_star_map:
         from django.http import HttpResponseForbidden
-        return HttpResponseForbidden("STAR MAP ACCESS DISABLED")
+        return HttpResponseForbidden("PUBLIC MAP ACCESS DISABLED")
     return render(request, "starmap/demo.html", {
         "SHOW_FTL_ROUTE_PLANNING": False,   # no jump route on the public map
         "SHOW_FTL_JUMPS": False,
