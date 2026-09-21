@@ -60,6 +60,20 @@ class Character(models.Model):
         User, on_delete=models.CASCADE, related_name="characters"
     )
 
+    # Sub-character ("soldier unit"): a secondary sheet a player runs while their
+    # main character is otherwise occupied. Walled off from the agency XP economy
+    # — cannot transfer XP to an agency, cannot earn XP via agency project/study
+    # rolls, and never acts as the player's character for agency operations.
+    is_sub_character = models.BooleanField(
+        default=False,
+        help_text="Soldier/tactical sub-unit. Excluded from the agency XP economy.",
+    )
+    agency = models.ForeignKey(
+        "agencies.Agency", on_delete=models.SET_NULL, null=True, blank=True,
+        related_name="sub_characters",
+        help_text="Agency this sub-character belongs to (informational).",
+    )
+
     # Info
     name = models.CharField(max_length=200, default="UNKNOWN AGENT")
     character_class = models.CharField(
@@ -108,6 +122,17 @@ class Character(models.Model):
     experience = models.IntegerField(default=0)
     experience_used = models.IntegerField(default=0)
 
+    # Character-creation mode: when True, the sheet bypasses XP-budget
+    # enforcement so the player can freely add AND remove dots while building
+    # the character. GM-controlled per character from Site Settings.
+    creation_mode = models.BooleanField(
+        default=False,
+        help_text=(
+            "Free-build mode: bypass XP enforcement on the sheet so dots can "
+            "be added/removed freely during character creation."
+        ),
+    )
+
     # Mental load (0-6, biosign stress indicator)
     mental_load = models.IntegerField(default=0)
 
@@ -125,6 +150,17 @@ class Character(models.Model):
 
     def __str__(self):
         return f"{self.name} ({self.owner.username})"
+
+    @classmethod
+    def main_for(cls, user):
+        """The user's primary (non-sub) character.
+
+        All agency/project/base/downtime actions resolve "the acting player's
+        character" through this helper so that editing a sub-character (which
+        bumps ``updated_at``) can never hijack which character acts on the
+        agency. Sub-characters are deliberately excluded.
+        """
+        return cls.objects.filter(owner=user, is_sub_character=False).first()
 
 
 class CharacterPullingString(models.Model):

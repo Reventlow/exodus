@@ -55,6 +55,8 @@ def serialize_character(character, user=None):
         "owner": character.owner.username,
         "owner_id": character.owner.id,
         "name": character.name,
+        "isSubCharacter": character.is_sub_character,
+        "agencyName": character.agency.name if character.agency_id else None,
         "characterClass": character.character_class,
         "concept": character.concept,
         "chronicle": character.chronicle,
@@ -81,6 +83,7 @@ def serialize_character(character, user=None):
         "specialisations": character.specialisations,
         "experience": character.experience,
         "experienceUsed": character.experience_used,
+        "creationMode": character.creation_mode,
         "pullingStringsCost": sum(cps.pulling_string.cost for cps in cps_entries),
         "classifiedNotes": character.classified_notes if (
             user and (user == character.owner or user.is_superuser)
@@ -106,5 +109,7 @@ def serialize_character_summary(character):
         "owner": character.owner.username,
         "name": character.name,
         "concept": character.concept,
+        "isSubCharacter": character.is_sub_character,
+        "agencyName": character.agency.name if character.agency_id else None,
         "profilePicture": character.profile_picture.url if character.profile_picture else None,
     }

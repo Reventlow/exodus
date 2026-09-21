@@ -78,6 +78,7 @@
         mentalLoad: 0,
         experience: 0,
         experienceUsed: 0,
+        creationMode: false,
         pullingStringsCost: 0,
         dossier: "",
         classifiedNotes: null,
@@ -1343,14 +1344,29 @@
 
         return (
             <div className="glass-panel" style={{ padding: '1.5rem', marginBottom: '1rem' }}>
-                {remaining < 0 && (
+                {remaining < 0 && !char.creationMode && (
                     <div className="xp-protester-zone"><XpProtester /></div>
+                )}
+                {char.creationMode && (
+                    <div className="mono-text" style={{
+                        border: '1px solid var(--accent-warning, #e0a800)',
+                        background: 'rgba(224,168,0,0.08)', color: 'var(--accent-warning, #e0a800)',
+                        padding: '0.5rem 0.75rem', marginBottom: '1rem',
+                        fontSize: '0.72rem', letterSpacing: '0.08em', textTransform: 'uppercase'
+                    }}>
+                        ⚙ CREATION MODE — free build, XP limit off. Add or remove dots freely; ask the GM to lock it when done.
+                    </div>
                 )}
                 {/* Wave 3B: block-head pattern with remaining-XP badge. */}
                 <header className="block-head" style={{ marginBottom: '1rem' }}>
                     <span className="block-bullet">■</span>
                     <h3>EXPERIENCE</h3>
                     <span className="block-line"></span>
+                    {char.isSubCharacter && (
+                        <span className="block-badge" style={{ color: 'var(--accent-warning)', borderColor: 'var(--accent-warning)' }}>
+                            TACTICAL UNIT{char.agencyName ? ' · ' + char.agencyName : ''}
+                        </span>
+                    )}
                     <span className="block-badge"
                         style={remaining < 0 ? { color: 'var(--accent-danger)', borderColor: 'var(--accent-danger)' } : null}>
                         {remaining} XP REMAINING
@@ -1440,8 +1456,8 @@
                     </div>
                 </div>
 
-                {/* XP Transfer to Agency */}
-                {IS_OWNER && agencies.length > 0 && (
+                {/* XP Transfer to Agency — never available to tactical sub-units. */}
+                {IS_OWNER && agencies.length > 0 && !char.isSubCharacter && (
                     <div style={{
                         marginTop: '1rem', paddingTop: '1rem',
                         borderTop: '1px solid var(--border-color)'
@@ -2067,6 +2083,8 @@
         const [char, setChar] = useState(null);
         const [loading, setLoading] = useState(true);
         const [saveStatus, setSaveStatus] = useState('saved');
+        const [xpWarning, setXpWarning] = useState('');
+        const xpWarnTimerRef = useRef(null);
         const [psCatalog, setPsCatalog] = useState([]);
         const [agencies, setAgencies] = useState([]);
         const [npcList, setNpcList] = useState([]);
@@ -2200,6 +2218,50 @@
             }, 500);
         }, []);
 
+        // --- XP ENFORCEMENT ---
+        // Players cannot raise a trait they can't pay for. We recompute the
+        // build cost of a *candidate* character and reject the change if it
+        // would spend XP the character doesn't have. Lowering traits and
+        // lateral rearrangements that don't deepen the deficit always pass,
+        // so an already over-budget sheet (e.g. a GM grant pending) can still
+        // be trimmed back. Superusers (GM) bypass entirely — they grant XP
+        // and build NPC-grade statblocks.
+        const xpRemainingFor = (candidate) => {
+            const creation = computeCreation(candidate);
+            const psCost = candidate.pullingStringsCost || 0;
+            const donated = (candidate.xpTransfers || [])
+                .reduce((s, t) => s + (t.amount || 0), 0);
+            return (candidate.experience || 0)
+                - ((candidate.experienceUsed || 0) + psCost + creation.totalXp + donated);
+        };
+
+        const flashXpWarning = (msg) => {
+            setXpWarning(msg);
+            if (xpWarnTimerRef.current) clearTimeout(xpWarnTimerRef.current);
+            xpWarnTimerRef.current = setTimeout(() => setXpWarning(''), 4000);
+        };
+
+        // Returns true if the candidate is allowed. Blocks only spends that
+        // push remaining XP below zero (or deeper below zero than it already is).
+        const guardXp = (candidate) => {
+            if (IS_SUPERUSER) return true;
+            // Per-character creation mode (GM-set): free build, no XP limit.
+            if ((charRef.current || {}).creationMode) return true;
+            const after = xpRemainingFor(candidate);
+            if (after < 0 && after < xpRemainingFor(charRef.current)) {
+                flashXpWarning(
+                    'Not enough XP. Lower another trait, free up XP, or ask the GM to grant more.'
+                );
+                return false;
+            }
+            return true;
+        };
+
+        // Apply a partial char update only if it passes the XP guard.
+        const guardedUpdate = (updates) => {
+            if (guardXp({ ...charRef.current, ...updates })) updateCharacter(updates);
+        };
+
         if (loading) {
             return (
                 <div style={{ textAlign: 'center', padding: '4rem' }}>
@@ -2242,6 +2304,15 @@
                     }}>
                         EDIT MODE
                     </div>
+                    {xpWarning && (
+                        <div className="mono-text text-danger" role="alert" style={{
+                            fontSize: '0.7rem', letterSpacing: '0.08em', textTransform: 'uppercase',
+                            border: '1px solid var(--accent-danger, #ff5555)', padding: '0.35rem 0.6rem',
+                            background: 'rgba(255,0,0,0.08)', flex: '1 1 240px', textAlign: 'center'
+                        }}>
+                            ⚠ {xpWarning}
+                        </div>
+                    )}
                     <div style={{ display: 'flex', gap: '1rem', alignItems: 'center' }}>
                         {IS_OWNER && <SaveStatus status={saveStatus} />}
                         <a href="/"
@@ -2273,17 +2344,17 @@
                 }}>
                     <AttributesModule
                         attributes={char.attributes}
-                        update={attrs => updateCharacter({ attributes: attrs })}
+                        update={attrs => guardedUpdate({ attributes: attrs })}
                         lockPhysical={lockPhysical} />
                     <SkillsModule
                         skills={char.skills}
-                        update={skills => updateCharacter({ skills })}
+                        update={skills => guardedUpdate({ skills })}
                         lockPhysical={lockPhysical} />
                 </div>
 
                 <SpecialisationsModule
                     specialisations={char.specialisations || []}
-                    update={specs => updateCharacter({ specialisations: specs })}
+                    update={specs => guardedUpdate({ specialisations: specs })}
                     quietUpdate={specs => saveCharacterQuiet({ specialisations: specs })}
                     getFresh={() => charRef.current.specialisations || []}
                 />
@@ -2330,6 +2401,11 @@
                         characterClass={char.characterClass || ""}
                         npcs={npcList.filter(n => n.assignedTo === char.owner)}
                         onAdd={psId => {
+                            const added = (psCatalog || []).find(p => p.id === psId);
+                            const candidate = { ...charRef.current,
+                                pullingStringsCost: (charRef.current.pullingStringsCost || 0)
+                                    + ((added && added.cost) || 0) };
+                            if (!guardXp(candidate)) return;
                             saveCharacter({ addPullingString: { pullingStringId: psId } });
                             // Reload to get accurate through-table IDs
                             setTimeout(fetchCharacter, 500);
@@ -2353,6 +2429,9 @@
                         characterClass={char.characterClass || ""}
                         meritUses={char.meritUses || {}}
                         onAdd={(meritId, maxRating) => {
+                            const candidate = { ...charRef.current,
+                                merits: [...(charRef.current.merits || []), { rating: maxRating }] };
+                            if (!guardXp(candidate)) return;
                             saveCharacter({ addMerit: { meritId, rating: maxRating } });
                             setTimeout(fetchCharacter, 500);
                         }}
@@ -2363,6 +2442,10 @@
                             saveCharacter({ removeMerit: cmId });
                         }}
                         onUpdateRating={(cmId, rating) => {
+                            const candidate = { ...charRef.current,
+                                merits: (charRef.current.merits || [])
+                                    .map(m => m.id === cmId ? { ...m, rating } : m) };
+                            if (!guardXp(candidate)) return;
                             saveCharacter({ updateMeritRating: { id: cmId, rating } });
                             setTimeout(fetchCharacter, 500);
                         }}

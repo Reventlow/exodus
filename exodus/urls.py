@@ -1,8 +1,8 @@
 """URL configuration for exodus project."""
 from django.conf import settings
-from django.conf.urls.static import static
 from django.contrib import admin
-from django.urls import path, include
+from django.urls import path, include, re_path
+from django.views.static import serve
 
 from . import views
 
@@ -48,4 +48,16 @@ urlpatterns = [
     path("", include("gm_workspace.urls")),
 ]
 
-urlpatterns += static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)
+# Serve uploaded media (portraits, news images, comms attachments) from Django
+# itself, regardless of DEBUG. The stock ``static()`` helper registers nothing
+# when DEBUG is False, which left every /media/ URL a 404 in production (the
+# container runs with DJANGO_DEBUG=False). There is no separate file server in
+# front of Daphne for uploads, so this route is the only thing that serves them.
+def media_serve(request, path):
+    """Serve one file from MEDIA_ROOT, reading the setting at request time."""
+    return serve(request, path, document_root=settings.MEDIA_ROOT)
+
+
+urlpatterns += [
+    re_path(r"^media/(?P<path>.*)$", media_serve, name="media"),
+]

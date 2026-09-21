@@ -478,7 +478,7 @@ def _serialize_projects(agency, show_all, user, is_field_visible_fn):
         projects = [p for p in projects if isinstance(p, dict) and not p.get("classified", False) and not p.get("discarded", False)]
 
     # Check if user is science class
-    char = Character.objects.filter(owner=user).first()
+    char = Character.main_for(user)
     is_science = user.is_superuser or (char and char.character_class == "science")
 
     if not is_science:
@@ -504,7 +504,7 @@ def _serialize_projects(agency, show_all, user, is_field_visible_fn):
 def _get_player_rolls(agency, user):
     """Get roll allocation for the current player, plus personal NPCs for downtime."""
     rolls = agency.project_rolls or {}
-    char = Character.objects.filter(owner=user).first()
+    char = Character.main_for(user)
     char_name = char.name if char else ""
     personal = rolls.get(char_name, {})
     # Personal NPCs assigned to this player
@@ -522,7 +522,7 @@ def _get_player_rolls(agency, user):
 
 def _get_fringe_info(agency, user):
     """Get fringe project slot info for the current user."""
-    char = Character.objects.filter(owner=user).first()
+    char = Character.main_for(user)
     is_science = user.is_superuser or (char and char.character_class == "science")
     if not is_science:
         return None
@@ -545,7 +545,7 @@ def _get_sweep_info(agency, user):
 
     if agency.is_player_agency and not user.is_superuser:
         # Player agency — use the requesting user's character
-        char = Character.objects.filter(owner=user).first()
+        char = Character.main_for(user)
         if not char:
             return info
         intelligence = char.attributes.get("power", {}).get("mental", 1)
@@ -572,7 +572,7 @@ def _get_sweep_info(agency, user):
         # GM viewing player agency — show all player characters' sweep pools
         best_pool = 0
         best_info = info
-        for char in Character.objects.all():
+        for char in Character.objects.filter(is_sub_character=False):
             intelligence = char.attributes.get("power", {}).get("mental", 1)
             computer = char.skills.get("mental", {}).get("Computer", 0)
             if computer <= 0:
@@ -795,7 +795,7 @@ def serialize_agency(agency, user):
     if is_admin:
         char_class = None  # No filtering
     else:
-        char = Character.objects.filter(owner=user).first()
+        char = Character.main_for(user)
         char_class = char.character_class if char else ""
 
     # Bases + config for cost lookups (with per-base visibility for NPC agencies)
@@ -871,10 +871,11 @@ def serialize_agency(agency, user):
                 if isinstance(s, dict) and s.get("name")
             ],
         }
+        # Sub-characters (soldier units) cannot be assigned to agency projects.
         for c in Character.objects.select_related("owner").prefetch_related(
             "character_merits__merit", "character_pulling_strings__pulling_string",
             "character_pulling_strings__linked_npc",
-        ).all().order_by("name")
+        ).filter(is_sub_character=False).order_by("name")
     ]
     # NPCs belonging to this agency (includes personal NPCs now that they have agency set)
     data["assignableNpcs"] = [
@@ -931,7 +932,7 @@ def serialize_agency(agency, user):
         ftl_chars = {
             c.name: c for c in Character.objects.prefetch_related(
                 "character_merits__merit", "character_pulling_strings__pulling_string"
-            ).all()
+            ).filter(is_sub_character=False)
         }
         ftl_bases = list(agency.bases.all())
     data["ftlProjects"] = [

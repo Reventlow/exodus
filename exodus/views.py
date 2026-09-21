@@ -38,14 +38,27 @@ def site_settings(request):
     settings_obj = SiteSettings.load()
 
     if request.method == "POST":
-        date_value = request.POST.get("next_game_date", "").strip()
-        settings_obj.next_game_date = date_value or None
-        settings_obj.charter_text = request.POST.get("charter_text", "")
-        settings_obj.lock_comms = "lock_comms" not in request.POST
-        settings_obj.show_world_map = "show_world_map" in request.POST
-        settings_obj.show_star_map = "show_star_map" in request.POST
-        settings_obj.show_public_star_map = "show_public_star_map" in request.POST
-        settings_obj.show_starships = "show_starships" in request.POST
+        # Core settings (game date, comms lock, map/council visibility) all live
+        # in the main settings form. Gate the writes behind its hidden marker so
+        # a POST from a *different* form on this same page — armor, cover,
+        # combat-NPCs, the ship-slot toggle — can't silently reset them. Before
+        # this gate these ran unconditionally and were wiped by every other
+        # form's save (the checkboxes simply weren't in that form's POST).
+        if "core_settings_submitted" in request.POST:
+            date_value = request.POST.get("next_game_date", "").strip()
+            settings_obj.next_game_date = date_value or None
+            settings_obj.lock_comms = "lock_comms" not in request.POST
+            settings_obj.show_world_map = "show_world_map" in request.POST
+            settings_obj.show_star_map = "show_star_map" in request.POST
+            settings_obj.show_public_star_map = "show_public_star_map" in request.POST
+            settings_obj.show_starships = "show_starships" in request.POST
+            settings_obj.show_council = "show_council" in request.POST
+            settings_obj.council_mode = request.POST.get("council_mode", "agency")
+        # The charter is edited via the Django admin, not on this page. Only
+        # write it when a form actually carries the field, otherwise every
+        # settings save would blank it (there is no charter input here).
+        if "charter_text" in request.POST:
+            settings_obj.charter_text = request.POST["charter_text"]
         # Star-map tech gates. Guarded by a hidden marker (like class_unlock
         # below) so a POST from a different settings form — weapons, armor,
         # etc., which all hit this same view — can't silently reset them.
@@ -70,9 +83,10 @@ def site_settings(request):
             je["resupply_amount"] = max(0, _je_num("jump_resupply_amount", je["resupply_amount"], int))
             je["max_jump_ly"] = max(0, _je_num("jump_max_ly", je["max_jump_ly"], int))
             settings_obj.jump_economy_config = je
-        settings_obj.show_council = "show_council" in request.POST
-        settings_obj.council_mode = request.POST.get("council_mode", "agency")
-        settings_obj.enforce_ship_slot_budget = "enforce_ship_slot_budget" in request.POST
+        # Ship-slot budget toggle has its own small self-contained form (own
+        # marker) so it both saves correctly and isn't reset by other saves.
+        if "ship_budget_submitted" in request.POST:
+            settings_obj.enforce_ship_slot_budget = "enforce_ship_slot_budget" in request.POST
         # Per-class base-building unlocks. The form always POSTs the full set
         # so an unchecked checkbox correctly lands as False.
         if "class_unlock_submitted" in request.POST:
@@ -80,6 +94,17 @@ def site_settings(request):
                 cls: f"class_unlock_{cls}" in request.POST
                 for cls in ("soldier", "science", "engineer", "fixer", "ai")
             }
+        # Per-character creation mode. Gated by a hidden marker (like the
+        # class-unlock block above) so saves from other settings forms can't
+        # silently reset every character's flag. The section POSTs a checkbox
+        # per character, so an unchecked box correctly lands as False.
+        if "creation_mode_submitted" in request.POST:
+            from characters.models import Character
+            for ch in Character.objects.all():
+                desired = f"creation_mode_{ch.id}" in request.POST
+                if ch.creation_mode != desired:
+                    ch.creation_mode = desired
+                    ch.save(update_fields=["creation_mode"])
         # Clearance Gate tweaks. Like class_unlock_flags above we only touch
         # the JSON blob when the TWEAKS tab POSTs its hidden marker, so saves
         # from other tabs don't clobber the Clearance Gate settings.
@@ -547,6 +572,11 @@ def site_settings(request):
          "rows": npc_by_cat["drone"]},
     ]
 
+    from characters.models import Character
+    playable_characters = list(
+        Character.objects.select_related("owner").order_by("owner__username", "name")
+    )
+
     return render(request, "site_settings.html", {
         "settings_obj": settings_obj,
         "users": users,
@@ -558,6 +588,7 @@ def site_settings(request):
         "armor_sections": armor_sections,
         "cover_sections": cover_sections,
         "combat_npcs_sections": combat_npcs_sections,
+        "playable_characters": playable_characters,
     })
 
 

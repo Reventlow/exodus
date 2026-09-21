@@ -81,6 +81,11 @@
                 <div style={{ flex: 1, minWidth: 0 }}>
                     <h3 className="text-accent mono-text" style={{ fontSize: '1.1rem' }}>
                         {char.name}
+                        {char.isSubCharacter && (
+                            <span className="block-badge" style={{ marginLeft: '0.5rem', fontSize: '0.6rem', color: 'var(--accent-warning)', borderColor: 'var(--accent-warning)' }}>
+                                UNIT{char.agencyName ? ' · ' + char.agencyName : ''}
+                            </span>
+                        )}
                     </h3>
                     <p className="text-secondary" style={{ fontSize: '0.9rem' }}>
                         {char.concept || <Redacted>UNKNOWN</Redacted>}

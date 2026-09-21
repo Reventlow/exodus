@@ -46,14 +46,15 @@ def character_sheet_page(request, pk):
 def api_character_list(request):
     """GET: list all characters. POST: create a new character."""
     if request.method == "GET":
-        characters = Character.objects.select_related("owner").all()
+        characters = Character.objects.select_related("owner", "agency").all()
         data = [serialize_character_summary(c) for c in characters]
         return JsonResponse(data, safe=False)
 
     # POST - create new character
-    # Non-admin users can only have one character
+    # Non-admin users can only have one (main) character. Sub-characters are
+    # seeded by the GM and don't count toward this limit.
     if not request.user.is_superuser:
-        if Character.objects.filter(owner=request.user).exists():
+        if Character.objects.filter(owner=request.user, is_sub_character=False).exists():
             return JsonResponse(
                 {"error": "Operative already has an active record. Only administrators may create additional records."},
                 status=400,
@@ -214,7 +215,11 @@ def api_character_detail(request, pk):
             character.size = data["size"]
         if "mentalLoad" in data:
             character.mental_load = max(0, min(6, data["mentalLoad"]))
-        if "experience" in data:
+        # EARNED XP is GM-controlled. Sub-characters start with a fixed grant
+        # (25 XP) and cannot accrue more, so only a superuser may change it.
+        if "experience" in data and not (
+            character.is_sub_character and not request.user.is_superuser
+        ):
             character.experience = data["experience"]
         if "experienceUsed" in data:
             character.experience_used = data["experienceUsed"]
@@ -296,6 +301,13 @@ def api_transfer_xp(request, pk):
 
     if request.user != character.owner and not request.user.is_superuser:
         return JsonResponse({"error": "ACCESS DENIED."}, status=403)
+
+    # Sub-characters (soldier units) are walled off from the agency XP economy.
+    if character.is_sub_character:
+        return JsonResponse(
+            {"error": "Tactical units cannot transfer XP to an agency."},
+            status=403,
+        )
 
     try:
         data = json.loads(request.body)

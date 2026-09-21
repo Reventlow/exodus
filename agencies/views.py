@@ -34,7 +34,7 @@ COUNCIL_GROUP = "council_votes"
 def _is_fixer(user):
     """Check if the user's character has the fixer class."""
     from characters.models import Character
-    char = Character.objects.filter(owner=user).first()
+    char = Character.main_for(user)
     return char and char.character_class == "fixer"
 
 
@@ -126,7 +126,7 @@ def agency_sheet_page(request, pk):
         return HttpResponseForbidden("ACCESS DENIED. Agency record not found.")
     is_admin = request.user.is_superuser
     from characters.models import Character
-    char = Character.objects.filter(owner=request.user).first()
+    char = Character.main_for(request.user)
     char_class = char.character_class if char else ""
     return render(
         request,
@@ -1415,7 +1415,7 @@ def api_sweep_condition(request, pk, condition_id):
 
     # Get actor's stats — need Computer skill
     from characters.models import Character
-    char = Character.objects.filter(owner=request.user).first()
+    char = Character.main_for(request.user)
     if not char and not request.user.is_superuser:
         return JsonResponse({"error": "No character found."}, status=400)
 
@@ -1527,7 +1527,7 @@ def api_dark_grants(request, pk, project_index):
 
     # Check science class or admin
     from characters.models import Character
-    char = Character.objects.filter(owner=request.user).first()
+    char = Character.main_for(request.user)
     is_science = request.user.is_superuser or (char and char.character_class == "science")
     if not is_science:
         return JsonResponse({"error": "Science class required."}, status=403)
@@ -1635,7 +1635,7 @@ def api_live_testing(request, pk, project_index):
     agency = get_object_or_404(Agency, pk=pk)
 
     from characters.models import Character
-    char = Character.objects.filter(owner=request.user).first()
+    char = Character.main_for(request.user)
     is_science = request.user.is_superuser or (char and char.character_class == "science")
     if not is_science:
         return JsonResponse({"error": "Science class required."}, status=403)
@@ -1771,7 +1771,7 @@ def api_stimulants(request, pk, project_index):
     agency = get_object_or_404(Agency, pk=pk)
 
     from characters.models import Character
-    char = Character.objects.filter(owner=request.user).first()
+    char = Character.main_for(request.user)
     is_science = request.user.is_superuser or (char and char.character_class == "science")
     if not is_science:
         return JsonResponse({"error": "Science class required."}, status=403)
@@ -1958,7 +1958,7 @@ def api_fringe_effect(request, pk, project_index):
     agency = get_object_or_404(Agency, pk=pk)
 
     from characters.models import Character
-    char = Character.objects.filter(owner=request.user).first()
+    char = Character.main_for(request.user)
     is_science = request.user.is_superuser or (char and char.character_class == "science")
     if not is_science:
         return JsonResponse({"error": "Science class required."}, status=403)
@@ -2602,7 +2602,7 @@ def api_project_roll(request, pk, project_index):
     agency = get_object_or_404(Agency, pk=pk)
 
     from characters.models import Character
-    char = Character.objects.filter(owner=request.user).first()
+    char = Character.main_for(request.user)
 
     projects = agency.projects or []
     if project_index < 0 or project_index >= len(projects):
@@ -2651,7 +2651,7 @@ def api_project_roll(request, pk, project_index):
     from .serializers import _compute_project_dice_pool
     characters_by_name = {c.name: c for c in Character.objects.prefetch_related(
         "character_merits__merit", "character_pulling_strings__pulling_string"
-    ).all()}
+    ).filter(is_sub_character=False)}
     bases_list = list(agency.bases.all())
     computed = _compute_project_dice_pool(project, agency, characters_by_name, bases_list)
     if computed:
@@ -2890,7 +2890,7 @@ def api_ftl_fringe_effect(request, pk, assignment_id):
         return JsonResponse({"error": "FTL assignment not found."}, status=404)
 
     from characters.models import Character
-    char = Character.objects.filter(owner=request.user).first()
+    char = Character.main_for(request.user)
     is_science = request.user.is_superuser or (char and char.character_class == "science")
     if not is_science:
         return JsonResponse({"error": "Science class required."}, status=403)
@@ -2995,7 +2995,7 @@ def api_ftl_roll(request, pk, assignment_id):
         return JsonResponse({"error": "FTL assignment not found."}, status=404)
 
     from characters.models import Character
-    char = Character.objects.filter(owner=request.user).first()
+    char = Character.main_for(request.user)
     char_name = char.name if char else ""
 
     if not request.user.is_superuser and afp.player != char_name:
@@ -3032,7 +3032,7 @@ def api_ftl_roll(request, pk, assignment_id):
         for fk, _ in [("darkGrantsLevel",""), ("liveTestingDice",""), ("blackMarketTechDice",""), ("geneManipulationDice",""), ("neuralInterfaceDice",""), ("sleepDeprivationDice",""), ("overclockedEquipmentDice",""), ("childProdigyDice",""), ("assignedProdigyDice","")]:
             if fk in meta:
                 fake_project[fk] = meta[fk]
-        chars_by_name = {c.name: c for c in Character.objects.prefetch_related("character_merits__merit", "character_pulling_strings__pulling_string").all()}
+        chars_by_name = {c.name: c for c in Character.objects.prefetch_related("character_merits__merit", "character_pulling_strings__pulling_string").filter(is_sub_character=False)}
         bases = list(agency.bases.all())
         computed = _compute_project_dice_pool(fake_project, agency, chars_by_name, bases)
         if computed:
@@ -3182,7 +3182,7 @@ def api_downtime_action(request, pk):
     agency = get_object_or_404(Agency, pk=pk)
 
     from characters.models import Character
-    char = Character.objects.filter(owner=request.user).first()
+    char = Character.main_for(request.user)
     if not char and not request.user.is_superuser:
         return JsonResponse({"error": "No character found."}, status=400)
 

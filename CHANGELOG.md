@@ -1,5 +1,23 @@
 # Changelog
 
+## v0.15.61
+- **Fix: uploaded images (character/NPC portraits, news featured images, comms attachments) were all 404 in production.** `/media/` was wired through Django's `static()` URL helper, which registers **nothing when `DEBUG` is False** — and the production container runs with `DJANGO_DEBUG=False`. Static assets were unaffected (WhiteNoise serves those), which is why only uploads vanished. Media is now served by an unconditional `re_path` → `django.views.static.serve` route rooted at `MEDIA_ROOT`. Regression test added in `exodus/tests.py`. No migration
+
+## v0.15.60
+- **Fix: saving one Site Settings section no longer wipes another section's settings.** The settings page hosts several independent forms that all POST to the same view, but the core flags (game date, comms lock, world/star/public-star/starships map visibility, council visibility + mode) were written on **every** POST — so saving **Armor, Cover, or Combat NPCs reset all of them**. Those writes are now gated behind a hidden `core_settings_submitted` marker carried only by the main form
+- **Fix: the charter text was blanked on every settings save.** `charter_text` has no editor on the settings page (it's managed via the Django admin) yet was overwritten unconditionally on each POST; it's now only written when a form actually carries the field
+- **Fix: the Theme/Tweaks panel and the ship-slot budget toggle never saved.** Both lived in `<form>`s that the browser had already closed (nested-form parsing), leaving their Save buttons inert. Each is now its own self-contained form (with its own marker) — so they save correctly **and** can't clobber other settings
+- Added regression tests (`exodus/tests.py`) asserting that armor/cover/combat-NPC/tweaks saves preserve the core settings and charter. No migration
+
+## v0.15.59
+- **New per-character CREATION MODE — free character building.** The GM can put any character into creation mode from **Settings → Characters → Creation Mode**, which lists every playable character by **name + player** (sub-characters tagged `· UNIT`) with a `CREATION`/`LOCKED` toggle. While a character is in creation mode, its sheet **suspends the XP-budget guard** so the player can freely **add and remove** dots (attributes, skills, merits, specialisations, pulling strings); the XP "protester" is hidden and a `⚙ CREATION MODE` banner shows. Switch it back to LOCKED to re-enable the v0.15.58 XP enforcement
+- GM-controlled and **default off**: the toggle lives on the staff-only settings page; the player's character-save API deliberately ignores the flag, so players can't self-enable it. Superusers always bypass the guard regardless. New `Character.creation_mode` field (migration `0015`). **Requires migrate on deploy**
+
+## v0.15.58
+- **Character sheet now enforces the XP budget — players can't raise a trait they can't pay for.** When an owner raises an attribute, skill, merit (add or rating), specialisation, or pulling string, the sheet recomputes the build cost and **blocks the change if it would push remaining XP below zero**; a warning flashes in the edit-mode header. Lowering traits and lateral rearrangements that don't deepen a deficit always pass, so an over-budget sheet can still be trimmed back
+- **Superusers (GM) bypass the guard** — they grant XP and build NPC-grade statblocks. Enforcement is client-side, matching where the creation/XP math already lives; the server still accepts any owner save
+- No migration, no model change
+
 ## v0.15.57
 - **New GM star-intel JSON endpoint for the MCP.** `GET /api/starmap/star-intel/` (superuser/MCP only) returns the full oversight as JSON — per discovered system: ground-truth resources, base vs effective scan target (with the disinformation penalty), every agency's real accuracy (accumulated/target/uncertainty%), and public records with `is_false` exposed
 - Refactored the `/gm/star-intel/` page and the new endpoint to share one `gather_star_intel()` data function (DRY) — no behaviour change to the page

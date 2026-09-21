@@ -161,6 +161,10 @@
             <button class="sidebar-item" onclick="showSection('comms-lock', this)">Comms Lock</button>
         </div>
         <div class="sidebar-group">
+            <div class="sidebar-group-label">CHARACTERS</div>
+            <button class="sidebar-item" onclick="showSection('char-creation', this)">Creation Mode</button>
+        </div>
+        <div class="sidebar-group">
             <div class="sidebar-group-label">INTERFACE</div>
             <button class="sidebar-item" onclick="showSection('map-vis', this)">Map Visibility</button>
             <button class="sidebar-item" onclick="showSection('council', this)">Council</button>
@@ -217,6 +221,7 @@
 
         <form method="post">
         {% csrf_token %}
+        <input type="hidden" name="core_settings_submitted" value="1">
 
         <!-- Game Date -->
         <div id="sec-game-date" class="settings-section active">
@@ -464,6 +469,33 @@
                 </span>
             </div>
             <button type="submit" class="btn-primary" style="width: 100%;">SAVE</button>
+        </div>
+
+        <!-- Character Creation Mode -->
+        <div id="sec-char-creation" class="settings-section">
+            <div class="block-head">
+                <span class="block-bullet">&#9679;</span>
+                <h3>CHARACTER CREATION MODE</h3>
+                <span class="block-line"></span>
+                <span class="block-badge">{{ playable_characters|length }}</span>
+            </div>
+            <span class="text-muted mono-text" style="font-size: 0.7rem; display: block; margin-bottom: 1rem;">
+                When a character is in <strong>CREATION</strong> mode, their sheet lets the player freely add <em>and</em> remove dots &mdash; the XP-budget guard is suspended. Use it while a player builds their character, then switch it back to <strong>LOCKED</strong> to re-enable XP enforcement. Superusers always bypass the guard regardless of this setting.
+            </span>
+            <input type="hidden" name="creation_mode_submitted" value="1">
+            {% for c in playable_characters %}
+            <label style="display:flex; align-items:center; gap:0.6rem; padding:0.45rem 0; border-bottom:1px solid var(--border-color); cursor:pointer;">
+                <input type="checkbox" name="creation_mode_{{ c.id }}" {% if c.creation_mode %}checked{% endif %}>
+                <span class="mono-text" style="font-size:0.9rem; color:var(--ink); flex:1;">
+                    {{ c.name }}{% if c.is_sub_character %} <span class="text-muted" style="font-size:0.68rem;">· UNIT</span>{% endif %}
+                    <span class="text-muted" style="font-size:0.72rem;">&mdash; {{ c.owner.username }}</span>
+                </span>
+                <span class="status-pill {% if c.creation_mode %}s-active{% else %}s-inactive{% endif %}">{% if c.creation_mode %}CREATION{% else %}LOCKED{% endif %}</span>
+            </label>
+            {% empty %}
+            <span class="text-muted mono-text" style="font-size:0.8rem;">No playable characters yet.</span>
+            {% endfor %}
+            <button type="submit" class="btn-primary" style="width: 100%; margin-top: 1rem;">SAVE CREATION MODES</button>
         </div>
 
         <!-- Weapons catalogue -->
@@ -1142,6 +1174,8 @@
 
         <!-- Clearance Gate Tweaks -->
         <div id="sec-tweaks" class="settings-section">
+            <form method="post">
+            {% csrf_token %}
             <div class="block-head">
                 <span class="block-bullet">&#9679;</span>
                 <h3>THEME</h3>
@@ -1342,9 +1376,8 @@
               });
             })();
             </script>
+            </form>
         </div>
-
-        </form>
 
         <!-- City Maps -->
         <div id="sec-city-maps" class="settings-section">
@@ -1611,8 +1644,12 @@
                 <span class="status-pill {% if settings_obj.enforce_ship_slot_budget %}s-active{% else %}s-standby{% endif %}">{% if settings_obj.enforce_ship_slot_budget %}ENFORCED{% else %}WARN ONLY{% endif %}</span>
             </div>
 
-            <!-- Slot budget enforcement toggle — this one lives in the outer form. -->
+            <!-- Slot budget enforcement toggle — own self-contained form so it
+                 saves correctly and isn't clobbered by other settings saves. -->
             <div class="ss-card">
+                <form method="post">
+                {% csrf_token %}
+                <input type="hidden" name="ship_budget_submitted" value="1">
                 <label style="display: flex; align-items: center; gap: 0.75rem; cursor: pointer;">
                     <input type="checkbox" name="enforce_ship_slot_budget" {% if settings_obj.enforce_ship_slot_budget %}checked{% endif %}
                         style="width: 20px; height: 20px; accent-color: var(--c-primary);">
@@ -1622,6 +1659,7 @@
                     When on, the class editor rejects designs that exceed the ship type's slot budget. When off, it only warns &mdash; useful for sketching in-progress designs.
                 </span>
                 <button type="submit" class="btn-primary" style="margin-top: 0.75rem; padding: 0.4rem 0.9rem; font-size: 0.75rem;">SAVE TOGGLE</button>
+                </form>
             </div>
 
             <!-- Legacy fleet import -->
