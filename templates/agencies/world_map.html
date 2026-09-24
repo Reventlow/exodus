@@ -30,6 +30,10 @@
 <!-- Leaflet CSS & JS -->
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+{# Vector basemap: OpenFreeMap (no API key, no quota) rendered under Leaflet via the MapLibre bridge. #}
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/maplibre-gl@4/dist/maplibre-gl.css" />
+<script src="https://cdn.jsdelivr.net/npm/maplibre-gl@4/dist/maplibre-gl.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@maplibre/maplibre-gl-leaflet@0.0.22/leaflet-maplibre-gl.js"></script>
 
 <script>
     const IS_ADMIN = {{ is_admin|yesno:"true,false" }};
@@ -120,13 +124,19 @@
                 zoomControl: true,
                 attributionControl: false,
             });
-            // Dark tile layer
-            L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_nolabels/{z}/{x}/{y}{r}.png', {
-                subdomains: 'abcd',
-                maxZoom: 19,
-            }).addTo(map);
+            // Dark basemap without labels. CARTO's free raster tiles started
+            // watermarking "API KEY REQUIRED" in Sept 2026, so this now uses
+            // OpenFreeMap's dark vector style with the label (symbol) layers
+            // removed — same look as the old dark_nolabels tiles, no key.
+            fetch('https://tiles.openfreemap.org/styles/dark')
+                .then((r) => r.json())
+                .then((style) => {
+                    if (!mapInstance.current) return;
+                    style.layers = style.layers.filter((l) => l.type !== 'symbol');
+                    L.maplibreGL({ style, attribution: '' }).addTo(mapInstance.current);
+                });
             L.control.attribution({ position: 'bottomright', prefix: false })
-                .addAttribution('&copy; <a href="https://carto.com/">CARTO</a>')
+                .addAttribution('<a href="https://openfreemap.org">OpenFreeMap</a> &copy; <a href="https://www.openmaptiles.org/">OpenMapTiles</a> &copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>')
                 .addTo(map);
             mapInstance.current = map;
             return () => { map.remove(); mapInstance.current = null; };

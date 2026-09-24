@@ -1,5 +1,8 @@
 # Changelog
 
+## v0.15.62
+- **Fix: WORLD MAP and city maps showed "API KEY REQUIRED" tiles.** CARTO began watermarking its free `basemaps.cartocdn.com` raster tiles in September 2026 (free use now needs a registered key). Both Leaflet maps now draw their basemap from **OpenFreeMap**'s dark vector style (no key, no quota, OpenStreetMap data) through the MapLibre-GL Leaflet bridge; markers, GeoJSON overlays and all interaction code are unchanged. The agency world map strips the style's label layers to keep its label-free look; city maps keep street labels. Attribution updated. No migration
+
 ## v0.15.61
 - **Fix: uploaded images (character/NPC portraits, news featured images, comms attachments) were all 404 in production.** `/media/` was wired through Django's `static()` URL helper, which registers **nothing when `DEBUG` is False** — and the production container runs with `DJANGO_DEBUG=False`. Static assets were unaffected (WhiteNoise serves those), which is why only uploads vanished. Media is now served by an unconditional `re_path` → `django.views.static.serve` route rooted at `MEDIA_ROOT`. Regression test added in `exodus/tests.py`. No migration
 
